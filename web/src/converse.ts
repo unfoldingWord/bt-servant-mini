@@ -116,8 +116,7 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string):
   if (!sheet.what.includes('notes')) out.push({ label: w.lNotes, sheet: same(['notes']) })
   if (!sheet.what.includes('questions')) out.push({ label: w.lQuestions, sheet: same(['questions']) })
   if (!sheet.what.includes('text')) out.push({ label: w.lText, sheet: same(['text']) })
-  const next = Number(v2 ?? v1) + 1
-  out.push({ label: `${w.lNext} (${bookFor(ui, code!)} ${ch}:${next})`, sheet: same(sheet.what, `${code} ${ch}:${next}`) })
+  if (facts.next) out.push({ label: `${w.lNext} (${bookFor(ui, code!)} ${facts.next})`, sheet: same(sheet.what, `${code} ${facts.next}`) })
   return out
 }
 

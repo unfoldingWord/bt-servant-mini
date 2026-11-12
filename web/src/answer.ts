@@ -189,6 +189,13 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const head = say(lang, 'passage_head', { book, ref: refLabel(ref), lang }).replace(/\s+\(/, ' (').replace(/\s{2,}/g, ' ')
   out.push(head)
   facts = { kind: 'passage', book, ref: refLabel(ref), texts: 0, notes: 0, questions: 0, terms: 0, code: ref.book, ch: ref.ch ?? null }
+  // the verse after this one, if the book has it: the next verse of the chapter, else the first of the next chapter
+  if (ref.kind === 'verses' && ref.ch && ref.v1) {
+    const t0 = model.texts[0]
+    const has = (c: number, v: number) => !!t0 && !!textOfRange(ref.book, t0.pieces as any, t0.events as any, verseId(ref.book, c, v), verseId(ref.book, c, v))
+    const last = ref.v2 ?? ref.v1
+    facts.next = has(ref.ch, last + 1) ? `${ref.ch}:${last + 1}` : has(ref.ch + 1, 1) ? `${ref.ch + 1}:1` : null
+  }
   if (what.includes('intro') || ref.kind === 'bookintro' || ref.kind === 'chapintro') {
     const rows = model.notes?.rows.filter(isIntroRow) ?? []
     const bookIntro = rows[0]
