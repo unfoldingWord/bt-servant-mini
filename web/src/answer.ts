@@ -212,7 +212,9 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     let any = false
     for (const t of model.texts) {
       const key = resShort(t.res)
-      if (s.version && !t.res.endsWith('/' + verKey(s.version as 'ult' | 'ust'))) continue
+      // ULT/UST (GLT/GST in Spanish); a language whose texts have other names shows them all
+      const wanted = s.version ? '/' + verKey(s.version as 'ult' | 'ust') : ''
+      if (wanted && model.texts.some((x) => x.res.endsWith(wanted)) && !t.res.endsWith(wanted)) continue
       const text = textOfRange(ref.book, t.pieces as any, t.events as any, range[0], range[1])
       if (!text) continue
       any = true

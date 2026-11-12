@@ -9,7 +9,7 @@ import { keywords, searchVerses } from './search'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
-  chats: string; newChat: string; max: string; del: string; confirmDel: string; untitled: string; appLang: string; packs: string; welcome: string
+  chats: string; newChat: string; max: string; del: string; confirmDel: string; untitled: string; appLang: string; packs: string; welcome: string; helps: string; auto: string
 }
 const UI: Record<string, UiText> = {
   en: {
@@ -19,7 +19,7 @@ const UI: Record<string, UiText> = {
     ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'What do the notes say about Ruth 1:16?'],
     chats: 'Conversations', newChat: 'New conversation', max: 'You can keep up to 3 conversations. Delete one to start another.',
     del: 'Delete', confirmDel: 'Delete this conversation?', untitled: 'New conversation',
-    appLang: 'App language', packs: 'Installed language packs', welcome: 'How can I help with your translation?',
+    appLang: 'App language', packs: 'Installed language packs', welcome: 'How can I help with your translation?', helps: 'Language of the helps', auto: 'Same as my question',
   },
   es: {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
@@ -28,7 +28,7 @@ const UI: Record<string, UiText> = {
     ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Qué dice Jonás 3:9?'],
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
     del: 'Borrar', confirmDel: '¿Borrar esta conversación?', untitled: 'Conversación nueva',
-    appLang: 'Idioma de la app', packs: 'Paquetes de idioma instalados', welcome: '¿En qué te ayudo con tu traducción?',
+    appLang: 'Idioma de la app', packs: 'Paquetes de idioma instalados', welcome: '¿En qué te ayudo con tu traducción?', helps: 'Idioma de las ayudas', auto: 'El de mi pregunta',
   },
   fr: {
     ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Hors ligne · prêt',
@@ -37,7 +37,7 @@ const UI: Record<string, UiText> = {
     ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?'],
     chats: 'Conversations', newChat: 'Nouvelle conversation', max: "Vous pouvez garder 3 conversations. Supprimez-en une pour en commencer une autre.",
     del: 'Supprimer', confirmDel: 'Supprimer cette conversation ?', untitled: 'Nouvelle conversation',
-    appLang: "Langue de l'application", packs: 'Paquets de langue installés', welcome: 'Comment puis-je aider votre traduction ?',
+    appLang: "Langue de l'application", packs: 'Paquets de langue installés', welcome: 'Comment puis-je aider votre traduction ?', helps: 'Langue des aides', auto: 'Celle de ma question',
   },
   id: {
     ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Offline · siap',
@@ -46,7 +46,7 @@ const UI: Record<string, UiText> = {
     ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?'],
     chats: 'Percakapan', newChat: 'Percakapan baru', max: 'Anda bisa menyimpan 3 percakapan. Hapus satu untuk memulai yang lain.',
     del: 'Hapus', confirmDel: 'Hapus percakapan ini?', untitled: 'Percakapan baru',
-    appLang: 'Bahasa aplikasi', packs: 'Paket bahasa terpasang', welcome: 'Apa yang bisa saya bantu untuk terjemahan Anda?',
+    appLang: 'Bahasa aplikasi', packs: 'Paket bahasa terpasang', welcome: 'Apa yang bisa saya bantu untuk terjemahan Anda?', helps: 'Bahasa bahan bantu', auto: 'Sesuai pertanyaan saya',
   },
   hi: {
     ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'ऑफ़लाइन · तैयार',
@@ -55,11 +55,19 @@ const UI: Record<string, UiText> = {
     ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?'],
     chats: 'बातचीत', newChat: 'नई बातचीत', max: 'आप 3 बातचीत रख सकते हैं। नई शुरू करने के लिए एक हटाएँ।',
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
-    appLang: 'ऐप की भाषा', packs: 'स्थापित भाषा पैकेज', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?',
+    appLang: 'ऐप की भाषा', packs: 'स्थापित भाषा पैकेज', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?', helps: 'सहायता की भाषा', auto: 'मेरे प्रश्न वाली',
   },
 }
 const UI_LANGS: [string, string][] = [['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['id', 'Bahasa Indonesia'], ['hi', 'हिन्दी']]
 const UI_KEY = 'btsm.ui'
+const PACK_KEY = 'btsm.helps'
+let helpsLang: string | null = (() => {
+  try {
+    return localStorage.getItem(PACK_KEY) || null
+  } catch {
+    return null
+  }
+})()
 let nav = (() => {
   try {
     const saved = localStorage.getItem(UI_KEY)
@@ -133,6 +141,7 @@ applyUi()
 function el(tag: string, cls: string, text?: string): HTMLElement {
   const d = document.createElement(tag)
   d.className = cls
+  if (/^(info|plain|intro|msg)/.test(cls)) d.dir = 'auto' // Arabic helps read right to left
   if (text !== undefined) d.textContent = text
   return d
 }
@@ -234,8 +243,22 @@ function renderPanel() {
     langs.appendChild(b)
   }
   panel.appendChild(langs)
-  panel.appendChild(el('h2', '', T.packs))
-  panel.appendChild(el('p', 'packs', $('#packs').textContent || '—'))
+  panel.appendChild(el('h2', '', T.helps))
+  const hl = el('div', 'langs')
+  for (const code of [null, ...INSTALLED]) {
+    const b = el('button', code === helpsLang ? 'on' : '', code ? PACK_NAMES[code] ?? code : T.auto) as HTMLButtonElement
+    b.type = 'button'
+    b.onclick = () => {
+      helpsLang = code
+      try {
+        if (code) localStorage.setItem(PACK_KEY, code)
+        else localStorage.removeItem(PACK_KEY)
+      } catch {}
+      renderPanel()
+    }
+    hl.appendChild(b)
+  }
+  panel.appendChild(hl)
 }
 const closePanel = () => panel.classList.remove('show')
 menu.onclick = () => {
@@ -356,7 +379,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     let searched = ''
     if (q !== undefined && isOpen(q, sheet)) {
       const res = await searchVerses(q, sheet.term, sheet.lang)
-      const hitSheet = async (h: Hit, what: string[]) => (await buildSheet(`h${Date.now()}`, passageOf(h, what, ui))).sheet
+      const hitSheet = async (h: Hit, what: string[]) => (await buildSheet(`h${Date.now()}`, passageOf(h, what, ui), helpsLang)).sheet
       c.found = res.hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v }))
       searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}`
       const kind = kindOf(q)
@@ -408,11 +431,11 @@ form.addEventListener('submit', (e) => {
     const s0 = refInText(slots ?? { intent: 'unknown', lang: nav }, q)
     const picked = pickFound(q, s0, c)
     if (picked) {
-      const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? nav))
+      const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? nav), helpsLang)
       return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
     }
     const s = withContext(s0, c.last, q)
-    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s)
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, helpsLang)
     return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
   })
 })
@@ -425,6 +448,10 @@ input.addEventListener('keydown', (e) => {
 
 load()
 renderConv()
-const PACK_NAMES: Record<string, string> = { en: 'English', 'es-419': 'Español (Latinoamérica)' }
-installedLangs().then((ls) => ($('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · '))).catch(() => {})
+const PACK_NAMES: Record<string, string> = { en: 'English', 'es-419': 'Español (Latinoamérica)', id: 'Bahasa Indonesia', hi: 'हिन्दी', ar: 'العربية', fr: 'Français' }
+let INSTALLED: string[] = []
+installedLangs().then((ls) => {
+  INSTALLED = ls
+  $('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · ')
+}).catch(() => {})
 setReady()

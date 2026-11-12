@@ -3,7 +3,7 @@ import books from './data/books.json'
 import figs from './data/figs.json'
 import glossary from './data/kt-glossary.json'
 import type { Sheet } from './answer'
-import { openLang } from './packs'
+import { hasLang, openLang } from './packs'
 
 export type Slots = {
   intent?: string; book?: string | null; chapter?: number | null; verse_start?: number | null; verse_end?: number | null
@@ -118,9 +118,14 @@ const LANG_NAMES: Record<string, string> = {
   portuguese: 'pt-br', portugues: 'pt-br', swahili: 'sw', arabic: 'ar', russian: 'ru', chinese: 'zh', german: 'de',
 }
 
-export async function buildSheet(qid: string, d: Slots): Promise<{ sheet: Sheet; ui: string }> {
+/** The pack of each language the person can write in, when the app has it. */
+const UI_PACK: Record<string, string> = { es: 'es-419', id: 'id', hi: 'hi', ar: 'ar', fr: 'fr' }
+
+/** `prefer`: the helps language chosen in the app (null: the pack of the language the person wrote in, else English). */
+export async function buildSheet(qid: string, d: Slots, prefer: string | null = null): Promise<{ sheet: Sheet; ui: string }> {
   const ui = UI_LANGS.includes(d.lang ?? '') ? d.lang! : 'en'
-  const lang = ui === 'es' ? 'es-419' : 'en'
+  const want = prefer ?? UI_PACK[ui] ?? null
+  const lang = want && (await hasLang(want)) ? want : 'en'
   const packLangs = lang === 'en' ? ['en'] : [lang, 'en']
   const sheet: Sheet = {
     id: qid, intent: d.intent ?? 'unknown', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang,

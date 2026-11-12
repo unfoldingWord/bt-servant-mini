@@ -7,8 +7,8 @@ android {
         applicationId 'org.unfoldingword.btservantmini'
         minSdk 26
         targetSdk 35
-        versionCode 7
-        versionName '0.5.1-mini'
+        versionCode 8
+        versionName '0.6-mini'
         ndk { abiFilters 'arm64-v8a' }
     }
     buildTypes { debug { minifyEnabled false } }
