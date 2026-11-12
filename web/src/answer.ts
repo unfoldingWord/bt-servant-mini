@@ -17,6 +17,8 @@ export type Sheet = {
   id: string; intent: string; ref: string | null; what: string[]; version: string | null; concept: string | null
   term: string | null; phrase: string | null; candidates: string[] | null; lang: string
 }
+/** What the last answer found, for the conversational sentence around it (set by the recipes, read by converse.ts). */
+export let facts: Record<string, any> = {}
 export type Result = { answer: string; cites: string[] }
 
 const BOOK_EN: Record<string, string> = {
@@ -186,6 +188,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const out: string[] = []
   const head = say(lang, 'passage_head', { book, ref: refLabel(ref), lang }).replace(/\s+\(/, ' (').replace(/\s{2,}/g, ' ')
   out.push(head)
+  facts = { kind: 'passage', book, ref: refLabel(ref), texts: 0, notes: 0, questions: 0, terms: 0, code: ref.book, ch: ref.ch ?? null }
   if (what.includes('intro') || ref.kind === 'bookintro' || ref.kind === 'chapintro') {
     const rows = model.notes?.rows.filter(isIntroRow) ?? []
     const bookIntro = rows[0]
@@ -206,6 +209,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       const text = textOfRange(ref.book, t.pieces as any, t.events as any, range[0], range[1])
       if (!text) continue
       any = true
+      facts.texts++
       out.push(say(lang, 'text_line', { label: key.toUpperCase(), res: t.res, release: releaseOf(model, t.res), text }))
       cites.push(cite(t.res, releaseOf(model, t.res), `${ref.book} ${refLabel(ref)}`))
     }
@@ -222,10 +226,12 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       out.push(say(lang, 'term_line', { said, title: await titleOf(l, id) }))
       cites.push(cite(model.links!.res, releaseOf(model, model.links!.res), `${ref.book} ${x.ref}, ${id}`))
     }
+    facts.terms = seen.size
     if (seen.size === 0) out.push('-')
   }
   if (what.includes('notes')) {
     const notes = rowsIn(model.notes).filter((x) => clean(x.cols.note))
+    facts.notes = notes.length
     if (notes.length === 0) out.push(say(lang, 'notes_none', { book, ref: refLabel(ref) }))
     else out.push(say(lang, 'notes_head', { book, ref: refLabel(ref) }))
     for (const [i, n] of notes.entries()) {
@@ -239,6 +245,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   }
   if (what.includes('questions')) {
     const qs = rowsIn(model.questions)
+    facts.questions = qs.length
     out.push(qs.length ? say(lang, 'questions_head', { book, ref: refLabel(ref) }) : say(lang, 'questions_none', { book, ref: refLabel(ref) }))
     for (const q of qs) {
       out.push(say(lang, 'question_line', { q: String(q.cols.question ?? ''), a: String(q.cols.response ?? '') }))
@@ -265,6 +272,7 @@ async function article(s: Sheet, l: Lang): Promise<Result> {
   const a = ans.data
   const by = (...roles: string[]) => a.sections.filter((x) => roles.includes(x.role))
   const main = s.concept.startsWith('tw:') ? (by('definition').length ? by('definition').slice(0, 1) : by('intro').slice(0, 1)) : by('description')
+  facts = { kind: 'article', title: a.title }
   const out: string[] = [say(lang, 'article_head', { title: a.title })]
   for (const x of main.length ? main : a.sections.slice(0, 1)) {
     out.push(clean(x.md))
@@ -482,6 +490,7 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
 // ------------------------------------------------------------------------------------------------------------------ main
 
 export async function answerSheet(s: Sheet): Promise<Result> {
+  facts = {}
   const lang = s.lang
   const l = await getLang(lang)
   if (s.intent === 'resources') return resources(s, l)

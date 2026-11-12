@@ -31,10 +31,29 @@
   textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #send { min-width: 72px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; }
   #send:disabled { opacity: .45; }
+  .msg.bot { max-width: 96%; }
+  .intro { margin: 0 0 8px; font-weight: 500; }
+  .info { white-space: pre-wrap; font-size: 14.5px; border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; margin: 2px 0; }
+  .plain { white-space: pre-wrap; }
+  .follow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .follow button { border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 13.5px; }
+  #menu { border: 0; background: transparent; color: var(--fg); font-size: 22px; line-height: 1; padding: 2px 6px 2px 0; }
+  header { position: relative; }
+  #panel { display: none; position: absolute; z-index: 5; left: 0; right: 0; top: 52px; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 16px 14px; box-shadow: 0 8px 20px rgba(0,0,0,.18); }
+  #panel.show { display: block; }
+  #panel h2 { font-size: 14px; color: var(--muted); margin: 6px 0 8px; font-weight: 600; }
+  #panel .row { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+  #panel .row.on .open { font-weight: 700; }
+  #panel .open { flex: 1; text-align: left; border: 1px solid var(--line); background: var(--bot); color: var(--fg); border-radius: 10px; padding: 10px; font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #panel .del { border: 1px solid #c0533f; color: #c0533f; background: transparent; border-radius: 10px; padding: 9px 10px; font: inherit; font-size: 14px; }
+  #panel .add { margin-top: 8px; width: 100%; border: 0; border-radius: 10px; background: var(--accent); color: #fff; padding: 10px; font: inherit; font-weight: 600; }
+  #panel .add:disabled { opacity: .4; }
+  #panel .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
 </style>
 </head>
 <body>
-<header><h1>BT Servant Mini</h1><span id="status"></span><span id="packs"></span></header>
+<header><button id="menu" type="button">&#9776;</button><h1>BT Servant Mini</h1><span id="status"></span><span id="packs"></span></header>
+<nav id="panel"></nav>
 <main id="log" aria-live="polite"></main>
 <form id="ask"><textarea id="q" rows="1" enterkeyhint="send"></textarea><button id="send" type="submit" disabled>Send</button></form>
 <script type="module" src="./main.js"></script>
