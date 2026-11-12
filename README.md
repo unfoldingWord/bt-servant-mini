@@ -1,4 +1,6 @@
-# BT Servant Mini (Android, sin conexión)
+# BT Servant Mini (Android, sin conexión) — alfa
+
+> Versión alfa para pruebas internas. Ver `NOTICE.md` para las licencias de lo que lleva el APK (modelo derivado de Gemma, llama.cpp, ayudas de traducción CC BY-SA).
 
 App de prueba: preguntas en lenguaje natural (inglés, español, francés, indonesio, hindi) respondidas con las ayudas de traducción
 de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin internet. Trabajo de unfoldingWord, fase de prueba.
