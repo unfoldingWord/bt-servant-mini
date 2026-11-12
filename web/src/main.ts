@@ -1,7 +1,7 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { answerSheet, facts, setUiLang, type Sheet } from './answer'
-import { bookCode, buildSheet, type Slots } from './sheet'
+import { bookCode, buildSheet, fold, type Slots } from './sheet'
 import { modelReady, modelStatus, slotsOf } from './model'
 import { installedLangs } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
@@ -59,7 +59,8 @@ const T = UI[nav] ?? UI.en!
 // ------------------------------------------------------------------------------------------------------------ conversations
 
 type Msg = { who: 'me' | 'bot'; text?: string; intro?: string | null; info?: string; follow?: { label: string; sheet: Sheet }[]; meta?: string; ui?: string }
-type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null }
+type Hit = { book: string; ch: number; v: number }
+type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[] }
 const KEY = 'btsm.conversations.v1'
 const MAX = 3
 let convs: Conv[] = []
@@ -254,8 +255,35 @@ function isOpen(q: string, sheet: Sheet): boolean {
   if (sheet.intent === 'search') return true
   if (sheet.ref) return false
   if (WHERE.test(q)) return keywords(q).length >= 1
+  if (kindOf(q) && keywords(q).length >= 2) return true // "notes about Abraham sacrificing Isaac"
   return ['unknown', 'advice', 'passage'].includes(sheet.intent) && keywords(q).length >= 2
 }
+
+/** What the person wants to see of a verse, when the question says it. */
+function kindOf(q: string): string[] | null {
+  return /not[ae]s?\b|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions']
+    : /\b(text|texto|teks|texte)\b|पाठ/i.test(q) ? ['text'] : null
+}
+const ORDINALS: [RegExp, number][] = [
+  [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर/i, 1],
+  [/\b(third|tercer[oa]?|troisième|ketiga)\b|तीसर/i, 2], [/\b(fourth|cuart[oa]|quatrième|keempat)\b|चौथ/i, 3],
+]
+const THAT = /\b(that|this) (verse|one|passage)|\b(ese|este|aquel) (vers[íi]culo|pasaje)|\b(ce|cet) (verset|passage)|\bayat (itu|ini)\b|(उस|इस) पद/i
+/** A follow-up with no book of its own: "the second one" (a search result), "that verse" or "and the questions?" (the last verse shown). */
+function pickFound(q: string, slots: Slots, c: Conv): { hit: Hit; what: string[] } | null {
+  const named = !THAT.test(q) && slots.book && fold(q).includes(fold(slots.book)) && bookCode(slots.lang ?? nav, slots.book)
+  if (named) return null
+  const ord = ORDINALS.find(([re]) => re.test(q))?.[1]
+  const kind = kindOf(q)
+  if (ord !== undefined && c.found?.length) return { hit: c.found[Math.min(ord, c.found.length - 1)]!, what: kind ?? ['text', 'notes'] }
+  const m = /^([0-9a-z]{3}) (\d+):(\d+)/.exec(c.last?.ref ?? '')
+  if (!m) return null
+  if (THAT.test(q) || (kind && keywords(q).length === 0))
+    return { hit: { book: m[1]!, ch: +m[2]!, v: +m[3]! }, what: kind ?? ['text', 'notes'] }
+  return null
+}
+const passageOf = (h: Hit, what: string[], lang: string): Slots =>
+  ({ intent: 'passage', book: h.book, chapter: h.ch, verse_start: h.v, verse_end: null, what, lang })
 
 async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Sheet; ui: string; meta: string; q?: string }>) {
   busy = true
@@ -271,35 +299,38 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   const t0 = performance.now()
   let m: Msg
   try {
-    const { sheet, ui, meta, q } = await make()
+    let { sheet, ui, meta, q } = await make()
     setUiLang(ui)
+    let others: { label: string; sheet: Sheet }[] = []
+    let searched = ''
     if (q !== undefined && isOpen(q, sheet)) {
       const res = await searchVerses(q, sheet.term, sheet.lang)
-      const total = ((performance.now() - t0) / 1000).toFixed(1)
-      const used = res.how === 'concepts' ? res.concepts : res.how === 'text' ? (res.hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
-      m = { who: 'bot', intro: searchIntro(res.how, used, ui), ui,
-        info: res.hits.map((h) => `${bookLabel(ui, h.book)} ${h.ch}:${h.v} — ${h.text.replace(/\s+/g, ' ').trim()}`).join('\n\n') || undefined,
-        follow: res.hits.slice(0, 4).map((h) => ({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`,
-          sheet: { ...sheet, intent: 'passage', ref: `${h.book} ${h.ch}:${h.v}`, what: ['text', 'notes'], term: null } })),
-        meta: `${T.details} · ${total} s
-${meta}
-search: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}` }
-      c.msgs.push(m)
-      c.updated = Date.now()
-      save()
-      wait.replaceWith(renderMsg(m))
-      log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      busy = false
-      setReady()
-      return
+      const hitSheet = async (h: Hit, what: string[]) => (await buildSheet(`h${Date.now()}`, passageOf(h, what, ui))).sheet
+      c.found = res.hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v }))
+      searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}`
+      const kind = kindOf(q)
+      if (res.hits.length) c.last = await hitSheet(res.hits[0]!, ['text'])
+      if (!kind || !res.hits.length) {
+        const total = ((performance.now() - t0) / 1000).toFixed(1)
+        const used = res.how === 'concepts' ? res.concepts : res.how === 'text' ? (res.hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
+        const follow: { label: string; sheet: Sheet }[] = []
+        for (const h of res.hits.slice(0, 4)) follow.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, ['text', 'notes']) })
+        m = { who: 'bot', intro: searchIntro(res.how, used, ui), ui, follow,
+          info: res.hits.map((h) => `${bookLabel(ui, h.book)} ${h.ch}:${h.v} — ${h.text.replace(/\s+/g, ' ').trim()}`).join('\n\n') || undefined,
+          meta: `${T.details} · ${total} s\n${meta}${searched}` }
+        throw { done: m }
+      }
+      // "notes about Jonah swallowed by the fish": straight to the notes of the best verse; the other verses as buttons
+      sheet = await hitSheet(res.hits[0]!, kind)
+      for (const h of res.hits.slice(1, 4)) others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, kind) })
     }
     const r = await answerSheet(sheet)
     const total = ((performance.now() - t0) / 1000).toFixed(1)
-    m = { who: 'bot', intro: intro(sheet, facts, ui), info: r.answer, follow: followups(sheet, facts, ui), ui,
-      meta: `${T.details} · ${total} s\n${meta}\n${JSON.stringify(sheet, null, 1)}` }
+    m = { who: 'bot', intro: intro(sheet, facts, ui), info: r.answer, follow: [...followups(sheet, facts, ui), ...others], ui,
+      meta: `${T.details} · ${total} s\n${meta}${searched}\n${JSON.stringify(sheet, null, 1)}` }
     if (sheet.ref && sheet.intent === 'passage') c.last = sheet
-  } catch (err) {
-    m = { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}` }
+  } catch (err: any) {
+    m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}` }
   }
   c.msgs.push(m)
   c.updated = Date.now()
@@ -323,7 +354,13 @@ form.addEventListener('submit', (e) => {
   const c = conv()
   respond(c, q, async () => {
     const { slots, raw, ms } = await slotsOf(q)
-    const s = withContext(refInText(slots ?? { intent: 'unknown', lang: nav }, q), c.last, q)
+    const s0 = refInText(slots ?? { intent: 'unknown', lang: nav }, q)
+    const picked = pickFound(q, s0, c)
+    if (picked) {
+      const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? nav))
+      return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
+    }
+    const s = withContext(s0, c.last, q)
     const { sheet, ui } = await buildSheet(`q${Date.now()}`, s)
     return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
   })

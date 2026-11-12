@@ -25,10 +25,12 @@ const STOP = new Set(
     'parle parlent dit disent verset versets bible livre chapitre passage quel quelle il elle ils elles avec est été être par ' +
     // id
     'yang di ke dari dan atau apa siapa mana kapan bagaimana adalah itu ini ada dalam pada untuk dengan tentang ayat ayatnya alkitab ' +
-    'kitab pasal bagian berbicara mengatakan berkata cerita tunjukkan '
+    'kitab pasal bagian berbicara mengatakan berkata cerita tunjukkan ' +
+    // what to show, not what to look for
+    'notes note notas nota translation traduccion traducción traduction terjemahan catatan questions question preguntas pregunta pertanyaan text texto teks texte '
   ).split(/\s+/),
 )
-const HI_STOP = new Set('में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता'.split(' '))
+const HI_STOP = new Set('टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता'.split(' '))
 
 /** The content words of a question, longest first within the question order (names usually survive). */
 export function keywords(q: string): string[] {
@@ -114,8 +116,8 @@ const parseRef = (ref: string): [number, number] => {
 }
 
 /** Verses where the word links hold every concept (or as many as possible), from the English pack (it has every book). */
-async function byConcepts(groups: string[][], words: string[]): Promise<Found[]> {
-  const roots = words.map((w) => fold(w)).filter((w) => w.length >= 4).map((w) => w.slice(0, Math.min(6, Math.max(4, w.length - 2))))
+async function byConcepts(groups: string[][], words: string[], packLang = 'en'): Promise<Found[]> {
+  const roots = words.map((w) => fold(w)).filter((w) => w.length >= 3).map((w) => w.slice(0, Math.min(6, Math.max(3, w.length - 2))))
   const textHits = (t: string) => { const toks = fold(t).split(/[^\p{L}]+/u); return roots.filter((r) => toks.some((x) => x.startsWith(r))).length }
   const { r, maps } = await lang('en')
   const links = maps.xmap?.core?.links?.rows as Map<string, Map<string, [number, number]>> | undefined
@@ -137,6 +139,14 @@ async function byConcepts(groups: string[][], words: string[]): Promise<Found[]>
     if (!r.installed(`book:${b}`)) continue
     const model = await r.book(b)
     if (!model?.links) continue
+    // the words of a question in Spanish can match the Spanish text, when the Spanish pack has the book
+    let local: BookModel | undefined
+    if (packLang !== 'en' && roots.length) {
+      try {
+        const lr = (await lang(packLang)).r
+        if (lr.installed(`book:${b}`)) local = await lr.book(b)
+      } catch {}
+    }
     const byVerse = new Map<number, { ref: string; ids: string[] }>()
     for (const row of model.links.rows as HelpRow[]) {
       if (!row.concept) continue
@@ -160,13 +170,15 @@ async function byConcepts(groups: string[][], words: string[]): Promise<Found[]>
       if (covered.size < Math.min(2, groups.length) || own === 0) continue
       const [ch, v] = parseRef(e.ref)
       const text = verseText(model, from, from)
-      const tx = roots.length ? textHits(model.texts.map((t) => textOfRange(model.book, t.pieces as any, t.events as any, from, from)).join(' ')) : 0
+      const texts = [...model.texts, ...(local?.texts ?? [])]
+      const tx = roots.length ? textHits(texts.map((t) => textOfRange(model.book, t.pieces as any, t.events as any, from, from)).join(' ')) : 0
       if (groups.length === 1 && roots.length && tx === 0) continue
       scored.push({ book: b, ch, v, text, why: 'concepts', n: covered.size + tx, dense, own })
     }
+    for (const h of scored) (h as any).bookWeight = scored.length
     hits.push(...scored)
   }
-  hits.sort((a, b) => b.n - a.n || b.dense - a.dense || b.own - a.own)
+  hits.sort((a, b) => b.n - a.n || b.dense - a.dense || (b as any).bookWeight - (a as any).bookWeight || b.own - a.own)
   const out: Found[] = []
   for (const h of hits) {
     if (out.some((o) => o.book === h.book && o.ch === h.ch && Math.abs(o.v - h.v) <= 4)) continue
@@ -219,7 +231,7 @@ export async function searchVerses(question: string, term: string | null, packLa
   }
   const others = kw.filter((w) => !concepts.includes(w) && !(conceptOf(w, m) ?? []).length)
   if (groups.length >= 1) {
-    let hits = await byConcepts(groups, others)
+    let hits = await byConcepts(groups, others, packLang)
     // other words in a language with no pack cannot match the English text: fall back to the verses of the names alone
     if (!hits.length && groups.length === 1) hits = await byConcepts(groups, [])
     if (hits.length) return { keywords: kw, concepts, hits, how: 'concepts' }

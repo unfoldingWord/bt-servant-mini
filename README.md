@@ -32,6 +32,13 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
   para Abraham e Isaac, Génesis 22:6 sale cuarto (Éxodo 3:15 primero).
 - Si el modelo no saca una referencia escrita («Rut 1:16»), el código la lee de la pregunta.
 
+## Continuar después de una búsqueda (v0.4)
+- La conversación guarda los versículos encontrados (`found`) y el último versículo mostrado (`last`).
+- «el segundo», «the first one» -> ese resultado; «ese versículo», «that verse» o solo «¿y las preguntas?» -> el último mostrado.
+- «Notas sobre Abraham sacrificando a Isaac» busca y muestra directo las notas del mejor versículo, con los demás como botones.
+- Un libro solo cuenta si su nombre está escrito en la pregunta (el modelo a veces inventa uno). En español, las palabras de la
+  pregunta se comparan también con el texto español cuando el paquete tiene el libro.
+
 ## Construir e instalar
 ```
 python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun y ../lp3-mcp, ../fase0-mini-servant/packs)
