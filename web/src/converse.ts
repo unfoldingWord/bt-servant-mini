@@ -120,3 +120,19 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string):
   out.push({ label: `${w.lNext} (${bookFor(ui, code!)} ${ch}:${next})`, sheet: same(sheet.what, `${code} ${ch}:${next}`) })
   return out
 }
+
+const S: Record<L, { concepts: string; text: string; none: string; nothing: string }> = {
+  en: { concepts: 'These verses mention {words}:', text: 'These verses contain «{words}»:', none: "I didn't find verses with {words}. Try other words or a name.", nothing: 'Tell me some words or names from the passage you are looking for.' },
+  es: { concepts: 'Estos versículos mencionan {words}:', text: 'Estos versículos contienen «{words}»:', none: 'No encontré versículos con {words}. Prueba otras palabras o un nombre.', nothing: 'Dime algunas palabras o nombres del pasaje que buscas.' },
+  fr: { concepts: 'Ces versets mentionnent {words} :', text: 'Ces versets contiennent «{words}» :', none: "Je n'ai pas trouvé de verset avec {words}. Essayez d'autres mots ou un nom.", nothing: 'Donnez-moi quelques mots ou noms du passage que vous cherchez.' },
+  id: { concepts: 'Ayat-ayat ini menyebut {words}:', text: 'Ayat-ayat ini memuat «{words}»:', none: 'Saya tidak menemukan ayat dengan {words}. Coba kata lain atau sebuah nama.', nothing: 'Sebutkan beberapa kata atau nama dari bagian yang Anda cari.' },
+  hi: { concepts: 'इन पदों में {words} का उल्लेख है:', text: 'इन पदों में «{words}» है:', none: 'मुझे {words} वाले पद नहीं मिले। दूसरे शब्द या कोई नाम आज़माएँ।', nothing: 'जिस भाग को आप खोज रहे हैं, उसके कुछ शब्द या नाम बताइए।' },
+}
+/** The sentence before search results: what was searched, and how. */
+export function searchIntro(how: 'concepts' | 'text' | 'none', words: string[], ui: string): string {
+  const s = S[lang(ui)]
+  if (!words.length) return s.nothing
+  const w = list(words, W[lang(ui)].and)
+  return fill(how === 'concepts' ? s.concepts : how === 'text' ? s.text : s.none, { words: w })
+}
+export const bookLabel = bookFor

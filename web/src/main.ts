@@ -4,7 +4,8 @@ import { answerSheet, facts, setUiLang, type Sheet } from './answer'
 import { bookCode, buildSheet, type Slots } from './sheet'
 import { modelReady, modelStatus, slotsOf } from './model'
 import { installedLangs } from './packs'
-import { followups, intro } from './converse'
+import { bookLabel, followups, intro, searchIntro } from './converse'
+import { keywords, searchVerses } from './search'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -229,7 +230,34 @@ function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
   return slots
 }
 
-async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Sheet; ui: string; meta: string }>) {
+/** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
+function refInText(slots: Slots, q: string): Slots {
+  if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter) return slots
+  const t = q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d)))
+  const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?/u.exec(t)
+  if (!m) return slots
+  const words = m[1]!.trim().split(/\s+/)
+  let code: string | null = null
+  let name = ''
+  for (let k = Math.min(3, words.length); k >= 1 && !code; k--) {
+    name = words.slice(-k).join(' ')
+    code = bookCode(slots.lang ?? nav, name)
+  }
+  if (!code) return slots
+  const what = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions'] : slots.what ?? []
+  return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: +m[3]!, verse_end: m[4] ? +m[4] : null, what }
+}
+
+/** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
+const WHERE = /(en )?qu[ée] vers[íi]culo|d[óo]nde|which verse|what verse|where (does|is|do)|in which|quel verset|o[ùu] (est|parle)|ayat (mana|berapa)|di mana|किस पद|कहाँ/i
+function isOpen(q: string, sheet: Sheet): boolean {
+  if (sheet.intent === 'search') return true
+  if (sheet.ref) return false
+  if (WHERE.test(q)) return keywords(q).length >= 1
+  return ['unknown', 'advice', 'passage'].includes(sheet.intent) && keywords(q).length >= 2
+}
+
+async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Sheet; ui: string; meta: string; q?: string }>) {
   busy = true
   btn.disabled = true
   const mine: Msg = { who: 'me', text: label }
@@ -243,8 +271,28 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   const t0 = performance.now()
   let m: Msg
   try {
-    const { sheet, ui, meta } = await make()
+    const { sheet, ui, meta, q } = await make()
     setUiLang(ui)
+    if (q !== undefined && isOpen(q, sheet)) {
+      const res = await searchVerses(q, sheet.term, sheet.lang)
+      const total = ((performance.now() - t0) / 1000).toFixed(1)
+      const used = res.how === 'concepts' ? res.concepts : res.how === 'text' ? (res.hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
+      m = { who: 'bot', intro: searchIntro(res.how, used, ui), ui,
+        info: res.hits.map((h) => `${bookLabel(ui, h.book)} ${h.ch}:${h.v} — ${h.text.replace(/\s+/g, ' ').trim()}`).join('\n\n') || undefined,
+        follow: res.hits.slice(0, 4).map((h) => ({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`,
+          sheet: { ...sheet, intent: 'passage', ref: `${h.book} ${h.ch}:${h.v}`, what: ['text', 'notes'], term: null } })),
+        meta: `${T.details} · ${total} s
+${meta}
+search: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}` }
+      c.msgs.push(m)
+      c.updated = Date.now()
+      save()
+      wait.replaceWith(renderMsg(m))
+      log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      busy = false
+      setReady()
+      return
+    }
     const r = await answerSheet(sheet)
     const total = ((performance.now() - t0) / 1000).toFixed(1)
     m = { who: 'bot', intro: intro(sheet, facts, ui), info: r.answer, follow: followups(sheet, facts, ui), ui,
@@ -275,9 +323,9 @@ form.addEventListener('submit', (e) => {
   const c = conv()
   respond(c, q, async () => {
     const { slots, raw, ms } = await slotsOf(q)
-    const s = withContext(slots ?? { intent: 'unknown', lang: nav }, c.last, q)
+    const s = withContext(refInText(slots ?? { intent: 'unknown', lang: nav }, q), c.last, q)
     const { sheet, ui } = await buildSheet(`q${Date.now()}`, s)
-    return { sheet, ui, meta: `model ${ms} ms\n${raw}` }
+    return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
   })
 })
 input.addEventListener('keydown', (e) => {

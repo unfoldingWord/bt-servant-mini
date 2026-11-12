@@ -11,8 +11,8 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
 - `web/src/sheet.ts`: ficha -> consulta (nombres de libros en 5 idiomas, figuras retóricas, glosario de 190 términos clave fr/id/hi).
 - `web/src/answer.ts`: las recetas de la fase 0 sobre `language-pack-client` (pasaje, notas, preguntas, palabras clave, artículos,
   conteos, recursos, consejo de traducción), con plantillas en los 5 idiomas.
-- Paquetes incluidos: `en` (Rut, Salmos, Jonás, Juan, Tito, más los artículos) y `es-419` (Rut, Tito). Si un libro no está en
-  español, responde con el paquete en inglés.
+- Paquetes incluidos (12 nov): `en` con los 66 libros (25 MB) y `es-419` con los 6 libros que publica el servidor de staging.
+  Si un libro no está en español, responde con el paquete en inglés.
 
 ## Conversación (v0.2)
 - Cada respuesta: una frase que presenta lo encontrado (`web/src/converse.ts`, armada con los datos reales, en 5 idiomas), la
@@ -20,6 +20,17 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
 - «¿Y el versículo 4?» usa el libro y capítulo de la pregunta anterior. Hasta 3 conversaciones guardadas (localStorage), borrables.
 - La frase no la escribe un modelo: Qwen3 0.6B, Llama 3.2 1B y Gemma 3 1B inventaron conteos, versículos y definiciones al
   intentarlo (12 nov). Un modelo de 3-4B sería el siguiente intento.
+
+## Preguntas abiertas (v0.3)
+- «¿En qué versículo Abraham sacrifica a Isaac?», «Where is Jonah swallowed by a fish?» -> `web/src/search.ts`.
+- Palabras con contenido de la pregunta (sin palabras vacías de los 5 idiomas). Las que nombran un artículo de Palabras de
+  Traducción (nombres y términos clave; por nombre exacto, raíz común o el glosario fr/id/hi; personas con nombre de libro en los
+  5 idiomas) se vuelven conceptos; se buscan los versículos cuyos enlaces de palabras los tienen, en ventanas de 7 versículos,
+  primero los pasajes donde varios versículos los nombran juntos. Las otras palabras suben el puntaje si están en el texto inglés.
+  Si no hay conceptos, búsqueda de texto del cliente (todas las palabras, luego menos).
+- Límite: en fr/id/hi solo los nombres cruzan de idioma; «pez» o «poisson» no se comparan con el texto inglés. Orden imperfecto:
+  para Abraham e Isaac, Génesis 22:6 sale cuarto (Éxodo 3:15 primero).
+- Si el modelo no saca una referencia escrita («Rut 1:16»), el código la lee de la pregunta.
 
 ## Construir e instalar
 ```

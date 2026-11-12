@@ -3,9 +3,11 @@ import { createClient, type PackReader, type BlobStore } from '@bt-synergy/langu
 import { trustedKeys } from './shared'
 
 const BASE = './packs'
+/** The pack lists change when the app is rebuilt: never take them from the browser cache. */
+const NOCACHE: RequestInit = { cache: 'no-store' }
 let index: { langs: string[] } | null = null
 async function idx() {
-  return (index ??= await (await fetch(`${BASE}/index.json`)).json())
+  return (index ??= await (await fetch(`${BASE}/index.json`, NOCACHE)).json())
 }
 export async function installedLangs(): Promise<string[]> {
   return (await idx()).langs
@@ -27,8 +29,8 @@ function assetStore(lang: string): BlobStore {
       return r.ok ? new Uint8Array(await r.arrayBuffer()) : undefined
     },
     put: ro, delete: ro, setState: ro,
-    async ids() { return (ids ??= await (await fetch(`${dir}/ids.json`)).json()) },
-    async getState() { const r = await fetch(`${dir}/state.json`); return r.ok ? r.json() : undefined },
+    async ids() { return (ids ??= await (await fetch(`${dir}/ids.json`, NOCACHE)).json()) },
+    async getState() { const r = await fetch(`${dir}/state.json`, NOCACHE); return r.ok ? r.json() : undefined },
   }
 }
 
