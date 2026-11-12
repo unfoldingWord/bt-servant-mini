@@ -9,19 +9,24 @@ export type Slots = {
   intent?: string; book?: string | null; chapter?: number | null; verse_start?: number | null; verse_end?: number | null
   what?: string[]; version?: string | null; term?: string | null; phrase?: string | null; lang?: string; other_language?: string | null
 }
-const UI_LANGS = ['en', 'es', 'fr', 'id', 'hi']
+const UI_LANGS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
 const DEV = '०१२३४५६७८९'
 const isDeva = (s: string) => /[ऀ-ॿ]/.test(s)
 
+const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩'
+const AR_FOLD: Record<string, string> = { 'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ى': 'ي', 'ئ': 'ي', 'ؤ': 'و', 'ة': 'ه' }
+/** Lower case, Latin digits (Devanagari and Arabic-Indic too), no accents (not in Devanagari), Arabic letters folded as py/langs.py does. */
 export function fold(s: string): string {
   s = s.normalize('NFC').toLowerCase().replace(/’/g, "'").replace(/[०-९]/g, (d) => String(DEV.indexOf(d)))
+  s = s.replace(/[٠-٩]/g, (d) => String(AR_DIGITS.indexOf(d))).replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
   if (!isDeva(s)) s = s.normalize('NFD').replace(/\p{Mn}/gu, '').normalize('NFC')
+  if (/[ء-ي]/.test(s)) s = s.replace(/ـ/g, '').replace(/[أإآٱىئؤة]/g, (c) => AR_FOLD[c]!)
   return s
 }
 function normBook(s: string): string {
-  s = fold(s).replace(/[.\-–]/g, ' ').trim()
+  s = fold(s).replace(/[.\-–،]/g, ' ').trim()
   s = s.replace(/^(iii|ii|i) /, (_, r: string) => `${r.length} `).replace(/^([123])(?=\D)/, '$1 ')
-  s = s.replace(/\s+/g, ' ').trim().replace(/^(kitab |injil |le livre de |livre de |l'evangile selon |l'evangile de |evangile selon |evangile de )/, '')
+  s = s.replace(/\s+/g, ' ').trim().replace(/^(kitab |injil |le livre de |livre de |l'evangile selon |l'evangile de |evangile selon |evangile de |سفر |انجيل |رساله )/, '')
   return s.replace(/\s+/g, ' ').trim()
 }
 export function bookCode(lang: string, name: string | null | undefined): string | null {

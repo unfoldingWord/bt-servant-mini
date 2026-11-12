@@ -4,7 +4,7 @@
 import type { Sheet } from './answer'
 import booknames from './data/booknames.json'
 
-type L = 'en' | 'es' | 'fr' | 'id' | 'hi'
+type L = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 const pick = <T,>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)]!
 
 const W: Record<L, {
@@ -72,15 +72,27 @@ const W: Record<L, {
     resources: ['इस फ़ोन पर यह है:'],
     lNotes: 'टिप्पणियाँ', lQuestions: 'प्रश्न', lTerms: 'मुख्य शब्द', lNext: 'अगला पद', lText: 'पाठ',
   },
+  ar: {
+    text: (n) => (n === 1 ? 'نص الآية' : `النص في ${n} ترجمات`), notes: (n) => `${n} من ملاحظات الترجمة`,
+    questions: (n) => `${n} من أسئلة الفهم`, terms: (n) => `${n} من الكلمات الرئيسية`, and: 'و',
+    found: ['وجدتُ لـ {ref} {list}.', 'إليك {list} لـ {ref}.'],
+    nothing: 'لم أجد شيئًا لـ {ref} في حزم هذا الهاتف.',
+    article: ['إليك مقالة «{title}»:', 'وجدتُ مقالة «{title}». هذا ما تقوله:'],
+    choose: ['هناك أكثر من مقالة بهذا الاسم. أيّها تقصد؟'],
+    counted: ['هذا ما أحصيته:'],
+    advice: ['بخصوص «{phrase}»، هذا ما تقوله مساعدات الترجمة:'],
+    resources: ['هذا ما يوجد على هذا الهاتف:'],
+    lNotes: 'الملاحظات', lQuestions: 'الأسئلة', lTerms: 'الكلمات الرئيسية', lNext: 'الآية التالية', lText: 'النص',
+  },
 }
-const lang = (ui: string): L => (['en', 'es', 'fr', 'id', 'hi'].includes(ui) ? (ui as L) : 'en')
+const lang = (ui: string): L => (['en', 'es', 'fr', 'id', 'hi', 'ar'].includes(ui) ? (ui as L) : 'en')
 const fill = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '')
 function list(items: string[], and: string): string {
   if (items.length <= 1) return items[0] ?? ''
   return `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}`
 }
 const bookFor = (ui: string, code: string): string =>
-  (ui === 'es' ? (booknames as any).BOOK_ES : (booknames as any).BOOK_EN)[code] ?? code
+  (ui === 'es' ? (booknames as any).BOOK_ES : ui === 'ar' ? (booknames as any).BOOK_AR : (booknames as any).BOOK_EN)[code] ?? code
 
 /** The sentence before the found information, or null when the answer already speaks for itself (not understood, not found). */
 export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): string | null {
@@ -125,6 +137,7 @@ const S: Record<L, { concepts: string; text: string; none: string; nothing: stri
   es: { concepts: 'Estos versículos mencionan {words}:', text: 'Estos versículos contienen «{words}»:', none: 'No encontré versículos con {words}. Prueba otras palabras o un nombre.', nothing: 'Dime algunas palabras o nombres del pasaje que buscas.' },
   fr: { concepts: 'Ces versets mentionnent {words} :', text: 'Ces versets contiennent «{words}» :', none: "Je n'ai pas trouvé de verset avec {words}. Essayez d'autres mots ou un nom.", nothing: 'Donnez-moi quelques mots ou noms du passage que vous cherchez.' },
   id: { concepts: 'Ayat-ayat ini menyebut {words}:', text: 'Ayat-ayat ini memuat «{words}»:', none: 'Saya tidak menemukan ayat dengan {words}. Coba kata lain atau sebuah nama.', nothing: 'Sebutkan beberapa kata atau nama dari bagian yang Anda cari.' },
+  ar: { concepts: 'هذه الآيات تذكر {words}:', text: 'هذه الآيات تحتوي «{words}»:', none: 'لم أجد آيات فيها {words}. جرّب كلمات أخرى أو اسمًا.', nothing: 'اذكر بعض الكلمات أو الأسماء من المقطع الذي تبحث عنه.' },
   hi: { concepts: 'इन पदों में {words} का उल्लेख है:', text: 'इन पदों में «{words}» है:', none: 'मुझे {words} वाले पद नहीं मिले। दूसरे शब्द या कोई नाम आज़माएँ।', nothing: 'जिस भाग को आप खोज रहे हैं, उसके कुछ शब्द या नाम बताइए।' },
 }
 /** The sentence before search results: what was searched, and how. */

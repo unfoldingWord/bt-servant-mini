@@ -12,6 +12,7 @@ import tEs from './data/tpl-es.json'
 import tFr from './data/tpl-fr.json'
 import tId from './data/tpl-id.json'
 import tHi from './data/tpl-hi.json'
+import tAr from './data/tpl-ar.json'
 
 export type Sheet = {
   id: string; intent: string; ref: string | null; what: string[]; version: string | null; concept: string | null
@@ -46,7 +47,7 @@ const BOOK_ES: Record<string, string> = {
 
 // ---------------------------------------------------------------------------------------------------------------- helpers
 
-const templates: Record<string, Record<string, string>> = { en: tEn, es: tEs, fr: tFr, id: tId, hi: tHi }
+const templates: Record<string, Record<string, string>> = { en: tEn, es: tEs, fr: tFr, id: tId, hi: tHi, ar: tAr }
 /** The language the person wrote in: the answer's fixed words follow it, whatever pack the content comes from. */
 let UI: string | null = null
 export function setUiLang(l: string | null) { UI = l && templates[l] ? l : null }
@@ -58,7 +59,9 @@ function say(lang: string, key: string, vars: Record<string, string | number> = 
   if (t === undefined) throw new Error(`no template ${key} for ${lang}`)
   return t.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''))
 }
-const bookName = (lang: string, code: string): string => (lang.startsWith('es') ? BOOK_ES : BOOK_EN)[code] ?? code
+import booknames from './data/booknames.json'
+const bookName = (lang: string, code: string): string =>
+  (lang.startsWith('es') ? BOOK_ES : lang === 'ar' ? ((booknames as any).BOOK_AR as Record<string, string>) : BOOK_EN)[code] ?? code
 
 /** A note or an article in plain text: no headings, no links the reader cannot follow (as `clean` of language-pack-mcp). */
 export function clean(md: unknown): string {

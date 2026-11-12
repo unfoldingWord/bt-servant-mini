@@ -30,6 +30,8 @@ const STOP = new Set(
     'notes note notas nota translation traduccion traducción traduction terjemahan catatan questions question preguntas pregunta pertanyaan text texto teks texte '
   ).split(/\s+/),
 )
+// ar
+const AR_STOP = new Set('في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
 const HI_STOP = new Set('टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता'.split(' '))
 
 /** The content words of a question, longest first within the question order (names usually survive). */
@@ -41,7 +43,7 @@ export function keywords(q: string): string[] {
   const out: string[] = []
   for (const t of toks) {
     const f = fold(t)
-    if (/^\d+$/.test(f) || f.length < 3 || STOP.has(f) || HI_STOP.has(t)) continue
+    if (/^\d+$/.test(f) || f.length < 3 || STOP.has(f) || HI_STOP.has(t) || AR_STOP.has(f) || AR_STOP.has(f.replace(/^(ال|و|ب|ل)/, ''))) continue
     if (!out.includes(t)) out.push(t)
   }
   return out.slice(0, 6)

@@ -58,8 +58,17 @@ const UI: Record<string, UiText> = {
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
     appLang: 'ऐप की भाषा', packs: 'स्थापित भाषा पैकेज', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?', helps: 'सहायता की भाषा', auto: 'मेरे प्रश्न वाली',
   },
+  ar: {
+    ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'دون اتصال · جاهز',
+    thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
+    hello: 'مرحبًا! أجيب من مساعدات الترجمة المثبتة على هذا الهاتف (الملاحظات والكلمات والأسئلة والأكاديمية)، دون إنترنت.',
+    ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'ساعدني في ترجمة يونان ١'],
+    chats: 'المحادثات', newChat: 'محادثة جديدة', max: 'يمكنك الاحتفاظ بثلاث محادثات. احذف واحدة لتبدأ أخرى.',
+    del: 'حذف', confirmDel: 'حذف هذه المحادثة؟', untitled: 'محادثة جديدة',
+    appLang: 'لغة التطبيق', packs: 'حزم اللغات المثبتة', welcome: 'كيف أساعدك في ترجمتك؟', helps: 'لغة المساعدات', auto: 'لغة سؤالي',
+  },
 }
-const UI_LANGS: [string, string][] = [['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['id', 'Bahasa Indonesia'], ['hi', 'हिन्दी']]
+const UI_LANGS: [string, string][] = [['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['id', 'Bahasa Indonesia'], ['hi', 'हिन्दी'], ['ar', 'العربية']]
 const UI_KEY = 'btsm.ui'
 const PACK_KEY = 'btsm.helps'
 let helpsLang: string | null = (() => {
@@ -122,6 +131,7 @@ const log = $('#log'), form = $<HTMLFormElement>('#ask'), input = $<HTMLTextArea
 const status = $('#status'), panel = $('#panel'), menu = $<HTMLButtonElement>('#menu')
 function applyUi() {
   document.documentElement.lang = nav
+  document.documentElement.dir = nav === 'ar' ? 'rtl' : 'ltr'
   input.placeholder = T.ph
   btn.setAttribute('aria-label', T.send)
   menu.setAttribute('aria-label', T.chats)
@@ -289,11 +299,11 @@ function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
   if (named) return slots
   // short question with a number and no book: verse (or chapter) of the same passage
   const words = q.trim().split(/\s+/).length
-  const nums = /(\d+)\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?|(\d+)(?:\s*[-–]\s*(\d+))?/.exec(q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))))
+  const nums = /(\d+)\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?|(\d+)(?:\s*[-–]\s*(\d+))?/.exec(q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))
   // only when the words around the number are not a name ("Mathew 3" names a book, "and verse 4?" does not)
   if (words <= 8 && nums && keywords(q).filter((w) => !/^\d/.test(w)).length === 0) {
-    const isChap = /cap[ií]tulo|chapter|chapitre|pasal|अध्याय/i.test(q)
-    const asked = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions']
+    const isChap = /cap[ií]tulo|chapter|chapitre|pasal|अध्याय|أصحاح/i.test(q)
+    const asked = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न|أسئلة/i.test(q) ? ['questions']
       : /text|texto|teks|पाठ|dice|say|dit/i.test(q) ? ['text'] : null
     const base = { ...slots, intent: 'passage', book: code, what: asked ?? last!.what }
     if (nums[1]) return { ...base, chapter: +nums[1], verse_start: +nums[2]!, verse_end: nums[3] ? +nums[3] : null }
@@ -308,7 +318,7 @@ function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
 /** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
 function refInText(slots: Slots, q: string): Slots {
   if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter) return slots
-  const t = q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d)))
+  const t = q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
   const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/u.exec(t)
   if (!m) return slots
   const words = m[1]!.trim().split(/\s+/)
@@ -324,7 +334,7 @@ function refInText(slots: Slots, q: string): Slots {
 }
 
 /** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
-const WHERE = /(en )?qu[ée] vers[íi]culo|d[óo]nde|which verse|what verse|where (does|is|do)|in which|quel verset|o[ùu] (est|parle)|ayat (mana|berapa)|di mana|किस पद|कहाँ/i
+const WHERE = /(en )?qu[ée] vers[íi]culo|d[óo]nde|which verse|what verse|where (does|is|do)|in which|quel verset|o[ùu] (est|parle)|ayat (mana|berapa)|di mana|किस पद|कहाँ|أين|في أي آية/i
 function isOpen(q: string, sheet: Sheet): boolean {
   if (sheet.intent === 'search') return true
   if (sheet.ref) return false
@@ -335,16 +345,16 @@ function isOpen(q: string, sheet: Sheet): boolean {
 
 /** What the person wants to see of a verse, when the question says it. */
 function kindOf(q: string): string[] | null {
-  return /not[ae]s?\b|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions']
-    : /\b(text|texto|teks|texte)\b|पाठ/i.test(q) ? ['text'] : null
+  return /not[ae]s?\b|catatan|टिप्पणि|ملاحظات/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions']
+    : /\b(text|texto|teks|texte)\b|पाठ|النص/i.test(q) ? ['text'] : null
 }
 const ORDINALS: [RegExp, number][] = [
-  [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर/i, 1],
-  [/\b(third|tercer[oa]?|troisième|ketiga)\b|तीसर/i, 2], [/\b(fourth|cuart[oa]|quatrième|keempat)\b|चौथ/i, 3],
+  [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल|الأول/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर|الثاني/i, 1],
+  [/\b(third|tercer[oa]?|troisième|ketiga)\b|तीसर|الثالث/i, 2], [/\b(fourth|cuart[oa]|quatrième|keempat)\b|चौथ/i, 3],
 ]
 /** "The whole chapter": the chapter of the last passage. */
-const WHOLE = /(whole|entire|full|all the) chapter|chapter (in full|complete)|cap[íi]tulo (completo|entero)|todo el cap[íi]tulo|(tout le|le chapitre) (chapitre|entier|complet)|(seluruh|semua) pasal|pasal (lengkap|seluruhnya)|पूरा अध्याय|सारा अध्याय/i
-const THAT = /\b(that|this) (verse|one|passage)|\b(ese|este|aquel) (vers[íi]culo|pasaje)|\b(ce|cet) (verset|passage)|\bayat (itu|ini)\b|(उस|इस) पद/i
+const WHOLE = /(whole|entire|full|all the) chapter|chapter (in full|complete)|cap[íi]tulo (completo|entero)|todo el cap[íi]tulo|(tout le|le chapitre) (chapitre|entier|complet)|(seluruh|semua) pasal|pasal (lengkap|seluruhnya)|पूरा अध्याय|सारा अध्याय|الأصحاح (كله|كاملا)|كل الأصحاح/i
+const THAT = /\b(that|this) (verse|one|passage)|\b(ese|este|aquel) (vers[íi]culo|pasaje)|\b(ce|cet) (verset|passage)|\bayat (itu|ini)\b|(उस|इस) पद|(تلك|هذه) الآية/i
 /** A follow-up with no book of its own: "the second one" (a search result), "that verse" or "and the questions?" (the last verse shown). */
 function pickFound(q: string, slots: Slots, c: Conv): { hit: Hit; what: string[] } | null {
   const named = !THAT.test(q) && slots.book && fold(q).includes(fold(slots.book)) && bookCode(slots.lang ?? nav, slots.book)
@@ -433,6 +443,9 @@ form.addEventListener('submit', (e) => {
   respond(c, q, async () => {
     const { slots, raw, ms } = await slotsOf(q)
     const s0 = refInText(slots ?? { intent: 'unknown', lang: nav }, q)
+    // the script says the language even when the model does not know it: Arabic letters, Devanagari
+    if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
+    else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
     const picked = pickFound(q, s0, c)
     if (picked) {
       const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? nav), helpsLang)
