@@ -1,0 +1,2134 @@
+{
+  "tw:kt/ark": {
+    "fr": [
+      "arche"
+    ],
+    "id": [
+      "bahtera"
+    ],
+    "hi": [
+      "जहाज़"
+    ]
+  },
+  "tw:kt/god": {
+    "fr": [
+      "Dieu"
+    ],
+    "id": [
+      "Allah"
+    ],
+    "hi": [
+      "परमेश्वर",
+      "ईश्वर"
+    ]
+  },
+  "tw:kt/jew": {
+    "fr": [
+      "juif"
+    ],
+    "id": [
+      "Yahudi"
+    ],
+    "hi": [
+      "यहूदी"
+    ]
+  },
+  "tw:kt/sin": {
+    "fr": [
+      "péché"
+    ],
+    "id": [
+      "dosa"
+    ],
+    "hi": [
+      "पाप"
+    ]
+  },
+  "tw:kt/woe": {
+    "fr": [
+      "malheur"
+    ],
+    "id": [
+      "celaka"
+    ],
+    "hi": [
+      "हाय"
+    ]
+  },
+  "tw:kt/amen": {
+    "fr": [
+      "amen"
+    ],
+    "id": [
+      "amin"
+    ],
+    "hi": [
+      "आमीन"
+    ]
+  },
+  "tw:kt/bond": {
+    "fr": [
+      "lier"
+    ],
+    "id": [
+      "mengikat"
+    ],
+    "hi": [
+      "बाँधना"
+    ]
+  },
+  "tw:kt/evil": {
+    "fr": [
+      "mal"
+    ],
+    "id": [
+      "kejahatan",
+      "jahat"
+    ],
+    "hi": [
+      "बुराई"
+    ]
+  },
+  "tw:kt/fear": {
+    "fr": [
+      "crainte"
+    ],
+    "id": [
+      "takut"
+    ],
+    "hi": [
+      "भय"
+    ]
+  },
+  "tw:kt/good": {
+    "fr": [
+      "bon"
+    ],
+    "id": [
+      "baik"
+    ],
+    "hi": [
+      "भला",
+      "अच्छा"
+    ]
+  },
+  "tw:kt/hell": {
+    "fr": [
+      "enfer"
+    ],
+    "id": [
+      "neraka"
+    ],
+    "hi": [
+      "नरक"
+    ]
+  },
+  "tw:kt/holy": {
+    "fr": [
+      "saint"
+    ],
+    "id": [
+      "kudus"
+    ],
+    "hi": [
+      "पवित्र"
+    ]
+  },
+  "tw:kt/hope": {
+    "fr": [
+      "espérance"
+    ],
+    "id": [
+      "pengharapan"
+    ],
+    "hi": [
+      "आशा"
+    ]
+  },
+  "tw:kt/lamb": {
+    "fr": [
+      "agneau"
+    ],
+    "id": [
+      "domba"
+    ],
+    "hi": [
+      "मेम्ना"
+    ]
+  },
+  "tw:kt/lord": {
+    "fr": [
+      "Seigneur"
+    ],
+    "id": [
+      "tuan"
+    ],
+    "hi": [
+      "प्रभु"
+    ]
+  },
+  "tw:kt/love": {
+    "fr": [
+      "amour"
+    ],
+    "id": [
+      "kasih"
+    ],
+    "hi": [
+      "प्रेम"
+    ]
+  },
+  "tw:kt/pray": {
+    "fr": [
+      "prier"
+    ],
+    "id": [
+      "berdoa"
+    ],
+    "hi": [
+      "प्रार्थना करना"
+    ]
+  },
+  "tw:kt/save": {
+    "fr": [
+      "sauver"
+    ],
+    "id": [
+      "menyelamatkan"
+    ],
+    "hi": [
+      "बचाना"
+    ]
+  },
+  "tw:kt/sign": {
+    "fr": [
+      "signe"
+    ],
+    "id": [
+      "tanda"
+    ],
+    "hi": [
+      "चिन्ह"
+    ]
+  },
+  "tw:kt/soul": {
+    "fr": [
+      "âme"
+    ],
+    "id": [
+      "jiwa"
+    ],
+    "hi": [
+      "प्राण",
+      "आत्मा"
+    ]
+  },
+  "tw:kt/test": {
+    "fr": [
+      "éprouver",
+      "épreuve"
+    ],
+    "id": [
+      "mencobai",
+      "ujian"
+    ],
+    "hi": [
+      "परखना",
+      "परीक्षा"
+    ]
+  },
+  "tw:kt/wise": {
+    "fr": [
+      "sage"
+    ],
+    "id": [
+      "bijak"
+    ],
+    "hi": [
+      "बुद्धिमान"
+    ]
+  },
+  "tw:kt/zion": {
+    "fr": [
+      "Sion"
+    ],
+    "id": [
+      "Sion"
+    ],
+    "hi": [
+      "सियोन"
+    ]
+  },
+  "tw:kt/altar": {
+    "fr": [
+      "autel"
+    ],
+    "id": [
+      "mezbah"
+    ],
+    "hi": [
+      "वेदी"
+    ]
+  },
+  "tw:kt/angel": {
+    "fr": [
+      "ange"
+    ],
+    "id": [
+      "malaikat"
+    ],
+    "hi": [
+      "स्वर्गदूत"
+    ]
+  },
+  "tw:kt/beget": {
+    "fr": [
+      "engendrer"
+    ],
+    "id": [
+      "memperanakkan"
+    ],
+    "hi": [
+      "जन्म देना"
+    ]
+  },
+  "tw:kt/bless": {
+    "fr": [
+      "bénir"
+    ],
+    "id": [
+      "memberkati"
+    ],
+    "hi": [
+      "आशीष देना"
+    ]
+  },
+  "tw:kt/cross": {
+    "fr": [
+      "croix"
+    ],
+    "id": [
+      "salib"
+    ],
+    "hi": [
+      "क्रूस"
+    ]
+  },
+  "tw:kt/curse": {
+    "fr": [
+      "malédiction"
+    ],
+    "id": [
+      "kutuk",
+      "kutukan"
+    ],
+    "hi": [
+      "श्राप",
+      "शाप"
+    ]
+  },
+  "tw:kt/demon": {
+    "fr": [
+      "démon"
+    ],
+    "id": [
+      "setan",
+      "roh jahat"
+    ],
+    "hi": [
+      "दुष्टात्मा"
+    ]
+  },
+  "tw:kt/elect": {
+    "fr": [
+      "élu"
+    ],
+    "id": [
+      "pilihan"
+    ],
+    "hi": [
+      "चुने हुए"
+    ]
+  },
+  "tw:kt/ephod": {
+    "fr": [
+      "éphod"
+    ],
+    "id": [
+      "efod"
+    ],
+    "hi": [
+      "एपोद"
+    ]
+  },
+  "tw:kt/exalt": {
+    "fr": [
+      "exalter"
+    ],
+    "id": [
+      "meninggikan"
+    ],
+    "hi": [
+      "ऊँचा करना"
+    ]
+  },
+  "tw:kt/faith": {
+    "fr": [
+      "foi"
+    ],
+    "id": [
+      "iman"
+    ],
+    "hi": [
+      "विश्वास"
+    ]
+  },
+  "tw:kt/favor": {
+    "fr": [
+      "faveur"
+    ],
+    "id": [
+      "perkenanan"
+    ],
+    "hi": [
+      "अनुग्रह",
+      "कृपा"
+    ]
+  },
+  "tw:kt/glory": {
+    "fr": [
+      "gloire"
+    ],
+    "id": [
+      "kemuliaan"
+    ],
+    "hi": [
+      "महिमा"
+    ]
+  },
+  "tw:kt/godly": {
+    "fr": [
+      "pieux"
+    ],
+    "id": [
+      "saleh"
+    ],
+    "hi": [
+      "भक्त"
+    ]
+  },
+  "tw:kt/grace": {
+    "fr": [
+      "grâce"
+    ],
+    "id": [
+      "kasih karunia"
+    ],
+    "hi": [
+      "अनुग्रह"
+    ]
+  },
+  "tw:kt/guilt": {
+    "fr": [
+      "culpabilité"
+    ],
+    "id": [
+      "kesalahan",
+      "bersalah"
+    ],
+    "hi": [
+      "दोष",
+      "अपराध"
+    ]
+  },
+  "tw:kt/hades": {
+    "fr": [
+      "Hadès"
+    ],
+    "id": [
+      "Hades"
+    ],
+    "hi": [
+      "अधोलोक"
+    ]
+  },
+  "tw:kt/honor": {
+    "fr": [
+      "honneur"
+    ],
+    "id": [
+      "hormat",
+      "kehormatan"
+    ],
+    "hi": [
+      "आदर",
+      "सम्मान"
+    ]
+  },
+  "tw:kt/jesus": {
+    "fr": [
+      "Jésus"
+    ],
+    "id": [
+      "Yesus"
+    ],
+    "hi": [
+      "यीशु"
+    ]
+  },
+  "tw:kt/judge": {
+    "fr": [
+      "juge",
+      "juger"
+    ],
+    "id": [
+      "hakim",
+      "menghakimi"
+    ],
+    "hi": [
+      "न्यायाधीश",
+      "न्याय करना"
+    ]
+  },
+  "tw:kt/manna": {
+    "fr": [
+      "manne"
+    ],
+    "id": [
+      "manna"
+    ],
+    "hi": [
+      "मन्ना"
+    ]
+  },
+  "tw:kt/mercy": {
+    "fr": [
+      "miséricorde"
+    ],
+    "id": [
+      "belas kasihan",
+      "rahmat"
+    ],
+    "hi": [
+      "दया"
+    ]
+  },
+  "tw:kt/myrrh": {
+    "fr": [
+      "myrrhe"
+    ],
+    "id": [
+      "mur"
+    ],
+    "hi": [
+      "गन्धरस"
+    ]
+  },
+  "tw:kt/psalm": {
+    "fr": [
+      "psaume"
+    ],
+    "id": [
+      "mazmur"
+    ],
+    "hi": [
+      "भजन"
+    ]
+  },
+  "tw:kt/rabbi": {
+    "fr": [
+      "rabbi"
+    ],
+    "id": [
+      "rabi"
+    ],
+    "hi": [
+      "रब्बी"
+    ]
+  },
+  "tw:kt/saint": {
+    "fr": [
+      "saint"
+    ],
+    "id": [
+      "orang kudus"
+    ],
+    "hi": [
+      "पवित्र जन",
+      "संत"
+    ]
+  },
+  "tw:kt/satan": {
+    "fr": [
+      "Satan"
+    ],
+    "id": [
+      "Iblis",
+      "Setan"
+    ],
+    "hi": [
+      "शैतान"
+    ]
+  },
+  "tw:kt/stone": {
+    "fr": [
+      "pierre"
+    ],
+    "id": [
+      "batu"
+    ],
+    "hi": [
+      "पत्थर"
+    ]
+  },
+  "tw:kt/tempt": {
+    "fr": [
+      "tenter"
+    ],
+    "id": [
+      "mencobai"
+    ],
+    "hi": [
+      "परीक्षा लेना",
+      "प्रलोभन देना"
+    ]
+  },
+  "tw:kt/trust": {
+    "fr": [
+      "confiance",
+      "se confier"
+    ],
+    "id": [
+      "percaya"
+    ],
+    "hi": [
+      "भरोसा करना"
+    ]
+  },
+  "tw:kt/world": {
+    "fr": [
+      "monde"
+    ],
+    "id": [
+      "dunia"
+    ],
+    "hi": [
+      "संसार",
+      "जगत"
+    ]
+  },
+  "tw:kt/wrath": {
+    "fr": [
+      "colère"
+    ],
+    "id": [
+      "murka",
+      "kemurkaan"
+    ],
+    "hi": [
+      "क्रोध"
+    ]
+  },
+  "tw:kt/anoint": {
+    "fr": [
+      "oindre"
+    ],
+    "id": [
+      "mengurapi"
+    ],
+    "hi": [
+      "अभिषेक करना"
+    ]
+  },
+  "tw:kt/christ": {
+    "fr": [
+      "Christ"
+    ],
+    "id": [
+      "Kristus"
+    ],
+    "hi": [
+      "मसीह"
+    ]
+  },
+  "tw:kt/church": {
+    "fr": [
+      "Église"
+    ],
+    "id": [
+      "jemaat",
+      "gereja"
+    ],
+    "hi": [
+      "कलीसिया"
+    ]
+  },
+  "tw:kt/deacon": {
+    "fr": [
+      "diacre"
+    ],
+    "id": [
+      "diaken"
+    ],
+    "hi": [
+      "सेवक"
+    ]
+  },
+  "tw:kt/divine": {
+    "fr": [
+      "divin"
+    ],
+    "id": [
+      "ilahi"
+    ],
+    "hi": [
+      "ईश्वरीय"
+    ]
+  },
+  "tw:kt/eunuch": {
+    "fr": [
+      "eunuque"
+    ],
+    "id": [
+      "sida-sida"
+    ],
+    "hi": [
+      "खोजा"
+    ]
+  },
+  "tw:kt/exhort": {
+    "fr": [
+      "exhorter"
+    ],
+    "id": [
+      "menasihati"
+    ],
+    "hi": [
+      "समझाना",
+      "उत्साह देना"
+    ]
+  },
+  "tw:kt/heaven": {
+    "fr": [
+      "ciel"
+    ],
+    "id": [
+      "surga"
+    ],
+    "hi": [
+      "स्वर्ग"
+    ]
+  },
+  "tw:kt/hebrew": {
+    "fr": [
+      "hébreu"
+    ],
+    "id": [
+      "Ibrani"
+    ],
+    "hi": [
+      "इब्रानी"
+    ]
+  },
+  "tw:kt/humble": {
+    "fr": [
+      "humble"
+    ],
+    "id": [
+      "rendah hati"
+    ],
+    "hi": [
+      "नम्र"
+    ]
+  },
+  "tw:kt/israel": {
+    "fr": [
+      "Israël"
+    ],
+    "id": [
+      "Israel"
+    ],
+    "hi": [
+      "इस्राएल"
+    ]
+  },
+  "tw:kt/lament": {
+    "fr": [
+      "se lamenter"
+    ],
+    "id": [
+      "meratap"
+    ],
+    "hi": [
+      "विलाप करना"
+    ]
+  },
+  "tw:kt/perish": {
+    "fr": [
+      "périr"
+    ],
+    "id": [
+      "binasa"
+    ],
+    "hi": [
+      "नाश होना"
+    ]
+  },
+  "tw:kt/priest": {
+    "fr": [
+      "prêtre"
+    ],
+    "id": [
+      "imam"
+    ],
+    "hi": [
+      "याजक"
+    ]
+  },
+  "tw:kt/purify": {
+    "fr": [
+      "purifier"
+    ],
+    "id": [
+      "menyucikan"
+    ],
+    "hi": [
+      "शुद्ध करना"
+    ]
+  },
+  "tw:kt/ransom": {
+    "fr": [
+      "rançon"
+    ],
+    "id": [
+      "tebusan"
+    ],
+    "hi": [
+      "छुड़ौती",
+      "फिरौती"
+    ]
+  },
+  "tw:kt/redeem": {
+    "fr": [
+      "racheter"
+    ],
+    "id": [
+      "menebus"
+    ],
+    "hi": [
+      "छुड़ाना"
+    ]
+  },
+  "tw:kt/repent": {
+    "fr": [
+      "se repentir"
+    ],
+    "id": [
+      "bertobat"
+    ],
+    "hi": [
+      "मन फिराना",
+      "पश्चाताप करना"
+    ]
+  },
+  "tw:kt/savior": {
+    "fr": [
+      "Sauveur"
+    ],
+    "id": [
+      "Juruselamat"
+    ],
+    "hi": [
+      "उद्धारकर्ता"
+    ]
+  },
+  "tw:kt/scribe": {
+    "fr": [
+      "scribe"
+    ],
+    "id": [
+      "ahli Taurat"
+    ],
+    "hi": [
+      "शास्त्री"
+    ]
+  },
+  "tw:kt/spirit": {
+    "fr": [
+      "esprit"
+    ],
+    "id": [
+      "roh"
+    ],
+    "hi": [
+      "आत्मा"
+    ]
+  },
+  "tw:kt/temple": {
+    "fr": [
+      "temple"
+    ],
+    "id": [
+      "bait suci"
+    ],
+    "hi": [
+      "मंदिर"
+    ]
+  },
+  "tw:kt/yahweh": {
+    "fr": [
+      "Yahvé"
+    ],
+    "id": [
+      "Yahweh"
+    ],
+    "hi": [
+      "यहोवा"
+    ]
+  },
+  "tw:kt/apostle": {
+    "fr": [
+      "apôtre"
+    ],
+    "id": [
+      "rasul"
+    ],
+    "hi": [
+      "प्रेरित"
+    ]
+  },
+  "tw:kt/appoint": {
+    "fr": [
+      "désigner",
+      "établir"
+    ],
+    "id": [
+      "menetapkan"
+    ],
+    "hi": [
+      "नियुक्त करना"
+    ]
+  },
+  "tw:kt/baptize": {
+    "fr": [
+      "baptiser"
+    ],
+    "id": [
+      "membaptis"
+    ],
+    "hi": [
+      "बपतिस्मा देना"
+    ]
+  },
+  "tw:kt/believe": {
+    "fr": [
+      "croire"
+    ],
+    "id": [
+      "percaya"
+    ],
+    "hi": [
+      "विश्वास करना"
+    ]
+  },
+  "tw:kt/beloved": {
+    "fr": [
+      "bien-aimé"
+    ],
+    "id": [
+      "kekasih"
+    ],
+    "hi": [
+      "प्रिय"
+    ]
+  },
+  "tw:kt/condemn": {
+    "fr": [
+      "condamner"
+    ],
+    "id": [
+      "menghukum"
+    ],
+    "hi": [
+      "दोषी ठहराना"
+    ]
+  },
+  "tw:kt/confess": {
+    "fr": [
+      "confesser"
+    ],
+    "id": [
+      "mengaku"
+    ],
+    "hi": [
+      "अंगीकार करना"
+    ]
+  },
+  "tw:kt/crucify": {
+    "fr": [
+      "crucifier"
+    ],
+    "id": [
+      "menyalibkan"
+    ],
+    "hi": [
+      "क्रूस पर चढ़ाना"
+    ]
+  },
+  "tw:kt/foolish": {
+    "fr": [
+      "insensé",
+      "fou"
+    ],
+    "id": [
+      "bodoh"
+    ],
+    "hi": [
+      "मूर्ख"
+    ]
+  },
+  "tw:kt/forgive": {
+    "fr": [
+      "pardonner"
+    ],
+    "id": [
+      "mengampuni"
+    ],
+    "hi": [
+      "क्षमा करना"
+    ]
+  },
+  "tw:kt/fulfill": {
+    "fr": [
+      "accomplir"
+    ],
+    "id": [
+      "menggenapi"
+    ],
+    "hi": [
+      "पूरा करना"
+    ]
+  },
+  "tw:kt/gentile": {
+    "fr": [
+      "païen"
+    ],
+    "id": [
+      "bangsa lain"
+    ],
+    "hi": [
+      "अन्यजाति"
+    ]
+  },
+  "tw:kt/holyone": {
+    "fr": [
+      "le Saint"
+    ],
+    "id": [
+      "Yang Kudus"
+    ],
+    "hi": [
+      "पवित्र परमेश्वर"
+    ]
+  },
+  "tw:kt/inherit": {
+    "fr": [
+      "hériter"
+    ],
+    "id": [
+      "mewarisi"
+    ],
+    "hi": [
+      "विरासत में पाना"
+    ]
+  },
+  "tw:kt/jealous": {
+    "fr": [
+      "jaloux"
+    ],
+    "id": [
+      "cemburu"
+    ],
+    "hi": [
+      "ईर्ष्यालु"
+    ]
+  },
+  "tw:kt/justice": {
+    "fr": [
+      "justice",
+      "juste"
+    ],
+    "id": [
+      "keadilan",
+      "adil"
+    ],
+    "hi": [
+      "न्याय"
+    ]
+  },
+  "tw:kt/lastday": {
+    "fr": [
+      "dernier jour"
+    ],
+    "id": [
+      "hari terakhir"
+    ],
+    "hi": [
+      "अंतिम दिन"
+    ]
+  },
+  "tw:kt/majesty": {
+    "fr": [
+      "majesté"
+    ],
+    "id": [
+      "keagungan"
+    ],
+    "hi": [
+      "प्रताप"
+    ]
+  },
+  "tw:kt/miracle": {
+    "fr": [
+      "miracle"
+    ],
+    "id": [
+      "mukjizat"
+    ],
+    "hi": [
+      "चमत्कार"
+    ]
+  },
+  "tw:kt/parable": {
+    "fr": [
+      "parabole"
+    ],
+    "id": [
+      "perumpamaan"
+    ],
+    "hi": [
+      "दृष्टांत"
+    ]
+  },
+  "tw:kt/promise": {
+    "fr": [
+      "promesse"
+    ],
+    "id": [
+      "janji"
+    ],
+    "hi": [
+      "प्रतिज्ञा"
+    ]
+  },
+  "tw:kt/prophet": {
+    "fr": [
+      "prophète"
+    ],
+    "id": [
+      "nabi"
+    ],
+    "hi": [
+      "नबी"
+    ]
+  },
+  "tw:kt/remnant": {
+    "fr": [
+      "reste"
+    ],
+    "id": [
+      "sisa"
+    ],
+    "hi": [
+      "अवशेष"
+    ]
+  },
+  "tw:kt/restore": {
+    "fr": [
+      "restaurer"
+    ],
+    "id": [
+      "memulihkan"
+    ],
+    "hi": [
+      "बहाल करना"
+    ]
+  },
+  "tw:kt/sabbath": {
+    "fr": [
+      "sabbat"
+    ],
+    "id": [
+      "Sabat"
+    ],
+    "hi": [
+      "विश्रामदिन"
+    ]
+  },
+  "tw:kt/shaddai": {
+    "fr": [
+      "Shaddaï"
+    ],
+    "id": [
+      "Yang Mahakuasa"
+    ],
+    "hi": [
+      "सर्वशक्तिमान"
+    ]
+  },
+  "tw:kt/worship": {
+    "fr": [
+      "adorer"
+    ],
+    "id": [
+      "menyembah"
+    ],
+    "hi": [
+      "आराधना करना"
+    ]
+  },
+  "tw:kt/zealous": {
+    "fr": [
+      "zèle"
+    ],
+    "id": [
+      "semangat"
+    ],
+    "hi": [
+      "उत्साह"
+    ]
+  },
+  "tw:kt/adoption": {
+    "fr": [
+      "adoption"
+    ],
+    "id": [
+      "pengangkatan anak"
+    ],
+    "hi": [
+      "गोद लेना"
+    ]
+  },
+  "tw:kt/adultery": {
+    "fr": [
+      "adultère"
+    ],
+    "id": [
+      "perzinahan"
+    ],
+    "hi": [
+      "व्यभिचार"
+    ]
+  },
+  "tw:kt/almighty": {
+    "fr": [
+      "Tout-Puissant"
+    ],
+    "id": [
+      "Mahakuasa"
+    ],
+    "hi": [
+      "सर्वशक्तिमान"
+    ]
+  },
+  "tw:kt/covenant": {
+    "fr": [
+      "alliance"
+    ],
+    "id": [
+      "perjanjian"
+    ],
+    "hi": [
+      "वाचा"
+    ]
+  },
+  "tw:kt/disciple": {
+    "fr": [
+      "disciple"
+    ],
+    "id": [
+      "murid"
+    ],
+    "hi": [
+      "शिष्य"
+    ]
+  },
+  "tw:kt/dominion": {
+    "fr": [
+      "domination"
+    ],
+    "id": [
+      "kuasa"
+    ],
+    "hi": [
+      "अधिकार"
+    ]
+  },
+  "tw:kt/eternity": {
+    "fr": [
+      "éternité"
+    ],
+    "id": [
+      "kekekalan"
+    ],
+    "hi": [
+      "अनंतकाल"
+    ]
+  },
+  "tw:kt/faithful": {
+    "fr": [
+      "fidèle"
+    ],
+    "id": [
+      "setia"
+    ],
+    "hi": [
+      "विश्वासयोग्य"
+    ]
+  },
+  "tw:kt/falsegod": {
+    "fr": [
+      "faux dieu",
+      "idole"
+    ],
+    "id": [
+      "berhala"
+    ],
+    "hi": [
+      "झूठा देवता",
+      "मूर्ति"
+    ]
+  },
+  "tw:kt/goodnews": {
+    "fr": [
+      "bonne nouvelle",
+      "Évangile"
+    ],
+    "id": [
+      "kabar baik",
+      "Injil"
+    ],
+    "hi": [
+      "सुसमाचार"
+    ]
+  },
+  "tw:kt/inchrist": {
+    "fr": [
+      "en Christ"
+    ],
+    "id": [
+      "dalam Kristus"
+    ],
+    "hi": [
+      "मसीह में"
+    ]
+  },
+  "tw:kt/iniquity": {
+    "fr": [
+      "iniquité"
+    ],
+    "id": [
+      "kejahatan"
+    ],
+    "hi": [
+      "अधर्म"
+    ]
+  },
+  "tw:kt/innocent": {
+    "fr": [
+      "innocent"
+    ],
+    "id": [
+      "tidak bersalah"
+    ],
+    "hi": [
+      "निर्दोष"
+    ]
+  },
+  "tw:kt/minister": {
+    "fr": [
+      "servir"
+    ],
+    "id": [
+      "melayani"
+    ],
+    "hi": [
+      "सेवा करना"
+    ]
+  },
+  "tw:kt/mosthigh": {
+    "fr": [
+      "Très-Haut"
+    ],
+    "id": [
+      "Yang Mahatinggi"
+    ],
+    "hi": [
+      "परमप्रधान"
+    ]
+  },
+  "tw:kt/nazirite": {
+    "fr": [
+      "nazir"
+    ],
+    "id": [
+      "nazir"
+    ],
+    "hi": [
+      "नाज़ीर"
+    ]
+  },
+  "tw:kt/passover": {
+    "fr": [
+      "Pâque"
+    ],
+    "id": [
+      "Paskah"
+    ],
+    "hi": [
+      "फसह"
+    ]
+  },
+  "tw:kt/pharisee": {
+    "fr": [
+      "pharisien"
+    ],
+    "id": [
+      "orang Farisi"
+    ],
+    "hi": [
+      "फरीसी"
+    ]
+  },
+  "tw:kt/sadducee": {
+    "fr": [
+      "sadducéen"
+    ],
+    "id": [
+      "orang Saduki"
+    ],
+    "hi": [
+      "सदूकी"
+    ]
+  },
+  "tw:kt/sanctify": {
+    "fr": [
+      "sanctifier"
+    ],
+    "id": [
+      "menguduskan"
+    ],
+    "hi": [
+      "पवित्र करना"
+    ]
+  },
+  "tw:kt/sonofgod": {
+    "fr": [
+      "Fils de Dieu"
+    ],
+    "id": [
+      "Anak Allah"
+    ],
+    "hi": [
+      "परमेश्वर का पुत्र"
+    ]
+  },
+  "tw:kt/sonofman": {
+    "fr": [
+      "Fils de l'homme"
+    ],
+    "id": [
+      "Anak Manusia"
+    ],
+    "hi": [
+      "मनुष्य का पुत्र"
+    ]
+  },
+  "tw:kt/tetrarch": {
+    "fr": [
+      "tétrarque"
+    ],
+    "id": [
+      "tetrarkh"
+    ],
+    "hi": [
+      "चौथाई राजा"
+    ]
+  },
+  "tw:kt/trespass": {
+    "fr": [
+      "offense"
+    ],
+    "id": [
+      "pelanggaran"
+    ],
+    "hi": [
+      "अपराध"
+    ]
+  },
+  "tw:kt/atonement": {
+    "fr": [
+      "expiation"
+    ],
+    "id": [
+      "pendamaian"
+    ],
+    "hi": [
+      "प्रायश्चित्त"
+    ]
+  },
+  "tw:kt/authority": {
+    "fr": [
+      "autorité"
+    ],
+    "id": [
+      "kuasa",
+      "wewenang"
+    ],
+    "hi": [
+      "अधिकार"
+    ]
+  },
+  "tw:kt/blameless": {
+    "fr": [
+      "irréprochable"
+    ],
+    "id": [
+      "tak bercela"
+    ],
+    "hi": [
+      "निर्दोष"
+    ]
+  },
+  "tw:kt/blasphemy": {
+    "fr": [
+      "blasphème"
+    ],
+    "id": [
+      "hujat"
+    ],
+    "hi": [
+      "निन्दा"
+    ]
+  },
+  "tw:kt/bornagain": {
+    "fr": [
+      "né de nouveau"
+    ],
+    "id": [
+      "lahir baru"
+    ],
+    "hi": [
+      "नया जन्म"
+    ]
+  },
+  "tw:kt/centurion": {
+    "fr": [
+      "centurion"
+    ],
+    "id": [
+      "perwira"
+    ],
+    "hi": [
+      "सूबेदार"
+    ]
+  },
+  "tw:kt/christian": {
+    "fr": [
+      "chrétien"
+    ],
+    "id": [
+      "Kristen"
+    ],
+    "hi": [
+      "मसीही"
+    ]
+  },
+  "tw:kt/faithless": {
+    "fr": [
+      "infidèle"
+    ],
+    "id": [
+      "tidak setia"
+    ],
+    "hi": [
+      "अविश्वासी"
+    ]
+  },
+  "tw:kt/holyplace": {
+    "fr": [
+      "lieu saint"
+    ],
+    "id": [
+      "tempat kudus"
+    ],
+    "hi": [
+      "पवित्र स्थान"
+    ]
+  },
+  "tw:kt/hypocrite": {
+    "fr": [
+      "hypocrite"
+    ],
+    "id": [
+      "munafik"
+    ],
+    "hi": [
+      "कपटी"
+    ]
+  },
+  "tw:kt/iamyahweh": {
+    "fr": [
+      "Je suis Yahvé"
+    ],
+    "id": [
+      "aku adalah Yahweh"
+    ],
+    "hi": [
+      "मैं यहोवा हूँ"
+    ]
+  },
+  "tw:kt/intercede": {
+    "fr": [
+      "intercéder"
+    ],
+    "id": [
+      "mensyafaati"
+    ],
+    "hi": [
+      "विनती करना"
+    ]
+  },
+  "tw:kt/pentecost": {
+    "fr": [
+      "Pentecôte"
+    ],
+    "id": [
+      "Pentakosta"
+    ],
+    "hi": [
+      "पिन्तेकुस्त"
+    ]
+  },
+  "tw:kt/reconcile": {
+    "fr": [
+      "réconcilier"
+    ],
+    "id": [
+      "mendamaikan"
+    ],
+    "hi": [
+      "मेल-मिलाप करना"
+    ]
+  },
+  "tw:kt/righteous": {
+    "fr": [
+      "juste"
+    ],
+    "id": [
+      "benar"
+    ],
+    "hi": [
+      "धर्मी"
+    ]
+  },
+  "tw:kt/sanctuary": {
+    "fr": [
+      "sanctuaire"
+    ],
+    "id": [
+      "tempat kudus"
+    ],
+    "hi": [
+      "पवित्रस्थान"
+    ]
+  },
+  "tw:kt/sonsofgod": {
+    "fr": [
+      "fils de Dieu"
+    ],
+    "id": [
+      "anak-anak Allah"
+    ],
+    "hi": [
+      "परमेश्वर के पुत्र"
+    ]
+  },
+  "tw:kt/synagogue": {
+    "fr": [
+      "synagogue"
+    ],
+    "id": [
+      "sinagoga"
+    ],
+    "hi": [
+      "आराधनालय"
+    ]
+  },
+  "tw:kt/testimony": {
+    "fr": [
+      "témoignage"
+    ],
+    "id": [
+      "kesaksian"
+    ],
+    "hi": [
+      "गवाही"
+    ]
+  },
+  "tw:kt/thetwelve": {
+    "fr": [
+      "les Douze"
+    ],
+    "id": [
+      "kedua belas murid"
+    ],
+    "hi": [
+      "बारह चेले"
+    ]
+  },
+  "tw:kt/willofgod": {
+    "fr": [
+      "volonté de Dieu"
+    ],
+    "id": [
+      "kehendak Allah"
+    ],
+    "hi": [
+      "परमेश्वर की इच्छा"
+    ]
+  },
+  "tw:kt/wordofgod": {
+    "fr": [
+      "parole de Dieu"
+    ],
+    "id": [
+      "firman Allah"
+    ],
+    "hi": [
+      "परमेश्वर का वचन"
+    ]
+  },
+  "tw:kt/antichrist": {
+    "fr": [
+      "antichrist"
+    ],
+    "id": [
+      "antikristus"
+    ],
+    "hi": [
+      "मसीह-विरोधी"
+    ]
+  },
+  "tw:kt/birthright": {
+    "fr": [
+      "droit d'aînesse"
+    ],
+    "id": [
+      "hak kesulungan"
+    ],
+    "hi": [
+      "पहलौठे का अधिकार"
+    ]
+  },
+  "tw:kt/circumcise": {
+    "fr": [
+      "circoncire"
+    ],
+    "id": [
+      "menyunat"
+    ],
+    "hi": [
+      "खतना करना"
+    ]
+  },
+  "tw:kt/compassion": {
+    "fr": [
+      "compassion"
+    ],
+    "id": [
+      "belas kasihan"
+    ],
+    "hi": [
+      "करुणा"
+    ]
+  },
+  "tw:kt/conscience": {
+    "fr": [
+      "conscience"
+    ],
+    "id": [
+      "hati nurani"
+    ],
+    "hi": [
+      "विवेक"
+    ]
+  },
+  "tw:kt/consecrate": {
+    "fr": [
+      "consacrer"
+    ],
+    "id": [
+      "menguduskan"
+    ],
+    "hi": [
+      "समर्पित करना"
+    ]
+  },
+  "tw:kt/evangelism": {
+    "fr": [
+      "évangéliste"
+    ],
+    "id": [
+      "penginjil"
+    ],
+    "hi": [
+      "सुसमाचार प्रचारक"
+    ]
+  },
+  "tw:kt/fellowship": {
+    "fr": [
+      "communion"
+    ],
+    "id": [
+      "persekutuan"
+    ],
+    "hi": [
+      "संगति"
+    ]
+  },
+  "tw:kt/highpriest": {
+    "fr": [
+      "grand prêtre"
+    ],
+    "id": [
+      "imam besar"
+    ],
+    "hi": [
+      "महायाजक"
+    ]
+  },
+  "tw:kt/holyspirit": {
+    "fr": [
+      "Saint-Esprit"
+    ],
+    "id": [
+      "Roh Kudus"
+    ],
+    "hi": [
+      "पवित्र आत्मा"
+    ]
+  },
+  "tw:kt/houseofgod": {
+    "fr": [
+      "maison de Dieu"
+    ],
+    "id": [
+      "rumah Allah"
+    ],
+    "hi": [
+      "परमेश्वर का भवन"
+    ]
+  },
+  "tw:kt/imageofgod": {
+    "fr": [
+      "image de Dieu"
+    ],
+    "id": [
+      "gambar Allah"
+    ],
+    "hi": [
+      "परमेश्वर का स्वरूप"
+    ]
+  },
+  "tw:kt/lawofmoses": {
+    "fr": [
+      "loi"
+    ],
+    "id": [
+      "Taurat"
+    ],
+    "hi": [
+      "व्यवस्था"
+    ]
+  },
+  "tw:kt/lordyahweh": {
+    "fr": [
+      "Seigneur Yahvé"
+    ],
+    "id": [
+      "Tuhan Yahweh"
+    ],
+    "hi": [
+      "प्रभु यहोवा"
+    ]
+  },
+  "tw:kt/predestine": {
+    "fr": [
+      "prédestiner"
+    ],
+    "id": [
+      "menentukan sebelumnya"
+    ],
+    "hi": [
+      "पहले से ठहराना"
+    ]
+  },
+  "tw:kt/tabernacle": {
+    "fr": [
+      "tabernacle"
+    ],
+    "id": [
+      "kemah suci"
+    ],
+    "hi": [
+      "डेरा"
+    ]
+  },
+  "tw:kt/abomination": {
+    "fr": [
+      "abomination"
+    ],
+    "id": [
+      "kekejian"
+    ],
+    "hi": [
+      "घृणित वस्तु"
+    ]
+  },
+  "tw:kt/call-toname": {
+    "fr": [
+      "appeler",
+      "nommer"
+    ],
+    "id": [
+      "memanggil",
+      "menamai"
+    ],
+    "hi": [
+      "बुलाना",
+      "नाम रखना"
+    ]
+  },
+  "tw:kt/cornerstone": {
+    "fr": [
+      "pierre d'angle"
+    ],
+    "id": [
+      "batu penjuru"
+    ],
+    "hi": [
+      "कोने का पत्थर"
+    ]
+  },
+  "tw:kt/judgmentday": {
+    "fr": [
+      "jour du jugement"
+    ],
+    "id": [
+      "hari penghakiman"
+    ],
+    "hi": [
+      "न्याय का दिन"
+    ]
+  },
+  "tw:kt/lordssupper": {
+    "fr": [
+      "Cène"
+    ],
+    "id": [
+      "Perjamuan Tuhan"
+    ],
+    "hi": [
+      "प्रभु-भोज"
+    ]
+  },
+  "tw:kt/peopleofgod": {
+    "fr": [
+      "peuple de Dieu"
+    ],
+    "id": [
+      "umat Allah"
+    ],
+    "hi": [
+      "परमेश्वर के लोग"
+    ]
+  },
+  "tw:kt/atonementlid": {
+    "fr": [
+      "propitiatoire"
+    ],
+    "id": [
+      "tutup pendamaian"
+    ],
+    "hi": [
+      "दयासन"
+    ]
+  },
+  "tw:kt/dayofthelord": {
+    "fr": [
+      "jour du Seigneur"
+    ],
+    "id": [
+      "hari Tuhan"
+    ],
+    "hi": [
+      "यहोवा का दिन"
+    ]
+  },
+  "tw:kt/godthefather": {
+    "fr": [
+      "Dieu le Père"
+    ],
+    "id": [
+      "Allah Bapa"
+    ],
+    "hi": [
+      "परमेश्वर पिता"
+    ]
+  },
+  "tw:kt/kingdomofgod": {
+    "fr": [
+      "royaume de Dieu"
+    ],
+    "id": [
+      "kerajaan Allah"
+    ],
+    "hi": [
+      "परमेश्वर का राज्य"
+    ]
+  },
+  "tw:kt/promisedland": {
+    "fr": [
+      "Terre promise"
+    ],
+    "id": [
+      "Tanah Perjanjian"
+    ],
+    "hi": [
+      "प्रतिज्ञा का देश"
+    ]
+  },
+  "tw:kt/propitiation": {
+    "fr": [
+      "propitiation"
+    ],
+    "id": [
+      "pendamaian"
+    ],
+    "hi": [
+      "प्रायश्चित्त"
+    ]
+  },
+  "tw:kt/resurrection": {
+    "fr": [
+      "résurrection"
+    ],
+    "id": [
+      "kebangkitan"
+    ],
+    "hi": [
+      "पुनरुत्थान"
+    ]
+  },
+  "tw:kt/call-tosummon": {
+    "fr": [
+      "appeler"
+    ],
+    "id": [
+      "memanggil"
+    ],
+    "hi": [
+      "बुलाना"
+    ]
+  },
+  "tw:kt/covenantfaith": {
+    "fr": [
+      "fidélité de l'alliance"
+    ],
+    "id": [
+      "kesetiaan perjanjian"
+    ],
+    "hi": [
+      "वाचा की विश्वासयोग्यता"
+    ]
+  },
+  "tw:kt/kingofthejews": {
+    "fr": [
+      "roi des Juifs"
+    ],
+    "id": [
+      "Raja orang Yahudi"
+    ],
+    "hi": [
+      "यहूदियों का राजा"
+    ]
+  },
+  "tw:kt/transgression": {
+    "fr": [
+      "transgresser"
+    ],
+    "id": [
+      "melanggar"
+    ],
+    "hi": [
+      "उल्लंघन करना"
+    ]
+  },
+  "tw:kt/yahwehofhosts": {
+    "fr": [
+      "Yahvé des armées"
+    ],
+    "id": [
+      "Yahweh semesta alam"
+    ],
+    "hi": [
+      "सेनाओं का यहोवा"
+    ]
+  },
+  "tw:kt/demonpossessed": {
+    "fr": [
+      "démoniaque"
+    ],
+    "id": [
+      "kerasukan setan"
+    ],
+    "hi": [
+      "दुष्टात्मा से ग्रस्त"
+    ]
+  },
+  "tw:kt/unleavenedbread": {
+    "fr": [
+      "pain sans levain"
+    ],
+    "id": [
+      "roti tidak beragi"
+    ],
+    "hi": [
+      "बेखमीरी रोटी"
+    ]
+  },
+  "tw:kt/arkofthecovenant": {
+    "fr": [
+      "arche de l'alliance"
+    ],
+    "id": [
+      "tabut perjanjian"
+    ],
+    "hi": [
+      "वाचा का सन्दूक"
+    ]
+  },
+  "tw:kt/call-speakloudly": {
+    "fr": [
+      "appeler",
+      "crier"
+    ],
+    "id": [
+      "memanggil"
+    ],
+    "hi": [
+      "पुकारना"
+    ]
+  }
+}

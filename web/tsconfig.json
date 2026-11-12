@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "skipLibCheck": true, "noEmit": true,
+    "resolveJsonModule": true, "lib": ["ES2022", "DOM"], "baseUrl": ".",
+    "paths": {
+      "@bt-synergy/language-pack-client": ["../../lp3-mcp/packages/language-pack-client/src/index.ts"],
+      "@bt-synergy/language-pack-v3": ["../../lp3-mcp/packages/language-pack-v3/src/index.ts"],
+      "@lpc/*": ["../../lp3-mcp/packages/language-pack-client/src/*"]
+    }
+  }
+}

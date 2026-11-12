@@ -1,0 +1,21 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'org.unfoldingword.btservantmini'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'org.unfoldingword.btservantmini'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1-mini'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    buildTypes { debug { minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    // llama-server runs as a process: its .so files must be extracted to nativeLibraryDir; the model is copied out of the APK once.
+    packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += ['**/*.so'] } }
+    androidResources { noCompress += ['gguf'] }
+}
+
+dependencies { implementation 'androidx.webkit:webkit:1.12.1' }

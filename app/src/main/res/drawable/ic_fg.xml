@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An open book with a speech mark: helps you can ask. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:pathData="M30,40 C38,36 46,36 53,40 L53,72 C46,68 38,68 30,72 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M55,40 C62,36 70,36 78,40 L78,72 C70,68 62,68 55,72 Z" />
+    <path android:fillColor="#F2C14E" android:pathData="M66,26 h14 a4,4 0 0 1 4,4 v8 a4,4 0 0 1 -4,4 h-6 l-5,4 v-4 h-3 a4,4 0 0 1 -4,-4 v-8 a4,4 0 0 1 4,-4 Z" />
+</vector>
