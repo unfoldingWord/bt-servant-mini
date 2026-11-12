@@ -38,7 +38,36 @@ export function bookCode(lang: string, name: string | null | undefined): string 
     const hit = Object.keys(t).find((n) => n.length >= 3 && k.length >= 3 && n.startsWith(k))
     if (hit) return t[hit]!
   }
+  // a misspelled name ("Mathew", "Genesys", "Jonas"): the closest name, one edit away (two for long names)
+  if (k.length >= 4 && !/\d/.test(k)) {
+    let bestD = k.length >= 7 ? 2 : 1
+    let codes = new Set<string>()
+    for (const l of [lang, 'en', 'es']) {
+      for (const [n, c] of Object.entries(tables[l] ?? {})) {
+        if (Math.abs(n.length - k.length) > bestD) continue
+        const d = edits(k, n)
+        if (d < bestD) {
+          bestD = d
+          codes = new Set([c])
+        } else if (d === bestD) codes.add(c)
+      }
+    }
+    if (codes.size === 1) return [...codes][0]!
+  }
   return null
+}
+function edits(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0]!
+    row[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const cur = row[j]!
+      row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1))
+      prev = cur
+    }
+  }
+  return row[b.length]!
 }
 
 const clean = (v: unknown): string | null => {

@@ -263,7 +263,8 @@ function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
   // short question with a number and no book: verse (or chapter) of the same passage
   const words = q.trim().split(/\s+/).length
   const nums = /(\d+)\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?|(\d+)(?:\s*[-–]\s*(\d+))?/.exec(q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))))
-  if (words <= 8 && nums) {
+  // only when the words around the number are not a name ("Mathew 3" names a book, "and verse 4?" does not)
+  if (words <= 8 && nums && keywords(q).filter((w) => !/^\d/.test(w)).length === 0) {
     const isChap = /cap[ií]tulo|chapter|chapitre|pasal|अध्याय/i.test(q)
     const asked = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions']
       : /text|texto|teks|पाठ|dice|say|dit/i.test(q) ? ['text'] : null
@@ -281,7 +282,7 @@ function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
 function refInText(slots: Slots, q: string): Slots {
   if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter) return slots
   const t = q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d)))
-  const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?/u.exec(t)
+  const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/u.exec(t)
   if (!m) return slots
   const words = m[1]!.trim().split(/\s+/)
   let code: string | null = null
@@ -292,7 +293,7 @@ function refInText(slots: Slots, q: string): Slots {
   }
   if (!code) return slots
   const what = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions'] : slots.what ?? []
-  return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: +m[3]!, verse_end: m[4] ? +m[4] : null, what }
+  return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
 }
 
 /** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
@@ -314,6 +315,8 @@ const ORDINALS: [RegExp, number][] = [
   [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर/i, 1],
   [/\b(third|tercer[oa]?|troisième|ketiga)\b|तीसर/i, 2], [/\b(fourth|cuart[oa]|quatrième|keempat)\b|चौथ/i, 3],
 ]
+/** "The whole chapter": the chapter of the last passage. */
+const WHOLE = /(whole|entire|full|all the) chapter|chapter (in full|complete)|cap[íi]tulo (completo|entero)|todo el cap[íi]tulo|(tout le|le chapitre) (chapitre|entier|complet)|(seluruh|semua) pasal|pasal (lengkap|seluruhnya)|पूरा अध्याय|सारा अध्याय/i
 const THAT = /\b(that|this) (verse|one|passage)|\b(ese|este|aquel) (vers[íi]culo|pasaje)|\b(ce|cet) (verset|passage)|\bayat (itu|ini)\b|(उस|इस) पद/i
 /** A follow-up with no book of its own: "the second one" (a search result), "that verse" or "and the questions?" (the last verse shown). */
 function pickFound(q: string, slots: Slots, c: Conv): { hit: Hit; what: string[] } | null {
@@ -321,6 +324,8 @@ function pickFound(q: string, slots: Slots, c: Conv): { hit: Hit; what: string[]
   if (named) return null
   const ord = ORDINALS.find(([re]) => re.test(q))?.[1]
   const kind = kindOf(q)
+  const lastM = /^([0-9a-z]{3}) (\d+)/.exec(c.last?.ref ?? '')
+  if (WHOLE.test(q) && lastM) return { hit: { book: lastM[1]!, ch: +lastM[2]!, v: 0 }, what: kind ?? ['text'] }
   if (ord !== undefined && c.found?.length) return { hit: c.found[Math.min(ord, c.found.length - 1)]!, what: kind ?? ['text', 'notes'] }
   const m = /^([0-9a-z]{3}) (\d+):(\d+)/.exec(c.last?.ref ?? '')
   if (!m) return null
