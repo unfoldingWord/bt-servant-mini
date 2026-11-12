@@ -1,11 +1,12 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { answerSheet, facts, setUiLang, type Sheet } from './answer'
+import { answerSheet, facts, resetLangs, setUiLang, type Sheet } from './answer'
 import { bookCode, buildSheet, fold, type Slots } from './sheet'
-import { modelReady, modelStatus, slotsOf } from './model'
-import { installedLangs } from './packs'
+import { modelReady, modelState, slotsOf } from './model'
+import { aboutLabel, languagesSection, modelLine, modelSection, PACK_NAMES, showAbout } from './setup'
+import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
-import { keywords, searchVerses } from './search'
+import { keywords, resetSearch, searchVerses } from './search'
 import { md } from './md'
 
 type UiText = {
@@ -285,6 +286,24 @@ function renderPanel() {
     hl.appendChild(b)
   }
   panel.appendChild(hl)
+  panel.appendChild(modelSection(nav, () => {
+    setReady()
+    renderPanel()
+  }))
+  const panelLang = nav
+  languagesSection(nav, () => {
+    refreshInstalled()
+    renderPanel()
+  }).then((box) => {
+    if (panel.classList.contains('show') && panelLang === nav) panel.insertBefore(box, panel.querySelector('.about-link'))
+  })
+  const about = el('button', 'about-link', aboutLabel(nav)) as HTMLButtonElement
+  about.type = 'button'
+  about.onclick = () => {
+    closePanel()
+    showAbout(nav, () => setReady())
+  }
+  panel.appendChild(about)
 }
 const closePanel = () => panel.classList.remove('show')
 menu.onclick = () => {
@@ -294,12 +313,22 @@ menu.onclick = () => {
 // -------------------------------------------------------------------------------------------------------------- answering
 
 let busy = false
+let polling = false
 function setReady() {
   const ok = modelReady()
-  status.textContent = ok ? T.ready : `${T.loading} ${modelStatus()}`
+  const { state } = modelState()
+  status.textContent = ok ? T.ready : modelLine(nav)
   status.dataset.ok = String(ok)
-  btn.disabled = !ok || busy
-  if (!ok) setTimeout(setReady, 1000)
+  // without a model the app still answers references and searches
+  btn.disabled = busy || ['copying', 'starting', 'importing'].includes(state)
+  if (!['ready', 'missing', 'error'].includes(state) && !polling) {
+    polling = true
+    setTimeout(() => {
+      polling = false
+      setReady()
+      if (panel.classList.contains('show')) renderPanel()
+    }, 1000)
+  }
 }
 
 /** A follow-up ("and verse 4?") names no book: take the book (and chapter) of the last passage of this conversation. */
@@ -449,7 +478,7 @@ function runSheet(label: string, sheet: Sheet, ui: string) {
 form.addEventListener('submit', (e) => {
   e.preventDefault()
   const q = input.value.trim()
-  if (!q || busy || !modelReady()) return
+  if (!q || busy) return
   input.value = ''
   const c = conv()
   respond(c, q, async () => {
@@ -477,10 +506,19 @@ input.addEventListener('keydown', (e) => {
 
 load()
 renderConv()
-const PACK_NAMES: Record<string, string> = { en: 'English', 'es-419': 'Español (Latinoamérica)', id: 'Bahasa Indonesia', hi: 'हिन्दी', ar: 'العربية', fr: 'Français' }
 let INSTALLED: string[] = []
-installedLangs().then((ls) => {
+const refreshInstalled = () => installedLangs().then((ls) => {
   INSTALLED = ls
   $('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · ')
 }).catch(() => {})
+refreshInstalled()
+onPacksChanged(() => {
+  resetLangs()
+  resetSearch()
+  refreshInstalled()
+})
 setReady()
+// first launch: what BT Servant Mini is (and, in the light build, getting the model)
+try {
+  if (!localStorage.getItem('btsm.onboarded')) showAbout(nav, () => setReady())
+} catch {}

@@ -1,0 +1,12 @@
+{
+  "models": [
+    {
+      "name": "ms-all-q8",
+      "label": "FunctionGemma 270M, fine-tuned (q8)",
+      "langs": ["en", "es", "fr", "id", "hi"],
+      "sha256": "5c5a3ddab838b600ac1e4d10ee8d867b5879a7b95bc0aea67308a4266d7365a2",
+      "bytes": 291558624,
+      "path": "/v3/packs/seg/5c5a3ddab838b600ac1e4d10ee8d867b5879a7b95bc0aea67308a4266d7365a2"
+    }
+  ]
+}

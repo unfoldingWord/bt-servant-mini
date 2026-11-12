@@ -109,6 +109,10 @@ const inRange = (row: HelpRow, [from, to]: [number, number]): boolean => row.fro
 /** What is installed and cached per language, opened once. */
 type Lang = { lang: string; r: PackReader; maps: any; aligned: Map<string, AlignedText[]> }
 const langs = new Map<string, Lang | null>()
+/** After a language is added or removed. */
+export function resetLangs() {
+  langs.clear()
+}
 async function getLang(lang: string): Promise<Lang | null> {
   if (langs.has(lang)) return langs.get(lang)!
   let out: Lang | null = null

@@ -58,6 +58,11 @@ const lang = (l: string) => {
 
 /** name -> Translation Words ids, from the pack's article names (en, es) and the key-term glossary (fr, id, hi). */
 let NAMES: Map<string, string[]> | null = null
+/** After a language is added or removed. */
+export function resetSearch() {
+  opened.clear()
+  NAMES = null
+}
 async function names(): Promise<Map<string, string[]>> {
   if (NAMES) return NAMES
   const m = new Map<string, string[]>()

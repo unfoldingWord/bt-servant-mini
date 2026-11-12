@@ -15,14 +15,26 @@ if r.returncode:
 import hashlib
 v = hashlib.sha256((WWW / 'main.js').read_bytes()).hexdigest()[:10]
 (WWW / 'index.html').write_text((ROOT / 'web' / 'index.html').read_text(encoding='utf-8').replace('./main.js', f'./main.js?v={v}'), encoding='utf-8')
+# The packs go only into the full build; the light build ships an empty list (packs are added from the app).
+FULL = ROOT / 'app' / 'src' / 'full' / 'assets' / 'www' / 'packs'
+LITE = ROOT / 'app' / 'src' / 'lite' / 'assets' / 'www' / 'packs'
+shutil.rmtree(FULL, ignore_errors=True)
+shutil.rmtree(LITE, ignore_errors=True)
+LITE.mkdir(parents=True)
+(LITE / 'index.json').write_text(json.dumps({'langs': []}), encoding='utf-8')
 langs = []
 for d in sorted(PACKS.iterdir()):
     if not (d / 'state.json').exists():
         continue
-    out = WWW / 'packs' / d.name
+    out = FULL / d.name
     shutil.copytree(d, out)
     ids = sorted(p.name for p in (out / 'seg').rglob('*') if p.is_file())
     (out / 'ids.json').write_text(json.dumps(ids), encoding='utf-8')
     langs.append(d.name)
-(WWW / 'packs' / 'index.json').write_text(json.dumps({'langs': langs}), encoding='utf-8')
+(FULL / 'index.json').write_text(json.dumps({'langs': langs}), encoding='utf-8')
+# desktop testing: the page plus the full packs, outside the APK's assets
+DESK = ROOT / 'web' / 'desktop'
+shutil.rmtree(DESK, ignore_errors=True)
+shutil.copytree(WWW, DESK)
+shutil.copytree(FULL, DESK / 'packs')
 print('packs', langs, 'www', sum(f.stat().st_size for f in WWW.rglob('*') if f.is_file()) // 1024, 'KB')

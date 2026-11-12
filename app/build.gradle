@@ -7,15 +7,23 @@ android {
         applicationId 'org.unfoldingword.btservantmini'
         minSdk 26
         targetSdk 35
-        versionCode 11
-        versionName '0.6.3-mini'
+        versionCode 12
+        versionName '0.7.0-mini'
         ndk { abiFilters 'arm64-v8a' }
     }
     buildTypes { debug { minifyEnabled false } }
+    // full: the model and the base language packs inside (~350 MB); lite: neither (~30 MB), they are downloaded or loaded
+    // from a file on first use. Same application id: one replaces the other, keeping conversations and added packs.
+    flavorDimensions 'content'
+    productFlavors {
+        full { dimension 'content' }
+        lite { dimension 'content'; versionNameSuffix '-lite' }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     // llama-server runs as a process: its .so files must be extracted to nativeLibraryDir; the model is copied out of the APK once.
     packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += ['**/*.so'] } }
     androidResources { noCompress += ['gguf'] }
+    sourceSets { lite { assets.srcDirs = ['src/lite/assets'] } }
 }
 
 dependencies { implementation 'androidx.webkit:webkit:1.12.1' }
