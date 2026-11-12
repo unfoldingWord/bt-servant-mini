@@ -66,7 +66,7 @@ export function clean(md: unknown): string {
     .replace(/^#+\s*/gm, '')
     .replace(/\((?:ver|see):\s*(?:\[\[[^\]]+\]\]|rc:\/\/[^)\s]+)\)/gi, '')
     .replace(/\[\[([^\]]+)\]\]/g, '$1')
-    .replace(/\*\*/g, '')
+    .replace(/\[([^\]]+)\]\((?:ref|rc):[^)]*\)/g, '$1') // [1:2](ref:jon 1:2): a link the reader cannot follow here
     .replace(/[ \t]+\./g, '.')
     .replace(/(?<!\.)\.\.(?!\.)/g, '.')
     .replace(/\n{3,}/g, '\n\n')
@@ -187,7 +187,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const range = rangeOf(ref)
   const out: string[] = []
   const head = say(lang, 'passage_head', { book, ref: refLabel(ref), lang }).replace(/\s+\(/, ' (').replace(/\s{2,}/g, ' ')
-  out.push(head)
+  out.push('## ' + head)
   facts = { kind: 'passage', book, ref: refLabel(ref), texts: 0, notes: 0, questions: 0, terms: 0, code: ref.book, ch: ref.ch ?? null }
   // the verse after this one, if the book has it: the next verse of the chapter, else the first of the next chapter
   if (ref.kind === 'verses' && ref.ch && ref.v1) {
@@ -203,7 +203,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       : ref.kind === 'chapter' ? rows.find((x) => x !== bookIntro && x.from === verseId(ref.book, ref.ch!, 1)) : bookIntro
     const what_ = ref.kind === 'bookintro' || ref.kind === 'book' ? book : `${book} ${ref.ch}`
     if (row) {
-      out.push(say(lang, 'intro_head', { what: what_ }))
+      out.push('### ' + say(lang, 'intro_head', { what: what_ }))
       out.push(clean(row.cols.note))
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} intro, note ${row.id}`))
     } else out.push(say(lang, 'intro_none', { what: what_ }))
@@ -219,7 +219,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       if (!text) continue
       any = true
       facts.texts++
-      out.push(say(lang, 'text_line', { label: key.toUpperCase(), res: t.res, release: releaseOf(model, t.res), text }))
+      out.push(say(lang, 'text_line', { label: `**${key.toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }))
       cites.push(cite(t.res, releaseOf(model, t.res), `${ref.book} ${refLabel(ref)}`))
     }
     if (!any) out.push(say(lang, 'text_none', { label: (s.version ?? '').toUpperCase(), ref: `${book} ${refLabel(ref)}`.trim() }))
@@ -229,10 +229,10 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     const links = rowsIn(model.links).filter((x) => x.concept)
     const seen = new Map<string, HelpRow>()
     for (const x of links) if (!seen.has(x.concept!)) seen.set(x.concept!, x)
-    out.push(say(lang, 'terms_head', { book, ref: refLabel(ref) }))
+    out.push('### ' + say(lang, 'terms_head', { book, ref: refLabel(ref) }))
     for (const [id, x] of seen) {
       const said = quoteIn(al, x.quote)[0]?.text ?? String(x.cols.origWords ?? '')
-      out.push(say(lang, 'term_line', { said, title: await titleOf(l, id) }))
+      out.push(say(lang, 'term_line', { said: `**${said}**`, title: await titleOf(l, id) }))
       cites.push(cite(model.links!.res, releaseOf(model, model.links!.res), `${ref.book} ${x.ref}, ${id}`))
     }
     facts.terms = seen.size
@@ -242,26 +242,26 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     const notes = rowsIn(model.notes).filter((x) => clean(x.cols.note))
     facts.notes = notes.length
     if (notes.length === 0) out.push(say(lang, 'notes_none', { book, ref: refLabel(ref) }))
-    else out.push(say(lang, 'notes_head', { book, ref: refLabel(ref) }))
+    else out.push('### ' + say(lang, 'notes_head', { book, ref: refLabel(ref) }))
     for (const [i, n] of notes.entries()) {
       const said = quoteIn(al, n.quote).map((q) => `«${q.text}»`).join(' / ')
       const orig = n.cols.quote && !clean(n.cols.note).startsWith(String(n.cols.quote)) ? String(n.cols.quote) : ''
       const headTxt = [said, orig ? `(${orig})` : ''].filter(Boolean).join(' ')
       const academy = n.concept ? say(lang, 'note_academy', { title: await titleOf(l, n.concept) }) : ''
-      out.push(say(lang, 'note_line', { n: i + 1, head: headTxt ? headTxt + ': ' : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy }))
+      out.push(say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy }))
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${n.ref}, note ${n.id}`))
     }
   }
   if (what.includes('questions')) {
     const qs = rowsIn(model.questions)
     facts.questions = qs.length
-    out.push(qs.length ? say(lang, 'questions_head', { book, ref: refLabel(ref) }) : say(lang, 'questions_none', { book, ref: refLabel(ref) }))
+    out.push(qs.length ? '### ' + say(lang, 'questions_head', { book, ref: refLabel(ref) }) : say(lang, 'questions_none', { book, ref: refLabel(ref) }))
     for (const q of qs) {
-      out.push(say(lang, 'question_line', { q: String(q.cols.question ?? ''), a: String(q.cols.response ?? '') }))
+      out.push(say(lang, 'question_line', { q: `**${String(q.cols.question ?? '')}**`, a: String(q.cols.response ?? '') }))
       cites.push(cite(model.questions!.res, releaseOf(model, model.questions!.res), `${ref.book} ${q.ref}`))
     }
   }
-  return { answer: out.join('\n'), cites }
+  return { answer: out.join('\n\n'), cites }
 }
 
 async function installedBooks(l: Lang): Promise<string[]> {
@@ -282,14 +282,14 @@ async function article(s: Sheet, l: Lang): Promise<Result> {
   const by = (...roles: string[]) => a.sections.filter((x) => roles.includes(x.role))
   const main = s.concept.startsWith('tw:') ? (by('definition').length ? by('definition').slice(0, 1) : by('intro').slice(0, 1)) : by('description')
   facts = { kind: 'article', title: a.title }
-  const out: string[] = [say(lang, 'article_head', { title: a.title })]
+  const out: string[] = ['## ' + say(lang, 'article_head', { title: a.title })]
   for (const x of main.length ? main : a.sections.slice(0, 1)) {
     out.push(clean(x.md))
     if (x.lang !== lang && x.lang) out.push(say(lang, 'article_other_lang', { lang: x.lang }))
   }
   if (s.concept.startsWith('ta:')) {
     const st = by('strategies')[0]
-    if (st) out.push(say(lang, 'article_strategies', {}) + ' ' + clip(clean(st.md).replace(/\n+/g, ' '), 1200))
+    if (st) out.push('### ' + say(lang, 'article_strategies', {}) + '\n' + clip(clean(st.md), 1500))
   }
   for (const c of ans.cites) cites.push(cite(c.res, c.release, `${c.id}, ${c.section}`))
   return { answer: out.join('\n\n'), cites }
@@ -304,7 +304,7 @@ const firstSentence = (t: string): string => {
 
 async function choose(s: Sheet, l: Lang): Promise<Result> {
   const lang = l.lang
-  const lines = [say(lang, 'choose_head')]
+  const lines = ['**' + say(lang, 'choose_head') + '**', '']
   const cites: string[] = []
   for (const [i, id] of (s.candidates ?? []).entries()) {
     const a = await l.r.article(id, 'all')
@@ -386,7 +386,7 @@ async function rank(s: Sheet, l: Lang): Promise<Result> {
   const sorted = [...by].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book}${lab}`))
   if (!sorted.length) return { answer: say(lang, 'rank_none', { book, ref: lab }), cites }
-  const lines = [say(lang, 'rank_head', { book, ref: lab, n: rows.length })]
+  const lines = ['**' + say(lang, 'rank_head', { book, ref: lab, n: rows.length }) + '**', '']
   for (const [i, [id, c]] of sorted.slice(0, 10).entries()) lines.push(say(lang, 'rank_line', { n: i + 1, title: await titleOf(l, id), count: c }))
   for (const [id] of sorted.slice(0, 10)) cites.push(`id:${id}`)
   return { answer: lines.join('\n'), cites }
@@ -435,7 +435,7 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
   const book = bookName(lang, ref.book)
   const phrase = s.phrase ?? ''
   const model = await bookOf(l, ref.book)
-  const out: string[] = [say(lang, 'advice_head', { book, ref: refLabel(ref), phrase })]
+  const out: string[] = ['## ' + say(lang, 'advice_head', { book, ref: refLabel(ref), phrase })]
   let articleId = s.concept
   let matched = false
   if (model) {
@@ -483,17 +483,17 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
     const ans = await l.r.article(articleId, 'all')
     if (ans.data) {
       const by = (...r: string[]) => ans.data!.sections.filter((x) => r.includes(x.role))
-      out.push(say(lang, 'advice_academy', { title: ans.data.title }))
+      out.push('### ' + say(lang, 'advice_academy', { title: ans.data.title }))
       cites.push(`id:${articleId}`)
       if (!matched) out.push(say(lang, 'advice_general'))
       const d = by('description')[0]
       if (d) out.push(clip(clean(d.md).replace(/\n+/g, ' '), 700))
       const st = by('strategies')[0]
-      if (st) out.push(say(lang, 'article_strategies') + ' ' + clip(clean(st.md).replace(/\n+/g, ' '), 900))
+      if (st) out.push('### ' + say(lang, 'article_strategies') + '\n' + clip(clean(st.md), 900))
       for (const c of ans.cites.slice(0, 1)) cites.push(cite(c.res, c.release, articleId))
     }
   } else if (!matched) out.push(say(lang, 'advice_none'))
-  return { answer: out.join('\n'), cites }
+  return { answer: out.join('\n\n'), cites }
 }
 
 // ------------------------------------------------------------------------------------------------------------------ main
@@ -516,7 +516,7 @@ export async function answerSheet(s: Sheet): Promise<Result> {
     default: r = { answer: say(lang, s.intent === 'unknown' ? 'unknown' : 'no_intent'), cites: [] }
   }
   const src = r.cites.length ? sourceLine(lang, r.cites) : ''
-  if (src) r.answer += '\n' + src
+  if (src) r.answer += '\n\n_' + src + '_'
   return r
 }
 

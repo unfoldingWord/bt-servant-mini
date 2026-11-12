@@ -6,6 +6,7 @@ import { modelReady, modelStatus, slotsOf } from './model'
 import { installedLangs } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { keywords, searchVerses } from './search'
+import { md } from './md'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -145,13 +146,16 @@ function el(tag: string, cls: string, text?: string): HTMLElement {
   if (text !== undefined) d.textContent = text
   return d
 }
-const tidy = (s: string) => s.replace(/\*\*?([^*\n]+)\*\*?/g, '$1')
 
 function renderMsg(m: Msg): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
   if (m.intro) d.appendChild(el('p', 'intro', m.intro))
-  if (m.info) d.appendChild(el('div', m.intro ? 'info' : 'plain', tidy(m.info)))
+  if (m.info) {
+    const box = el('div', m.intro ? 'info' : 'plain md')
+    box.innerHTML = md(m.info) // md() escapes everything first
+    d.appendChild(box)
+  }
   if (m.text) d.appendChild(el('div', 'plain', m.text))
   if (m.follow?.length) {
     const f = el('div', 'follow')
@@ -390,7 +394,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
         const follow: { label: string; sheet: Sheet }[] = []
         for (const h of res.hits.slice(0, 4)) follow.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, ['text', 'notes']) })
         m = { who: 'bot', intro: searchIntro(res.how, used, ui), ui, follow,
-          info: res.hits.map((h) => `${bookLabel(ui, h.book)} ${h.ch}:${h.v} — ${h.text.replace(/\s+/g, ' ').trim()}`).join('\n\n') || undefined,
+          info: res.hits.map((h) => `**${bookLabel(ui, h.book)} ${h.ch}:${h.v}** — ${h.text.replace(/\s+/g, ' ').trim()}`).join('\n\n') || undefined,
           meta: `${T.details} · ${total} s\n${meta}${searched}` }
         throw { done: m }
       }

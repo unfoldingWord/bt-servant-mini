@@ -34,9 +34,20 @@
   .bot { align-self: stretch; font-family: Georgia, "Noto Serif", "Noto Serif Devanagari", serif; font-size: 16.5px; line-height: 1.6; }
   .pending { color: var(--faint); font-style: italic; }
   .intro { margin: 0 0 10px; }
-  .info { white-space: pre-wrap; font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--card);
+  .info { font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--card);
     border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
   .plain { white-space: pre-wrap; }
+  .plain.md { white-space: normal; }
+  .info h3, .md h3 { font: 600 17px/1.3 Georgia, "Noto Serif", "Noto Serif Devanagari", serif; margin: 2px 0 10px; }
+  .info h4, .md h4 { font: 600 12px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin: 16px 0 6px; }
+  .info h5, .md h5 { font: 600 14px/1.3 system-ui, sans-serif; margin: 12px 0 4px; }
+  .info p { margin: 0 0 10px; }
+  .info ul, .info ol { margin: 0 0 10px; padding-left: 22px; }
+  .info li { margin: 0 0 8px; }
+  .info li::marker { color: var(--faint); }
+  .info strong { font-weight: 650; }
+  .info em { color: var(--muted); }
+  .info > :last-child { margin-bottom: 0; }
   .follow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .follow button, .examples button { font: 14px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
     border-radius: 10px; padding: 7px 11px; text-align: left; }
