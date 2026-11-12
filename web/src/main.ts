@@ -225,8 +225,20 @@ function renderPanel() {
     }
     const del = el('button', 'del', T.del) as HTMLButtonElement
     del.type = 'button'
+    // Two taps, inside the page: Android's WebView shows no confirm() dialog unless the app opts in
+    let armed: ReturnType<typeof setTimeout> | null = null
     del.onclick = () => {
-      if (!confirm(T.confirmDel)) return
+      if (!armed) {
+        del.textContent = T.confirmDel
+        del.classList.add('armed')
+        armed = setTimeout(() => {
+          armed = null
+          del.textContent = T.del
+          del.classList.remove('armed')
+        }, 4000)
+        return
+      }
+      clearTimeout(armed)
       convs = convs.filter((x) => x.id !== c.id)
       if (!convs.length) newConv()
       if (current === c.id) current = convs[0]!.id

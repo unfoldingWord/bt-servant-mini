@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
                 return loader.shouldInterceptRequest(req.getUrl());
             }
         });
+        web.setWebChromeClient(new android.webkit.WebChromeClient()); // JS dialogs (alert, confirm) and, later, file pickers
         web.addJavascriptInterface(new Bridge(), "Android");
         final android.widget.FrameLayout root = new android.widget.FrameLayout(this);
         root.addView(web);
