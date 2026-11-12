@@ -14,6 +14,13 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
 - Paquetes incluidos: `en` (Rut, Salmos, Jonás, Juan, Tito, más los artículos) y `es-419` (Rut, Tito). Si un libro no está en
   español, responde con el paquete en inglés.
 
+## Conversación (v0.2)
+- Cada respuesta: una frase que presenta lo encontrado (`web/src/converse.ts`, armada con los datos reales, en 5 idiomas), la
+  información de los paquetes debajo y botones para seguir (notas, preguntas, texto, versículo siguiente), que no pasan por el modelo.
+- «¿Y el versículo 4?» usa el libro y capítulo de la pregunta anterior. Hasta 3 conversaciones guardadas (localStorage), borrables.
+- La frase no la escribe un modelo: Qwen3 0.6B, Llama 3.2 1B y Gemma 3 1B inventaron conteos, versículos y definiciones al
+  intentarlo (12 nov). Un modelo de 3-4B sería el siguiente intento.
+
 ## Construir e instalar
 ```
 python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun y ../lp3-mcp, ../fase0-mini-servant/packs)

@@ -217,7 +217,9 @@ function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
   const nums = /(\d+)\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?|(\d+)(?:\s*[-–]\s*(\d+))?/.exec(q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))))
   if (words <= 8 && nums) {
     const isChap = /cap[ií]tulo|chapter|chapitre|pasal|अध्याय/i.test(q)
-    const base = { ...slots, intent: 'passage', book: code, what: slots.what?.length ? slots.what : last!.what }
+    const asked = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions']
+      : /text|texto|teks|पाठ|dice|say|dit/i.test(q) ? ['text'] : null
+    const base = { ...slots, intent: 'passage', book: code, what: asked ?? last!.what }
     if (nums[1]) return { ...base, chapter: +nums[1], verse_start: +nums[2]!, verse_end: nums[3] ? +nums[3] : null }
     if (isChap) return { ...base, chapter: +nums[4]!, verse_start: null, verse_end: null }
     return { ...base, chapter: Number(ch), verse_start: +nums[4]!, verse_end: nums[5] ? +nums[5] : null }
