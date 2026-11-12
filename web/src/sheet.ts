@@ -182,6 +182,12 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
     case 'advice': {
       const ids = await idsOf(term, packLangs)
       const ref = refOf()
+      // "Help me translate Jonah 1" names no phrase: that is a passage with its helps, not advice on one figure
+      const phraseIsBook = !!phrase && !!book && fold(phrase).trim() === fold(book).trim()
+      if (ref && (!phrase || phraseIsBook || !/:\d/.test(ref))) {
+        Object.assign(sheet, { intent: 'passage', ref, what: /:\d/.test(ref) ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'] })
+        break
+      }
       Object.assign(sheet, { ref, phrase, concept: ids?.length === 1 && ids[0]!.startsWith('ta:translate/figs-') ? ids[0] : null })
       if (!ref) sheet.term = term
       break
