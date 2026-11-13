@@ -3,7 +3,7 @@
 import { answerSheet, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
-import { appVersion, isLite, modelOff, modelReady, modelState, PWA, slotsOf } from './model'
+import { appVersion, isLite, LIMITED, modelOff, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
@@ -1148,7 +1148,7 @@ function firstSafety() {
     const v = localStorage.getItem(k)
     return v === '1' ? true : v === '0' ? false : null
   }
-  const ask: ('online' | 'usage' | 'discreet')[] = [...(onlineAvailable() ? ['online' as const] : []), 'usage', ...(PWA ? [] : ['discreet' as const])]
+  const ask: ('online' | 'usage' | 'discreet')[] = [...(onlineAvailable() ? ['online' as const] : []), 'usage', ...(LIMITED ? [] : ['discreet' as const])]
   askSafety(nav, ask, async (a) => {
     if (!a) return
     if (a.discreet !== undefined) setDiscreet(a.discreet, nav)

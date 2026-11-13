@@ -13,6 +13,17 @@ import version from './data/version.json'
 declare const __PWA__: boolean
 export const PWA = typeof __PWA__ !== 'undefined' && __PWA__
 if (PWA) webInit()
+// The iOS app: the same bridge as Android (window.Android, given by the app's Swift code), with platform() = 'ios'. Some
+// things the Android app does are not there yet: loading or sharing the model as a file, and discreet mode.
+export const IOS = (() => {
+  try {
+    return typeof window !== 'undefined' && window.Android?.platform?.() === 'ios'
+  } catch {
+    return false
+  }
+})()
+/** Without the model file features and discreet mode: the web app and (for now) the iOS app. */
+export const LIMITED = PWA || IOS
 
 declare global {
   interface Window {
@@ -29,6 +40,8 @@ declare global {
       saveBegin(name: string, mime: string): string
       saveChunk(b64: string): string
       saveEnd(): string
+      /** 'ios' in the iOS app (absent on Android) */
+      platform?(): string
     }
     __llm?: (id: string, result: string) => void
   }

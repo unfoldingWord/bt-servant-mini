@@ -1,0 +1,54 @@
+# BT Servant Mini for iOS. The Xcode project is generated from this file (xcodegen generate, in ios/), so no Mac is needed
+# to change it. vendor/llama.xcframework is built by CI from llama.cpp (see .github/workflows/ios.yml) and not committed.
+name: BTServantMini
+options:
+  bundleIdPrefix: org.unfoldingword
+  deploymentTarget:
+    iOS: "16.4"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "0.9.4"
+    CURRENT_PROJECT_VERSION: "20"
+    SWIFT_VERSION: "5.9"
+targets:
+  BTServantMini:
+    type: application
+    platform: iOS
+    sources:
+      - path: BTServantMini
+        excludes:
+          - www
+      - path: BTServantMini/www
+        type: folder
+    dependencies:
+      - framework: vendor/llama.xcframework
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.unfoldingword.btservantmini
+        PRODUCT_NAME: BTServantMini
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_BITCODE: NO
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: BTServantMini/Info.plist
+      properties:
+        CFBundleDisplayName: BT Servant
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UIUserInterfaceStyle: Dark
+        UIViewControllerBasedStatusBarAppearance: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        ITSAppUsesNonExemptEncryption: false
+        LSRequiresIPhoneOS: true

@@ -1,6 +1,6 @@
 // The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
-import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelState, pickModelFile, PWA, saveToDownloads, setModelOff } from './model'
+import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { availableLangs, downloadLang, exportPack, importPack, installedLangs, openLang, origin, removeLang } from './packs'
 
 type S = {
@@ -189,8 +189,8 @@ export function modelSection(lang: string, refresh: () => void): HTMLElement {
   if (busy(state)) follow()
   if (state === 'missing' || state === 'error') {
     row.append(btn(`${s.download} (${mb(MODEL.bytes)})`, () => { downloadModel(); refresh(); follow() }, 'on'))
-    if (!PWA) row.append(btn(s.loadFile, () => pickModelFile()))
-  } else if (state === 'ready' && !PWA) {
+    if (!LIMITED) row.append(btn(s.loadFile, () => pickModelFile()))
+  } else if (state === 'ready' && !LIMITED) {
     row.append(btn(s.share, () => { const err = exportModel(); alertish(box, err ? `${s.failed} ${err}` : s.saved) }))
   }
   box.appendChild(row)

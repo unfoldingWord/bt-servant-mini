@@ -42,6 +42,14 @@ shutil.copytree(WWW, DESK)
 shutil.copytree(FULL, DESK / 'packs')
 print('packs', langs, 'www', sum(f.stat().st_size for f in WWW.rglob('*') if f.is_file()) // 1024, 'KB')
 
+# The iOS app (ios/): the same page as the Android app, without packs (they are added from the app, like the light build).
+# It is kept in the repository so that CI can build the app without this machine's sources of the page.
+IOS = ROOT / 'ios' / 'BTServantMini' / 'www'
+shutil.rmtree(IOS, ignore_errors=True)
+shutil.copytree(WWW, IOS)
+(IOS / 'packs').mkdir()
+(IOS / 'packs' / 'index.json').write_text(json.dumps({'langs': []}), encoding='utf-8')
+
 # The installable web app (iPhone and any browser): site/app, served at /app/ on the landing page. Same page as the Android
 # app, built with __PWA__ (the model runs in the browser through wllama), no packs inside (they are added from the menu, like
 # the light build), plus the web-app manifest, icons and a service worker that keeps the app's files for offline use.

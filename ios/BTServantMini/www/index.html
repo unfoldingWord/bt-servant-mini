@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BT Servant Mini</title>
+<style>
+  /* The look of the BT Servant web client: cream page, beige bubbles for the person, the answer as plain serif text, terracotta accent. */
+  :root {
+    --bg: #f5f5f0; --fg: #1a1a18; --muted: #6b6a68; --faint: #9a9893; --me: #ddd9ce; --card: #ffffff; --line: #00000015;
+    --accent: #ae5630; --accent-hover: #c4633a; --accent-soft: #ae563018; --ok: #3d7a4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #262624; --fg: #eeeeee; --muted: #b8b5a9; --faint: #8a8985; --me: #393937; --card: #30302e; --line: #6c6a6040;
+      --accent: #c4633a; --accent-hover: #d67447; --accent-soft: #c4633a26; --ok: #7fbf8f; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
+  body { display: flex; flex-direction: column; font: 16px/1.5 system-ui, -apple-system, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; position: relative; }
+  #menu { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 8px; display: grid; place-items: center; }
+  #menu:active { background: var(--line); }
+  .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .brand svg { width: 20px; height: 23px; flex: none; }
+  .brand h1 { font: 600 18px/1 Georgia, "Noto Serif", serif; margin: 0; letter-spacing: .1px; white-space: nowrap; }
+  .badge { font: 600 10.5px/1 system-ui, sans-serif; letter-spacing: .6px; text-transform: uppercase; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 4px 7px 3px; }
+  /* the bar shows only a dot (tap: About); what needs attention goes in #notice under the bar, where it can wrap */
+  #status { margin-inline-start: auto; flex: none; border: 0; background: transparent; padding: 10px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+  #status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
+  #status[data-ok="true"]::before { background: var(--ok); }
+  #status[data-state="downloading"]::before, #status[data-state="copying"]::before, #status[data-state="importing"]::before, #status[data-state="starting"]::before { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #notice { display: block; width: calc(100% - 28px); margin: 0 14px 6px; text-align: start; font: 13px/1.4 system-ui, sans-serif; color: var(--muted);
+    background: var(--accent-soft); border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+  #notice[hidden] { display: none; }
+  #netnote { display: flex; gap: 8px; align-items: flex-start; margin: 0 14px 8px; padding: 10px 12px; border-radius: 12px; background: var(--card); border-inline-start: 3px solid var(--accent); font: 13.5px/1.45 system-ui, sans-serif; color: var(--fg); }
+  #netnote.back { border-inline-start-color: #3a9d5d; }
+  #netnote span { flex: 1; }
+  #netnote .x { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px; cursor: pointer; }
+  #pwahint { display: flex; gap: 8px; align-items: center; margin: 0 14px 8px; padding: 10px 12px; border-radius: 12px; background: var(--card); border-inline-start: 3px solid var(--accent); font: 13.5px/1.45 system-ui, sans-serif; color: var(--fg); }
+  #pwahint span { flex: 1; }
+  #pwahint .go { border: 0; border-radius: 999px; background: var(--accent); color: #fff; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+  #pwahint .x { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px; cursor: pointer; }
+  .brand { flex: 0 1 auto; }
+  #log { flex: 1; overflow-y: auto; padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 18px; }
+  .msg { overflow-wrap: anywhere; }
+  .me { align-self: flex-end; max-width: 85%; background: var(--me); border-radius: 14px; padding: 9px 14px; white-space: pre-wrap; }
+  .bot { align-self: stretch; font-family: Georgia, "Noto Serif", "Noto Serif Devanagari", serif; font-size: 16.5px; line-height: 1.6; }
+  .pending { color: var(--faint); font-style: italic; }
+  .intro { margin: 0 0 10px; }
+  .info { font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .plain { white-space: pre-wrap; }
+  .plain.md { white-space: normal; }
+  .info h3, .md h3 { font: 600 17px/1.3 Georgia, "Noto Serif", "Noto Serif Devanagari", serif; margin: 2px 0 10px; }
+  .info h4, .md h4 { font: 600 12px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin: 16px 0 6px; }
+  .info h5, .md h5 { font: 600 14px/1.3 system-ui, sans-serif; margin: 12px 0 4px; }
+  .info p { margin: 0 0 10px; }
+  .info ul, .info ol { margin: 0 0 10px; padding-inline-start: 22px; }
+  .info li { margin: 0 0 8px; }
+  .info li::marker { color: var(--faint); }
+  .info strong { font-weight: 650; }
+  .info em { color: var(--muted); }
+  .info > :last-child { margin-bottom: 0; }
+  .follow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .follow button, .examples button { font: 14px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
+    border-radius: 10px; padding: 7px 11px; text-align: left; }
+  .follow button:active, .examples button:active { background: var(--line); }
+  details { margin-top: 8px; font: 12px system-ui, sans-serif; color: var(--faint); }
+  details pre { white-space: pre-wrap; font-size: 11px; max-height: 240px; overflow: auto; }
+  .welcome { margin: auto 0; text-align: center; padding: 24px 6px 8px; }
+  .welcome svg { width: 34px; height: 39px; }
+  .welcome h2 { font: 400 26px/1.25 Georgia, "Noto Serif", "Noto Serif Devanagari", serif; margin: 14px 0 8px; }
+  .welcome p { color: var(--muted); margin: 0 auto 18px; max-width: 34ch; font-size: 15px; }
+  .examples { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+  form { display: flex; align-items: flex-end; gap: 8px; margin: 0 12px calc(12px + env(safe-area-inset-bottom)); padding: 6px 6px 6px 14px;
+    background: var(--card); border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,.035), 0 0 0 .5px rgba(0,0,0,.08); }
+  textarea { flex: 1; resize: none; min-height: 40px; max-height: 120px; padding: 9px 0; border: 0; outline: none; background: transparent; color: var(--fg);
+    font: 16.5px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  textarea::placeholder { color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #send { width: 38px; height: 38px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
+  #send:active { background: var(--accent-hover); }
+  #send:disabled { opacity: .45; }
+  #panel { display: none; position: absolute; z-index: 5; left: 8px; right: 8px; top: 56px; background: var(--card); border-radius: 14px;
+    padding: 10px 14px 14px; box-shadow: 0 12px 32px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.08); max-height: 75vh; overflow-y: auto; }
+  #panel.show { display: block; }
+  #panel h2 { font: 600 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin: 10px 0 8px; }
+  #panel .row { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+  #panel .open { flex: 1; text-align: left; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 10px;
+    font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #panel .row.on .open { background: var(--me); border-color: transparent; }
+  #panel .del { border: 0; color: #b4432f; background: transparent; padding: 9px 6px; font: inherit; font-size: 14px; }
+  #panel .del.armed { background: #b4432f; color: #fff; border-radius: 10px; padding: 9px 10px; white-space: nowrap; }
+  #panel .add { margin-top: 8px; width: 100%; border: 0; border-radius: 10px; background: var(--accent); color: #fff; padding: 10px; font: inherit; font-weight: 600; }
+  #panel .add:disabled { opacity: .4; }
+  #panel .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  #panel .langs { display: flex; flex-wrap: wrap; gap: 6px; }
+  #panel .langs button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 14px; }
+  #panel .langs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #panel .packs { font-size: 13px; color: var(--muted); }
+  #panel .setup .row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  #panel .grow { flex: 1; font-size: 14.5px; }
+  #panel button.small { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; }
+  #panel button.small.del { color: #b4432f; }
+  #panel .about-link { margin-top: 14px; width: 100%; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 14.5px; text-align: start; padding: 8px 0; }
+  #about, #safety, #report { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #about .card, #safety .card, #report .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; max-width: 520px; max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
+  #about h2, #safety h2, #report h2 { font: 600 22px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 12px; }
+  #about p, #safety p, #report p { margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
+  #about .meta, #safety .meta, #report .meta { color: var(--muted); font-size: 13.5px; }
+  #about .setup h2, #safety .setup h2, #report .setup h2 { font: 600 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin: 8px 0; }
+  #about .langs, #safety .langs, #report .langs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  #about .langs button, #safety .langs button, #report .langs button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 14px; }
+  #about .langs button.on, #safety .langs button.on, #report .langs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #about button.primary, #safety button.primary, #report button.primary { width: 100%; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 12px; font: inherit; font-weight: 600; margin-top: 4px; }
+  #safety { z-index: 11; }
+  #report { z-index: 12; }
+  #report .card { display: grid; gap: 10px; width: 100%; box-sizing: border-box; }
+  #report .langs button { font-size: 13.5px; padding: 6px 11px; }
+  #report h2 { margin: 0; }
+  #report .langs { margin: 0; }
+  #report textarea.comment { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); resize: vertical; }
+  #report .toggle { display: flex; gap: 10px; align-items: center; font-size: 14.5px; }
+  #report .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+  #report details.preview summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  #report pre.usage { white-space: pre-wrap; font-size: 11px; max-height: 220px; overflow: auto; background: var(--bg); border-radius: 10px; padding: 8px 10px; direction: ltr; text-align: left; }
+  #report .meta { margin: 0; }
+  #report button.secondary { width: 100%; border: 0; background: transparent; color: var(--muted); padding: 10px; font: inherit; }
+  .about-link { display: block; margin-top: 10px; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 14px; padding: 4px 0; text-align: start; cursor: pointer; }
+  .rate { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+  .rate button { border: 0; background: transparent; color: var(--faint); padding: 6px; border-radius: 8px; display: flex; }
+  .rate button.on { color: var(--accent); }
+  .rate button.down svg { transform: rotate(180deg); }
+  .rate .done { color: var(--muted); font-size: 12.5px; margin-inline-start: 4px; }
+  #lock { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #lock .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; width: min(360px, 100%); display: grid; gap: 10px; }
+  #lock h2 { font: 600 20px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 4px; }
+  #lock .note { color: var(--accent); margin: 0; min-height: 1em; font-size: 14px; }
+  #lock .meta { color: var(--muted); font-size: 12.5px; margin: 0; }
+  #lock button.primary { border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 12px; font: inherit; font-weight: 600; }
+  input.pin { width: 100%; box-sizing: border-box; font: inherit; font-size: 20px; letter-spacing: 6px; text-align: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg); }
+  #panel .pinbox { display: grid; gap: 8px; margin-top: 8px; }
+  #panel button.danger { margin-top: 10px; width: 100%; border: 1px solid #b4232a66; background: transparent; color: #d0444b; border-radius: 12px; padding: 10px; font: inherit; font-size: 14px; }
+  #safety .choice { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+  #safety h3 { font: 600 15.5px/1.35 system-ui, sans-serif; margin: 0 0 6px; }
+  #safety .choice p { font-size: 14.5px; color: var(--muted); }
+  #safety button.primary:disabled { opacity: .45; }
+  #safety button.secondary { width: 100%; border: 0; background: transparent; color: var(--muted); padding: 12px; font: inherit; margin-top: 2px; }
+  .ai { margin: 0 0 10px; }
+  .ai.pending { color: var(--faint); font-style: italic; }
+  .ai-badge { display: inline-block; font: 600 11px/1 system-ui, sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 8px 3px; margin-bottom: 8px; }
+  .ai-text p { margin: 0 0 10px; }
+  .ai-text ul, .ai-text ol { margin: 0 0 10px; padding-inline-start: 22px; }
+  details.sources { margin-top: 6px; font: inherit; color: inherit; }
+  details.sources > summary { font: 600 13px system-ui, sans-serif; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
+  #panel .toggle { display: flex; gap: 10px; align-items: center; font-size: 14.5px; padding: 4px 0; }
+  #panel .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+  #panel pre.usage { white-space: pre-wrap; font-size: 11.5px; line-height: 1.35; max-height: 260px; overflow: auto; background: var(--card, rgba(255,255,255,.04)); border-radius: 10px; padding: 10px 12px; direction: ltr; text-align: left; }
+  /* interactive passage (view.ts) */
+  .study .tx { margin: 0 0 12px; }
+  .study .tx-label { font: 600 11px/1.3 system-ui, sans-serif; letter-spacing: .6px; color: var(--accent); margin: 0 0 3px; }
+  .study .vv { margin: 0; font: 16px/1.75 Georgia, "Noto Serif", "Noto Serif Devanagari", "Noto Naskh Arabic", serif; }
+  .study .vv sup { font: 600 10px system-ui, sans-serif; color: var(--faint); margin-inline-end: 2px; }
+  .study .w { cursor: pointer; border-radius: 3px; -webkit-tap-highlight-color: transparent; }
+  .study .w.n { text-decoration: underline dotted var(--accent); text-underline-offset: 4px; text-decoration-thickness: 1.5px; }
+  .study .w.t { text-decoration: underline dotted var(--faint); text-underline-offset: 4px; }
+  .study .w.rel { background: var(--accent-soft); }
+  .study .w.on { background: var(--accent); color: #fff; text-decoration: none; }
+  .study details.more-tx, .study details.qs { margin: 4px 0 10px; }
+  .study details > summary { font: 600 13px system-ui, sans-serif; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+  .chip { font: 13.5px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+  .chip:active { background: var(--accent-soft); }
+  .study ol.nl, .helps ol.nl { list-style: none; padding: 0; margin: 0 0 10px; }
+  .study ol.nl li, .helps ol.nl li { margin: 0 0 6px; }
+  .info.helps { margin-top: 8px; }
+  .nrow { display: block; width: 100%; text-align: start; font: 14px/1.45 system-ui, "Noto Sans", sans-serif; color: var(--fg);
+    background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+  .nrow:active { background: var(--accent-soft); }
+  .nrow strong { font-weight: 650; }
+  a.lk { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  /* bottom panel */
+  .sheet-bg { position: fixed; inset: 0; background: #0006; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; }
+  .sheet-bg.open { opacity: 1; pointer-events: auto; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 78vh; display: flex; flex-direction: column; background: var(--bg);
+    border-radius: 16px 16px 0 0; box-shadow: 0 -6px 24px #0003; transform: translateY(105%); transition: transform .22s ease-out; z-index: 41;
+    padding-bottom: env(safe-area-inset-bottom); max-width: 760px; margin: 0 auto; }
+  .sheet.open { transform: none; }
+  .sheet-grip { width: 38px; height: 4px; border-radius: 2px; background: var(--line); margin: 8px auto 2px; }
+  .sheet-head { display: flex; align-items: center; gap: 6px; padding: 4px 10px 8px; border-bottom: 1px solid var(--line); }
+  .sheet-title { flex: 1; font: 600 16px/1.3 Georgia, "Noto Serif", serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sheet-btn { font: 20px/1 system-ui, sans-serif; color: var(--muted); background: transparent; border: 0; padding: 6px 10px; cursor: pointer; }
+  .sheet-body { overflow-y: auto; padding: 12px 16px 16px; font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  .sheet-body h4 { font: 600 12px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin: 4px 0 8px; }
+  .sheet-body .rich p { margin: 0 0 10px; }
+  .sheet-body .rich h3, .sheet-body .rich h4, .sheet-body .rich h5 { margin: 12px 0 6px; }
+  .sheet-body .rich ul, .sheet-body .rich ol { padding-inline-start: 20px; margin: 0 0 10px; }
+  .pnote { border-inline-start: 3px solid var(--accent); padding: 2px 0 2px 10px; margin: 0 0 14px; }
+  .pnote-head { font-weight: 650; margin: 0 0 4px; }
+  .chip-link { display: inline-block; font-size: 13px; margin-top: 2px; }
+  .sheet-foot:empty { display: none; }
+  .sheet-foot { padding: 8px 16px 12px; border-top: 1px solid var(--line); }
+  .sheet-chat { width: 100%; font: 600 14px system-ui, sans-serif; color: #fff; background: var(--accent); border: 0; border-radius: 10px;
+    padding: 10px; cursor: pointer; }
+  .muted { color: var(--muted); }
+  /* menu: settings as rows (name, current value, ›); each opens its own view in the panel */
+  .mrows { display: flex; flex-direction: column; margin-top: 14px; border-top: 1px solid var(--line); }
+  .mrow { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; width: 100%;
+    text-align: start; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 11px 4px; color: var(--fg); cursor: pointer; min-height: 52px; }
+  .mrow:active { background: var(--line); }
+  .mrow-t { font: 500 15px/1.3 system-ui, sans-serif; grid-column: 1; }
+  .mrow-s { font: 13px/1.35 system-ui, sans-serif; color: var(--muted); grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mrow-c { grid-column: 2; grid-row: 1 / span 2; font-size: 20px; color: var(--faint); }
+  [dir="rtl"] .mrow-c { transform: scaleX(-1); }
+  .subhead { display: flex; align-items: center; gap: 4px; margin: -4px 0 8px; }
+  #panel .subhead h2 { margin: 0; font: 600 17px/1.3 Georgia, "Noto Serif", serif; text-transform: none; letter-spacing: 0; color: var(--fg); }
+  .subhead .back { font: 24px/1 system-ui, sans-serif; color: var(--muted); background: transparent; border: 0; padding: 4px 10px 6px 2px; cursor: pointer; }
+  [dir="rtl"] .subhead .back { transform: scaleX(-1); }
+  #panel h3 { font: 600 12px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 14px 0 8px; }
+  #panel.sub .setup > h2:first-child { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <button id="menu" type="button"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
+  <div class="brand">
+    <svg viewBox="0 0 448 512" aria-hidden="true"><path fill="#ae5630" d="M0 96L0 416c0 53 43 96 96 96l320 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l0-66.7c18.6-6.6 32-24.4 32-45.3l0-288c0-26.5-21.5-48-48-48L96 0C43 0 0 43 0 96zM64 416c0-17.7 14.3-32 32-32l256 0 0 64-256 0c-17.7 0-32-14.3-32-32zm64-272c0-8.8 7.2-16 16-16l48 0 0-48c0-8.8 7.2-16 16-16l32 0c8.8 0 16 7.2 16 16l0 48 48 0c8.8 0 16 7.2 16 16l0 32c0 8.8-7.2 16-16 16l-48 0 0 112c0 8.8-7.2 16-16 16l-32 0c-8.8 0-16-7.2-16-16l0-112-48 0c-8.8 0-16-7.2-16-16l0-32z"/><path fill="#fff" d="M208 64c-8.8 0-16 7.2-16 16l0 48-48 0c-8.8 0-16 7.2-16 16l0 32c0 8.8 7.2 16 16 16l48 0 0 112c0 8.8 7.2 16 16 16l32 0c8.8 0 16-7.2 16-16l0-112 48 0c8.8 0 16-7.2 16-16l0-32c0-8.8-7.2-16-16-16l-48 0 0-48c0-8.8-7.2-16-16-16l-32 0z"/></svg>
+    <h1>BT Servant</h1><span class="badge">Mini</span>
+  </div>
+  <button id="status" type="button"></button>
+</header>
+<button id="notice" type="button" hidden></button>
+<nav id="panel"></nav>
+<main id="log" aria-live="polite"></main>
+<form id="ask"><textarea id="q" rows="1" enterkeyhint="send"></textarea><button id="send" type="submit" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
+<span id="packs" hidden></span>
+<script type="module" src="./main.js?v=238ce80ee4"></script>
+</body>
+</html>
