@@ -1,6 +1,6 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { answerSheet, booksWith, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
+import { answerSheet, booksWith, facts, linkedVerses, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { appVersion, isLite, LIMITED, modelOff, modelReady, modelState, PWA, slotsOf } from './model'
@@ -235,6 +235,58 @@ const LIMITS: Record<string, string> = {
   en: 'What this app can and cannot do ›', es: 'Lo que esta app puede y no puede hacer ›', fr: 'Ce que cette application peut et ne peut pas faire ›',
   id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
 }
+// "¿Cómo traduzco «cordero» si en mi pueblo solo hay llamas?" and "¿Qué significa «redentor» en Rut 4?": the questions of a
+// translator who works far from the Bible's world. The term's article first, then what helps with it (a report of Nov 13).
+const TERM_T: Record<string, { unknown: string; meaning: string; inRef: string; all: string }> = {
+  en: { unknown: 'When something does not exist where you translate, this is what the helps say:', meaning: 'This is what «{term}» means:', inRef: 'In {ref} it appears in {list}.', all: '{ref}: all the helps' },
+  es: { unknown: 'Cuando algo no existe donde traduces, esto dicen las ayudas:', meaning: 'Esto significa «{term}»:', inRef: 'En {ref} aparece en {list}.', all: '{ref}: todas las ayudas' },
+  fr: { unknown: "Quand une chose n'existe pas là où vous traduisez, voici ce que disent les aides :", meaning: 'Voici ce que signifie « {term} » :', inRef: 'Dans {ref}, il apparaît en {list}.', all: '{ref} : toutes les aides' },
+  id: { unknown: 'Jika sesuatu tidak ada di tempat Anda menerjemahkan, inilah kata bahan bantu:', meaning: 'Inilah arti «{term}»:', inRef: 'Di {ref} muncul pada {list}.', all: '{ref}: semua bahan bantu' },
+  hi: { unknown: 'जब कोई चीज़ वहाँ नहीं होती जहाँ आप अनुवाद करते हैं, तो सहायताएँ यह कहती हैं:', meaning: '«{term}» का अर्थ यह है:', inRef: '{ref} में यह {list} में आता है।', all: '{ref}: सभी सहायताएँ' },
+  ar: { unknown: 'عندما لا يوجد شيء حيث تترجم، هذا ما تقوله المساعدات:', meaning: 'هذا معنى «{term}»:', inRef: 'في {ref} يرد في {list}.', all: '{ref}: كل المساعدات' },
+}
+const TT = (ui: string) => TERM_T[ui] ?? TERM_T.en!
+/** "jon 1:17" as the person reads it: "Jonás 1:17". */
+const refLabelOf = (ui: string, ref: string): string => { const [code, rest] = ref.split(' '); return `${bookLabel(ui, code!)}${rest ? ' ' + rest.replace(/^front:intro$/, '') : ''}`.trim() }
+/**
+ * The one Translation Words article the question's words name, leaving out book names: two words together first ("pez
+ * grande"), then each word, exact names before a close spelling ("jueces" ~ "juez").
+ */
+// the person's own situation ("en mi pueblo solo hay llamas"): never the term they ask about
+const SITUATION = new Set('pueblo pueblos idioma lengua cultura comunidad tierra zona region solo village language culture community country area only langue village communaute region seulement desa bahasa budaya daerah hanya conocen conocemos conoce tenemos tienen hay existe existen usan usamos visto saben sabemos know knows have has exist exists see seen connaissons connaissent existe punya mengenal tahu ada'.split(' '))
+async function termArticle(q: string, ui: string): Promise<string | null> {
+  let kw = keywords(q).filter((k) => !bookCode(ui, k) && !bookCode('en', k) && !SITUATION.has(fold(k)))
+  // the words right after "how do I translate" are the thing asked about ("…we don't have sheep, how do I translate lamb?")
+  const asked = pattern('howTranslate').exec(q)
+  if (asked) {
+    const after = asked.index + asked[0].length
+    kw = [...kw.filter((k) => q.indexOf(k, after) >= 0), ...kw.filter((k) => q.indexOf(k, after) < 0)]
+  }
+  const pairs = kw.slice(0, -1).map((k, i) => `${k} ${kw[i + 1]}`)
+  for (const t of [...pairs, ...kw]) {
+    const ids = await articleForQuestion(t)
+    if (ids?.length === 1) return ids[0]!
+  }
+  for (const t of kw) {
+    const ids = await articleForQuestion(`qué es ${t}`)
+    if (ids?.length === 1) return ids[0]!
+  }
+  return null
+}
+/** The phrase the model took from the question, without the question's own words ("que quiere decir eso", "como traduzco"). */
+function cleanPhrase(phrase: string, q: string): string | null {
+  let p = phrase.replace(/[¿?!¡]/g, ' ').replace(/\s+/g, ' ').trim()
+  // the question's words at the start ("que quiere decir eso"), never inside: "el que es fiel" is the verse's text
+  for (const c of ['meaning', 'howTranslate', 'noWord'] as const) p = p.replace(new RegExp('^(?:' + pattern(c).source + ')', 'iu'), ' ').trim()
+  // the person's own situation: "…, en mi pueblo no conocen el mar"
+  p = p.replace(/,?\s*(?:en|in|dans|di|dalam|donde|where) (?:mi|my|mis|nuestro|nuestra|our|mon|ma|notre|kami|saya) (?:pueblo|idioma|lengua|cultura|comunidad|village|language|culture|community|langue|desa|bahasa|budaya)\b.*$/iu, '')
+  p = p.replace(/^[,.;:\s]+|[,.;:\s]+$/g, '')
+  if (!keywords(p).length) return null // nothing left but question words ("eso")
+  // the whole question is not a phrase of the verse (unless the person quoted it)
+  if (!/[«"“]/.test(q) && p.length > 0.8 * q.replace(/\s+/g, ' ').trim().length) return null
+  return p
+}
+
 // Without the language: the light build starts with none, and a question in a language that is not here finds nothing.
 // Saying so (and where to add it) instead of "I didn't find…", which reads as a fault of the app.
 const NOPACK: Record<string, { none: string; missing: string; add: string }> = {
@@ -929,6 +981,48 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     setUiLang(ui)
     let others: { label: string; sheet: Sheet }[] = []
     let searched = ''
+    // "¿Cómo traduzco cordero si en mi pueblo solo hay llamas?": the article of the term, then "Translate Unknowns" (tA); the
+    // passage's helps as a button when the question names one. Only when the question names an article: otherwise as usual.
+    if (q !== undefined && (has('howTranslate', q) || has('noWord', q)) && !has('translateBook', q)) {
+      const id = await termArticle(q, ui)
+      // with no article for the thing ("pez grande"), "there is no … where I live" still wants "Translate Unknowns"
+      if (id || (has('noWord', q) && sheet.ref)) {
+        const base = { ...sheet, id: `t${Date.now()}`, ref: null, what: [], phrase: null, candidates: null, term: null } as Sheet
+        const art = id ? await answerSheet({ ...base, intent: 'article', concept: id }) : null
+        const ta = await answerSheet({ ...base, intent: 'article', concept: 'ta:translate/translate-unknown' })
+        answered = 'translate-unknown'
+        const total = ((performance.now() - t0) / 1000).toFixed(1)
+        const follow = sheet.ref ? [{ label: TT(ui).all.replace('{ref}', refLabelOf(ui, sheet.ref)), sheet: { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes'], phrase: null } as Sheet }] : []
+        m = { who: 'bot', intro: TT(ui).unknown, info: art ? `${art.answer}
+
+${ta.answer}` : ta.answer, ui, lang: sheet.lang, follow,
+          meta: `${T.details} · ${total} s
+${meta}
+translate unknowns: ${id ?? '(no article)'}` }
+        throw { done: m }
+      }
+    }
+    // "¿Qué significa «redentor» en Rut 4?": the article of the term and where it is in the passage, not the whole passage
+    // (not when it quotes a phrase of the verse: "Rut 3:9 qué quiere decir «extiende tu manto…»" wants the notes on that phrase)
+    if (q !== undefined && sheet.ref && has('meaning', q) && ['passage', 'advice'].includes(sheet.intent) && !(sheet.intent === 'advice' && sheet.phrase)) {
+      const id = await termArticle(q, ui)
+      if (id) {
+        const art = await answerSheet({ ...sheet, id: `a${Date.now()}`, intent: 'article', concept: id, ref: null, what: [], phrase: null, candidates: null, term: null } as Sheet)
+        const where = await linkedVerses(sheet.ref, id, sheet.lang ?? 'en')
+        const label = refLabelOf(ui, sheet.ref)
+        answered = 'meaning'
+        const total = ((performance.now() - t0) / 1000).toFixed(1)
+        const passage = { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes', 'questions', 'terms'], phrase: null } as Sheet
+        m = { who: 'bot', info: art.answer + (where.length ? `
+
+${TT(ui).inRef.replace('{ref}', label).replace('{list}', where.join(', '))}` : ''),
+          ui, lang: sheet.lang, follow: [{ label: TT(ui).all.replace('{ref}', label), sheet: passage }],
+          meta: `${T.details} · ${total} s
+${meta}
+meaning: ${id} in ${sheet.ref}` }
+        throw { done: m }
+      }
+    }
     // "What books of the Bible mention grace?": every book with the verses that use the term (not a search on "mention"),
     // when what is left of the question names one article; otherwise the question goes on as usual
     if (q !== undefined && has('whichBooks', q)) {
@@ -957,7 +1051,18 @@ books with ${ids[0]}` }
       searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}`
       const kind = kindOf(q)
       if (res.hits.length) c.last = await hitSheet(res.hits[0]!, ['text'])
-      if (!kind || !res.hits.length) {
+      // nothing has all the words ("cebada" with "pueblo" and "traduzco"): the article one of them names, with its verses
+      let rescued = false
+      if (!res.hits.length) {
+        const id = await termArticle(q, ui)
+        if (id) {
+          sheet = { ...sheet, intent: 'article', concept: id, candidates: null, term: null, ref: null, phrase: null } as Sheet
+          rescued = true
+          searched += `
+rescued: ${id}`
+        }
+      }
+      if (!rescued && (!kind || !res.hits.length)) {
         const total = ((performance.now() - t0) / 1000).toFixed(1)
         const used = res.how === 'concepts' ? res.concepts : res.how === 'text' ? (res.hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
         const follow: { label: string; sheet: Sheet }[] = []
@@ -986,8 +1091,10 @@ books with ${ids[0]}` }
         throw { done: m }
       }
       // "notes about Jonah swallowed by the fish": straight to the notes of the best verse; the other verses as buttons
-      sheet = await hitSheet(res.hits[0]!, kind)
-      for (const h of res.hits.slice(1, 4)) others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, kind) })
+      if (!rescued && kind) {
+        sheet = await hitSheet(res.hits[0]!, kind)
+        for (const h of res.hits.slice(1, 4)) others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, kind) })
+      }
     }
     const r = await answerSheet(sheet)
     if (onlineOn() && onlineAvailable()) onlineCtx = await passageContext(sheet).catch(() => '')
@@ -1100,6 +1207,7 @@ form.addEventListener('submit', (e) => {
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
     const { slots, raw, ms } = await slotsOf(q)
     const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
+    if (s0.phrase) s0.phrase = cleanPhrase(s0.phrase, q)
     // the script says the language even when the model does not know it: Arabic letters, Devanagari
     if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
     else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'

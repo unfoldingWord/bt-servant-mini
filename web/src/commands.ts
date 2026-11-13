@@ -4,7 +4,7 @@
 import data from './data/commands.json'
 
 export type Command = 'intro' | 'overview' | 'about' | 'tell' | 'chapter' | 'notes' | 'questions' | 'text' | 'where' | 'whole' | 'that'
-  | 'terms' | 'again' | 'help' | 'replyVerb' | 'translateBook' | 'whichBooks'
+  | 'terms' | 'again' | 'help' | 'replyVerb' | 'translateBook' | 'whichBooks' | 'howTranslate' | 'noWord' | 'meaning'
 
 const VOCAB = data as unknown as Record<Command, Record<string, string[]>>
 const cache = new Map<Command, RegExp>()

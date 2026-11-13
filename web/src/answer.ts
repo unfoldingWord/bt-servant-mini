@@ -380,6 +380,21 @@ async function count(s: Sheet, l: Lang): Promise<Result> {
   cites.push(cite(hit.res, hit.release, 'map'))
   return { answer: say(lang, 'count_bible', { n, what: say(lang, what === 'terms' ? 'word_links' : 'word_notes'), filter: filterTxt, list: rows.slice(0, 8).map(([b, c]) => `${bookName(lang, b)} ${c}`).join(', ') }), cites }
 }
+/** The verses of a passage linked to an article ("redentor" in Ruth 4: 4:1, 4:3…), from the passage's key-term links. */
+export async function linkedVerses(ref: string, concept: string, packLang: string): Promise<string[]> {
+  const r = parseRef(ref)
+  if (!r) return []
+  for (const pl of [...new Set([packLang, 'en'])]) {
+    const l = await getLang(pl)
+    const model = l ? await bookOf(l, r.book) : undefined
+    const rows = (model?.links?.rows ?? []) as HelpRow[]
+    if (!rows.length) continue
+    const range = rangeOf(r)
+    const refs = rows.filter((x) => x.concept === concept && inRange(x, range)).map((x) => x.ref)
+    return [...new Set(refs)]
+  }
+  return []
+}
 /**
  * "What books of the Bible mention grace?": every book whose verses link to the article, in Bible order, with how many
  * verses in each. From the map of the whole Bible (English TWL), so it counts books that are not installed too.
@@ -512,7 +527,15 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
         cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${h.row.ref}, note ${h.row.id}`))
         if (h.row.concept && !articleId) articleId = h.row.concept
       }
-    } else out.push(say(lang, 'advice_no_note', { phrase, book, ref: refLabel(ref) }))
+    } else {
+      out.push(say(lang, 'advice_no_note', { phrase, book, ref: refLabel(ref) }))
+      // the phrase was not found in a note (it may be the person's own words): the verse's notes, so the help is still there
+      for (const x of scored.slice(0, 3)) {
+        const note = clean(x.row.cols.note).replace(/\n+/g, ' ')
+        out.push(say(lang, 'advice_note', { res: model.notes!.res, release: releaseOf(model, model.notes!.res), said: x.said ? `«${x.said}»: ` : '', note }))
+        cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${x.row.ref}, note ${x.row.id}`))
+      }
+    }
     const uKey = textKey(model, 'ust')
     const simple = model.texts.find((t) => t.res === uKey)
     if (simple) {

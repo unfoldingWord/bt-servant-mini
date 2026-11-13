@@ -41,6 +41,11 @@ const STOP = new Set(
     'mention mentions mentioned mentioning word words term terms books contain contains appear appears used uses use ' +
     'menciona mencionan mencionado mencionada mencionar palabra palabras termino término terminos términos libros contiene contienen usa usan aparecen ' +
     'mentionne mentionnent mot mots terme termes livres contient quels quelles cuales cuáles saja ' +
+    // how a question asks, not what it looks for ("como traduzco…", "que quiere decir…")
+    'translate translating meaning ' +
+    'traduzco traducir traduce traducimos quiere quieren decir significa significan eso esto ' +
+    'traduire signifie ' +
+    'menerjemahkan maksud ' +
     'menyebut menyebutkan kata istilah kitab-kitab memuat muncul ' +
     // what to show, not what to look for
     'notes note notas nota translation traduccion traducción traduction terjemahan catatan questions question preguntas pregunta pertanyaan text texto teks texte '

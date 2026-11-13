@@ -550,5 +550,95 @@
       "في أي (?:أسفار|سفر)",
       "ما الأسفار"
     ]
+  },
+  "howTranslate": {
+    "en": [
+      "how (?:do|can|should|would|could) (?:i|we|you|one) (?:translate|say|express|put)",
+      "how to (?:translate|say)",
+      "how (?:is|would) .{1,40} (?:translated|said)"
+    ],
+    "es": [
+      "c[oó]mo (?:lo |la |los |las )?(?:traduzco|traducimos|traducir[ií]a|digo|decimos|expreso)",
+      "c[oó]mo (?:puedo|podemos|debo|debemos|se puede|hay que) (?:traducir|decir|expresar)",
+      "c[oó]mo se (?:traduce|dice)"
+    ],
+    "fr": [
+      "comment (?:puis-je |dois-je |pouvons-nous |peut-on )?(?:traduire|dire|exprimer)",
+      "comment (?:le |la |les )?traduire"
+    ],
+    "id": [
+      "bagaimana (?:cara )?(?:saya |kami |kita )?(?:menerjemahkan|mengatakan|mengungkapkan)"
+    ],
+    "hi": [
+      "कैसे अनुवाद",
+      "का अनुवाद कैसे",
+      "कैसे कहें"
+    ],
+    "ar": [
+      "كيف (?:أترجم|نترجم|أقول|نقول|يمكنني ترجمة|يمكن ترجمة|أعبر)"
+    ]
+  },
+  "noWord": {
+    "en": [
+      "there['’]?s? (?:is )?no word",
+      "(?:we|they) (?:don['’]t|do not) have (?:a |any )?word",
+      "(?:in|where) (?:my|our) (?:village|language|culture|community|country|area).*?(?:no |not |don['’]t|doesn['’]t|never)",
+      "(?:doesn['’]t|does not|don['’]t|do not) exist (?:in|where|among) (?:my|our)"
+    ],
+    "es": [
+      "no (?:hay|existe|tenemos|tienen|conocemos|conocen) (?:una |la |esa |ninguna )?palabra",
+      "(?:en|donde) (?:mi|nuestro|nuestra|nuestros|mis) (?:pueblo|idioma|lengua|cultura|comunidad|tierra|zona|regi[oó]n).*?no (?:hay|existe|existen|tenemos|tienen|conocen|conocemos|se conoce|se conocen|usan|usamos|han visto)"
+    ],
+    "fr": [
+      "il n['’]y a pas de mot",
+      "(?:dans|chez) (?:ma|mon|notre|nos) (?:langue|culture|village|communaut[eé]|r[eé]gion).*?(?:n['’]existe pas|pas de|ne connaiss|ne conna[iî]t)"
+    ],
+    "id": [
+      "tidak ada (?:kata|istilah)",
+      "(?:di|dalam) (?:desa|bahasa|budaya|daerah) (?:kami|saya|kita).*?tidak (?:ada|punya|mengenal|tahu)"
+    ],
+    "hi": [
+      "कोई शब्द नहीं",
+      "हमारी (?:भाषा|संस्कृति) में .*?नहीं",
+      "हमारे (?:गाँव|गांव|इलाके) में .*?नहीं"
+    ],
+    "ar": [
+      "لا (?:توجد|يوجد) كلمة",
+      "(?:في|عندنا في) (?:لغتنا|ثقافتنا|قريتنا|بلدنا).*?(?:لا|ليس)"
+    ]
+  },
+  "meaning": {
+    "en": [
+      "what (?:does|do) .{1,60} mean",
+      "what(?:['’]s| is| are| was| were)",
+      "who(?:['’]s| is| are| was| were)",
+      "meaning of"
+    ],
+    "es": [
+      "qu[eé] (?:significa|significan|quiere decir|quieren decir|es|son|era|eran)",
+      "qui[eé]n(?:es)? (?:es|son|era|eran|fue|fueron)",
+      "significado de"
+    ],
+    "fr": [
+      "que (?:signifie|signifient|veut dire|veulent dire)",
+      "qu['’]est-ce que",
+      "qui (?:est|sont|était|étaient)",
+      "sens de"
+    ],
+    "id": [
+      "apa (?:arti|maksud|itu)",
+      "siapa(?:kah)?",
+      "arti (?:kata|dari)"
+    ],
+    "hi": [
+      "का (?:अर्थ|मतलब) क्या",
+      "क्या (?:है|हैं|था|थे)",
+      "कौन (?:है|हैं|था|थे)"
+    ],
+    "ar": [
+      "ما (?:معنى|هو|هي|هم)",
+      "ماذا (?:يعني|تعني)",
+      "من (?:هو|هي|هم|كان|كانوا)"
+    ]
   }
 }
