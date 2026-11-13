@@ -6,46 +6,41 @@
 <title>BT Servant Mini</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="BT Servant Mini: the unfoldingWord translation helps on an Android phone, without internet. Ask about a verse, a word or a name in six languages.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: the BT Servant site's system (navy, bronze, vellum; Newsreader + Inter), so this page can join it later.
-   A phone-sized column of real recordings beside short copy; one comparison table; two download cards. */
+/* Layout: the app's own look (cream and terracotta, Georgia headings, system text, the book-and-cross mark), so the page
+   and the app read as one product. A phone-sized column of real recordings beside short copy; one table; two download cards. */
 :root {
-  --navy: #3B3768; --navy-deep: #2C2950; --bronze: #B58A3C; --bronze-soft: #D9BC85;
-  --vellum: #F1EBDD; --bg: #FBFAF7; --card: #FFFFFF; --ink: #2A2740; --heading: #3B3768; --muted: #6B6880; --border: #E4DFD3;
-  --header-bg: rgba(251, 250, 247, 0.92); --mark-frame: #3B3768; --mark-dot: #FBFAF7; --mark-accent: #B58A3C; --on-navy: #FBFAF7;
-  --font-head: 'Newsreader', 'Lora', Georgia, serif; --font-body: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --radius: 10px; --shadow: 0 1px 3px rgba(20, 18, 40, .07), 0 10px 28px rgba(20, 18, 40, .06); --wrap: 1120px;
+  --bg: #f5f5f0; --card: #ffffff; --band: #ece9e0; --fg: #1a1a18; --heading: #1a1a18; --muted: #6b6a68; --border: #e2ded3;
+  --accent: #ae5630; --accent-hover: #c4633a; --accent-soft: #ae563018; --on-accent: #ffffff; --header-bg: rgba(245, 245, 240, 0.92);
+  --font-head: Georgia, "Noto Serif", "Noto Serif Devanagari", serif; --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --radius: 14px; --shadow: 0 1px 3px rgba(26, 26, 24, .06), 0 10px 28px rgba(26, 26, 24, .07); --wrap: 1120px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --navy: #6C63C7; --navy-deep: #0E0D18; --bronze: #D5A551; --bronze-soft: #E5C588;
-  --vellum: #191830; --bg: #131220; --card: #1C1B2E; --ink: #D9D7E6; --heading: #EDECF4; --muted: #9A97B0; --border: #2A2940;
-  --header-bg: rgba(19, 18, 32, 0.9); --mark-frame: #EDECF4; --mark-dot: #131220; --mark-accent: #D5A551; --on-navy: #F2F1F8;
+  --bg: #262624; --card: #30302e; --band: #2c2c2a; --fg: #eeeeee; --heading: #f2f1ec; --muted: #b8b5a9; --border: #3d3c38;
+  --accent: #c4633a; --accent-hover: #d67447; --accent-soft: #c4633a26; --on-accent: #ffffff; --header-bg: rgba(38, 38, 36, 0.92);
   color-scheme: dark; } }
 :root[data-theme="dark"] {
-  --navy: #6C63C7; --navy-deep: #0E0D18; --bronze: #D5A551; --bronze-soft: #E5C588;
-  --vellum: #191830; --bg: #131220; --card: #1C1B2E; --ink: #D9D7E6; --heading: #EDECF4; --muted: #9A97B0; --border: #2A2940;
-  --header-bg: rgba(19, 18, 32, 0.9); --mark-frame: #EDECF4; --mark-dot: #131220; --mark-accent: #D5A551; --on-navy: #F2F1F8;
+  --bg: #262624; --card: #30302e; --band: #2c2c2a; --fg: #eeeeee; --heading: #f2f1ec; --muted: #b8b5a9; --border: #3d3c38;
+  --accent: #c4633a; --accent-hover: #d67447; --accent-soft: #c4633a26; --on-accent: #ffffff; --header-bg: rgba(38, 38, 36, 0.92);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font-body); -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-body); -webkit-font-smoothing: antialiased; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--header-bg); }
 img, video { max-width: 100%; display: block; }
-a { color: var(--navy); }
+a { color: var(--accent); }
+h2 a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 4px; }
 .wrap { max-width: var(--wrap); margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-h1, h2, h3 { font-family: var(--font-head); color: var(--heading); font-weight: 500; line-height: 1.15; text-wrap: balance; margin: 0; }
+h1, h2, h3 { font-family: var(--font-head); color: var(--heading); font-weight: 600; line-height: 1.15; text-wrap: balance; margin: 0; }
 h1 { font-size: clamp(2.3rem, 5.2vw, 3.6rem); letter-spacing: -.01em; }
 h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
 h3 { font-size: 1.35rem; }
 p { margin: 0; }
-.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--bronze); }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
 .lead { font-size: 1.12rem; color: var(--muted); max-width: 36em; }
-:focus-visible { outline: 2px solid var(--bronze); outline-offset: 3px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
 /* languages: every text exists in English and Spanish; the page shows one */
 [data-l="es"] .en, [data-l="en"] .es { display: none !important; }
@@ -53,32 +48,32 @@ p { margin: 0; }
 /* header */
 header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--header-bg); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
 header.top .wrap { display: flex; align-items: center; gap: 16px; padding-block: 12px; }
-.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--heading); min-width: 0; }
-.brand svg { width: 30px; height: 29px; flex: none; }
-.brand b { font: 600 1.15rem/1 var(--font-head); white-space: nowrap; }
-.brand .mini { font: 700 .62rem/1 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--bronze); border: 1px solid var(--bronze-soft); border-radius: 999px; padding: 4px 7px 3px; }
+.brand { display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--heading); flex: none; }
+.brand svg { width: 22px; height: 25px; flex: none; }
+.brand b { font: 600 1.2rem/1 var(--font-head); white-space: nowrap; }
+.brand .mini { font: 600 .66rem/1 var(--font-body); letter-spacing: .6px; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 7px 3px; }
 nav.links { display: flex; gap: 22px; margin-inline-start: auto; font-size: .92rem; }
 nav.links a { color: var(--muted); text-decoration: none; font-weight: 500; }
 nav.links a:hover { color: var(--heading); }
 .lang { display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; flex: none; }
 .lang button { font: 600 .78rem/1 var(--font-body); color: var(--muted); background: transparent; border: 0; padding: 7px 11px; cursor: pointer; }
-.lang button[aria-pressed="true"] { background: var(--navy); color: var(--on-navy); }
+.lang button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 @media (max-width: 760px) { nav.links { display: none; } .lang { margin-inline-start: auto; } }
 
 /* hero */
 .hero { padding-block: clamp(36px, 7vw, 84px) clamp(28px, 5vw, 56px); }
 .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: clamp(28px, 6vw, 72px); align-items: center; }
 .hero-copy { display: grid; gap: 20px; min-width: 0; }
-.hero h1 em { font-style: italic; color: var(--bronze); }
+.hero h1 em { font-style: italic; color: var(--accent); font-weight: 600; }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 6px; }
 .btn { display: inline-flex; align-items: center; gap: 8px; font: 600 .95rem/1 var(--font-body); text-decoration: none; border-radius: 999px; padding: 13px 20px; border: 1px solid transparent; }
-.btn.primary { background: var(--navy); color: var(--on-navy); }
-.btn.primary:hover { background: var(--navy-deep); }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-hover); }
 .btn.ghost { color: var(--heading); border-color: var(--border); }
-.btn.ghost:hover { border-color: var(--navy); }
+.btn.ghost:hover { border-color: var(--accent); }
 .facts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .86rem; color: var(--muted); }
 .facts span { display: inline-flex; align-items: center; gap: 7px; }
-.facts span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--bronze); }
+.facts span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 
 /* the phone: a real recording in a simple frame */
 .phone { justify-self: center; width: min(320px, 82vw); border-radius: 34px; padding: 10px; background: #15141c; box-shadow: var(--shadow), 0 30px 60px -20px rgba(20, 18, 40, .35); }
@@ -88,48 +83,69 @@ nav.links a:hover { color: var(--heading); }
 
 /* features */
 section.band { padding-block: clamp(48px, 8vw, 96px); }
-section.alt { background: var(--vellum); }
+section.alt { background: var(--band); }
 .section-head { display: grid; gap: 12px; max-width: 46em; margin-bottom: clamp(28px, 5vw, 48px); }
 .feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 6vw, 72px); align-items: center; }
 .feature + .feature { margin-top: clamp(48px, 8vw, 88px); }
 .feature.flip .media { order: -1; }
 .feature .copy { display: grid; gap: 14px; min-width: 0; max-width: 32em; }
 .feature .copy p { color: var(--muted); }
-.ask { font: italic 500 1.05rem/1.4 var(--font-head); color: var(--heading); background: var(--card); border: 1px solid var(--border); border-radius: 14px 14px 4px 14px; padding: 9px 14px; justify-self: start; }
+.ask { font: 500 1rem/1.4 var(--font-body); color: var(--fg); background: var(--band); border: 0; border-radius: 18px 18px 4px 18px; padding: 9px 14px; justify-self: start; }
 .ticks { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 8px; }
 .ticks li { padding-inline-start: 22px; position: relative; }
-.ticks li::before { content: ""; position: absolute; inset-inline-start: 2px; top: .62em; width: 9px; height: 5px; border-left: 2px solid var(--bronze); border-bottom: 2px solid var(--bronze); transform: rotate(-45deg); }
+.ticks li::before { content: ""; position: absolute; inset-inline-start: 2px; top: .62em; width: 9px; height: 5px; border-left: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: rotate(-45deg); }
 .media { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; min-width: 0; }
 
 /* how it works: a real sequence */
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; counter-reset: s; }
 .step { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; display: grid; gap: 8px; align-content: start; }
-.step::before { counter-increment: s; content: counter(s); font: 500 1.6rem/1 var(--font-head); color: var(--bronze); }
+.step::before { counter-increment: s; content: counter(s); font: 600 1.6rem/1 var(--font-head); color: var(--accent); }
 .step p { color: var(--muted); font-size: .95rem; }
-.step code { font-size: .85em; background: var(--vellum); border-radius: 4px; padding: 1px 5px; }
+.step code { font-size: .85em; background: var(--band); border-radius: 4px; padding: 1px 5px; }
 
 /* comparison */
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
 table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .95rem; }
 th, td { text-align: start; padding: 14px 18px; border-bottom: 1px solid var(--border); vertical-align: top; }
 tr:last-child td { border-bottom: 0; }
-thead th { font: 600 .78rem/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--vellum); }
+thead th { font: 600 .78rem/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--band); }
 td:first-child { font-weight: 600; color: var(--heading); width: 22%; }
 
 /* languages */
 .packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .pack { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: grid; gap: 2px; }
-.pack b { font: 500 1.25rem/1.2 var(--font-head); color: var(--heading); }
+.pack b { font: 600 1.2rem/1.2 var(--font-head); color: var(--heading); }
 .pack span { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* download */
 .downloads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .dl { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; display: grid; gap: 12px; align-content: start; box-shadow: var(--shadow); }
-.dl .size { font: 500 2rem/1 var(--font-head); color: var(--heading); font-variant-numeric: tabular-nums; }
+.dl .size { font: 600 2rem/1 var(--font-head); color: var(--heading); font-variant-numeric: tabular-nums; }
 .dl p { color: var(--muted); font-size: .95rem; }
 .dl .btn { justify-self: start; }
 .hash { font: .72rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; }
 .note { margin-top: 18px; font-size: .9rem; color: var(--muted); max-width: 52em; }
+
+/* what comes next: the levels of the app, the current one marked */
+.levels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.level { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: grid; gap: 8px; align-content: start; }
+.level .tag { font: 600 .7rem/1 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.level.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.level.now .tag { color: var(--accent); }
+.level h3 { font-size: 1.1rem; }
+.level p { color: var(--muted); font-size: .92rem; }
+.soon { list-style: none; padding: 0; margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.soon li { font-size: .88rem; color: var(--fg); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; }
+
+/* for developers */
+.dev { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.dev .box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.dev .box p, .dev .box li { color: var(--muted); font-size: .94rem; }
+.dev ul { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; }
+.dev code, .note code, .lead code { font: .86em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--band); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+pre.flow { margin: 0; overflow-x: auto; font: .8rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--fg); background: var(--band); border-radius: 10px; padding: 14px 16px; }
+@media (max-width: 860px) { .levels { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dev { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .levels { grid-template-columns: minmax(0, 1fr); } }
 
 footer { border-top: 1px solid var(--border); padding-block: 28px; font-size: .86rem; color: var(--muted); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
@@ -148,13 +164,15 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: 
 <header class="top">
   <div class="wrap">
     <a class="brand" href="#top" aria-label="BT Servant Mini">
-      <svg viewBox="0 2 100 96" aria-hidden="true"><g fill="var(--mark-frame)"><rect x="21.5" y="6" width="6" height="14" rx="3"/><rect x="21.5" y="80" width="6" height="14" rx="3"/><rect x="17" y="16" width="15" height="68" rx="2"/><rect x="72.5" y="6" width="6" height="14" rx="3"/><rect x="72.5" y="80" width="6" height="14" rx="3"/><rect x="68" y="16" width="15" height="68" rx="2"/><rect x="30" y="28" width="40" height="44"/></g><circle cx="39" cy="50" r="4.6" fill="var(--mark-dot)"/><circle cx="50" cy="50" r="4.6" fill="var(--mark-dot)"/><circle cx="61" cy="50" r="4.6" fill="var(--mark-accent)"/></svg>
+      <svg class="mark" viewBox="0 0 448 512" aria-hidden="true"><path fill="#ae5630" d="M0 96L0 416c0 53 43 96 96 96l320 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l0-66.7c18.6-6.6 32-24.4 32-45.3l0-288c0-26.5-21.5-48-48-48L96 0C43 0 0 43 0 96zM64 416c0-17.7 14.3-32 32-32l256 0 0 64-256 0c-17.7 0-32-14.3-32-32zm64-272c0-8.8 7.2-16 16-16l48 0 0-48c0-8.8 7.2-16 16-16l32 0c8.8 0 16 7.2 16 16l0 48 48 0c8.8 0 16 7.2 16 16l0 32c0 8.8-7.2 16-16 16l-48 0 0 112c0 8.8-7.2 16-16 16l-32 0c-8.8 0-16-7.2-16-16l0-112-48 0c-8.8 0-16-7.2-16-16l0-32z"/><path fill="#fff" d="M208 64c-8.8 0-16 7.2-16 16l0 48-48 0c-8.8 0-16 7.2-16 16l0 32c0 8.8 7.2 16 16 16l48 0 0 112c0 8.8 7.2 16 16 16l32 0c8.8 0 16-7.2 16-16l0-112 48 0c8.8 0 16-7.2 16-16l0-32c0-8.8-7.2-16-16-16l-48 0 0-48c0-8.8-7.2-16-16-16l-32 0z"/></svg>
       <b>BT Servant</b><span class="mini">Mini</span>
     </a>
     <nav class="links" aria-label="Sections">
       <a href="#ask"><span class="en">What it does</span><span class="es">Qué hace</span></a>
       <a href="#how"><span class="en">How it works</span><span class="es">Cómo funciona</span></a>
       <a href="#languages"><span class="en">Languages</span><span class="es">Idiomas</span></a>
+      <a href="#next"><span class="en">What's next</span><span class="es">Lo que viene</span></a>
+      <a href="#developers"><span class="en">Developers</span><span class="es">Desarrolladores</span></a>
       <a href="#download"><span class="en">Download</span><span class="es">Descargar</span></a>
     </nav>
     <div class="lang" role="group" aria-label="Language">
@@ -246,7 +264,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: 
       </div>
       <div class="step">
         <h3><span class="en">It looks in the language packs</span><span class="es">Busca en los paquetes de idioma</span></h3>
-        <p><span class="en">The translation helps live on the phone as <code>tc-language-packs</code>: texts aligned to the Hebrew and Greek, notes, questions, key terms and articles.</span><span class="es">Las ayudas de traducción viven en el teléfono como <code>tc-language-packs</code>: textos alineados al hebreo y al griego, notas, preguntas, palabras clave y artículos.</span></p>
+        <p><span class="en">The translation helps live on the phone as <a href="https://tc-language-packs.unfoldingword.workers.dev">tC Language Packs</a>: texts aligned to the Hebrew and Greek, notes, questions, key terms and articles.</span><span class="es">Las ayudas de traducción viven en el teléfono como <a href="https://tc-language-packs.unfoldingword.workers.dev">tC Language Packs</a>: textos alineados al hebreo y al griego, notas, preguntas, palabras clave y artículos.</span></p>
       </div>
       <div class="step">
         <h3><span class="en">It shows the helps as they are</span><span class="es">Muestra las ayudas tal como son</span></h3>
@@ -293,6 +311,78 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: 
       <div class="pack"><b>Français</b><span><span class="en">App language</span><span class="es">Idioma de la app</span></span></div>
     </div>
     <p class="note"><span class="en">A book missing from a pack is answered from English.</span><span class="es">Un libro que le falta a un paquete se responde en inglés.</span></p>
+  </div>
+</section>
+
+<section class="band alt" id="next">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="en">What's next</span><span class="es">Lo que viene</span></p>
+      <h2><span class="en">An app that grows with the phone it runs on</span><span class="es">Una app que crece con el teléfono donde corre</span></h2>
+      <p class="lead"><span class="en">BT Servant Mini is built in levels. Each one adds to the one before, and the app uses the highest the phone and the person allow. This alpha is level 1; each release will add more.</span><span class="es">BT Servant Mini se construye por niveles. Cada uno suma al anterior, y la app usa el más alto que el teléfono y la persona permitan. Esta versión alfa es el nivel 1; cada versión traerá más.</span></p>
+    </div>
+    <div class="levels">
+      <div class="level">
+        <span class="tag"><span class="en">Level 0 · ready</span><span class="es">Nivel 0 · listo</span></span>
+        <h3><span class="en">No model</span><span class="es">Sin modelo</span></h3>
+        <p><span class="en">Written references and searches by words and names. Works on any phone, even before the model is downloaded.</span><span class="es">Referencias escritas y búsquedas por palabras y nombres. Funciona en cualquier teléfono, incluso antes de bajar el modelo.</span></p>
+      </div>
+      <div class="level now">
+        <span class="tag"><span class="en">Level 1 · this version</span><span class="es">Nivel 1 · esta versión</span></span>
+        <h3><span class="en">A small model on the phone</span><span class="es">Un modelo pequeño en el teléfono</span></h3>
+        <p><span class="en">Questions in your own words, in six languages, answered with the helps themselves. Runs on mid-range phones.</span><span class="es">Preguntas con tus propias palabras, en seis idiomas, respondidas con las ayudas mismas. Corre en teléfonos de gama media.</span></p>
+      </div>
+      <div class="level">
+        <span class="tag"><span class="en">Level 2 · being measured</span><span class="es">Nivel 2 · en medición</span></span>
+        <h3><span class="en">A larger model on the phone</span><span class="es">Un modelo más grande en el teléfono</span></h3>
+        <p><span class="en">On phones with more memory, a model of a few billion parameters that can explain and summarize the helps, still offline.</span><span class="es">En teléfonos con más memoria, un modelo de unos miles de millones de parámetros que pueda explicar y resumir las ayudas, todavía sin internet.</span></p>
+      </div>
+      <div class="level">
+        <span class="tag"><span class="en">Level 3 · under discussion</span><span class="es">Nivel 3 · en conversación</span></span>
+        <h3><span class="en">BT Servant online</span><span class="es">BT Servant en línea</span></h3>
+        <p><span class="en">When there is internet and the person turns it on, a conversation like BT Servant's, with the offline answer kept as its sources. Off by default.</span><span class="es">Cuando hay internet y la persona lo activa, una conversación como la de BT Servant, con la respuesta sin conexión como sus fuentes. Apagado por defecto.</span></p>
+      </div>
+    </div>
+    <ul class="soon" aria-label="Planned">
+      <li><span class="en">Arabic in the model</span><span class="es">Árabe en el modelo</span></li>
+      <li><span class="en">More language packs as they are published</span><span class="es">Más paquetes de idioma a medida que se publiquen</span></li>
+      <li><span class="en">The model on Hugging Face</span><span class="es">El modelo en Hugging Face</span></li>
+      <li><span class="en">Asking for a language that is missing</span><span class="es">Pedir un idioma que falta</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="band" id="developers">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="en">For developers</span><span class="es">Para desarrolladores</span></p>
+      <h2><span class="en">Built on <a href="https://tc-language-packs.unfoldingword.workers.dev">tC Language Packs</a></span><span class="es">Construida sobre <a href="https://tc-language-packs.unfoldingword.workers.dev">tC Language Packs</a></span></h2>
+      <p class="lead"><span class="en">Everything the app shows comes from <a href="https://tc-language-packs.unfoldingword.workers.dev">tC Language Packs</a> (format 3), built by the same pipeline as <a href="https://study.translationcore.com">tC Study</a>. Any app can read them offline. The format, its site and its agent skills are in <a href="https://github.com/unfoldingWord/tc-language-packs">unfoldingWord/tc-language-packs</a>.</span><span class="es">Todo lo que muestra la app viene de <a href="https://tc-language-packs.unfoldingword.workers.dev">tC Language Packs</a> (formato 3), construidos por el mismo proceso que <a href="https://study.translationcore.com">tC Study</a>. Cualquier app puede leerlos sin conexión. El formato, su sitio y sus skills para agentes están en <a href="https://github.com/unfoldingWord/tc-language-packs">unfoldingWord/tc-language-packs</a>.</span></p>
+    </div>
+    <div class="dev">
+      <div class="box">
+        <h3><span class="en">The packs</span><span class="es">Los paquetes</span></h3>
+        <ul>
+          <li><span class="en">One pack per language: Bible texts aligned word by word to the Hebrew and Greek, translation notes, questions and word links with the positions they quote, and Translation Words and Academy articles.</span><span class="es">Un paquete por idioma: textos bíblicos alineados palabra por palabra al hebreo y al griego, notas de traducción, preguntas y enlaces de palabras con las posiciones que citan, y artículos de Translation Words y Academy.</span></li>
+          <li><span class="en">A signed catalog per language and content-addressed segments (by SHA-256), so a phone downloads only the books it needs and checks every byte.</span><span class="es">Un catálogo firmado por idioma y segmentos direccionados por contenido (SHA-256): el teléfono baja solo los libros que necesita y comprueba cada byte.</span></li>
+          <li><span class="en">A whole language can travel as one <code>.tcpack</code> file, from phone to phone or on an SD card.</span><span class="es">Un idioma entero puede viajar como un archivo <code>.tcpack</code>, de teléfono a teléfono o en una tarjeta SD.</span></li>
+          <li><span class="en">Built and published by the <a href="https://github.com/unfoldingWord/tc-study/tree/master/packages/language-pack-v3"><code>language-pack-v3</code></a> pipeline in tC Study; read with <a href="https://github.com/unfoldingWord/tc-study/tree/master/packages/language-pack-client"><code>language-pack-client</code></a> (TypeScript, no Node APIs, runs in a WebView).</span><span class="es">Los construye y publica el proceso <a href="https://github.com/unfoldingWord/tc-study/tree/master/packages/language-pack-v3"><code>language-pack-v3</code></a> de tC Study; se leen con <a href="https://github.com/unfoldingWord/tc-study/tree/master/packages/language-pack-client"><code>language-pack-client</code></a> (TypeScript, sin APIs de Node, corre en un WebView).</span></li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3><span class="en">The app</span><span class="es">La app</span></h3>
+        <pre class="flow">question
+  → FunctionGemma 270M (llama.cpp, on the phone)
+  → a request: reference, word, what to show
+  → language-pack-client (IndexedDB, offline)
+  → the helps, drawn with their alignment</pre>
+        <ul>
+          <li><span class="en">Android shell with a WebView; the model runs in <code>llama-server</code> (llama.cpp) as a local process, GGUF q8, about 278 MB.</span><span class="es">Una app de Android con un WebView; el modelo corre en <code>llama-server</code> (llama.cpp) como proceso local, GGUF q8, unos 278 MB.</span></li>
+          <li><span class="en">The model fills a call sheet only; every sentence the reader sees comes from a pack, with its resource and version.</span><span class="es">El modelo solo llena una hoja de llamada; cada frase que lee la persona sale de un paquete, con su recurso y versión.</span></li>
+          <li><span class="en">Source code: to be published under unfoldingWord.</span><span class="es">Código fuente: se publicará en unfoldingWord.</span></li>
+        </ul>
+      </div>
+    </div>
   </div>
 </section>
 
