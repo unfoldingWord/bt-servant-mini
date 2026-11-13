@@ -14,10 +14,12 @@ const STR: Record<string, S> = {
   en: {
     about: 'About BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      'BT Servant Mini is BT Servant on your phone, without internet. It answers from the unfoldingWord translation helps kept on the phone: the literal and simplified texts, translation notes, comprehension questions, key terms and Translation Academy.',
-      '**How it differs from BT Servant.** BT Servant works through WhatsApp, Telegram, Signal or the web, needs internet, and uses a large AI model that talks with you and writes its answers. BT Servant Mini works offline and uses a small model only to understand your question: what you read are the helps as they are, never text written by a model.',
-      'So it understands fewer free questions. It works best with a reference (John 3:16), a word (grace), a phrase in quotes, or the names in a story (where is Jonah swallowed by the fish?).',
-      'This is an alpha version for testing.',
+      "BT Servant Mini is BT Servant on your phone, **without internet**. It answers from the unfoldingWord translation helps kept on the phone: literal and simplified Bible texts, translation notes, comprehension questions, key terms (Translation Words) and Translation Academy.",
+      "**What you can ask**\n• A verse or a chapter (Ruth 1:1, Jonah 1): the texts with their notes. Tap a word to see the notes and key terms about it.\n• A word or a name (grace, John the Baptist): its article and the verses that mention it.\n• Words from a story (Jonah swallowed by the fish): the verses that match.\n• For help translating (help me translate Jonah 1:3): the notes and the simpler version.",
+      "**Links and follow-ups.** Links in notes and articles open in a panel at the bottom; a Bible reference is asked in the chat. Buttons under each answer go on from there (notes, questions, next verse).",
+      "**Languages.** The app speaks English, Spanish, French, Indonesian, Hindi and Arabic, and you can ask in any of them. The helps come from the language packs on the phone; add more from the menu (from the internet or from a file) and share them with others.",
+      "**How it differs from BT Servant.** BT Servant (WhatsApp, Telegram, Signal, the web) needs internet and uses a large AI model that talks with you and writes its answers. BT Servant Mini works offline and uses a small model only to understand your question: what you read are the helps as they are, never text written by a model.",
+      "This is an alpha version for testing.",
     ],
     version: 'Version', full: 'complete (model and base languages included)', lite: 'light (model and languages added on the phone)',
     start: 'Start', close: 'Close', setup: 'To start, this light version needs the model (once):',
@@ -30,10 +32,12 @@ const STR: Record<string, S> = {
   es: {
     about: 'Acerca de BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      'BT Servant Mini es BT Servant en tu teléfono, sin internet. Responde con las ayudas de traducción de unfoldingWord guardadas en el teléfono: los textos literal y simplificado, las notas de traducción, las preguntas de comprensión, las palabras clave y la Academia de Traducción.',
-      '**En qué se diferencia de BT Servant.** BT Servant funciona por WhatsApp, Telegram, Signal o la web, necesita internet y usa un modelo de IA grande que conversa contigo y redacta sus respuestas. BT Servant Mini funciona sin conexión y usa un modelo pequeño solo para entender tu pregunta: lo que lees son las ayudas tal cual, nunca un texto escrito por un modelo.',
-      'Por eso entiende menos preguntas libres. Funciona mejor con una referencia (Juan 3:16), una palabra (gracia), una frase entre comillas o los nombres de una historia (¿dónde se traga el pez a Jonás?).',
-      'Es una versión alfa para pruebas.',
+      "BT Servant Mini es BT Servant en tu teléfono, **sin internet**. Responde con las ayudas de traducción de unfoldingWord guardadas en el teléfono: textos bíblicos literal y simplificado, notas de traducción, preguntas de comprensión, palabras clave (Palabras de Traducción) y Translation Academy.",
+      "**Qué puedes preguntar**\n• Un versículo o un capítulo (Rut 1:1, Jonás 1): los textos con sus notas. Toca una palabra para ver las notas y palabras clave que hablan de ella.\n• Una palabra o un nombre (gracia, Juan el Bautista): su artículo y los versículos que lo mencionan.\n• Palabras de una historia (Jonás tragado por el pez): los versículos que coinciden.\n• Ayuda para traducir (ayúdame a traducir Jonás 1:3): las notas y la versión más sencilla.",
+      "**Enlaces y seguimiento.** Los enlaces de notas y artículos se abren en un panel abajo; una referencia bíblica se pregunta en el chat. Los botones bajo cada respuesta siguen desde ahí (notas, preguntas, versículo siguiente).",
+      "**Idiomas.** La app habla inglés, español, francés, indonesio, hindi y árabe, y puedes preguntar en cualquiera de ellos. Las ayudas vienen de los paquetes de idioma del teléfono; agrega más desde el menú (de internet o de un archivo) y compártelos con otros.",
+      "**En qué se diferencia de BT Servant.** BT Servant (WhatsApp, Telegram, Signal, la web) necesita internet y usa un modelo de IA grande que conversa contigo y escribe sus respuestas. BT Servant Mini funciona sin conexión y usa un modelo pequeño solo para entender tu pregunta: lo que lees son las ayudas tal como son, nunca texto escrito por un modelo.",
+      "Esta es una versión alfa de prueba.",
     ],
     version: 'Versión', full: 'completa (con el modelo y los idiomas base)', lite: 'light (modelo e idiomas se agregan en el teléfono)',
     start: 'Empezar', close: 'Cerrar', setup: 'Para empezar, esta versión light necesita el modelo (una sola vez):',
@@ -46,10 +50,12 @@ const STR: Record<string, S> = {
   fr: {
     about: 'À propos de BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      "BT Servant Mini, c'est BT Servant sur votre téléphone, sans internet. Il répond avec les aides à la traduction d'unfoldingWord enregistrées sur le téléphone : textes littéral et simplifié, notes de traduction, questions de compréhension, mots clés et Translation Academy.",
-      "**La différence avec BT Servant.** BT Servant fonctionne par WhatsApp, Telegram, Signal ou le web, demande internet et utilise un grand modèle d'IA qui converse et rédige ses réponses. BT Servant Mini fonctionne hors ligne et n'utilise un petit modèle que pour comprendre votre question : vous lisez les aides telles quelles, jamais un texte écrit par un modèle.",
-      'Il comprend donc moins de questions libres. Il marche mieux avec une référence (Jean 3:16), un mot (grâce), une phrase entre guillemets ou les noms d’un récit.',
-      'Version alpha pour les tests.',
+      "BT Servant Mini, c'est BT Servant sur votre téléphone, **sans internet**. Il répond avec les aides à la traduction d'unfoldingWord gardées sur le téléphone : textes bibliques littéral et simplifié, notes de traduction, questions de compréhension, termes clés (Translation Words) et Translation Academy.",
+      "**Ce que vous pouvez demander**\n• Un verset ou un chapitre (Ruth 1:1, Jonas 1) : les textes avec leurs notes. Touchez un mot pour voir les notes et les termes clés qui en parlent.\n• Un mot ou un nom (grâce, Jean-Baptiste) : son article et les versets qui le mentionnent.\n• Des mots d'un récit (Jonas avalé par le poisson) : les versets qui correspondent.\n• De l'aide pour traduire (aide-moi à traduire Jonas 1:3) : les notes et la version simplifiée.",
+      "**Liens et suite.** Les liens des notes et des articles s'ouvrent dans un panneau en bas ; une référence biblique est demandée dans le chat. Les boutons sous chaque réponse continuent à partir de là (notes, questions, verset suivant).",
+      "**Langues.** L'application parle anglais, espagnol, français, indonésien, hindi et arabe, et vous pouvez demander dans chacune. Les aides viennent des paquets de langue du téléphone ; ajoutez-en depuis le menu (par internet ou depuis un fichier) et partagez-les.",
+      "**Ce qui le distingue de BT Servant.** BT Servant (WhatsApp, Telegram, Signal, le web) a besoin d'internet et utilise un grand modèle d'IA qui converse et rédige ses réponses. BT Servant Mini fonctionne hors ligne et n'utilise un petit modèle que pour comprendre votre question : vous lisez les aides telles quelles, jamais un texte écrit par un modèle.",
+      "Ceci est une version alpha de test.",
     ],
     version: 'Version', full: 'complète (modèle et langues de base inclus)', lite: 'légère (modèle et langues ajoutés sur le téléphone)',
     start: 'Commencer', close: 'Fermer', setup: 'Pour commencer, cette version légère a besoin du modèle (une seule fois) :',
@@ -62,10 +68,12 @@ const STR: Record<string, S> = {
   id: {
     about: 'Tentang BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      'BT Servant Mini adalah BT Servant di ponsel Anda, tanpa internet. Ia menjawab dari bahan bantu penerjemahan unfoldingWord yang tersimpan di ponsel: teks harfiah dan sederhana, catatan terjemahan, pertanyaan pemahaman, istilah kunci, dan Translation Academy.',
-      '**Bedanya dengan BT Servant.** BT Servant bekerja lewat WhatsApp, Telegram, Signal atau web, butuh internet, dan memakai model AI besar yang bercakap dan menulis jawabannya. BT Servant Mini bekerja offline dan memakai model kecil hanya untuk memahami pertanyaan Anda: yang Anda baca adalah bahan bantu apa adanya, bukan teks yang ditulis model.',
-      'Karena itu ia memahami lebih sedikit pertanyaan bebas. Paling baik dengan rujukan (Yohanes 3:16), kata (kasih karunia), frasa dalam tanda kutip, atau nama-nama dalam cerita.',
-      'Ini versi alfa untuk uji coba.',
+      "BT Servant Mini adalah BT Servant di ponsel Anda, **tanpa internet**. Ia menjawab dari alat bantu penerjemahan unfoldingWord yang tersimpan di ponsel: teks Alkitab harfiah dan sederhana, catatan terjemahan, pertanyaan pemahaman, istilah kunci (Translation Words) dan Translation Academy.",
+      "**Yang bisa Anda tanyakan**\n• Sebuah ayat atau pasal (Rut 1:1, Yunus 1): teks-teksnya dengan catatannya. Ketuk sebuah kata untuk melihat catatan dan istilah kunci tentang kata itu.\n• Sebuah kata atau nama (anugerah, Yohanes Pembaptis): artikelnya dan ayat-ayat yang menyebutnya.\n• Kata-kata dari sebuah kisah (Yunus ditelan ikan): ayat-ayat yang cocok.\n• Bantuan menerjemahkan (bantu saya menerjemahkan Yunus 1:3): catatan dan versi yang lebih sederhana.",
+      "**Tautan dan lanjutan.** Tautan di catatan dan artikel terbuka di panel bawah; rujukan Alkitab ditanyakan di obrolan. Tombol di bawah setiap jawaban melanjutkan dari sana (catatan, pertanyaan, ayat berikutnya).",
+      "**Bahasa.** Aplikasi ini berbahasa Inggris, Spanyol, Prancis, Indonesia, Hindi dan Arab, dan Anda bisa bertanya dalam bahasa mana pun. Alat bantu berasal dari paket bahasa di ponsel; tambahkan lagi dari menu (dari internet atau dari berkas) dan bagikan kepada orang lain.",
+      "**Bedanya dengan BT Servant.** BT Servant (WhatsApp, Telegram, Signal, web) memerlukan internet dan memakai model AI besar yang bercakap dan menulis jawabannya. BT Servant Mini bekerja tanpa koneksi dan memakai model kecil hanya untuk memahami pertanyaan Anda: yang Anda baca adalah alat bantu apa adanya, tidak pernah teks tulisan model.",
+      "Ini versi alfa untuk uji coba.",
     ],
     version: 'Versi', full: 'lengkap (model dan bahasa dasar sudah ada)', lite: 'ringan (model dan bahasa ditambahkan di ponsel)',
     start: 'Mulai', close: 'Tutup', setup: 'Untuk mulai, versi ringan ini perlu modelnya (sekali saja):',
@@ -78,10 +86,12 @@ const STR: Record<string, S> = {
   hi: {
     about: 'BT Servant Mini के बारे में', title: 'BT Servant Mini',
     body: [
-      'BT Servant Mini आपके फ़ोन पर, बिना इंटरनेट के, BT Servant है। यह फ़ोन में रखी unfoldingWord अनुवाद सहायता से उत्तर देता है: शाब्दिक और सरल पाठ, अनुवाद टिप्पणियाँ, समझ के प्रश्न, मुख्य शब्द और Translation Academy।',
-      '**BT Servant से अंतर।** BT Servant WhatsApp, Telegram, Signal या वेब से चलता है, इंटरनेट चाहिए, और एक बड़ा AI मॉडल बात करता है और उत्तर लिखता है। BT Servant Mini बिना इंटरनेट चलता है और छोटा मॉडल केवल आपका प्रश्न समझने के लिए है: आप सहायता को जैसी है वैसी पढ़ते हैं, मॉडल का लिखा पाठ कभी नहीं।',
-      'इसलिए यह कम खुले प्रश्न समझता है। संदर्भ (यूहन्ना 3:16), शब्द (अनुग्रह), उद्धरण में वाक्यांश, या कहानी के नामों के साथ सबसे अच्छा काम करता है।',
-      'यह परीक्षण के लिए अल्फ़ा संस्करण है।',
+      "BT Servant Mini आपके फ़ोन पर BT Servant है, **बिना इंटरनेट के**। यह फ़ोन में रखे unfoldingWord के अनुवाद सहायक संसाधनों से उत्तर देता है: शाब्दिक और सरल बाइबल पाठ, अनुवाद नोट्स, समझ के प्रश्न, मुख्य शब्द (Translation Words) और Translation Academy।",
+      "**आप क्या पूछ सकते हैं**\n• कोई पद या अध्याय (रूत 1:1, योना 1): पाठ और उनके नोट्स। किसी शब्द को छूकर उसके नोट्स और मुख्य शब्द देखें।\n• कोई शब्द या नाम (अनुग्रह, यूहन्ना): उसका लेख और वे पद जिनमें उसका उल्लेख है।\n• किसी कहानी के शब्द (योना को मछली ने निगल लिया): मेल खाने वाले पद।\n• अनुवाद में सहायता (योना 1:3 का अनुवाद करने में मदद करें): नोट्स और सरल संस्करण।",
+      "**लिंक और आगे।** नोट्स और लेखों के लिंक नीचे एक पैनल में खुलते हैं; बाइबल संदर्भ चैट में पूछा जाता है। हर उत्तर के नीचे के बटन वहीं से आगे ले जाते हैं (नोट्स, प्रश्न, अगला पद)।",
+      "**भाषाएँ।** ऐप अंग्रेज़ी, स्पेनिश, फ़्रेंच, इंडोनेशियाई, हिंदी और अरबी में है, और आप इनमें से किसी में भी पूछ सकते हैं। सहायक संसाधन फ़ोन के भाषा पैकों से आते हैं; मेनू से और जोड़ें (इंटरनेट से या फ़ाइल से) और दूसरों के साथ साझा करें।",
+      "**BT Servant से अंतर।** BT Servant (WhatsApp, Telegram, Signal, वेब) को इंटरनेट चाहिए और वह एक बड़े AI मॉडल का उपयोग करता है जो बात करता है और उत्तर लिखता है। BT Servant Mini बिना इंटरनेट चलता है और छोटा मॉडल केवल आपका प्रश्न समझने के लिए उपयोग करता है: आप सहायक संसाधनों को जैसे हैं वैसे ही पढ़ते हैं, मॉडल का लिखा पाठ कभी नहीं।",
+      "यह परीक्षण के लिए अल्फ़ा संस्करण है।",
     ],
     version: 'संस्करण', full: 'पूर्ण (मॉडल और मूल भाषाएँ शामिल)', lite: 'हल्का (मॉडल और भाषाएँ फ़ोन पर जोड़ी जाती हैं)',
     start: 'शुरू करें', close: 'बंद करें', setup: 'शुरू करने के लिए इस हल्के संस्करण को मॉडल चाहिए (एक बार):',
@@ -94,10 +104,12 @@ const STR: Record<string, S> = {
   ar: {
     about: 'حول BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      'BT Servant Mini هو BT Servant على هاتفك، دون إنترنت. يجيب من مساعدات الترجمة من unfoldingWord المحفوظة على الهاتف: النص الحرفي والنص المبسّط وملاحظات الترجمة وأسئلة الفهم والكلمات الرئيسية وأكاديمية الترجمة.',
-      '**الفرق عن BT Servant.** يعمل BT Servant عبر واتساب أو تيليجرام أو سيجنال أو الويب، ويحتاج إلى الإنترنت، ويستخدم نموذج ذكاء اصطناعي كبيرًا يحاورك ويكتب إجاباته. أما BT Servant Mini فيعمل دون اتصال ويستخدم نموذجًا صغيرًا لفهم سؤالك فقط: ما تقرؤه هو المساعدات كما هي، وليس نصًا كتبه نموذج.',
-      'لذلك يفهم أسئلة حرّة أقل. يعمل أفضل مع مرجع (يوحنا ٣:١٦) أو كلمة (نعمة) أو عبارة بين علامتي اقتباس أو أسماء من قصة.',
-      'هذه نسخة ألفا للتجربة.',
+      "BT Servant Mini هو BT Servant على هاتفك، **دون إنترنت**. يجيب من أدوات الترجمة المساعدة من unfoldingWord المحفوظة على الهاتف: نصوص الكتاب المقدس الحرفية والمبسّطة، وملاحظات الترجمة، وأسئلة الفهم، والكلمات الرئيسية (Translation Words) وTranslation Academy.",
+      "**ماذا يمكنك أن تسأل**\n• آية أو أصحاح (راعوث 1: 1، يونان 1): النصوص مع ملاحظاتها. المس كلمة لترى الملاحظات والكلمات الرئيسية عنها.\n• كلمة أو اسم (نعمة، يوحنا): مقالته والآيات التي تذكره.\n• كلمات من قصة (يونان والحوت): الآيات المطابقة.\n• مساعدة في الترجمة (ساعدني في ترجمة يونان 1: 3): الملاحظات والترجمة الأبسط.",
+      "**الروابط والمتابعة.** تُفتح روابط الملاحظات والمقالات في لوحة أسفل الشاشة؛ ويُسأل عن الشاهد الكتابي في المحادثة. والأزرار تحت كل إجابة تتابع من هناك (ملاحظات، أسئلة، الآية التالية).",
+      "**اللغات.** التطبيق بالإنجليزية والإسبانية والفرنسية والإندونيسية والهندية والعربية، ويمكنك السؤال بأيّ منها. تأتي الأدوات المساعدة من حزم اللغات على الهاتف؛ أضف المزيد من القائمة (من الإنترنت أو من ملف) وشاركها مع الآخرين.",
+      "**الفرق عن BT Servant.** يحتاج BT Servant (واتساب، تيليجرام، سيجنال، الويب) إلى الإنترنت ويستخدم نموذج ذكاء اصطناعي كبيرًا يحاورك ويكتب إجاباته. أما BT Servant Mini فيعمل دون اتصال ويستخدم نموذجًا صغيرًا لفهم سؤالك فقط: ما تقرؤه هو الأدوات المساعدة كما هي، وليس نصًا كتبه نموذج أبدًا.",
+      "هذه نسخة ألفا للتجربة.",
     ],
     version: 'الإصدار', full: 'كاملة (النموذج واللغات الأساسية مضمّنة)', lite: 'خفيفة (يُضاف النموذج واللغات على الهاتف)',
     start: 'ابدأ', close: 'إغلاق', setup: 'لتبدأ، تحتاج هذه النسخة الخفيفة إلى النموذج (مرة واحدة):',
@@ -247,7 +259,7 @@ export function showAbout(lang: string, refresh: () => void) {
   card.appendChild(el('h2', '', s.title))
   for (const p of s.body) {
     const para = el('p', '')
-    para.innerHTML = p.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    para.innerHTML = p.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
     card.appendChild(para)
   }
   card.appendChild(el('p', 'meta', `${s.version} ${appVersion()} · ${isLite() ? s.lite : s.full}`))

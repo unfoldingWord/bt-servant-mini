@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BT Servant Mini</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="BT Servant Mini: the unfoldingWord translation helps on an Android phone, without internet. Ask about a verse, a word or a name in six languages.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: the BT Servant site's system (navy, bronze, vellum; Newsreader + Inter), so this page can join it later.
+   A phone-sized column of real recordings beside short copy; one comparison table; two download cards. */
+:root {
+  --navy: #3B3768; --navy-deep: #2C2950; --bronze: #B58A3C; --bronze-soft: #D9BC85;
+  --vellum: #F1EBDD; --bg: #FBFAF7; --card: #FFFFFF; --ink: #2A2740; --heading: #3B3768; --muted: #6B6880; --border: #E4DFD3;
+  --header-bg: rgba(251, 250, 247, 0.92); --mark-frame: #3B3768; --mark-dot: #FBFAF7; --mark-accent: #B58A3C; --on-navy: #FBFAF7;
+  --font-head: 'Newsreader', 'Lora', Georgia, serif; --font-body: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --radius: 10px; --shadow: 0 1px 3px rgba(20, 18, 40, .07), 0 10px 28px rgba(20, 18, 40, .06); --wrap: 1120px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --navy: #6C63C7; --navy-deep: #0E0D18; --bronze: #D5A551; --bronze-soft: #E5C588;
+  --vellum: #191830; --bg: #131220; --card: #1C1B2E; --ink: #D9D7E6; --heading: #EDECF4; --muted: #9A97B0; --border: #2A2940;
+  --header-bg: rgba(19, 18, 32, 0.9); --mark-frame: #EDECF4; --mark-dot: #131220; --mark-accent: #D5A551; --on-navy: #F2F1F8;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --navy: #6C63C7; --navy-deep: #0E0D18; --bronze: #D5A551; --bronze-soft: #E5C588;
+  --vellum: #191830; --bg: #131220; --card: #1C1B2E; --ink: #D9D7E6; --heading: #EDECF4; --muted: #9A97B0; --border: #2A2940;
+  --header-bg: rgba(19, 18, 32, 0.9); --mark-frame: #EDECF4; --mark-dot: #131220; --mark-accent: #D5A551; --on-navy: #F2F1F8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--font-body); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--header-bg); }
+img, video { max-width: 100%; display: block; }
+a { color: var(--navy); }
+.wrap { max-width: var(--wrap); margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--font-head); color: var(--heading); font-weight: 500; line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.3rem, 5.2vw, 3.6rem); letter-spacing: -.01em; }
+h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); }
+h3 { font-size: 1.35rem; }
+p { margin: 0; }
+.eyebrow { font: 600 .74rem/1.2 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--bronze); }
+.lead { font-size: 1.12rem; color: var(--muted); max-width: 36em; }
+:focus-visible { outline: 2px solid var(--bronze); outline-offset: 3px; border-radius: 4px; }
+
+/* languages: every text exists in English and Spanish; the page shows one */
+[data-l="es"] .en, [data-l="en"] .es { display: none !important; }
+
+/* header */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--header-bg); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+header.top .wrap { display: flex; align-items: center; gap: 16px; padding-block: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--heading); min-width: 0; }
+.brand svg { width: 30px; height: 29px; flex: none; }
+.brand b { font: 600 1.15rem/1 var(--font-head); white-space: nowrap; }
+.brand .mini { font: 700 .62rem/1 var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--bronze); border: 1px solid var(--bronze-soft); border-radius: 999px; padding: 4px 7px 3px; }
+nav.links { display: flex; gap: 22px; margin-inline-start: auto; font-size: .92rem; }
+nav.links a { color: var(--muted); text-decoration: none; font-weight: 500; }
+nav.links a:hover { color: var(--heading); }
+.lang { display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; flex: none; }
+.lang button { font: 600 .78rem/1 var(--font-body); color: var(--muted); background: transparent; border: 0; padding: 7px 11px; cursor: pointer; }
+.lang button[aria-pressed="true"] { background: var(--navy); color: var(--on-navy); }
+@media (max-width: 760px) { nav.links { display: none; } .lang { margin-inline-start: auto; } }
+
+/* hero */
+.hero { padding-block: clamp(36px, 7vw, 84px) clamp(28px, 5vw, 56px); }
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: clamp(28px, 6vw, 72px); align-items: center; }
+.hero-copy { display: grid; gap: 20px; min-width: 0; }
+.hero h1 em { font-style: italic; color: var(--bronze); }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 6px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; font: 600 .95rem/1 var(--font-body); text-decoration: none; border-radius: 999px; padding: 13px 20px; border: 1px solid transparent; }
+.btn.primary { background: var(--navy); color: var(--on-navy); }
+.btn.primary:hover { background: var(--navy-deep); }
+.btn.ghost { color: var(--heading); border-color: var(--border); }
+.btn.ghost:hover { border-color: var(--navy); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .86rem; color: var(--muted); }
+.facts span { display: inline-flex; align-items: center; gap: 7px; }
+.facts span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--bronze); }
+
+/* the phone: a real recording in a simple frame */
+.phone { justify-self: center; width: min(320px, 82vw); border-radius: 34px; padding: 10px; background: #15141c; box-shadow: var(--shadow), 0 30px 60px -20px rgba(20, 18, 40, .35); }
+.phone video, .phone img { width: 100%; aspect-ratio: 540 / 1050; object-fit: cover; border-radius: 26px; background: #262624; }
+.phone.small { width: min(270px, 78vw); border-radius: 30px; padding: 8px; }
+.phone.small video, .phone.small img { border-radius: 23px; }
+
+/* features */
+section.band { padding-block: clamp(48px, 8vw, 96px); }
+section.alt { background: var(--vellum); }
+.section-head { display: grid; gap: 12px; max-width: 46em; margin-bottom: clamp(28px, 5vw, 48px); }
+.feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 6vw, 72px); align-items: center; }
+.feature + .feature { margin-top: clamp(48px, 8vw, 88px); }
+.feature.flip .media { order: -1; }
+.feature .copy { display: grid; gap: 14px; min-width: 0; max-width: 32em; }
+.feature .copy p { color: var(--muted); }
+.ask { font: italic 500 1.05rem/1.4 var(--font-head); color: var(--heading); background: var(--card); border: 1px solid var(--border); border-radius: 14px 14px 4px 14px; padding: 9px 14px; justify-self: start; }
+.ticks { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 8px; }
+.ticks li { padding-inline-start: 22px; position: relative; }
+.ticks li::before { content: ""; position: absolute; inset-inline-start: 2px; top: .62em; width: 9px; height: 5px; border-left: 2px solid var(--bronze); border-bottom: 2px solid var(--bronze); transform: rotate(-45deg); }
+.media { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; min-width: 0; }
+
+/* how it works: a real sequence */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; counter-reset: s; }
+.step { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; display: grid; gap: 8px; align-content: start; }
+.step::before { counter-increment: s; content: counter(s); font: 500 1.6rem/1 var(--font-head); color: var(--bronze); }
+.step p { color: var(--muted); font-size: .95rem; }
+.step code { font-size: .85em; background: var(--vellum); border-radius: 4px; padding: 1px 5px; }
+
+/* comparison */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .95rem; }
+th, td { text-align: start; padding: 14px 18px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+thead th { font: 600 .78rem/1.2 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--vellum); }
+td:first-child { font-weight: 600; color: var(--heading); width: 22%; }
+
+/* languages */
+.packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.pack { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; display: grid; gap: 2px; }
+.pack b { font: 500 1.25rem/1.2 var(--font-head); color: var(--heading); }
+.pack span { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* download */
+.downloads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.dl { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; display: grid; gap: 12px; align-content: start; box-shadow: var(--shadow); }
+.dl .size { font: 500 2rem/1 var(--font-head); color: var(--heading); font-variant-numeric: tabular-nums; }
+.dl p { color: var(--muted); font-size: .95rem; }
+.dl .btn { justify-self: start; }
+.hash { font: .72rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); overflow-wrap: anywhere; }
+.note { margin-top: 18px; font-size: .9rem; color: var(--muted); max-width: 52em; }
+
+footer { border-top: 1px solid var(--border); padding-block: 28px; font-size: .86rem; color: var(--muted); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+
+@media (max-width: 860px) {
+  .hero .wrap, .feature, .downloads { grid-template-columns: minmax(0, 1fr); }
+  .feature.flip .media { order: 0; }
+  .steps { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div id="page" data-l="en">
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="BT Servant Mini">
+      <svg viewBox="0 2 100 96" aria-hidden="true"><g fill="var(--mark-frame)"><rect x="21.5" y="6" width="6" height="14" rx="3"/><rect x="21.5" y="80" width="6" height="14" rx="3"/><rect x="17" y="16" width="15" height="68" rx="2"/><rect x="72.5" y="6" width="6" height="14" rx="3"/><rect x="72.5" y="80" width="6" height="14" rx="3"/><rect x="68" y="16" width="15" height="68" rx="2"/><rect x="30" y="28" width="40" height="44"/></g><circle cx="39" cy="50" r="4.6" fill="var(--mark-dot)"/><circle cx="50" cy="50" r="4.6" fill="var(--mark-dot)"/><circle cx="61" cy="50" r="4.6" fill="var(--mark-accent)"/></svg>
+      <b>BT Servant</b><span class="mini">Mini</span>
+    </a>
+    <nav class="links" aria-label="Sections">
+      <a href="#ask"><span class="en">What it does</span><span class="es">Qué hace</span></a>
+      <a href="#how"><span class="en">How it works</span><span class="es">Cómo funciona</span></a>
+      <a href="#languages"><span class="en">Languages</span><span class="es">Idiomas</span></a>
+      <a href="#download"><span class="en">Download</span><span class="es">Descargar</span></a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" id="l-en" data-set="en" aria-pressed="true">EN</button>
+      <button type="button" id="l-es" data-set="es" aria-pressed="false">ES</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="en">Android · alpha</span><span class="es">Android · alfa</span></p>
+      <h1><span class="en">The translation helps in your pocket, <em>without internet.</em></span><span class="es">Las ayudas de traducción en tu bolsillo, <em>sin internet.</em></span></h1>
+      <p class="lead"><span class="en">BT Servant Mini is BT Servant on an Android phone. Ask about a verse, a word or a name, and it answers from the unfoldingWord translation helps stored on the phone: Bible texts, translation notes, key terms, questions and Translation Academy.</span><span class="es">BT Servant Mini es BT Servant en un teléfono Android. Pregunta por un versículo, una palabra o un nombre, y responde con las ayudas de traducción de unfoldingWord guardadas en el teléfono: textos bíblicos, notas de traducción, palabras clave, preguntas y Translation Academy.</span></p>
+      <div class="cta">
+        <a class="btn primary" href="#download"><span class="en">Download for Android</span><span class="es">Descargar para Android</span></a>
+        <a class="btn ghost" href="#ask"><span class="en">See it work</span><span class="es">Verlo en acción</span></a>
+      </div>
+      <p class="facts"><span><span class="en">Works offline</span><span class="es">Funciona sin conexión</span></span><span><span class="en">6 app languages</span><span class="es">6 idiomas en la app</span></span><span><span class="en">Runs on mid-range phones</span><span class="es">Para teléfonos de gama media</span></span></p>
+    </div>
+    <div class="phone"><video src="media/verse.mp4" poster="media/verse-poster.jpg" autoplay muted loop playsinline aria-label="Recording: asking for Ruth 1:1, tapping the word famine, and opening its article and a note"></video></div>
+  </div>
+</section>
+
+<section class="band alt" id="ask">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="en">What you can ask</span><span class="es">Qué puedes preguntar</span></p>
+      <h2><span class="en">Ask the way you would ask a colleague.</span><span class="es">Pregunta como le preguntarías a un colega.</span></h2>
+      <p class="lead"><span class="en">Every recording on this page is the app on a Galaxy A56. It answers on its own, without calling any server.</span><span class="es">Cada grabación de esta página es la app en un Galaxy A56. Responde por sí sola, sin llamar a ningún servidor.</span></p>
+    </div>
+
+    <article class="feature">
+      <div class="copy">
+        <p class="ask">Ruth 1:1</p>
+        <h3><span class="en">A verse, with its words tied to the notes</span><span class="es">Un versículo, con sus palabras unidas a las notas</span></h3>
+        <p><span class="en">The literal and simplified texts appear side by side. Words with a translation note are underlined; tap one and a panel opens with its notes and key terms, while the same words light up in every version.</span><span class="es">Los textos literal y simplificado aparecen juntos. Las palabras con nota de traducción están subrayadas; toca una y se abre un panel con sus notas y palabras clave, mientras esas mismas palabras se marcan en todas las versiones.</span></p>
+        <ul class="ticks">
+          <li><span class="en">The links work: other key terms, Translation Academy articles and Bible references open in the panel.</span><span class="es">Los enlaces funcionan: otras palabras clave, artículos de Translation Academy y referencias bíblicas se abren en el panel.</span></li>
+          <li><span class="en">Follow-up buttons: notes, questions, the next verse.</span><span class="es">Botones para seguir: notas, preguntas, el versículo siguiente.</span></li>
+        </ul>
+      </div>
+      <div class="media">
+        <div class="phone small"><img src="media/shot-word.jpg" alt="Ruth 1:1 with the word famine marked in the ULT and the UST, and a panel with its key term and the Hebrew word" loading="lazy"></div>
+        <div class="phone small"><img src="media/shot-note.jpg" alt="The translation note for 'in the days of the ruling of the judges' open in the bottom panel" loading="lazy"></div>
+      </div>
+    </article>
+
+    <article class="feature flip">
+      <div class="copy">
+        <p class="ask">John the Baptist</p>
+        <h3><span class="en">A word or a name: its article, and where it appears</span><span class="es">Una palabra o un nombre: su artículo y dónde aparece</span></h3>
+        <p><span class="en">Name a person, a place or a key term and you get its Translation Words article, followed by the verses that mention it. Each verse is a button to its text and notes. When a name is shared (John the apostle, John the Baptist) the app asks which one you mean.</span><span class="es">Nombra una persona, un lugar o una palabra clave y recibes su artículo de Palabras de Traducción, seguido de los versículos que la mencionan. Cada versículo es un botón a su texto y sus notas. Cuando un nombre es compartido (Juan el apóstol, Juan el Bautista), la app pregunta a cuál te refieres.</span></p>
+      </div>
+      <div class="media">
+        <div class="phone"><video src="media/name.mp4" poster="media/name-poster.jpg" autoplay muted loop playsinline preload="none" aria-label="Recording: asking for John the Baptist, reading the article and the verses that mention him"></video></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="copy">
+        <p class="ask">Jonás 1:3 · يونان 1: 3</p>
+        <h3><span class="en">In your language, from its own resources</span><span class="es">En tu idioma, con sus propios recursos</span></h3>
+        <p><span class="en">Ask in English, Spanish, French, Indonesian, Hindi or Arabic. The answer comes from the pack of that language when the phone has it (the GLT in Spanish, the Van Dyck in Arabic), and the words stay tappable.</span><span class="es">Pregunta en inglés, español, francés, indonesio, hindi o árabe. La respuesta sale del paquete de ese idioma cuando el teléfono lo tiene (la GLT en español, la Van Dyck en árabe), y las palabras siguen siendo tocables.</span></p>
+        <ul class="ticks">
+          <li><span class="en">Words from a story work too: "Jonah swallowed by the fish" finds the verses.</span><span class="es">También sirven palabras de una historia: «Jonás tragado por el pez» encuentra los versículos.</span></li>
+          <li><span class="en">"Help me translate Jonah 1:3" brings the notes and the simpler version.</span><span class="es">«Ayúdame a traducir Jonás 1:3» trae las notas y la versión más sencilla.</span></li>
+        </ul>
+      </div>
+      <div class="media">
+        <div class="phone"><video src="media/langs.mp4" poster="media/langs-poster.jpg" autoplay muted loop playsinline preload="none" aria-label="Recording: Jonah 1:3 answered in Spanish and in Arabic"></video></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="band" id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="en">How it works</span><span class="es">Cómo funciona</span></p>
+      <h2><span class="en">A small model listens. The helps answer.</span><span class="es">Un modelo pequeño escucha. Las ayudas responden.</span></h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <h3><span class="en">It understands the question</span><span class="es">Entiende la pregunta</span></h3>
+        <p><span class="en">A small model on the phone (FunctionGemma 270M, fine-tuned for this) turns your words into a request: a reference, a word, what you want to see.</span><span class="es">Un modelo pequeño en el teléfono (FunctionGemma 270M, afinado para esto) convierte tus palabras en una petición: una referencia, una palabra, lo que quieres ver.</span></p>
+      </div>
+      <div class="step">
+        <h3><span class="en">It looks in the language packs</span><span class="es">Busca en los paquetes de idioma</span></h3>
+        <p><span class="en">The translation helps live on the phone as <code>tc-language-packs</code>: texts aligned to the Hebrew and Greek, notes, questions, key terms and articles.</span><span class="es">Las ayudas de traducción viven en el teléfono como <code>tc-language-packs</code>: textos alineados al hebreo y al griego, notas, preguntas, palabras clave y artículos.</span></p>
+      </div>
+      <div class="step">
+        <h3><span class="en">It shows the helps as they are</span><span class="es">Muestra las ayudas tal como son</span></h3>
+        <p><span class="en">What you read is the published resource, with its name and version. No sentence is written by a model, so nothing is invented.</span><span class="es">Lo que lees es el recurso publicado, con su nombre y versión. Ninguna frase la escribe un modelo, así que nada se inventa.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="compare">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="en">Mini and BT Servant</span><span class="es">Mini y BT Servant</span></p>
+      <h2><span class="en">Two ways to reach the same helps</span><span class="es">Dos caminos a las mismas ayudas</span></h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>BT Servant</th><th>BT Servant Mini</th></tr></thead>
+        <tbody>
+          <tr><td><span class="en">Where</span><span class="es">Dónde</span></td><td>WhatsApp, Telegram, Signal, web</td><td><span class="en">An Android app</span><span class="es">Una app de Android</span></td></tr>
+          <tr><td><span class="en">Internet</span><span class="es">Internet</span></td><td><span class="en">Needed</span><span class="es">Necesario</span></td><td><span class="en">Not needed</span><span class="es">No hace falta</span></td></tr>
+          <tr><td><span class="en">The AI</span><span class="es">La IA</span></td><td><span class="en">A large model that talks with you, explains and writes its answers</span><span class="es">Un modelo grande que conversa, explica y escribe sus respuestas</span></td><td><span class="en">A small model that only understands the question</span><span class="es">Un modelo pequeño que solo entiende la pregunta</span></td></tr>
+          <tr><td><span class="en">Answers</span><span class="es">Respuestas</span></td><td><span class="en">Written for you from the helps</span><span class="es">Escritas para ti a partir de las ayudas</span></td><td><span class="en">The helps themselves, interactive</span><span class="es">Las ayudas mismas, interactivas</span></td></tr>
+          <tr><td><span class="en">Best for</span><span class="es">Ideal para</span></td><td><span class="en">Open questions and conversation</span><span class="es">Preguntas abiertas y conversación</span></td><td><span class="en">References, words and names, anywhere</span><span class="es">Referencias, palabras y nombres, en cualquier lugar</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="languages">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="en">Languages</span><span class="es">Idiomas</span></p>
+      <h2><span class="en">Six app languages, more packs as they are published</span><span class="es">Seis idiomas en la app, más paquetes a medida que se publican</span></h2>
+      <p class="lead"><span class="en">The full download includes these packs. More can be added from the menu, from the internet or from a <code>.tcpack</code> file on the phone or an SD card, and shared with others.</span><span class="es">La descarga completa trae estos paquetes. Se pueden agregar más desde el menú, de internet o de un archivo <code>.tcpack</code> en el teléfono o en una tarjeta SD, y compartirlos con otros.</span></p>
+    </div>
+    <div class="packs">
+      <div class="pack"><b>English</b><span><span class="en">66 books</span><span class="es">66 libros</span></span></div>
+      <div class="pack"><b>العربية</b><span><span class="en">66 books</span><span class="es">66 libros</span></span></div>
+      <div class="pack"><b>हिन्दी</b><span><span class="en">33 books</span><span class="es">33 libros</span></span></div>
+      <div class="pack"><b>Bahasa Indonesia</b><span><span class="en">9 books</span><span class="es">9 libros</span></span></div>
+      <div class="pack"><b>Español</b><span><span class="en">6 books, Latin America</span><span class="es">6 libros, Latinoamérica</span></span></div>
+      <div class="pack"><b>Français</b><span><span class="en">App language</span><span class="es">Idioma de la app</span></span></div>
+    </div>
+    <p class="note"><span class="en">A book missing from a pack is answered from English.</span><span class="es">Un libro que le falta a un paquete se responde en inglés.</span></p>
+  </div>
+</section>
+
+<section class="band alt" id="download">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow"><span class="en">Download · version 0.9.0 alpha</span><span class="es">Descarga · versión 0.9.0 alfa</span></p>
+      <h2><span class="en">Two builds of the same app</span><span class="es">Dos versiones de la misma app</span></h2>
+      <p class="lead"><span class="en">Android 8 or newer, on a 64-bit (arm64) phone. Installing one replaces the other and keeps your conversations.</span><span class="es">Android 8 o más reciente, en un teléfono de 64 bits (arm64). Instalar una reemplaza a la otra y conserva tus conversaciones.</span></p>
+    </div>
+    <div class="downloads">
+      <div class="dl">
+        <p class="eyebrow"><span class="en">Full</span><span class="es">Completa</span></p>
+        <p class="size">356 MB</p>
+        <p><span class="en">The model and the English, Spanish, Indonesian, Hindi and Arabic packs inside. Works offline from the first launch.</span><span class="es">Trae el modelo y los paquetes de inglés, español, indonesio, hindi y árabe. Funciona sin conexión desde el primer uso.</span></p>
+        <a class="btn primary" href="https://github.com/abelpz/bt-servant-mini/releases/download/v0.9.0-alpha/bt-servant-mini-0.9.0-alpha.apk"><span class="en">Download full</span><span class="es">Descargar completa</span></a>
+        <p class="hash">SHA-256 532e0facd5e1c614764b922fccab0b613cfe3b2555e073d6d8f436efbd3f9ba0</p>
+      </div>
+      <div class="dl">
+        <p class="eyebrow"><span class="en">Lite</span><span class="es">Ligera</span></p>
+        <p class="size">16 MB</p>
+        <p><span class="en">Nothing inside. On first launch it downloads the model (278 MB, about a minute on Wi-Fi) and the languages you choose, or loads them from a file.</span><span class="es">No trae nada. Al abrirla baja el modelo (278 MB, cerca de un minuto con Wi-Fi) y los idiomas que elijas, o los carga de un archivo.</span></p>
+        <a class="btn primary" href="https://github.com/abelpz/bt-servant-mini/releases/download/v0.9.0-alpha/bt-servant-mini-0.9.0-alpha-lite.apk"><span class="en">Download lite</span><span class="es">Descargar ligera</span></a>
+        <p class="hash">SHA-256 7522cc881c4de749ce3f2a9cf4ba4b8902c37c7d7204c9822d7395fde9e5bf2e</p>
+      </div>
+    </div>
+    <p class="note"><span class="en">This is an alpha for testing. The model is not trained on Arabic yet, so Arabic questions work best with references and names. Download the APK on the phone, allow installing from that source, and open it.</span><span class="es">Esta es una versión alfa de prueba. El modelo todavía no está entrenado en árabe, así que las preguntas en árabe funcionan mejor con referencias y nombres. Descarga el APK en el teléfono, permite instalar desde esa fuente y ábrelo.</span></p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><span class="en">BT Servant Mini is part of BT Servant, by unfoldingWord.</span><span class="es">BT Servant Mini es parte de BT Servant, de unfoldingWord.</span></span>
+    <span><span class="en">Helps: CC BY-SA 4.0 · Model: Gemma Terms of Use · llama.cpp: MIT</span><span class="es">Ayudas: CC BY-SA 4.0 · Modelo: Términos de uso de Gemma · llama.cpp: MIT</span></span>
+  </div>
+</footer>
+</div>
+<script>
+(() => {
+  const page = document.getElementById('page')
+  const set = (l) => {
+    page.dataset.l = l
+    document.documentElement.lang = l
+    for (const b of document.querySelectorAll('.lang button')) b.setAttribute('aria-pressed', String(b.dataset.set === l))
+    try { localStorage.setItem('btsm.site.lang', l) } catch {}
+  }
+  let l = 'en'
+  try { l = localStorage.getItem('btsm.site.lang') || ((navigator.language || '').startsWith('es') ? 'es' : 'en') } catch {}
+  set(l === 'es' ? 'es' : 'en')
+  for (const b of document.querySelectorAll('.lang button')) b.addEventListener('click', () => set(b.dataset.set))
+  // recordings play only while on screen, and not at all for people who ask for less motion
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver((es) => {
+    for (const e of es) { const v = e.target; if (e.isIntersecting && !still) { v.preload = 'auto'; v.play().catch(() => {}) } else v.pause() }
+  }, { threshold: 0.35 }) : null
+  for (const v of document.querySelectorAll('video')) { if (still) { v.removeAttribute('autoplay'); v.pause(); v.controls = true } else io?.observe(v) }
+})()
+</script>
+</body>
+</html>
