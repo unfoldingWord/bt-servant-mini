@@ -1,0 +1,10 @@
+# BT Servant Mini landing page: static files served by a Worker on unfoldingWord's Cloudflare account.
+# Deploy: npx wrangler deploy -c site/wrangler.toml   ->   https://bt-servant-mini.unfoldingword.workers.dev
+name = "bt-servant-mini"
+account_id = "5a3ffd86280d3ed086be76d955829242"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[assets]
+directory = "."
+not_found_handling = "404-page"
