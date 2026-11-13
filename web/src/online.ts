@@ -12,7 +12,8 @@ export const onlineUrl = (): string => {
     return online.url
   }
 }
-export const onlineAvailable = (): boolean => !!onlineUrl()
+// not in the iOS app yet: the online service accepts the Android app's key or the web app's origin, not the iOS app
+export const onlineAvailable = (): boolean => !!onlineUrl() && (window as any).Android?.platform?.() !== 'ios'
 /** Whether the phone has a connection now. On Android, from the app (WebView keeps navigator.onLine true without one). */
 export function isOnline(): boolean {
   try {

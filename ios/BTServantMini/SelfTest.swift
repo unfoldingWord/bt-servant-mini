@@ -42,7 +42,7 @@ enum SelfTest {
         return d.innerText.slice(0, 1500)
       }
       try {
-        log('bridge', [typeof window.Android, window.Android.platform(), window.Android.status(), window.Android.version()].join(' | '))
+        log('bridge', [typeof window.Android, window.Android.platform(), window.Android.status(), window.Android.version(), 'secure context: ' + window.isSecureContext, 'crypto.subtle: ' + !!(window.crypto && crypto.subtle)].join(' | '))
         const about = await until(() => document.querySelector('#about'), 30000, 'About on first launch')
         const t0 = Date.now()
         const dl = button(/^Download \\(/, about)

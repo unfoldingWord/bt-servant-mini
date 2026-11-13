@@ -36,6 +36,9 @@ final class Llama {
         let threads = Int32(max(1, min(4, ProcessInfo.processInfo.activeProcessorCount - 2)))
         cp.n_threads = threads
         cp.n_threads_batch = threads
+        #if targetEnvironment(simulator)
+        cp.op_offload = false // no Metal work in the simulator (CI's Mac has only a virtual GPU)
+        #endif
         guard let c = llama_init_from_model(m, cp) else {
             llama_model_free(m)
             throw LlamaError.context
