@@ -30,7 +30,18 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         web.navigationDelegate = self
         web.uiDelegate = self
         if #available(iOS 16.4, *) { web.isInspectable = true }
-        view = web
+        // the page inside the safe area (its header would go under the status bar and the notch); the rest in its color
+        let root = UIView()
+        root.backgroundColor = Self.background
+        web.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(web)
+        NSLayoutConstraint.activate([
+            web.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor),
+            web.bottomAnchor.constraint(equalTo: root.safeAreaLayoutGuide.bottomAnchor),
+            web.leadingAnchor.constraint(equalTo: root.safeAreaLayoutGuide.leadingAnchor),
+            web.trailingAnchor.constraint(equalTo: root.safeAreaLayoutGuide.trailingAnchor),
+        ])
+        view = root
     }
 
     override func viewDidLoad() {
