@@ -1,9 +1,10 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { answerSheet, facts, resetLangs, setUiLang, type Sheet } from './answer'
+import { answerSheet, facts, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
+import { backPanel, fillTitles, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, buildSheet, fold, type Slots } from './sheet'
 import { modelReady, modelState, slotsOf } from './model'
-import { aboutLabel, languagesSection, modelLine, modelSection, PACK_NAMES, showAbout } from './setup'
+import { aboutLabel, languagesSection, modelLine, modelNotice, modelSection, PACK_NAMES, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { articleForQuestion, asksAbout, keywords, resetSearch, searchVerses, versesOf } from './search'
@@ -16,7 +17,7 @@ type UiText = {
 }
 const UI: Record<string, UiText> = {
   en: {
-    ph: 'Ask about a verse or a word…', send: 'Send', loading: 'Starting the offline model…', ready: 'Offline · ready',
+    ph: 'Ask about a verse or a word…', send: 'Send', loading: 'Starting the offline model…', ready: 'Works without internet',
     thinking: 'Looking in the translation helps…', failed: 'Something went wrong:', details: 'details',
     hello: 'Hello! I answer from the translation helps installed on this phone (notes, words, questions, Academy), without internet. Ask in English, Spanish, French, Indonesian or Hindi.',
     ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'What do the notes say about Ruth 1:16?'],
@@ -26,7 +27,7 @@ const UI: Record<string, UiText> = {
   },
   es: {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
-    ready: 'Sin conexión · listo', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
+    ready: 'Funciona sin internet', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
     hello: '¡Hola! Respondo con las ayudas de traducción instaladas en este teléfono (notas, palabras, preguntas, Academia), sin internet. Pregunta en español, inglés, francés, indonesio o hindi.',
     ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Qué dice Jonás 3:9?'],
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
@@ -34,7 +35,7 @@ const UI: Record<string, UiText> = {
     appLang: 'Idioma de la app', packs: 'Paquetes de idioma instalados', welcome: '¿En qué te ayudo con tu traducción?', helps: 'Idioma de las ayudas', auto: 'El de mi pregunta',
   },
   fr: {
-    ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Hors ligne · prêt',
+    ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Fonctionne sans internet',
     thinking: 'Je cherche dans les aides à la traduction…', failed: 'Une erreur est survenue :', details: 'détails',
     hello: 'Bonjour ! Je réponds à partir des aides à la traduction installées sur ce téléphone, sans internet.',
     ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?'],
@@ -43,7 +44,7 @@ const UI: Record<string, UiText> = {
     appLang: "Langue de l'application", packs: 'Paquets de langue installés', welcome: 'Comment puis-je aider votre traduction ?', helps: 'Langue des aides', auto: 'Celle de ma question',
   },
   id: {
-    ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Offline · siap',
+    ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Bisa tanpa internet',
     thinking: 'Mencari di bahan bantu penerjemahan…', failed: 'Terjadi kesalahan:', details: 'detail',
     hello: 'Halo! Saya menjawab dari bahan bantu penerjemahan yang terpasang di ponsel ini, tanpa internet.',
     ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?'],
@@ -52,7 +53,7 @@ const UI: Record<string, UiText> = {
     appLang: 'Bahasa aplikasi', packs: 'Paket bahasa terpasang', welcome: 'Apa yang bisa saya bantu untuk terjemahan Anda?', helps: 'Bahasa bahan bantu', auto: 'Sesuai pertanyaan saya',
   },
   hi: {
-    ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'ऑफ़लाइन · तैयार',
+    ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'बिना इंटरनेट चलता है',
     thinking: 'अनुवाद सहायता में खोज रहा हूँ…', failed: 'कुछ गलत हो गया:', details: 'विवरण',
     hello: 'नमस्ते! मैं इस फ़ोन पर स्थापित अनुवाद सहायता से, बिना इंटरनेट के, उत्तर देता हूँ।',
     ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?'],
@@ -61,7 +62,7 @@ const UI: Record<string, UiText> = {
     appLang: 'ऐप की भाषा', packs: 'स्थापित भाषा पैकेज', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?', helps: 'सहायता की भाषा', auto: 'मेरे प्रश्न वाली',
   },
   ar: {
-    ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'دون اتصال · جاهز',
+    ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'يعمل دون إنترنت',
     thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
     hello: 'مرحبًا! أجيب من مساعدات الترجمة المثبتة على هذا الهاتف (الملاحظات والكلمات والأسئلة والأكاديمية)، دون إنترنت.',
     ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'ساعدني في ترجمة يونان ١'],
@@ -102,7 +103,12 @@ const LOGO = document.querySelector('.brand svg')!.outerHTML
 
 // ------------------------------------------------------------------------------------------------------------ conversations
 
-type Msg = { who: 'me' | 'bot'; text?: string; intro?: string | null; info?: string; follow?: { label: string; sheet: Sheet }[]; meta?: string; ui?: string; ai?: { text: string; model: string } }
+type Msg = {
+  who: 'me' | 'bot'; text?: string; intro?: string | null; info?: string; follow?: { label: string; sheet: Sheet }[]; meta?: string; ui?: string
+  ai?: { text: string; model: string }
+  /** the passage drawn with tappable words (kept for the last messages only); lang: the pack the answer came from; ctx: its article */
+  study?: Study; lang?: string; ctx?: string
+}
 type Hit = { book: string; ch: number; v: number }
 type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[] }
 const KEY = 'btsm.conversations.v1'
@@ -121,6 +127,8 @@ function load() {
   if (!convs.some((c) => c.id === current)) current = convs[0]!.id
 }
 function save() {
+  // the interactive passage is kept for the last messages of each conversation; older ones show their text answer
+  for (const c of convs) c.msgs.slice(0, -8).forEach((m) => delete m.study)
   try {
     localStorage.setItem(KEY, JSON.stringify({ convs, current }))
   } catch {}
@@ -139,7 +147,7 @@ const conv = (): Conv => convs.find((c) => c.id === current)!
 
 const $ = <E extends HTMLElement>(s: string) => document.querySelector(s) as E
 const log = $('#log'), form = $<HTMLFormElement>('#ask'), input = $<HTMLTextAreaElement>('#q'), btn = $<HTMLButtonElement>('#send')
-const status = $('#status'), panel = $('#panel'), menu = $<HTMLButtonElement>('#menu')
+const status = $('#status'), notice = $<HTMLButtonElement>('#notice'), panel = $('#panel'), menu = $<HTMLButtonElement>('#menu')
 function applyUi() {
   document.documentElement.lang = nav
   document.documentElement.dir = nav === 'ar' ? 'rtl' : 'ltr'
@@ -149,6 +157,7 @@ function applyUi() {
 }
 function setUi(l: string) {
   nav = l
+  setViewLang(l)
   T = UI[l]!
   try {
     localStorage.setItem(UI_KEY, l)
@@ -171,6 +180,7 @@ function el(tag: string, cls: string, text?: string): HTMLElement {
 function renderMsg(m: Msg): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
+  d.dataset.lang = m.lang ?? 'en'
   // with an online answer, it comes first and the offline answer becomes its sources
   let host: HTMLElement = d
   if (m.ai) {
@@ -187,9 +197,11 @@ function renderMsg(m: Msg): HTMLElement {
     host = src
   }
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
-  if (m.info) {
+  if (m.study) host.appendChild(renderStudy(m.study))
+  else if (m.info) {
     const box = el('div', m.intro ? 'info' : 'plain md')
-    box.innerHTML = md(m.info) // md() escapes everything first
+    box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
+    fillTitles(box, m.lang ?? 'en')
     host.appendChild(box)
   }
   if (m.text) d.appendChild(el('div', 'plain', m.text))
@@ -342,6 +354,14 @@ function renderPanel() {
   panel.appendChild(about)
 }
 const closePanel = () => panel.classList.remove('show')
+// Android's back button (MainActivity.onBackPressed): the bottom panel, then the About page, then the menu; else it leaves
+;(window as any).__back = (): boolean => {
+  if (backPanel()) return true
+  const about = document.querySelector('#about')
+  if (about) { about.remove(); return true }
+  if (panel.classList.contains('show')) { closePanel(); return true }
+  return false
+}
 menu.onclick = () => {
   if (panel.classList.toggle('show')) renderPanel()
 }
@@ -350,11 +370,24 @@ menu.onclick = () => {
 
 let busy = false
 let polling = false
+// the status explains itself: a tap opens About, which says what works without internet
+status.style.cursor = 'pointer'
+status.onclick = () => showAbout(nav, () => setReady())
+// the notice opens the menu, where the model can be downloaded or loaded
+notice.onclick = () => { if (!panel.classList.contains('show')) menu.click() }
+
 function setReady() {
   const ok = modelReady()
   const { state } = modelState()
-  status.textContent = ok ? T.ready : modelLine(nav)
+  const line = ok ? T.ready : modelLine(nav)
+  status.textContent = ''
+  status.title = line
+  status.setAttribute('aria-label', line)
   status.dataset.ok = String(ok)
+  status.dataset.state = state
+  // the message itself goes under the bar, only when something needs attention (no model, downloading, a problem)
+  notice.hidden = ok
+  notice.textContent = ok ? '' : modelNotice(nav)
   // without a model the app still answers references and searches
   btn.disabled = busy || ['copying', 'starting', 'importing'].includes(state)
   if (!['ready', 'missing', 'error'].includes(state) && !polling) {
@@ -533,8 +566,11 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     // "Which John do you mean?": each article as a button
     for (const o of r.options ?? [])
       others.push({ label: o.title, sheet: { ...sheet, id: `f${Date.now()}`, intent: 'article', concept: o.id, candidates: null, term: null } })
+    const said = intro(sheet, facts, ui)
+    const study = await studyOf(sheet).catch(() => null)
     const total = ((performance.now() - t0) / 1000).toFixed(1)
-    m = { who: 'bot', intro: intro(sheet, facts, ui), info: r.answer, follow: [...followups(sheet, facts, ui), ...others], ui,
+    m = { who: 'bot', intro: said, info: r.answer, follow: [...followups(sheet, facts, ui), ...others], ui,
+      study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
       meta: `${T.details} · ${total} s\n${meta}${searched}\n${JSON.stringify(sheet, null, 1)}` }
     if (sheet.ref && sheet.intent === 'passage') c.last = sheet
   } catch (err: any) {
@@ -567,6 +603,18 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     } else writing.remove()
   }
 }
+
+// what the panel and the links ask the chat for: a Bible reference, or an article ("Open in chat")
+const bare = (lang: string): Omit<Sheet, 'intent'> =>
+  ({ id: `f${Date.now()}`, ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang })
+setHooks({
+  ref: (ref, _label, lang) => {
+    const [code, chv] = ref.split(' ')
+    runSheet(`${bookLabel(nav, code!)} ${chv ?? ''}`.trim(), { ...bare(lang), intent: 'passage', ref, what: ['text', 'notes'] }, nav)
+  },
+  article: (id, title, lang) => runSheet(title, { ...bare(lang), intent: 'article', concept: id }, nav),
+})
+setViewLang(nav)
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
   if (busy) return

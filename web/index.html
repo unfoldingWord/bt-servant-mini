@@ -25,9 +25,16 @@
   .brand h1 { font: 600 18px/1 Georgia, "Noto Serif", serif; margin: 0; letter-spacing: .1px; white-space: nowrap; }
   .badge { font: 600 10.5px/1 system-ui, sans-serif; letter-spacing: .6px; text-transform: uppercase; color: var(--accent);
     background: var(--accent-soft); border-radius: 999px; padding: 4px 7px 3px; }
-  #status { margin-inline-start: auto; font-size: 12px; color: var(--faint); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  #status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  /* the bar shows only a dot (tap: About); what needs attention goes in #notice under the bar, where it can wrap */
+  #status { margin-inline-start: auto; flex: none; border: 0; background: transparent; padding: 10px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+  #status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
   #status[data-ok="true"]::before { background: var(--ok); }
+  #status[data-state="downloading"]::before, #status[data-state="copying"]::before, #status[data-state="importing"]::before, #status[data-state="starting"]::before { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #notice { display: block; width: calc(100% - 28px); margin: 0 14px 6px; text-align: start; font: 13px/1.4 system-ui, sans-serif; color: var(--muted);
+    background: var(--accent-soft); border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+  #notice[hidden] { display: none; }
+  .brand { flex: 0 1 auto; }
   #log { flex: 1; overflow-y: auto; padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 18px; }
   .msg { overflow-wrap: anywhere; }
   .me { align-self: flex-end; max-width: 85%; background: var(--me); border-radius: 14px; padding: 9px 14px; white-space: pre-wrap; }
@@ -108,6 +115,53 @@
   details.sources > summary { font: 600 13px system-ui, sans-serif; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
   #panel .toggle { display: flex; gap: 10px; align-items: center; font-size: 14.5px; padding: 4px 0; }
   #panel .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+  /* interactive passage (view.ts) */
+  .study .tx { margin: 0 0 12px; }
+  .study .tx-label { font: 600 11px/1.3 system-ui, sans-serif; letter-spacing: .6px; color: var(--accent); margin: 0 0 3px; }
+  .study .vv { margin: 0; font: 16px/1.75 Georgia, "Noto Serif", "Noto Serif Devanagari", "Noto Naskh Arabic", serif; }
+  .study .vv sup { font: 600 10px system-ui, sans-serif; color: var(--faint); margin-inline-end: 2px; }
+  .study .w { cursor: pointer; border-radius: 3px; -webkit-tap-highlight-color: transparent; }
+  .study .w.n { text-decoration: underline dotted var(--accent); text-underline-offset: 4px; text-decoration-thickness: 1.5px; }
+  .study .w.t { text-decoration: underline dotted var(--faint); text-underline-offset: 4px; }
+  .study .w.rel { background: var(--accent-soft); }
+  .study .w.on { background: var(--accent); color: #fff; text-decoration: none; }
+  .study details.more-tx, .study details.qs { margin: 4px 0 10px; }
+  .study details > summary { font: 600 13px system-ui, sans-serif; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+  .chip { font: 13.5px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+  .chip:active { background: var(--accent-soft); }
+  .study ol.nl { list-style: none; padding: 0; margin: 0 0 10px; }
+  .study ol.nl li { margin: 0 0 6px; }
+  .nrow { display: block; width: 100%; text-align: start; font: 14px/1.45 system-ui, "Noto Sans", sans-serif; color: var(--fg);
+    background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+  .nrow:active { background: var(--accent-soft); }
+  .nrow strong { font-weight: 650; }
+  a.lk { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  /* bottom panel */
+  .sheet-bg { position: fixed; inset: 0; background: #0006; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40; }
+  .sheet-bg.open { opacity: 1; pointer-events: auto; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; max-height: 78vh; display: flex; flex-direction: column; background: var(--bg);
+    border-radius: 16px 16px 0 0; box-shadow: 0 -6px 24px #0003; transform: translateY(105%); transition: transform .22s ease-out; z-index: 41;
+    padding-bottom: env(safe-area-inset-bottom); max-width: 760px; margin: 0 auto; }
+  .sheet.open { transform: none; }
+  .sheet-grip { width: 38px; height: 4px; border-radius: 2px; background: var(--line); margin: 8px auto 2px; }
+  .sheet-head { display: flex; align-items: center; gap: 6px; padding: 4px 10px 8px; border-bottom: 1px solid var(--line); }
+  .sheet-title { flex: 1; font: 600 16px/1.3 Georgia, "Noto Serif", serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sheet-btn { font: 20px/1 system-ui, sans-serif; color: var(--muted); background: transparent; border: 0; padding: 6px 10px; cursor: pointer; }
+  .sheet-body { overflow-y: auto; padding: 12px 16px 16px; font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  .sheet-body h4 { font: 600 12px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); margin: 4px 0 8px; }
+  .sheet-body .rich p { margin: 0 0 10px; }
+  .sheet-body .rich h3, .sheet-body .rich h4, .sheet-body .rich h5 { margin: 12px 0 6px; }
+  .sheet-body .rich ul, .sheet-body .rich ol { padding-inline-start: 20px; margin: 0 0 10px; }
+  .pnote { border-inline-start: 3px solid var(--accent); padding: 2px 0 2px 10px; margin: 0 0 14px; }
+  .pnote-head { font-weight: 650; margin: 0 0 4px; }
+  .chip-link { display: inline-block; font-size: 13px; margin-top: 2px; }
+  .sheet-foot:empty { display: none; }
+  .sheet-foot { padding: 8px 16px 12px; border-top: 1px solid var(--line); }
+  .sheet-chat { width: 100%; font: 600 14px system-ui, sans-serif; color: #fff; background: var(--accent); border: 0; border-radius: 10px;
+    padding: 10px; cursor: pointer; }
+  .muted { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -117,8 +171,9 @@
     <svg viewBox="0 0 448 512" aria-hidden="true"><path fill="#ae5630" d="M0 96L0 416c0 53 43 96 96 96l320 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l0-66.7c18.6-6.6 32-24.4 32-45.3l0-288c0-26.5-21.5-48-48-48L96 0C43 0 0 43 0 96zM64 416c0-17.7 14.3-32 32-32l256 0 0 64-256 0c-17.7 0-32-14.3-32-32zm64-272c0-8.8 7.2-16 16-16l48 0 0-48c0-8.8 7.2-16 16-16l32 0c8.8 0 16 7.2 16 16l0 48 48 0c8.8 0 16 7.2 16 16l0 32c0 8.8-7.2 16-16 16l-48 0 0 112c0 8.8-7.2 16-16 16l-32 0c-8.8 0-16-7.2-16-16l0-112-48 0c-8.8 0-16-7.2-16-16l0-32z"/><path fill="#fff" d="M208 64c-8.8 0-16 7.2-16 16l0 48-48 0c-8.8 0-16 7.2-16 16l0 32c0 8.8 7.2 16 16 16l48 0 0 112c0 8.8 7.2 16 16 16l32 0c8.8 0 16-7.2 16-16l0-112 48 0c8.8 0 16-7.2 16-16l0-32c0-8.8-7.2-16-16-16l-48 0 0-48c0-8.8-7.2-16-16-16l-32 0z"/></svg>
     <h1>BT Servant</h1><span class="badge">Mini</span>
   </div>
-  <span id="status"></span>
+  <button id="status" type="button"></button>
 </header>
+<button id="notice" type="button" hidden></button>
 <nav id="panel"></nav>
 <main id="log" aria-live="polite"></main>
 <form id="ask"><textarea id="q" rows="1" enterkeyhint="send"></textarea><button id="send" type="submit" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>

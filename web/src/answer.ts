@@ -23,7 +23,7 @@ export let facts: Record<string, any> = {}
 /** options: the articles to pick from, when the answer asks "which do you mean?" (the app shows them as buttons). */
 export type Result = { answer: string; cites: string[]; options?: { id: string; title: string }[] }
 /** Bible text as a reader sees it: the braces that mark implied words in the ULT/UST are left out. */
-const plain = (t: string): string => t.replace(/[{}]/g, '')
+const plain = (t: string): string => t.replace(/\{/g, ' ').replace(/\}/g, '').replace(/ {2,}/g, ' ')
 /** A text in another script than its pack's language is not that language (BSOJ's ar ARST New Testament is the English UST, Nov 2026). */
 const SCRIPT: Record<string, RegExp> = { ar: /[؀-ۿ]/, hi: /[ऀ-ॿ]/ }
 const wrongScript = (lang: string, text: string): boolean => !!SCRIPT[lang] && !SCRIPT[lang]!.test(text)
@@ -73,10 +73,8 @@ const bookName = (lang: string, code: string): string =>
 export function clean(md: unknown): string {
   return String(md ?? '')
     .replace(/^#+\s*/gm, '')
-    .replace(/\((?:ver|see):\s*(?:\[\[[^\]]+\]\]|rc:\/\/[^)\s]+)\)/gi, '')
-    .replace(/\[\[([^\]]+)\]\]/g, '$1')
-    .replace(/\[([^\]]+)\]\((?:ref|rc):[^)]*\)/g, '$1') // [1:2](ref:jon 1:2): a link the reader cannot follow here
-    .replace(/\[([^\]]+)\]\([^)\s]*\.md\)/g, '$1') // (See also: [christian](./kt/christian.md)): the name, without the file
+    // links stay: md() turns the ones the app can open ([[tw:kt/faith]], [1:2](ref:jon 1:2), ../kt/faith.md) into taps
+    .replace(/\((?:ver|see):\s*rc:\/\/[^)\s]+\)/gi, '')
     .replace(/[ \t]+\./g, '.')
     .replace(/(?<!\.)\.\.(?!\.)/g, '.')
     .replace(/\n{3,}/g, '\n\n')
@@ -537,3 +535,155 @@ export async function answerSheet(s: Sheet): Promise<Result> {
   return r
 }
 
+
+// ------------------------------------------------------------------------------------------------------------- study view
+
+/** One piece of a verse: its text, and for a word the helps it is part of (`n3` the fourth note, `t0` the first term). */
+export type StudyPiece = [text: string, keys?: string]
+export type StudyNote = { said: string; orig: string; note: string; concept?: string; ref: string }
+export type StudyTerm = { id: string; title: string; said: string; orig: string }
+/** A passage as the bubble shows it: each text with its words tied to the notes and key terms that quote them. */
+export type Study = {
+  lang: string; head: string; book: string; ch: number; v1: number; v2: number
+  texts: { label: string; verses: { v: string; p: StudyPiece[] }[] }[]
+  notes: StudyNote[]; terms: StudyTerm[]; questions: { q: string; a: string }[]
+  heads: { notes: string; terms: string; questions: string }
+}
+
+/** The pieces of a text between two verse ids, cut at each verse, with each piece's index. */
+function verseSlices(book: string, events: [number, string, string][], total: number, from: number, to: number) {
+  const out: { v: string; start: number; end: number }[] = []
+  let chapter = 0
+  let label = ''
+  let first = 0
+  let last = 0
+  let start = 0
+  const flush = (end: number) => {
+    if (!first) return
+    const lo = verseId(book, chapter, first)
+    const hi = verseId(book, chapter, last)
+    if (lo <= to && hi >= from && end > start) out.push({ v: label, start, end })
+  }
+  for (const [position, kind, arg] of events) {
+    if (kind !== 'chapter' && kind !== 'verse') continue
+    flush(position)
+    start = position
+    const m = /^(\d+)(?:-(\d+))?/.exec(arg)
+    if (!m) { first = last = 0; continue }
+    if (kind === 'chapter') { chapter = Number(m[1]); first = last = 0 }
+    else { first = Number(m[1]); last = m[2] === undefined ? first : Number(m[2]); label = arg }
+  }
+  flush(total)
+  return out
+}
+
+/** The study view of a passage sheet (verses or one chapter), or null when the answer is better as plain text. */
+export async function studyOf(s: Sheet): Promise<Study | null> {
+  if (!s.ref || !['passage', 'advice'].includes(s.intent) || s.phrase) return null
+  const ref = parseRef(s.ref)
+  if (!ref || (ref.kind !== 'verses' && ref.kind !== 'chapter')) return null
+  if (s.what.length === 1 && (s.what[0] === 'questions' || s.what[0] === 'intro')) return null
+  const l = await getLang(s.lang)
+  if (!l) return null
+  const model = await bookOf(l, ref.book)
+  if (!model) return null
+  const lang = l.lang
+  const range = rangeOf(ref)
+  const al = await alignedOf(l, ref.book, model)
+  const rowsIn = (t: { rows: HelpRow[] } | undefined): HelpRow[] => (t?.rows ?? []).filter((x) => inRange(x, range) && !isIntroRow(x))
+  const noteRows = rowsIn(model.notes).filter((x) => clean(x.cols.note))
+  const linkRows = rowsIn(model.links).filter((x) => x.concept)
+  // which helps quote each position of the original
+  const byPos = new Map<number, string[]>()
+  const tie = (positions: number[] | undefined, key: string) => {
+    for (const p of positions ?? []) {
+      const list = byPos.get(p)
+      if (!list) byPos.set(p, [key])
+      else if (!list.includes(key)) list.push(key)
+    }
+  }
+  noteRows.forEach((n, i) => tie(n.quote, `n${i}`))
+  const termIds: string[] = []
+  for (const x of linkRows) {
+    let i = termIds.indexOf(x.concept!)
+    if (i < 0) i = termIds.push(x.concept!) - 1
+    tie(x.quote, `t${i}`)
+  }
+  const ultFirst = (qs: { res: string; text: string }[]) => (qs.find((q) => /\/(ult|glt)$/.test(q.res)) ?? qs[0])?.text ?? ''
+  const texts: Study['texts'] = []
+  const wanted = s.version ? '/' + (lang.startsWith('es') ? (s.version === 'ult' ? 'glt' : 'gst') : s.version) : ''
+  for (const t of model.texts) {
+    if (wanted && model.texts.some((x) => x.res.endsWith(wanted)) && !t.res.endsWith(wanted)) continue
+    const pieces = t.pieces as unknown as [string, boolean][]
+    const slices = verseSlices(ref.book, t.events as any, pieces.length, range[0], range[1])
+    if (!slices.length) continue
+    // word ordinal of each piece, for its alignment
+    const ordinal: number[] = []
+    let n = 0
+    for (const p of pieces) ordinal.push(p[1] ? n++ : -1)
+    const verses = slices.map(({ v, start, end }) => ({
+      v,
+      p: pieces.slice(start, end).map((p, k): StudyPiece => {
+        const text = p[0].replace(/\{/g, ' ').replace(/\}/g, '')
+        const o = ordinal[start + k]!
+        if (o < 0 || !t.align) return [text]
+        const keys = [...new Set((t.align[o] ?? []).flatMap((pos) => byPos.get(pos) ?? []))]
+        return keys.length ? [text, keys.join(' ')] : [text]
+      }),
+    }))
+    const sample = verses.map((x) => x.p.map((p) => p[0]).join('')).join(' ')
+    if (!sample.trim() || wrongScript(lang, sample)) continue
+    texts.push({ label: resShort(t.res).toUpperCase(), verses })
+  }
+  if (!texts.length) return null
+  const notes: StudyNote[] = noteRows.map((n) => ({
+    said: ultFirst(quoteIn(al, n.quote)),
+    orig: String(n.cols.quote ?? ''),
+    note: clean(n.cols.note),
+    concept: n.concept,
+    ref: n.ref,
+  }))
+  const terms: StudyTerm[] = []
+  for (const id of termIds) {
+    const x = linkRows.find((r) => r.concept === id)!
+    terms.push({ id, title: await titleOf(l, id), said: ultFirst(quoteIn(al, x.quote)), orig: String(x.cols.origWords ?? '') })
+  }
+  const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? '') }))
+  const book = bookName(lang, ref.book)
+  const lab = refLabel(ref)
+  return {
+    lang, book: ref.book, ch: ref.ch ?? 0, v1: ref.v1 ?? 0, v2: ref.v2 ?? 0,
+    head: say(lang, 'passage_head', { book, ref: lab, lang }).replace(/\s+\(/, ' (').replace(/\s{2,}/g, ' '),
+    texts, notes, terms, questions,
+    heads: {
+      notes: say(lang, 'notes_head', { book, ref: lab }),
+      terms: say(lang, 'terms_head', { book, ref: lab }),
+      questions: say(lang, 'questions_head', { book, ref: lab }),
+    },
+  }
+}
+
+/** An article for the panel: its title and its text with the links kept, or null when the pack has no such article. */
+export async function articleView(lang: string, id: string): Promise<{ title: string; md: string; lang: string } | null> {
+  for (const pl of [lang, 'en']) {
+    const l = await getLang(pl)
+    if (!l) continue
+    try {
+      const a = (await l.r.article(id, 'all')).data
+      if (!a) continue
+      const md = a.sections
+        .filter((x: any) => x.role !== 'word-data')
+        .map((x: any) => String(x.md ?? '').trim())
+        .filter(Boolean)
+        .join('\n\n')
+      return { title: a.title ?? (await titleOf(l, id)), md, lang: pl }
+    } catch { /* the next pack */ }
+  }
+  return null
+}
+
+/** The title of an article in a language (or its name from the maps), for links shown before it is opened. */
+export async function titleFor(lang: string, id: string): Promise<string> {
+  const l = (await getLang(lang)) ?? (await getLang('en'))
+  return l ? titleOf(l, id) : id.split('/').pop()!
+}

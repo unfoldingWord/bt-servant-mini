@@ -1,15 +1,29 @@
 // A small Markdown renderer for answers: headings (#, ##, ###), paragraphs, line breaks, lists (-, *, •, 1.), **bold**,
 // *italic* and _italic_. Everything is escaped first, so text from the packs can never become HTML.
+import { linkTarget, slugLabel } from './links'
+
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
+// Links the app can open become <a class="lk" data-href>: an article (opened in the panel) or a Bible reference. `[[id]]`
+// gets a provisional label (data-fill asks for its title); a link the app cannot follow stays as its text.
+let CTX = ''
+function links(s: string): string {
+  return s
+    .replace(/\[\[([^\]\n]+)\]\]/g, (all, href: string) =>
+      linkTarget(href.replace(/&amp;/g, '&'), CTX) ? `<a class="lk" data-href="${href}" data-fill="1">${slugLabel(href)}</a>` : all)
+    .replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, (all, text: string, href: string) =>
+      linkTarget(href.replace(/&amp;/g, '&'), CTX) ? `<a class="lk" data-href="${href}" data-ctx="${CTX}">${text}</a>` : text)
+}
 function inline(s: string): string {
-  return esc(s)
+  return links(esc(s))
     .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[\s(«“])\*([^*\s][^*\n]*?)\*(?=[\s).,;:!?»”]|$)/g, '$1<em>$2</em>')
     .replace(/(^|[\s(«“])_([^_\n]+?)_(?=[\s).,;:!?»”]|$)/g, '$1<em>$2</em>')
 }
 
-export function md(src: string): string {
+/** `ctx`: the article id the text belongs to, for its relative links. */
+export function md(src: string, ctx = ''): string {
+  CTX = ctx
   const out: string[] = []
   for (const block of src.replace(/\r/g, '').split(/\n{2,}/)) {
     const lines = block.split('\n').filter((l) => l.trim() !== '')

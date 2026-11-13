@@ -1,7 +1,7 @@
 // The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelState, pickModelFile, saveToDownloads } from './model'
-import { availableLangs, downloadLang, exportPack, importPack, installedLangs, origin, removeLang } from './packs'
+import { availableLangs, downloadLang, exportPack, importPack, installedLangs, openLang, origin, removeLang } from './packs'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
@@ -142,6 +142,9 @@ export function modelLine(lang: string): string {
   }
 }
 
+/** The line under the bar when the model needs attention: "Model: not on this phone yet…". */
+export const modelNotice = (lang: string): string => `${str(lang).model}: ${modelLine(lang)}`
+
 /** The model section: its state, and download / load / share. */
 export function modelSection(lang: string, refresh: () => void): HTMLElement {
   const s = str(lang)
@@ -265,4 +268,4 @@ export function showAbout(lang: string, refresh: () => void) {
 export const aboutLabel = (lang: string) => str(lang).about
 
 // desktop testing only (no Android bridge): reach the pack functions from the console
-if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs }
+if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, openLang }

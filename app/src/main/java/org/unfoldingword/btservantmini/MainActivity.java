@@ -415,6 +415,16 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Back closes what the page has open (the bottom panel, the menu) before it leaves the app. */
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        if (web == null) { super.onBackPressed(); return; }
+        web.evaluateJavascript("(window.__back && window.__back()) ? 1 : 0", (r) -> {
+            if (!"1".equals(r)) MainActivity.super.onBackPressed();
+        });
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
