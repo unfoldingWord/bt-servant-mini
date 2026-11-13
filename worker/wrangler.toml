@@ -19,7 +19,8 @@ PERSON_DAILY_CAP = "40"
 # The Google OAuth web client id the app signs in with. Set it and sign-in is required (secrets: APP_KEY, SESSION_SECRET).
 # GOOGLE_CLIENT_ID = "....apps.googleusercontent.com"
 
-# today's counts (all, and per person by a hash of their Google id); they expire after 3 days
+# today's counts (all, and per person by a hash of their Google id; they expire after 3 days), and the usage counts
+# the phones send when their person allows it (stats:<day>, kept)
 [[kv_namespaces]]
 binding = "USAGE"
 id = "bf8577e478ce40f89310784803a152d7"

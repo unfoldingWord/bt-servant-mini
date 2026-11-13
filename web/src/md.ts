@@ -58,7 +58,27 @@ export function md(src: string, ctx = ''): string {
       const start = Number(/^\s*(\d+)/.exec(lines[0]!)![1])
       out.push(`<ol start="${start}">${lines.map((l) => `<li>${inline(l.replace(/^\s*\d+[.)]\s+/, ''))}</li>`).join('')}</ol>`)
     } else {
-      out.push(`<p>${lines.map(inline).join('<br>')}</p>`)
+      // text with a list inside it (an online answer often writes "To translate:" and then "- …" lines): each run of list
+      // lines becomes a list, the rest stays paragraphs
+      let para: string[] = []
+      let items: string[] = []
+      const flush = () => {
+        if (para.length) out.push(`<p>${para.map(inline).join('<br>')}</p>`)
+        if (items.length) out.push(`<ul>${items.map((l) => `<li>${inline(l)}</li>`).join('')}</ul>`)
+        para = []
+        items = []
+      }
+      for (const l of lines) {
+        const item = /^\s*[-*•]\s+(.*)$/.exec(l)
+        if (item) {
+          if (para.length) { out.push(`<p>${para.map(inline).join('<br>')}</p>`); para = [] }
+          items.push(item[1]!)
+        } else {
+          if (items.length) { out.push(`<ul>${items.map((x) => `<li>${inline(x)}</li>`).join('')}</ul>`); items = [] }
+          para.push(l)
+        }
+      }
+      flush()
     }
   }
   // one list, not one list per item, when the items were separated by blank lines

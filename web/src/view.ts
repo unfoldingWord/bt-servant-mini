@@ -4,6 +4,7 @@
 import { articleView, helpView, type Study, titleFor } from './answer'
 import { linkTarget } from './links'
 import { md } from './md'
+import { count } from './usage'
 
 type Ui = { back: string; close: string; inChat: string; notes: string; terms: string; noHelps: string; loading: string; missing: string; texts: string }
 const UI: Record<string, Ui> = {
@@ -238,6 +239,7 @@ export function backPanel(): boolean {
 
 export function openPanel(v: View) {
   ensureSheet()
+  count(`panel.${v.kind}`)
   stack.push(v)
   draw()
 }

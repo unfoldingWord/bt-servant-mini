@@ -1,6 +1,7 @@
 // BT Servant Mini — online helper (level 3).
 //   POST /v1/session { idToken }  -> { token, name, exp }   a Google sign-in becomes a session of 30 days
 //   POST /v1/answer  { question, lang, helps, history? } -> { text, model }   with the session, when sign-in is required
+//   POST /v1/usage   { days: [{ d, c }], app, flavor, ui, packs, model, online, mem } -> { ok }   usage counts (opt-in)
 // The app sends the question and the translation helps it already found on the phone; the model answers from them only,
 // in the person's language, and names its sources. It does not search, keep the questions, or see other conversations.
 //
@@ -88,6 +89,62 @@ function same(a: string, b: string): boolean {
   return d === 0
 }
 
+// -------------------------------------------------------------------------------------------------------- usage counts
+
+// The app's usage counts, sent only by phones whose person turned them on: totals per day, with no question text and no id
+// of the phone or the person. They are added into one record per day, `stats:<day>` in KV:
+//   { reports, c: { asked: 120, "kind.search": 30, ... }, dims: { "ui.es": 4, "app.0.9.2-mini": 5, "pack.ar": 2, ... } }
+// `reports` is phones-days; a dimension counts phones that day. Nothing about the sender (address, time) is kept.
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+const KEY = /^[a-z]+(\.[a-z0-9_-]{1,24})?$/
+const CODE = /^[a-z]{2,3}(-[a-z0-9]{1,12}){0,3}$/i
+const usageSeen = new Map<string, number[]>()
+function usageLimited(ip: string): boolean {
+  const now = Date.now()
+  const times = (usageSeen.get(ip) ?? []).filter((t) => now - t < 60_000)
+  times.push(now)
+  usageSeen.set(ip, times)
+  if (usageSeen.size > 5000) usageSeen.clear()
+  return times.length > 6
+}
+type Stats = { reports: number; c: Record<string, number>; dims: Record<string, number> }
+/** The report, checked and reduced to what is allowed; null when it is not a usage report. */
+function usageReport(body: any): { days: { d: string; c: Record<string, number> }[]; dims: string[] } | null {
+  if (!body || !Array.isArray(body.days) || !body.days.length || body.days.length > 45) return null
+  const now = Date.now()
+  const days: { d: string; c: Record<string, number> }[] = []
+  for (const x of body.days) {
+    if (!x || typeof x.d !== 'string' || !DAY.test(x.d) || typeof x.c !== 'object' || !x.c) return null
+    const age = (now - Date.parse(`${x.d}T00:00:00Z`)) / 86400_000
+    if (!(age > -2 && age < 60)) continue // a phone's clock can be off; very old days are dropped
+    const c: Record<string, number> = {}
+    for (const [k, v] of Object.entries(x.c).slice(0, 80))
+      if (KEY.test(k) && Number.isInteger(v) && (v as number) >= 0) c[k] = Math.min(v as number, k === 'secs' ? 100_000 : 5000)
+    days.push({ d: x.d, c })
+  }
+  const dims: string[] = []
+  const add = (name: string, v: unknown, re: RegExp) => { if (typeof v === 'string' && re.test(v)) dims.push(`${name}.${v.toLowerCase()}`) }
+  add('app', body.app, /^[\w.-]{1,24}$/)
+  add('flavor', body.flavor, /^(full|lite|desktop)$/)
+  add('ui', body.ui, /^(en|es|fr|id|hi|ar)$/)
+  add('model', body.model, /^[a-z]{1,12}$/)
+  if (typeof body.online === 'boolean') dims.push(`online.${body.online ? 'on' : 'off'}`)
+  if (typeof body.mem === 'number' && body.mem > 0 && body.mem <= 64) dims.push(`mem.${body.mem}`)
+  if (Array.isArray(body.packs)) for (const p of body.packs.slice(0, 20)) add('pack', p, CODE)
+  return { days, dims }
+}
+async function addUsage(env: Env, report: NonNullable<ReturnType<typeof usageReport>>): Promise<void> {
+  if (!env.USAGE) return
+  for (const { d, c } of report.days) {
+    const key = `stats:${d}`
+    const s: Stats = ((await env.USAGE.get(key, 'json')) as Stats | null) ?? { reports: 0, c: {}, dims: {} }
+    s.reports++
+    for (const [k, v] of Object.entries(c)) s.c[k] = (s.c[k] ?? 0) + v
+    for (const k of report.dims) s.dims[k] = (s.dims[k] ?? 0) + 1
+    await env.USAGE.put(key, JSON.stringify(s))
+  }
+}
+
 // ------------------------------------------------------------------------------------------------------------ sign-in
 
 const b64url = (bytes: ArrayBuffer | Uint8Array): string =>
@@ -145,10 +202,18 @@ export default {
     const url = new URL(req.url)
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
     if (url.pathname === '/health') return json({ ok: true, model: env.MODEL, signIn: !!env.GOOGLE_CLIENT_ID })
-    if (req.method !== 'POST' || !['/v1/answer', '/v1/session'].includes(url.pathname)) return json({ error: 'not found' }, 404)
+    if (req.method !== 'POST' || !['/v1/answer', '/v1/session', '/v1/usage'].includes(url.pathname)) return json({ error: 'not found' }, 404)
     // the app's key: anyone who only found the address gets nothing
     if (env.APP_KEY && !same(req.headers.get('X-BTSM-Key') ?? '', env.APP_KEY)) return json({ error: 'unauthorized' }, 401)
-    if (limited(req.headers.get('CF-Connecting-IP') ?? 'unknown')) return json({ error: 'too many requests, wait a minute' }, 429)
+    const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
+    if (url.pathname === '/v1/usage') {
+      if (usageLimited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)
+      const report = usageReport(await req.json().catch(() => null))
+      if (!report) return json({ error: 'not a usage report' }, 400)
+      await addUsage(env, report)
+      return json({ ok: true, days: report.days.length })
+    }
+    if (limited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)
 
     let body: { question?: unknown; lang?: unknown; helps?: unknown; history?: unknown; idToken?: unknown }
     try {

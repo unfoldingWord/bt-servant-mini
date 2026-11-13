@@ -96,16 +96,22 @@
   #panel button.small { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; }
   #panel button.small.del { color: #b4432f; }
   #panel .about-link { margin-top: 14px; width: 100%; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 14.5px; text-align: start; padding: 8px 0; }
-  #about { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
-  #about .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; max-width: 520px; max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
-  #about h2 { font: 600 22px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 12px; }
-  #about p { margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
-  #about .meta { color: var(--muted); font-size: 13.5px; }
-  #about .setup h2 { font: 600 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin: 8px 0; }
-  #about .langs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  #about .langs button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 14px; }
-  #about .langs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  #about button.primary { width: 100%; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 12px; font: inherit; font-weight: 600; margin-top: 4px; }
+  #about, #safety { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #about .card, #safety .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; max-width: 520px; max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
+  #about h2, #safety h2 { font: 600 22px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 12px; }
+  #about p, #safety p { margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
+  #about .meta, #safety .meta { color: var(--muted); font-size: 13.5px; }
+  #about .setup h2, #safety .setup h2 { font: 600 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin: 8px 0; }
+  #about .langs, #safety .langs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  #about .langs button, #safety .langs button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 14px; }
+  #about .langs button.on, #safety .langs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #about button.primary, #safety button.primary { width: 100%; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 12px; font: inherit; font-weight: 600; margin-top: 4px; }
+  #safety { z-index: 11; }
+  #safety .choice { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+  #safety h3 { font: 600 15.5px/1.35 system-ui, sans-serif; margin: 0 0 6px; }
+  #safety .choice p { font-size: 14.5px; color: var(--muted); }
+  #safety button.primary:disabled { opacity: .45; }
+  #safety button.secondary { width: 100%; border: 0; background: transparent; color: var(--muted); padding: 12px; font: inherit; margin-top: 2px; }
   .ai { margin: 0 0 10px; }
   .ai.pending { color: var(--faint); font-style: italic; }
   .ai-badge { display: inline-block; font: 600 11px/1 system-ui, sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 8px 3px; margin-bottom: 8px; }
@@ -115,6 +121,7 @@
   details.sources > summary { font: 600 13px system-ui, sans-serif; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
   #panel .toggle { display: flex; gap: 10px; align-items: center; font-size: 14.5px; padding: 4px 0; }
   #panel .toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+  #panel pre.usage { white-space: pre-wrap; font-size: 11.5px; line-height: 1.35; max-height: 260px; overflow: auto; background: var(--card, rgba(255,255,255,.04)); border-radius: 10px; padding: 10px 12px; direction: ltr; text-align: left; }
   /* interactive passage (view.ts) */
   .study .tx { margin: 0 0 12px; }
   .study .tx-label { font: 600 11px/1.3 system-ui, sans-serif; letter-spacing: .6px; color: var(--accent); margin: 0 0 3px; }

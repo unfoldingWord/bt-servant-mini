@@ -14,7 +14,7 @@ export const onlineUrl = (): string => {
 }
 export const onlineAvailable = (): boolean => !!onlineUrl()
 /** The app's key for the online service: from the APK (Android bridge), or set by hand for desktop testing. */
-const onlineKey = (): string => {
+export const onlineKey = (): string => {
   try {
     return (window as any).Android?.onlineKey?.() || localStorage.getItem('btsm.onlineKey') || ''
   } catch {

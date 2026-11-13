@@ -3,7 +3,7 @@
 import { answerSheet, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, buildSheet, fold, type Slots } from './sheet'
-import { modelOff, modelReady, modelState, slotsOf } from './model'
+import { appVersion, isLite, modelOff, modelReady, modelState, slotsOf } from './model'
 import { aboutLabel, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
@@ -40,6 +40,8 @@ function plainSnippet(s: string): string {
     .trim()
 }
 import { md } from './md'
+import { askSafety, closeSafety, safetyAsked } from './safety'
+import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
 type UiText = {
@@ -282,7 +284,7 @@ function renderConv() {
   for (const m of c.msgs) log.appendChild(renderMsg(m))
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
-type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs'
+type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs' | 'usage'
 let panelView: PanelView = 'main'
 const MTS: Record<string, { language: string; on: string; off: string; none: string; installed: string; back: string }> = {
   en: { language: 'Language', on: 'On', off: 'Off', none: 'None', installed: 'installed', back: 'Back' },
@@ -364,6 +366,7 @@ function renderPanel() {
   if (onlineAvailable()) row(OT().label, onlineOn() && (!signInAvailable() || onlineSession()) ? MT().on : MT().off, go('online'))
   row(modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
   row(packsTitle(nav), `${INSTALLED.length} ${MT().installed}`, go('packs'))
+  row(UT().title, usageOn() ? MT().on : MT().off, go('usage'))
   const aboutRow = el('button', 'mrow') as HTMLButtonElement
   aboutRow.type = 'button'
   aboutRow.append(el('span', 'mrow-t', aboutLabel(nav)), el('span', 'mrow-c', '›'))
@@ -387,11 +390,12 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
     panelView = 'main'
     renderPanel()
   }
-  const titles = { language: MT().language, online: OT().label, model: modelTitle(nav), packs: packsTitle(nav) }
+  const titles = { language: MT().language, online: OT().label, model: modelTitle(nav), packs: packsTitle(nav), usage: UT().title }
   head.append(back, el('h2', '', titles[v]))
   panel.appendChild(head)
   if (v === 'language') renderLanguageView()
   else if (v === 'online') renderOnlineView()
+  else if (v === 'usage') renderUsageView()
   else if (v === 'model') panel.appendChild(modelSection(nav, () => {
     setReady()
     renderPanel()
@@ -435,6 +439,16 @@ function renderLanguageView() {
   panel.appendChild(hl)
 }
 
+/** Online AI on, after a Google sign-in when this build requires one: '' when it is on, else why not. */
+async function turnOnline(): Promise<string> {
+  if (signInAvailable() && !onlineSession()) {
+    const r = await signIn()
+    if (!r.ok) return r.error
+  }
+  setOnline(true)
+  return ''
+}
+
 function renderOnlineView() {
   {
     const lab = el('label', 'toggle') as HTMLLabelElement
@@ -444,20 +458,22 @@ function renderOnlineView() {
     const needsSignIn = signInAvailable()
     cb.checked = onlineOn() && (!needsSignIn || !!onlineSession())
     const status = el('p', 'note')
-    cb.onchange = async () => {
-      if (cb.checked && needsSignIn && !onlineSession()) {
-        cb.checked = false
-        cb.disabled = true
-        const r = await signIn()
-        cb.disabled = false
-        if (!r.ok) {
-          status.textContent = `${T.failed} ${r.error}`
-          return
-        }
-        cb.checked = true
+    cb.onchange = () => {
+      if (!cb.checked) {
+        setOnline(false)
+        renderPanel()
+        return
       }
-      setOnline(cb.checked)
-      renderPanel()
+      // turning it on asks first, with what it means for someone's safety
+      cb.checked = false
+      askSafety(nav, ['online'], async (a) => {
+        if (!a?.online) return
+        cb.disabled = true
+        const r = await turnOnline()
+        cb.disabled = false
+        if (r) status.textContent = `${T.failed} ${r}`
+        else renderPanel()
+      })
     }
     lab.append(cb, el('span', '', OT().toggle))
     panel.appendChild(lab)
@@ -475,9 +491,47 @@ function renderOnlineView() {
     panel.appendChild(status)
   }
 }
+const UT = () => USAGE_T[nav] ?? USAGE_T.en!
+/** Usage counts: the switch, what is sent, and the report itself as it will go out (nothing hidden). */
+function renderUsageView() {
+  const lab = el('label', 'toggle') as HTMLLabelElement
+  const cb = document.createElement('input')
+  cb.type = 'checkbox'
+  cb.checked = usageOn()
+  cb.onchange = () => {
+    if (!cb.checked) {
+      setUsageOn(false)
+      renderPanel()
+      return
+    }
+    cb.checked = false
+    askSafety(nav, ['usage'], (a) => {
+      if (!a?.usage) return
+      setUsageOn(true)
+      count('opens')
+      renderPanel()
+    })
+  }
+  lab.append(cb, el('span', '', UT().toggle))
+  panel.appendChild(lab)
+  panel.appendChild(el('p', 'note', UT().note))
+  if (!usageOn()) return
+  const report = pendingReport()
+  panel.appendChild(el('h3', '', UT().next))
+  if (!report.days.length) panel.appendChild(el('p', 'note', UT().empty))
+  panel.appendChild(el('pre', 'usage', JSON.stringify(report, null, 1)))
+  const t = todayCounts()
+  if (Object.keys(t).length) {
+    panel.appendChild(el('h3', '', UT().today))
+    panel.appendChild(el('pre', 'usage', JSON.stringify(t, null, 1)))
+  }
+  const sent = lastSent()
+  if (sent) panel.appendChild(el('p', 'note', UT().sent.replace('{d}', sent)))
+}
 const closePanel = () => panel.classList.remove('show')
 // Android's back button (MainActivity.onBackPressed): the bottom panel, then the About page, then the menu; else it leaves
 ;(window as any).__back = (): boolean => {
+  if (closeSafety()) return true
   if (backPanel()) return true
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
@@ -654,10 +708,13 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   log.appendChild(wait)
   wait.scrollIntoView({ block: 'end', behavior: 'smooth' })
   const t0 = performance.now()
+  let answered = 'other'
+  let qLang = ''
   let onlineCtx = '' // the passage's context for online AI (surrounding verses, introductions)
   let m: Msg
   try {
     let { sheet, ui, meta, q } = await make()
+    qLang = sheet.lang ?? ui
     setUiLang(ui)
     let others: { label: string; sheet: Sheet }[] = []
     let searched = ''
@@ -688,6 +745,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
           head: (k === 'note' ? HT().notes : HT().questions).replace('{w}', words),
           items: helps.filter((h) => h.kind === k).map((h) => ({ ...h, snippet: plainSnippet(h.snippet), ref: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}` })),
         })).filter((g) => g.items.length)
+        answered = 'search'
         m = { who: 'bot', intro: res.hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words), ui, follow,
           info: info || undefined, helps: groups.length ? groups : undefined,
           meta: `${T.details} · ${total} s\n${meta}${searched}${helps.length ? `\nhelps: ${helps.length}` : ''}` }
@@ -715,6 +773,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     // "Which John do you mean?": each article as a button
     for (const o of r.options ?? [])
       others.push({ label: o.title, sheet: { ...sheet, id: `f${Date.now()}`, intent: 'article', concept: o.id, candidates: null, term: null } })
+    answered = sheet.intent === 'passage' ? (/intro/.test(sheet.ref ?? '') ? 'intro' : 'passage') : sheet.intent
     const said = intro(sheet, facts, ui)
     const study = await studyOf(sheet).catch(() => null)
     const total = ((performance.now() - t0) / 1000).toFixed(1)
@@ -724,7 +783,13 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     if (sheet.ref && sheet.intent === 'passage') c.last = sheet
   } catch (err: any) {
     m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}` }
+    if (!err?.done) answered = 'failed'
   }
+  count('answers')
+  count(`kind.${answered}`)
+  if (qLang) count(`lang.${qLang}`)
+  if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
+  count('secs', Math.round((performance.now() - t0) / 1000))
   c.msgs.push(m)
   c.updated = Date.now()
   save()
@@ -746,6 +811,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     const found = `${m.intro ?? ''}\n\n${m.info ?? ''}`
     const helps = onlineCtx ? `${found.length > 5000 ? found.slice(0, 5000) + ' …' : found}\n\n# Context of the passage\n\n${onlineCtx}` : found
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history)
+    count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
     if (res) {
       m.ai = res
       save()
@@ -783,6 +849,8 @@ form.addEventListener('submit', (e) => {
   if (!q || busy) return
   input.value = ''
   const c = conv()
+  count('asked')
+  count(modelReady() && !modelOff() ? 'model.used' : 'model.none')
   respond(c, q, async () => {
     const { slots, raw, ms } = await slotsOf(q)
     const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
@@ -824,7 +892,35 @@ onPacksChanged(() => {
   refreshInstalled()
 })
 setReady()
-// first launch: what BT Servant Mini is (and, in the light build, getting the model)
+// usage counts (only if turned on): this opening, and the days that ended go out when there is internet
+setSnapshot(() => ({
+  app: appVersion(), flavor: (window as any).Android ? (isLite() ? 'lite' : 'full') : 'desktop', ui: nav, packs: INSTALLED,
+  model: modelOff() ? 'none' : modelReady() ? 'ready' : modelState().state, online: onlineOn(),
+  mem: (navigator as any).deviceMemory ?? null,
+}))
+count('opens')
+setTimeout(() => sendUsage(), 5000)
+window.addEventListener('online', () => sendUsage())
+// first launch: what BT Servant Mini is (and, in the light build, getting the model), then what may use the internet. An
+// install from before this question gets the question once, with its current settings marked.
+function firstSafety() {
+  if (safetyAsked() || document.querySelector('#safety, #about')) return
+  const stored = (k: string): boolean | null => {
+    const v = localStorage.getItem(k)
+    return v === '1' ? true : v === '0' ? false : null
+  }
+  askSafety(nav, onlineAvailable() ? ['online', 'usage'] : ['usage'], async (a) => {
+    if (!a) return
+    if (a.usage !== undefined) {
+      setUsageOn(a.usage)
+      if (a.usage) count('opens')
+    }
+    if (a.online === false) setOnline(false)
+    if (a.online) await turnOnline()
+    setReady()
+  }, { online: stored('btsm.online'), usage: stored('btsm.usage') })
+}
 try {
-  if (!localStorage.getItem('btsm.onboarded')) showAbout(nav, () => setReady())
+  if (!localStorage.getItem('btsm.onboarded')) showAbout(nav, () => { setReady(); firstSafety() })
+  else firstSafety()
 } catch {}
