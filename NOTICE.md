@@ -11,3 +11,9 @@ BT Servant Mini (alpha) ships these inside the APK:
   Academy) and their Gateway Language versions, CC BY-SA 4.0. Berean Standard Bible (BSB): public domain. Built from Door43
   resources by the unfoldingWord language-pack builder.
 - **noble-curves / noble-hashes** (Paul Miller), **pako**: MIT License (bundled through `language-pack-client`).
+
+Online AI (optional, off until the person turns it on; not inside the APK):
+
+- **Built with Llama.** Answers with online AI are written by Llama 3.3 70B Instruct (Meta) on Cloudflare Workers AI
+  (`worker/`). Llama 3.3 is licensed under the Llama 3.3 Community License, Copyright © Meta Platforms, Inc. All Rights
+  Reserved: https://www.llama.com/llama3_3/license/ (and its Acceptable Use Policy: https://www.llama.com/llama3_3/use-policy/).
