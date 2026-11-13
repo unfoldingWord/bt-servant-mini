@@ -12,3 +12,4 @@ worker/node_modules/
 worker/.wrangler/
 
 build.log
+worker/training-candidates*.jsonl

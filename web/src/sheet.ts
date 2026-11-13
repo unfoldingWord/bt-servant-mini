@@ -29,6 +29,12 @@ function normBook(s: string): string {
   s = s.replace(/\s+/g, ' ').trim().replace(/^(kitab |injil |le livre de |livre de |l'evangile selon |l'evangile de |evangile selon |evangile de |سفر |انجيل |رساله )/, '')
   return s.replace(/\s+/g, ' ').trim()
 }
+/** A book named exactly (any language's table), without guessing from a prefix or a misspelling: for scanning a sentence word by word. */
+export function bookExact(name: string): string | null {
+  const k = normBook(name)
+  for (const t of Object.values(books as Record<string, Record<string, string>>)) if (t[k]) return t[k]!
+  return null
+}
 export function bookCode(lang: string, name: string | null | undefined): string | null {
   if (!name) return null
   const k = normBook(name)

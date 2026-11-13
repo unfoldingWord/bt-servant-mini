@@ -2,12 +2,12 @@
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { answerSheet, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
-import { bookCode, buildSheet, fold, type Slots } from './sheet'
+import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { appVersion, isLite, modelOff, modelReady, modelState, slotsOf } from './model'
-import { aboutLabel, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
+import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
-import { asksIntro, chapterNumber, has, kindOf } from './commands'
+import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, asksAbout, keywords, resetSearch, searchHelps, searchVerses, versesOf } from './search'
 
 // headings of the notes and questions a free search finds, in the app's language
@@ -44,7 +44,7 @@ import { askSafety, closeSafety, safetyAsked } from './safety'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
+import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -54,7 +54,7 @@ const UI: Record<string, UiText> = {
   en: {
     ph: 'Ask about a verse or a word…', send: 'Send', loading: 'Starting the offline model…', ready: 'Works without internet',
     thinking: 'Looking in the translation helps…', failed: 'Something went wrong:', details: 'details',
-    hello: 'Hello! I answer from the translation helps installed on this phone (notes, words, questions, Academy), without internet. Ask in English, Spanish, French, Indonesian, Hindi or Arabic.',
+    hello: "Hello! On this phone I work as a search assistant, not a chat: I find what you need in the translation helps (Bible texts, notes, key terms, questions, Academy), without internet. Ask for a verse, a word or a topic. With online AI turned on and internet, a larger model also explains what I find.",
     ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'Where was Jonah swallowed by the fish?', 'What do the notes say about Ruth 1:16?'],
     chats: 'Conversations', newChat: 'New conversation', max: 'You can keep up to 3 conversations. Delete one to start another.',
     del: 'Delete', confirmDel: 'Delete this conversation?', untitled: 'New conversation',
@@ -63,7 +63,7 @@ const UI: Record<string, UiText> = {
   es: {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
     ready: 'Funciona sin internet', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
-    hello: '¡Hola! Respondo con las ayudas de traducción instaladas en este teléfono (notas, palabras, preguntas, Academia), sin internet. Pregunta en español, inglés, francés, indonesio, hindi o árabe.',
+    hello: "¡Hola! En este teléfono funciono como un buscador asistido, no como un chat: encuentro lo que necesitas en las ayudas de traducción (textos bíblicos, notas, palabras clave, preguntas, Academia), sin internet. Pide un versículo, una palabra o un tema. Con la IA en línea activada y con internet, un modelo más grande además explica lo que encuentro.",
     ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Dónde fue tragado Jonás por un pez?', '¿Qué dice Jonás 3:9?'],
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
     del: 'Borrar', confirmDel: '¿Borrar esta conversación?', untitled: 'Conversación nueva',
@@ -72,7 +72,7 @@ const UI: Record<string, UiText> = {
   fr: {
     ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Fonctionne sans internet',
     thinking: 'Je cherche dans les aides à la traduction…', failed: 'Une erreur est survenue :', details: 'détails',
-    hello: 'Bonjour ! Je réponds à partir des aides à la traduction installées sur ce téléphone, sans internet.',
+    hello: "Bonjour ! Sur ce téléphone, je fonctionne comme un assistant de recherche, pas comme une messagerie : je trouve ce dont vous avez besoin dans les aides à la traduction (textes bibliques, notes, termes clés, questions, Academy), sans internet. Demandez un verset, un mot ou un sujet. Avec l'IA en ligne activée et internet, un modèle plus grand explique aussi ce que je trouve.",
     ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?', 'Où Jonas a-t-il été avalé par le poisson ?'],
     chats: 'Conversations', newChat: 'Nouvelle conversation', max: "Vous pouvez garder 3 conversations. Supprimez-en une pour en commencer une autre.",
     del: 'Supprimer', confirmDel: 'Supprimer cette conversation ?', untitled: 'Nouvelle conversation',
@@ -81,7 +81,7 @@ const UI: Record<string, UiText> = {
   id: {
     ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Bisa tanpa internet',
     thinking: 'Mencari di bahan bantu penerjemahan…', failed: 'Terjadi kesalahan:', details: 'detail',
-    hello: 'Halo! Saya menjawab dari bahan bantu penerjemahan yang terpasang di ponsel ini, tanpa internet.',
+    hello: "Halo! Di ponsel ini saya bekerja sebagai asisten pencari, bukan obrolan: saya menemukan yang Anda perlukan di bahan bantu penerjemahan (teks Alkitab, catatan, istilah kunci, pertanyaan, Academy), tanpa internet. Mintalah sebuah ayat, kata, atau topik. Dengan AI daring aktif dan ada internet, model yang lebih besar juga menjelaskan apa yang saya temukan.",
     ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?', 'Di mana Yunus ditelan ikan?'],
     chats: 'Percakapan', newChat: 'Percakapan baru', max: 'Anda bisa menyimpan 3 percakapan. Hapus satu untuk memulai yang lain.',
     del: 'Hapus', confirmDel: 'Hapus percakapan ini?', untitled: 'Percakapan baru',
@@ -90,7 +90,7 @@ const UI: Record<string, UiText> = {
   hi: {
     ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'बिना इंटरनेट चलता है',
     thinking: 'अनुवाद सहायता में खोज रहा हूँ…', failed: 'कुछ गलत हो गया:', details: 'विवरण',
-    hello: 'नमस्ते! मैं इस फ़ोन पर स्थापित अनुवाद सहायता से, बिना इंटरनेट के, उत्तर देता हूँ।',
+    hello: "नमस्ते! इस फ़ोन पर मैं एक खोज सहायक की तरह काम करता हूँ, चैट की तरह नहीं: मैं अनुवाद सहायताओं (बाइबल पाठ, नोट्स, मुख्य शब्द, प्रश्न, Academy) में आपकी ज़रूरत की जानकारी ढूँढता हूँ, बिना इंटरनेट के। कोई पद, शब्द या विषय पूछें। ऑनलाइन AI चालू हो और इंटरनेट हो, तो एक बड़ा मॉडल मेरी ढूँढी हुई जानकारी को समझाता भी है।",
     ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?', 'योना को मछली ने कहाँ निगल लिया?'],
     chats: 'बातचीत', newChat: 'नई बातचीत', max: 'आप 3 बातचीत रख सकते हैं। नई शुरू करने के लिए एक हटाएँ।',
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
@@ -99,7 +99,7 @@ const UI: Record<string, UiText> = {
   ar: {
     ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'يعمل دون إنترنت',
     thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
-    hello: 'مرحبًا! أجيب من مساعدات الترجمة المثبتة على هذا الهاتف (الملاحظات والكلمات والأسئلة والأكاديمية)، دون إنترنت.',
+    hello: "مرحبًا! أعمل على هذا الهاتف كمساعد بحث، لا كمحادثة: أجد ما تحتاج إليه في مساعدات الترجمة (نصوص الكتاب المقدس، الملاحظات، المصطلحات الرئيسية، الأسئلة، الأكاديمية)، دون إنترنت. اطلب آية أو كلمة أو موضوعًا. وعند تفعيل الذكاء الاصطناعي عبر الإنترنت وتوفر الاتصال، يشرح نموذج أكبر أيضًا ما أجده.",
     ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'أين ابتلع الحوت يونان؟', 'ساعدني في ترجمة يونان ١'],
     chats: 'المحادثات', newChat: 'محادثة جديدة', max: 'يمكنك الاحتفاظ بثلاث محادثات. احذف واحدة لتبدأ أخرى.',
     del: 'حذف', confirmDel: 'حذف هذه المحادثة؟', untitled: 'محادثة جديدة',
@@ -147,9 +147,13 @@ type Msg = {
   helps?: { head: string; items: HelpItem[] }[]
   /** the person's thumbs on this answer, and whether they sent a report about it */
   rating?: 'up' | 'down'; reported?: boolean
+  /** nothing could be answered: a link to About, which says what the app can and cannot do */
+  limits?: boolean
 }
 type Hit = { book: string; ch: number; v: number }
-type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[] }
+type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[]
+  /** the last question asked (without its "reply in …"), to ask it again in another language ("repeat that in Indonesian") */
+  prevQ?: string }
 const KEY = 'btsm.conversations.v1'
 const MAX = 3
 let convs: Conv[] = []
@@ -224,6 +228,10 @@ function el(tag: string, cls: string, text?: string): HTMLElement {
   return d
 }
 
+const LIMITS: Record<string, string> = {
+  en: 'What this app can and cannot do ›', es: 'Lo que esta app puede y no puede hacer ›', fr: 'Ce que cette application peut et ne peut pas faire ›',
+  id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
+}
 function renderMsg(m: Msg): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
@@ -262,6 +270,13 @@ function renderMsg(m: Msg): HTMLElement {
       f.appendChild(b)
     }
     d.appendChild(f)
+  }
+  // could not answer: what the app can and cannot do is in About
+  if (m.limits) {
+    const a = el('button', 'about-link', LIMITS[m.ui ?? nav] ?? LIMITS.en!) as HTMLButtonElement
+    a.type = 'button'
+    a.onclick = () => showAbout(nav, () => setReady())
+    d.appendChild(a)
   }
   // thumbs up or down, and with a thumbs down a report (feedback.ts)
   if (m.info || m.intro || m.ai || m.text || m.helps) {
@@ -491,12 +506,62 @@ function renderLanguageView() {
 }
 
 /** Online AI on, after a Google sign-in when this build requires one: '' when it is on, else why not. */
+// ------------------------------------------------------------------------------------- online AI and the connection
+
+const NET: Record<string, { off: string; back: string; unreachable: string; close: string }> = {
+  en: {
+    off: 'No internet: online AI is paused. Answers now come from the phone: the helps themselves (Bible texts, notes, key terms, questions), without a written explanation. Online AI comes back with the connection.',
+    back: 'Internet is back: online AI is on again.', unreachable: 'Online AI did not answer this time; this answer is from the phone.', close: 'Close',
+  },
+  es: {
+    off: 'Sin internet: la IA en línea está en pausa. Las respuestas ahora salen del teléfono: las ayudas tal cual (textos bíblicos, notas, palabras clave, preguntas), sin una explicación escrita. La IA en línea vuelve con la conexión.',
+    back: 'Volvió internet: la IA en línea está activa otra vez.', unreachable: 'La IA en línea no respondió esta vez; esta respuesta es del teléfono.', close: 'Cerrar',
+  },
+  fr: {
+    off: "Pas d'internet : l'IA en ligne est en pause. Les réponses viennent maintenant du téléphone : les aides elles-mêmes (textes bibliques, notes, termes clés, questions), sans explication rédigée. L'IA en ligne revient avec la connexion.",
+    back: "Internet est revenu : l'IA en ligne est de nouveau active.", unreachable: "L'IA en ligne n'a pas répondu cette fois ; cette réponse vient du téléphone.", close: 'Fermer',
+  },
+  id: {
+    off: 'Tidak ada internet: AI daring dijeda. Jawaban sekarang berasal dari ponsel: bahan bantu apa adanya (teks Alkitab, catatan, istilah kunci, pertanyaan), tanpa penjelasan tertulis. AI daring kembali saat koneksi kembali.',
+    back: 'Internet kembali: AI daring aktif lagi.', unreachable: 'AI daring tidak menjawab kali ini; jawaban ini dari ponsel.', close: 'Tutup',
+  },
+  hi: {
+    off: 'इंटरनेट नहीं है: ऑनलाइन AI रुका हुआ है। अब उत्तर फ़ोन से आते हैं: सहायताएँ जैसी हैं वैसी (बाइबल पाठ, नोट्स, मुख्य शब्द, प्रश्न), बिना लिखी हुई व्याख्या के। कनेक्शन लौटने पर ऑनलाइन AI लौट आएगा।',
+    back: 'इंटरनेट लौट आया: ऑनलाइन AI फिर से चालू है।', unreachable: 'इस बार ऑनलाइन AI ने उत्तर नहीं दिया; यह उत्तर फ़ोन से है।', close: 'बंद करें',
+  },
+  ar: {
+    off: 'لا يوجد إنترنت: الذكاء الاصطناعي عبر الإنترنت متوقف مؤقتًا. تأتي الإجابات الآن من الهاتف: المساعدات كما هي (نصوص الكتاب المقدس، الملاحظات، المصطلحات الرئيسية، الأسئلة)، دون شرح مكتوب. يعود الذكاء الاصطناعي عبر الإنترنت مع عودة الاتصال.',
+    back: 'عاد الإنترنت: الذكاء الاصطناعي عبر الإنترنت يعمل من جديد.', unreachable: 'لم يُجب الذكاء الاصطناعي عبر الإنترنت هذه المرة؛ هذه الإجابة من الهاتف.', close: 'إغلاق',
+  },
+}
+const NT = () => NET[nav] ?? NET.en!
+let netTimer: ReturnType<typeof setTimeout> | null = null
+/** The note under the bar about online AI and the connection: 'off' (lost: what answers are now), 'back', or none. */
+function netNote(kind: 'off' | 'back' | null) {
+  document.querySelector('#netnote')?.remove()
+  if (netTimer) clearTimeout(netTimer)
+  if (!kind || !onlineOn() || !onlineAvailable()) return
+  const box = el('div', kind)
+  box.id = 'netnote'
+  box.setAttribute('role', 'status')
+  const x = el('button', 'x', '×') as HTMLButtonElement
+  x.type = 'button'
+  x.setAttribute('aria-label', NT().close)
+  x.onclick = () => box.remove()
+  box.append(el('span', '', NT()[kind]), x)
+  notice.after(box)
+  if (kind === 'back') netTimer = setTimeout(() => box.remove(), 6000)
+}
+window.addEventListener('offline', () => netNote('off'))
+window.addEventListener('online', () => { if (document.querySelector('#netnote.off')) netNote('back') })
+
 async function turnOnline(): Promise<string> {
   if (signInAvailable() && !onlineSession()) {
     const r = await signIn()
     if (!r.ok) return r.error
   }
   setOnline(true)
+  if (!isOnline()) netNote('off')
   return ''
 }
 
@@ -698,6 +763,43 @@ function guessLang(q: string): string {
 
 /** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
 /** "Introduction to Jonah", "Introducción a Jonás 1", "¿De qué trata el libro de Jonás?": the book or chapter asked about. */
+/** The book a question names, by its code ("Titus", "Yunus", "योना"), or null. */
+function bookIn(q: string, lang: string): string | null {
+  const words = q.replace(/[¿?!¡.,;:«»"“”؟]/g, ' ').split(/\s+/).filter(Boolean)
+  for (let i = 0; i < words.length; i++)
+    for (let k = 3; k >= 1; k--) {
+      const code = bookExact(words.slice(i, i + k).join(' '))
+      if (code) return code
+    }
+  return null
+}
+const HELP_T: Record<string, { intro: string; notes: string; terms: string; questions: string }> = {
+  en: { intro: "On this phone BT Servant Mini works as a search assistant, not a chat: it finds things in the translation helps instead of holding a conversation like BT Servant online (with online AI turned on, a larger model also explains them). This is what you can ask:", notes: 'notes', terms: 'key terms', questions: 'questions' },
+  es: { intro: "En este teléfono, BT Servant Mini funciona como un buscador asistido, no como un chat: encuentra cosas en las ayudas de traducción en lugar de conversar como BT Servant en línea (con la IA en línea activada, un modelo más grande además las explica). Esto es lo que puedes preguntar:", notes: 'notas', terms: 'palabras clave', questions: 'preguntas' },
+  fr: { intro: "Sur ce téléphone, BT Servant Mini fonctionne comme un assistant de recherche, pas comme une messagerie : il trouve des choses dans les aides à la traduction au lieu de converser comme BT Servant en ligne (avec l'IA en ligne activée, un modèle plus grand les explique aussi). Voici ce que vous pouvez demander :", notes: 'notes', terms: 'termes clés', questions: 'questions' },
+  id: { intro: "Di ponsel ini, BT Servant Mini bekerja sebagai asisten pencari, bukan obrolan: ia menemukan hal-hal di bahan bantu penerjemahan, bukan bercakap-cakap seperti BT Servant daring (dengan AI daring aktif, model yang lebih besar juga menjelaskannya). Inilah yang dapat Anda tanyakan:", notes: 'catatan', terms: 'istilah kunci', questions: 'pertanyaan' },
+  hi: { intro: "इस फ़ोन पर BT Servant Mini एक खोज सहायक की तरह काम करता है, चैट की तरह नहीं: यह अनुवाद सहायताओं में चीज़ें ढूँढता है, ऑनलाइन BT Servant की तरह बातचीत नहीं करता (ऑनलाइन AI चालू हो तो एक बड़ा मॉडल उन्हें समझाता भी है)। आप यह पूछ सकते हैं:", notes: 'नोट्स', terms: 'मुख्य शब्द', questions: 'प्रश्न' },
+  ar: { intro: "يعمل BT Servant Mini على هذا الهاتف كمساعد بحث، لا كمحادثة: يجد الأشياء في مساعدات الترجمة بدلًا من أن يحاورك مثل BT Servant عبر الإنترنت (وعند تفعيل الذكاء الاصطناعي عبر الإنترنت يشرحها نموذج أكبر أيضًا). هذا ما يمكنك أن تسأل عنه:", notes: 'ملاحظات', terms: 'المصطلحات الرئيسية', questions: 'أسئلة' },
+}
+/** "What can you do?": what to ask (from About), and for a book it names, buttons to its introduction, chapter 1, notes, key terms. */
+async function helpAnswer(q: string, ui: string): Promise<Msg> {
+  const t = HELP_T[ui] ?? HELP_T.en!
+  const follow: { label: string; sheet: Sheet }[] = []
+  const code = bookIn(q, ui)
+  if (code) {
+    const { sheet: probe } = await buildSheet('probe', { intent: 'unknown', lang: ui } as Slots, helpsLang)
+    const B = bookLabel(ui, code)
+    const go = (label: string, ref: string, what: string[]) => follow.push({ label, sheet: { ...bare(probe.lang), intent: 'passage', ref, what } })
+    go(`${B} intro`, `${code} front:intro`, ['intro'])
+    go(`${B} 1`, `${code} 1`, ['text', 'notes'])
+    go(`${B} 1:1 ${t.notes}`, `${code} 1:1`, ['notes'])
+    go(`${B} 1 ${t.terms}`, `${code} 1`, ['terms'])
+    go(`${B} 1 ${t.questions}`, `${code} 1`, ['questions'])
+  }
+  return { who: 'bot', intro: t.intro, info: whatYouCanAsk(ui), ui, follow, limits: true, meta: `${T.details}
+(help: what you can ask)` }
+}
+
 function introAsked(q: string, lang: string): Slots | null {
   if (!asksIntro(q)) return null
   const t = q.replace(/[¿?!¡.,;:«»"“”؟]/g, ' ').replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
@@ -714,8 +816,13 @@ function introAsked(q: string, lang: string): Slots | null {
 }
 
 function refInText(slots: Slots, q: string): Slots {
-  if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter) return slots
-  const t = q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter)
+    return !slots.intent || slots.intent === 'unknown' ? { ...slots, intent: 'passage', what: kindOf(q) ?? slots.what ?? [] } : slots
+  const ch = pattern('chapter').source
+  const t = q
+    .replace(new RegExp(`${ch}\\s*(\\d+)\\s+(?:of|de|del|du|dari|का|من)\\s+((?:[123]\\s*)?[\\p{L}][\\p{L}\\p{M}]+)`, 'iu'), '$2 $1')
+    .replace(new RegExp(`\\s+${ch}\\s*(\\d+)`, 'iu'), ' $1')
+    .replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
   const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/u.exec(t)
   if (!m) return slots
   const words = m[1]!.trim().split(/\s+/)
@@ -726,7 +833,7 @@ function refInText(slots: Slots, q: string): Slots {
     code = bookCode(slots.lang ?? nav, name)
   }
   if (!code) return slots
-  const what = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions'] : slots.what ?? []
+  const what = kindOf(q) ?? slots.what ?? []
   return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
 }
 
@@ -779,6 +886,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   log.appendChild(wait)
   wait.scrollIntoView({ block: 'end', behavior: 'smooth' })
   const t0 = performance.now()
+  if (!isOnline() && !document.querySelector('#netnote')) netNote('off')
   let answered = 'other'
   let qLang = ''
   let onlineCtx = '' // the passage's context for online AI (surrounding verses, introductions)
@@ -860,6 +968,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   count(`kind.${answered}`)
   if (qLang) count(`lang.${qLang}`)
   if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
+  if (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length)) m.limits = true
   count('secs', Math.round((performance.now() - t0) / 1000))
   c.msgs.push(m)
   c.updated = Date.now()
@@ -870,7 +979,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   busy = false
   setReady()
   // level 3: the online answer, if allowed and there is internet; the offline answer already stands
-  if (m.who === 'bot' && (m.info || m.intro) && onlineOn() && onlineAvailable() && navigator.onLine) {
+  if (m.who === 'bot' && (m.info || m.intro) && onlineOn() && onlineAvailable() && isOnline()) {
     const writing = el('p', 'ai pending', OT().writing)
     node.prepend(writing)
     const history: Turn[] = []
@@ -892,7 +1001,8 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     } else if (onlineProblem) {
       // say why there is no online answer this time; the phone's answer stands
       writing.classList.remove('pending')
-      writing.textContent = onlineProblem === 'signin' ? OT().relogin : OT().limit
+      writing.textContent = onlineProblem === 'signin' ? OT().relogin : onlineProblem === 'limit' ? OT().limit : NT().unreachable
+      if (onlineProblem === 'network' && !isOnline()) netNote('off')
     } else writing.remove()
   }
 }
@@ -916,13 +1026,22 @@ function runSheet(label: string, sheet: Sheet, ui: string) {
 
 form.addEventListener('submit', (e) => {
   e.preventDefault()
-  const q = input.value.trim()
-  if (!q || busy) return
+  const q0 = input.value.trim()
+  if (!q0 || busy) return
+  // "… Reply in Indonesian": the answer in that language; the rest of the question is read as usual
+  const target = replyLang(q0)
+  let q = target ? withoutReply(q0) || q0 : q0
+  // "Repeat your last answer in Indonesian": the last question again, answered in that language
+  const prevC = conv()
+  if (target && prevC.prevQ && (has('again', q) || !keywords(q).length)) q = prevC.prevQ
+  else prevC.prevQ = q
   input.value = ''
   const c = conv()
   count('asked')
   count(modelReady() && !modelOff() ? 'model.used' : 'model.none')
-  respond(c, q, async () => {
+  respond(c, q0, async () => {
+    // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
+    if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
     const { slots, raw, ms } = await slotsOf(q)
     const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
     // the script says the language even when the model does not know it: Arabic letters, Devanagari
@@ -930,15 +1049,17 @@ form.addEventListener('submit', (e) => {
     else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
     // a command word next to a reference ("Jonás 1:3 notas") says what to show, with or without a model
     const shown = kindOf(q)
-    if (shown && s0.book && s0.chapter && !(s0.what ?? []).length) Object.assign(s0, { intent: 'passage', what: shown })
+    if (shown && s0.book && s0.chapter && !(s0.what ?? []).includes(shown[0]!)) Object.assign(s0, { intent: 'passage', what: shown })
     const picked = pickFound(q, s0, c)
     if (picked) {
       const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? nav), helpsLang)
       return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
     }
     const asked = introAsked(q, s0.lang ?? nav)
-    const s = asked ? { ...asked, lang: s0.lang ?? nav } : withContext(s0, c.last, q)
-    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, helpsLang)
+    let s = asked ? { ...asked, lang: s0.lang ?? nav } : withContext(s0, c.last, q)
+    // asked in one language, wanted in another: the book by its code, then the other language's pack and words
+    if (target) s = { ...s, book: s.book ? bookCode(s.lang ?? nav, s.book) ?? s.book : s.book, lang: target }
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : helpsLang)
     return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
   })
 })
@@ -976,6 +1097,7 @@ count('opens')
 setTimeout(() => sendUsage(), 5000)
 window.addEventListener('online', () => { sendUsage(); sendFeedback() })
 setTimeout(() => sendFeedback(), 6000)
+if (!isOnline()) netNote('off')
 // first launch: what BT Servant Mini is (and, in the light build, getting the model), then what may use the internet. An
 // install from before this question gets the question once, with its current settings marked.
 function firstSafety() {

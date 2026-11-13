@@ -14,7 +14,7 @@ const STR: Record<string, S> = {
   en: {
     about: 'About BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      "BT Servant Mini is BT Servant on your phone, **without internet**. It answers from the unfoldingWord translation helps kept on the phone: literal and simplified Bible texts, translation notes, comprehension questions, key terms (Translation Words) and Translation Academy.",
+      "BT Servant Mini is BT Servant on your phone, **without internet**. It answers from the unfoldingWord translation helps kept on the phone: literal and simplified Bible texts, translation notes, comprehension questions, key terms (Translation Words) and Translation Academy. On the phone it works as a search assistant, not a chat: it finds what you need in the helps and shows it, rather than holding a conversation like BT Servant. With online AI turned on and internet, a larger model also writes an explanation from what it found, closer to BT Servant, though still one answer at a time.",
       "**What you can ask**\n• A verse or a chapter (Ruth 1:1, Jonah 1): the texts with their notes. Tap a word to see the notes and key terms about it.\n• A word or a name (grace, John the Baptist): its article and the verses that mention it.\n• A free question about a story (Where was Jonah swallowed by the fish?) or just a few words (Jonah fish): the verses that tell it.\n• For help translating (help me translate Jonah 1:3): the notes and the simpler version.",
       "**Short commands (they work even without the model)**\nJonah 1:3 · Jonah 1:3 notes · Jonah 1:3 questions · Jonah intro · Jonah 2 intro · grace · Jonah fish",
       "**Links and follow-ups.** Links in notes and articles open in a panel at the bottom; a Bible reference is asked in the chat. Buttons under each answer go on from there (notes, questions, next verse).",
@@ -33,7 +33,7 @@ const STR: Record<string, S> = {
   es: {
     about: 'Acerca de BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      "BT Servant Mini es BT Servant en tu teléfono, **sin internet**. Responde con las ayudas de traducción de unfoldingWord guardadas en el teléfono: textos bíblicos literal y simplificado, notas de traducción, preguntas de comprensión, palabras clave (Palabras de Traducción) y Translation Academy.",
+      "BT Servant Mini es BT Servant en tu teléfono, **sin internet**. Responde con las ayudas de traducción de unfoldingWord guardadas en el teléfono: textos bíblicos literal y simplificado, notas de traducción, preguntas de comprensión, palabras clave (Palabras de Traducción) y Translation Academy. En el teléfono funciona como un buscador asistido, no como un chat: encuentra en las ayudas lo que necesitas y te lo muestra, en lugar de conversar como BT Servant. Con la IA en línea activada y con internet, un modelo más grande además escribe una explicación a partir de lo encontrado, más parecido a BT Servant, aunque todavía una respuesta a la vez.",
       "**Qué puedes preguntar**\n• Un versículo o un capítulo (Rut 1:1, Jonás 1): los textos con sus notas. Toca una palabra para ver las notas y palabras clave que hablan de ella.\n• Una palabra o un nombre (gracia, Juan el Bautista): su artículo y los versículos que lo mencionan.\n• Una pregunta libre sobre una historia (¿Dónde fue tragado Jonás por un pez?) o solo unas palabras (Jonás pez): los versículos que la cuentan.\n• Ayuda para traducir (ayúdame a traducir Jonás 1:3): las notas y la versión más sencilla.",
       "**Comandos cortos (funcionan incluso sin el modelo)**\nJonás 1:3 · Jonás 1:3 notas · Jonás 1:3 preguntas · Jonás intro · Jonás 2 intro · gracia · Jonás pez",
       "**Enlaces y seguimiento.** Los enlaces de notas y artículos se abren en un panel abajo; una referencia bíblica se pregunta en el chat. Los botones bajo cada respuesta siguen desde ahí (notas, preguntas, versículo siguiente).",
@@ -52,7 +52,7 @@ const STR: Record<string, S> = {
   fr: {
     about: 'À propos de BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      "BT Servant Mini, c'est BT Servant sur votre téléphone, **sans internet**. Il répond avec les aides à la traduction d'unfoldingWord gardées sur le téléphone : textes bibliques littéral et simplifié, notes de traduction, questions de compréhension, termes clés (Translation Words) et Translation Academy.",
+      "BT Servant Mini, c'est BT Servant sur votre téléphone, **sans internet**. Il répond avec les aides à la traduction d'unfoldingWord gardées sur le téléphone : textes bibliques littéral et simplifié, notes de traduction, questions de compréhension, termes clés (Translation Words) et Translation Academy. Sur le téléphone, il fonctionne comme un assistant de recherche, pas comme une messagerie : il trouve dans les aides ce dont vous avez besoin et vous le montre, au lieu de converser comme BT Servant. Avec l'IA en ligne activée et internet, un modèle plus grand rédige aussi une explication à partir de ce qui a été trouvé, plus proche de BT Servant, mais toujours une réponse à la fois.",
       "**Ce que vous pouvez demander**\n• Un verset ou un chapitre (Ruth 1:1, Jonas 1) : les textes avec leurs notes. Touchez un mot pour voir les notes et les termes clés qui en parlent.\n• Un mot ou un nom (grâce, Jean-Baptiste) : son article et les versets qui le mentionnent.\n• Une question libre sur un récit (Où Jonas a-t-il été avalé par le poisson ?) ou quelques mots (Jonas poisson) : les versets qui le racontent.\n• De l'aide pour traduire (aide-moi à traduire Jonas 1:3) : les notes et la version simplifiée.",
       "**Commandes courtes (elles marchent même sans le modèle)**\nJonas 1:3 · Jonas 1:3 notes · Jonas 1:3 questions · Jonas intro · Jonas 2 intro · grâce · Jonas poisson",
       "**Liens et suite.** Les liens des notes et des articles s'ouvrent dans un panneau en bas ; une référence biblique est demandée dans le chat. Les boutons sous chaque réponse continuent à partir de là (notes, questions, verset suivant).",
@@ -71,7 +71,7 @@ const STR: Record<string, S> = {
   id: {
     about: 'Tentang BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      "BT Servant Mini adalah BT Servant di ponsel Anda, **tanpa internet**. Ia menjawab dari alat bantu penerjemahan unfoldingWord yang tersimpan di ponsel: teks Alkitab harfiah dan sederhana, catatan terjemahan, pertanyaan pemahaman, istilah kunci (Translation Words) dan Translation Academy.",
+      "BT Servant Mini adalah BT Servant di ponsel Anda, **tanpa internet**. Ia menjawab dari alat bantu penerjemahan unfoldingWord yang tersimpan di ponsel: teks Alkitab harfiah dan sederhana, catatan terjemahan, pertanyaan pemahaman, istilah kunci (Translation Words) dan Translation Academy. Di ponsel, aplikasi ini bekerja sebagai asisten pencari, bukan obrolan: ia menemukan apa yang Anda perlukan di bahan bantu dan menampilkannya, bukan bercakap-cakap seperti BT Servant. Dengan AI daring aktif dan ada internet, model yang lebih besar juga menulis penjelasan dari apa yang ditemukan, lebih mirip BT Servant, meski tetap satu jawaban setiap kali.",
       "**Yang bisa Anda tanyakan**\n• Sebuah ayat atau pasal (Rut 1:1, Yunus 1): teks-teksnya dengan catatannya. Ketuk sebuah kata untuk melihat catatan dan istilah kunci tentang kata itu.\n• Sebuah kata atau nama (anugerah, Yohanes Pembaptis): artikelnya dan ayat-ayat yang menyebutnya.\n• Pertanyaan bebas tentang sebuah kisah (Di mana Yunus ditelan ikan?) atau beberapa kata (Yunus ikan): ayat-ayat yang menceritakannya.\n• Bantuan menerjemahkan (bantu saya menerjemahkan Yunus 1:3): catatan dan versi yang lebih sederhana.",
       "**Perintah singkat (tetap bekerja tanpa model)**\nYunus 1:3 · Yunus 1:3 catatan · Yunus 1:3 pertanyaan · Yunus intro · Yunus 2 intro · kasih karunia · Yunus ikan",
       "**Tautan dan lanjutan.** Tautan di catatan dan artikel terbuka di panel bawah; rujukan Alkitab ditanyakan di obrolan. Tombol di bawah setiap jawaban melanjutkan dari sana (catatan, pertanyaan, ayat berikutnya).",
@@ -90,7 +90,7 @@ const STR: Record<string, S> = {
   hi: {
     about: 'BT Servant Mini के बारे में', title: 'BT Servant Mini',
     body: [
-      "BT Servant Mini आपके फ़ोन पर BT Servant है, **बिना इंटरनेट के**। यह फ़ोन में रखे unfoldingWord के अनुवाद सहायक संसाधनों से उत्तर देता है: शाब्दिक और सरल बाइबल पाठ, अनुवाद नोट्स, समझ के प्रश्न, मुख्य शब्द (Translation Words) और Translation Academy।",
+      "BT Servant Mini आपके फ़ोन पर BT Servant है, **बिना इंटरनेट के**। यह फ़ोन में रखे unfoldingWord के अनुवाद सहायक संसाधनों से उत्तर देता है: शाब्दिक और सरल बाइबल पाठ, अनुवाद नोट्स, समझ के प्रश्न, मुख्य शब्द (Translation Words) और Translation Academy। फ़ोन पर यह एक खोज सहायक की तरह काम करता है, चैट की तरह नहीं: यह सहायताओं में से आपकी ज़रूरत की जानकारी ढूँढकर दिखाता है, BT Servant की तरह बातचीत नहीं करता। ऑनलाइन AI चालू हो और इंटरनेट हो, तो एक बड़ा मॉडल मिली हुई जानकारी से एक व्याख्या भी लिखता है, जो BT Servant के अधिक निकट है, फिर भी एक बार में एक उत्तर।",
       "**आप क्या पूछ सकते हैं**\n• कोई पद या अध्याय (रूत 1:1, योना 1): पाठ और उनके नोट्स। किसी शब्द को छूकर उसके नोट्स और मुख्य शब्द देखें।\n• कोई शब्द या नाम (अनुग्रह, यूहन्ना): उसका लेख और वे पद जिनमें उसका उल्लेख है।\n• किसी कहानी के बारे में खुला प्रश्न (योना को मछली ने कहाँ निगल लिया?): वे पद जो उसे बताते हैं, केवल कोई मुख्य शब्द या संदर्भ नहीं।\n• अनुवाद में सहायता (योना 1:3 का अनुवाद करने में मदद करें): नोट्स और सरल संस्करण।",
       "**छोटे आदेश (मॉडल के बिना भी चलते हैं)**\nयोना 1:3 · योना 1:3 नोट्स · योना 1:3 प्रश्न · योना intro · योना 2 intro · अनुग्रह · योना मछली",
       "**लिंक और आगे।** नोट्स और लेखों के लिंक नीचे एक पैनल में खुलते हैं; बाइबल संदर्भ चैट में पूछा जाता है। हर उत्तर के नीचे के बटन वहीं से आगे ले जाते हैं (नोट्स, प्रश्न, अगला पद)।",
@@ -109,7 +109,7 @@ const STR: Record<string, S> = {
   ar: {
     about: 'حول BT Servant Mini', title: 'BT Servant Mini',
     body: [
-      "BT Servant Mini هو BT Servant على هاتفك، **دون إنترنت**. يجيب من أدوات الترجمة المساعدة من unfoldingWord المحفوظة على الهاتف: نصوص الكتاب المقدس الحرفية والمبسّطة، وملاحظات الترجمة، وأسئلة الفهم، والكلمات الرئيسية (Translation Words) وTranslation Academy.",
+      "BT Servant Mini هو BT Servant على هاتفك، **دون إنترنت**. يجيب من أدوات الترجمة المساعدة من unfoldingWord المحفوظة على الهاتف: نصوص الكتاب المقدس الحرفية والمبسّطة، وملاحظات الترجمة، وأسئلة الفهم، والكلمات الرئيسية (Translation Words) وTranslation Academy. يعمل على الهاتف كمساعد بحث، لا كمحادثة: يجد ما تحتاج إليه في المساعدات ويعرضه لك، بدلًا من أن يحاورك مثل BT Servant. وعند تفعيل الذكاء الاصطناعي عبر الإنترنت وتوفر الاتصال، يكتب نموذج أكبر أيضًا شرحًا مما وُجد، أقرب إلى BT Servant، لكنه لا يزال إجابة واحدة في كل مرة.",
       "**ماذا يمكنك أن تسأل**\n• آية أو أصحاح (راعوث 1: 1، يونان 1): النصوص مع ملاحظاتها. المس كلمة لترى الملاحظات والكلمات الرئيسية عنها.\n• كلمة أو اسم (نعمة، يوحنا): مقالته والآيات التي تذكره.\n• سؤال حرّ عن قصة (أين ابتلع الحوت يونان؟): الآيات التي ترويها، لا مجرد كلمة رئيسية أو شاهد.\n• مساعدة في الترجمة (ساعدني في ترجمة يونان 1: 3): الملاحظات والترجمة الأبسط.",
       "**أوامر قصيرة (تعمل حتى من دون النموذج)**\nيونان 1:3 · يونان 1:3 ملاحظات · يونان 1:3 أسئلة · يونان intro · يونان 2 intro · نعمة · يونان حوت",
       "**الروابط والمتابعة.** تُفتح روابط الملاحظات والمقالات في لوحة أسفل الشاشة؛ ويُسأل عن الشاهد الكتابي في المحادثة. والأزرار تحت كل إجابة تتابع من هناك (ملاحظات، أسئلة، الآية التالية).",
@@ -291,6 +291,8 @@ export function showAbout(lang: string, refresh: () => void) {
   document.body.appendChild(wrap)
 }
 export const aboutLabel = (lang: string) => str(lang).about
+/** About's "What you can ask" and "Short commands", for an answer to "what can you do?". */
+export const whatYouCanAsk = (lang: string): string => str(lang).body.slice(1, 3).join('\n\n')
 /** The names of the model and languages views of the menu. */
 export const modelTitle = (lang: string) => str(lang).model
 export const packsTitle = (lang: string) => str(lang).langs

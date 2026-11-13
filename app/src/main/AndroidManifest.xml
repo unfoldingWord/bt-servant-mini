@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Only for the local model server on 127.0.0.1; the app never goes online. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- To tell the page when the connection comes and goes (WebView does not update navigator.onLine by itself). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:label="BT Servant Mini"
         android:icon="@mipmap/ic_launcher"

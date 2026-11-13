@@ -13,6 +13,14 @@ export const onlineUrl = (): string => {
   }
 }
 export const onlineAvailable = (): boolean => !!onlineUrl()
+/** Whether the phone has a connection now. On Android, from the app (WebView keeps navigator.onLine true without one). */
+export function isOnline(): boolean {
+  try {
+    const b = (window as any).Android
+    if (b?.online) return !!b.online()
+  } catch {}
+  return navigator.onLine
+}
 /** The app's key for the online service: from the APK (Android bridge), or set by hand for desktop testing. */
 export const onlineKey = (): string => {
   try {
@@ -37,7 +45,7 @@ export function setOnline(on: boolean) {
 export type Turn = { role: 'user' | 'assistant'; text: string }
 /** The online answer, or null when it cannot be had (off, no internet, server error, more than 45 s). */
 export async function onlineAnswer(question: string, lang: string, helps: string, history: Turn[]): Promise<{ text: string; model: string } | null> {
-  if (!onlineOn() || !onlineAvailable() || !navigator.onLine) return null
+  if (!onlineOn() || !onlineAvailable() || !isOnline()) return null
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 45000) // with the passage context an answer can take 20-30 s
   try {
@@ -60,10 +68,14 @@ export async function onlineAnswer(question: string, lang: string, helps: string
       onlineProblem = 'limit'
       return null
     }
-    if (!r.ok) return null
+    if (!r.ok) {
+      onlineProblem = 'network'
+      return null
+    }
     const j = await r.json()
     return typeof j.text === 'string' && j.text.trim() ? { text: j.text.trim(), model: String(j.model ?? '') } : null
   } catch {
+    onlineProblem = 'network' // no connection, the service down, or more than 45 s
     return null
   } finally {
     clearTimeout(timer)
@@ -125,4 +137,4 @@ export async function signIn(): Promise<{ ok: true; name: string } | { ok: false
   }
 }
 /** Why the last online answer did not come: '' (none, or no internet), 'signin' (the session ended), 'limit' (daily cap). */
-export let onlineProblem: '' | 'signin' | 'limit' = ''
+export let onlineProblem: '' | 'signin' | 'limit' | 'network' = ''

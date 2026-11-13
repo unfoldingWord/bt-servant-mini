@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.view.WindowManager;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -112,6 +114,7 @@ public class MainActivity extends Activity {
             }
         });
         web.addJavascriptInterface(new Bridge(), "Android");
+        watchNetwork();
         final android.widget.FrameLayout root = new android.widget.FrameLayout(this);
         root.addView(web);
         setContentView(root);
@@ -342,6 +345,35 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ------------------------------------------------------------------------------------------------ the connection
+
+    /** Whether the phone has a connection now (the page asks through Android.online()). */
+    private boolean hasNetwork() {
+        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        return cm == null || cm.getActiveNetwork() != null;
+    }
+
+    /**
+     * Tells the page when the connection comes and goes: an "online" or "offline" event on its window. WebView keeps
+     * navigator.onLine true without a connection, so the page asks Android.online() instead.
+     */
+    private void watchNetwork() {
+        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        if (cm == null) return;
+        cm.registerDefaultNetworkCallback(new ConnectivityManager.NetworkCallback() {
+            @Override public void onAvailable(Network n) { tell(true); }
+            @Override public void onLost(Network n) { tell(hasNetwork()); }
+        });
+    }
+    private Boolean told = null;
+    private void tell(boolean up) {
+        runOnUiThread(() -> {
+            if (told != null && told == up) return;
+            told = up;
+            web.evaluateJavascript("window.dispatchEvent(new Event('" + (up ? "online" : "offline") + "'))", null);
+        });
+    }
+
     // ------------------------------------------------------------------------------------------------- discreet mode
 
     private boolean isDiscreet() { return getSharedPreferences("btsm", MODE_PRIVATE).getBoolean("discreet", false); }
@@ -365,6 +397,9 @@ public class MainActivity extends Activity {
     }
 
     private class Bridge {
+        @JavascriptInterface
+        public boolean online() { return hasNetwork(); }
+
         @JavascriptInterface
         public boolean discreet() { return isDiscreet(); }
 

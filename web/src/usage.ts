@@ -2,7 +2,7 @@
 // questions, of what kind, in which language, how many found nothing) and, once a day has ended and there is internet,
 // sends those totals to BT Servant Mini's online service, with the app version, the languages on the phone and its memory
 // class. Never the text of a question, never an id of the phone or the person. Turning it off deletes what is waiting.
-import { onlineKey, onlineUrl } from './online'
+import { isOnline, onlineKey, onlineUrl } from './online'
 
 const ON = 'btsm.usage'
 const DAYS = 'btsm.usage.days'
@@ -82,7 +82,7 @@ export function lastSent(): string | null {
 let sending = false
 /** Sends the days that have ended, when the counts are on and there is internet; they are deleted once the service has them. */
 export async function sendUsage(): Promise<boolean> {
-  if (sending || !usageOn() || !navigator.onLine || !onlineUrl()) return false
+  if (sending || !usageOn() || !isOnline() || !onlineUrl()) return false
   const report = pendingReport()
   if (!report.days.length) return false
   sending = true

@@ -2,7 +2,7 @@
 // comment, and, if the person leaves it checked, the conversation up to that answer). The report shows exactly what will be
 // sent, waits on the phone until there is internet, and goes to BT Servant Mini's online service (POST /v1/feedback).
 // Nothing identifies the person or the phone. A thumb alone stays on the phone (it only adds to the usage counts, if on).
-import { onlineKey, onlineUrl } from './online'
+import { isOnline, onlineKey, onlineUrl } from './online'
 import { appSnapshot } from './usage'
 
 const QUEUE = 'btsm.feedback.queue'
@@ -26,42 +26,42 @@ const T: Record<string, F> = {
     good: 'Good answer', bad: 'Not what I expected', title: 'Report this answer',
     reasons: { understood: 'It did not understand my question', wrong: 'Wrong passage, word or article', missing: 'Something is missing', language: 'Wrong language', error: 'An error, or nothing came', slow: 'Too slow', other: 'Something else' },
     comment: 'What did you expect? (optional)', include: 'Include the conversation up to this answer', preview: 'What will be sent',
-    note: 'The report goes to the BT Servant Mini team, on a server of unfoldingWord, with the app version and its languages; nothing that identifies you or this phone. Do not send it if, where you are, it is risky to be known as a Bible translator, or if the conversation has something private.',
+    note: 'The report goes to the BT Servant Mini team, on a server of unfoldingWord, with the app version and its languages; nothing that identifies you or this phone. It helps fix the app and may be used to train its model; questions are reviewed and cleaned of anything personal first. Do not send it if, where you are, it is risky to be known as a Bible translator, or if the conversation has something private.',
     send: 'Send', cancel: 'Cancel', sent: 'Report sent. Thank you.', queued: 'Saved: it will be sent when there is internet.', reported: 'Reported', failed: 'It could not be sent; it will be tried again.',
   },
   es: {
     good: 'Buena respuesta', bad: 'No es lo que esperaba', title: 'Reportar esta respuesta',
     reasons: { understood: 'No entendió mi pregunta', wrong: 'Pasaje, palabra o artículo equivocado', missing: 'Falta algo', language: 'Idioma equivocado', error: 'Un error, o no llegó nada', slow: 'Demasiado lento', other: 'Otra cosa' },
     comment: '¿Qué esperabas? (opcional)', include: 'Incluir la conversación hasta esta respuesta', preview: 'Lo que se enviará',
-    note: 'El reporte va al equipo de BT Servant Mini, a un servidor de unfoldingWord, con la versión de la app y sus idiomas; nada que te identifique a ti o a este teléfono. No lo envíes si en tu lugar es riesgoso que se sepa que traduces la Biblia, o si la conversación tiene algo privado.',
+    note: 'El reporte va al equipo de BT Servant Mini, a un servidor de unfoldingWord, con la versión de la app y sus idiomas; nada que te identifique a ti o a este teléfono. Sirve para corregir la app y puede usarse para entrenar su modelo; antes se revisan las preguntas y se les quita cualquier dato personal. No lo envíes si en tu lugar es riesgoso que se sepa que traduces la Biblia, o si la conversación tiene algo privado.',
     send: 'Enviar', cancel: 'Cancelar', sent: 'Reporte enviado. Gracias.', queued: 'Guardado: se enviará cuando haya internet.', reported: 'Reportada', failed: 'No se pudo enviar; se intentará de nuevo.',
   },
   fr: {
     good: 'Bonne réponse', bad: 'Pas ce que j\'attendais', title: 'Signaler cette réponse',
     reasons: { understood: 'Il n\'a pas compris ma question', wrong: 'Mauvais passage, mot ou article', missing: 'Il manque quelque chose', language: 'Mauvaise langue', error: 'Une erreur, ou rien n\'est venu', slow: 'Trop lent', other: 'Autre chose' },
     comment: 'Qu\'attendiez-vous ? (facultatif)', include: 'Inclure la conversation jusqu\'à cette réponse', preview: 'Ce qui sera envoyé',
-    note: 'Le signalement va à l\'équipe de BT Servant Mini, sur un serveur d\'unfoldingWord, avec la version de l\'application et ses langues ; rien qui vous identifie, vous ou ce téléphone. Ne l\'envoyez pas si, là où vous êtes, il est risqué d\'être connu comme traducteur de la Bible, ou si la conversation contient quelque chose de privé.',
+    note: 'Le signalement va à l\'équipe de BT Servant Mini, sur un serveur d\'unfoldingWord, avec la version de l\'application et ses langues ; rien qui vous identifie, vous ou ce téléphone. Il sert à corriger l\'application et peut servir à entraîner son modèle ; les questions sont d\'abord relues et débarrassées de tout élément personnel. Ne l\'envoyez pas si, là où vous êtes, il est risqué d\'être connu comme traducteur de la Bible, ou si la conversation contient quelque chose de privé.',
     send: 'Envoyer', cancel: 'Annuler', sent: 'Signalement envoyé. Merci.', queued: 'Enregistré : il sera envoyé quand il y aura internet.', reported: 'Signalée', failed: 'L\'envoi a échoué ; il sera réessayé.',
   },
   id: {
     good: 'Jawaban yang baik', bad: 'Bukan yang saya harapkan', title: 'Laporkan jawaban ini',
     reasons: { understood: 'Tidak memahami pertanyaan saya', wrong: 'Bagian, kata, atau artikel yang salah', missing: 'Ada yang kurang', language: 'Bahasa yang salah', error: 'Ada galat, atau tidak ada yang muncul', slow: 'Terlalu lambat', other: 'Hal lain' },
     comment: 'Apa yang Anda harapkan? (opsional)', include: 'Sertakan percakapan sampai jawaban ini', preview: 'Yang akan dikirim',
-    note: 'Laporan dikirim ke tim BT Servant Mini, ke server unfoldingWord, bersama versi aplikasi dan bahasanya; tidak ada yang mengenali Anda atau ponsel ini. Jangan kirim jika di tempat Anda berisiko diketahui sebagai penerjemah Alkitab, atau jika percakapan berisi hal pribadi.',
+    note: 'Laporan dikirim ke tim BT Servant Mini, ke server unfoldingWord, bersama versi aplikasi dan bahasanya; tidak ada yang mengenali Anda atau ponsel ini. Laporan membantu memperbaiki aplikasi dan dapat dipakai untuk melatih modelnya; pertanyaan diperiksa dulu dan dibersihkan dari hal pribadi. Jangan kirim jika di tempat Anda berisiko diketahui sebagai penerjemah Alkitab, atau jika percakapan berisi hal pribadi.',
     send: 'Kirim', cancel: 'Batal', sent: 'Laporan terkirim. Terima kasih.', queued: 'Disimpan: akan dikirim saat ada internet.', reported: 'Dilaporkan', failed: 'Tidak dapat dikirim; akan dicoba lagi.',
   },
   hi: {
     good: 'अच्छा उत्तर', bad: 'जैसा मैंने सोचा था वैसा नहीं', title: 'इस उत्तर की रिपोर्ट करें',
     reasons: { understood: 'मेरा प्रश्न नहीं समझा', wrong: 'गलत अंश, शब्द या लेख', missing: 'कुछ छूट गया है', language: 'गलत भाषा', error: 'कोई त्रुटि, या कुछ नहीं आया', slow: 'बहुत धीमा', other: 'कुछ और' },
     comment: 'आप क्या चाहते थे? (वैकल्पिक)', include: 'इस उत्तर तक की बातचीत शामिल करें', preview: 'क्या भेजा जाएगा',
-    note: 'रिपोर्ट BT Servant Mini की टीम को, unfoldingWord के एक सर्वर पर, ऐप के संस्करण और उसकी भाषाओं के साथ जाती है; ऐसा कुछ नहीं जिससे आपकी या इस फ़ोन की पहचान हो। इसे न भेजें यदि आपकी जगह पर बाइबल अनुवादक के रूप में जाना जाना जोखिम भरा है, या बातचीत में कुछ निजी है।',
+    note: 'रिपोर्ट BT Servant Mini की टीम को, unfoldingWord के एक सर्वर पर, ऐप के संस्करण और उसकी भाषाओं के साथ जाती है; ऐसा कुछ नहीं जिससे आपकी या इस फ़ोन की पहचान हो। इससे ऐप ठीक करने में मदद मिलती है और इसका उपयोग ऐप के मॉडल को प्रशिक्षित करने में हो सकता है; पहले प्रश्नों की जाँच करके उनसे कोई भी निजी जानकारी हटा दी जाती है। इसे न भेजें यदि आपकी जगह पर बाइबल अनुवादक के रूप में जाना जाना जोखिम भरा है, या बातचीत में कुछ निजी है।',
     send: 'भेजें', cancel: 'रद्द करें', sent: 'रिपोर्ट भेज दी गई। धन्यवाद।', queued: 'सहेजी गई: इंटरनेट होने पर भेजी जाएगी।', reported: 'रिपोर्ट की गई', failed: 'भेजी नहीं जा सकी; फिर कोशिश की जाएगी।',
   },
   ar: {
     good: 'إجابة جيدة', bad: 'ليست ما توقعته', title: 'الإبلاغ عن هذه الإجابة',
     reasons: { understood: 'لم يفهم سؤالي', wrong: 'مقطع أو كلمة أو مقالة خاطئة', missing: 'ينقص شيء', language: 'لغة خاطئة', error: 'خطأ، أو لم يصل شيء', slow: 'بطيء جدًا', other: 'شيء آخر' },
     comment: 'ماذا كنت تتوقع؟ (اختياري)', include: 'تضمين المحادثة حتى هذه الإجابة', preview: 'ما سيُرسل',
-    note: 'يذهب البلاغ إلى فريق BT Servant Mini، إلى خادم تابع لـ unfoldingWord، مع إصدار التطبيق ولغاته؛ ولا شيء يدل عليك أو على هذا الهاتف. لا ترسله إذا كان من الخطر في مكانك أن تُعرف كمترجم للكتاب المقدس، أو إذا كانت المحادثة تحتوي على شيء خاص.',
+    note: 'يذهب البلاغ إلى فريق BT Servant Mini، إلى خادم تابع لـ unfoldingWord، مع إصدار التطبيق ولغاته؛ ولا شيء يدل عليك أو على هذا الهاتف. يساعد على إصلاح التطبيق وقد يُستخدم لتدريب نموذجه؛ وتُراجع الأسئلة أولًا ويُحذف منها أي شيء شخصي. لا ترسله إذا كان من الخطر في مكانك أن تُعرف كمترجم للكتاب المقدس، أو إذا كانت المحادثة تحتوي على شيء خاص.',
     send: 'إرسال', cancel: 'إلغاء', sent: 'أُرسل البلاغ. شكرًا.', queued: 'حُفظ: سيُرسل عند توفر الإنترنت.', reported: 'تم الإبلاغ', failed: 'تعذّر الإرسال؛ ستُعاد المحاولة.',
   },
 }
@@ -97,7 +97,7 @@ export async function sendFeedback(): Promise<boolean> {
   if (sending) return false
   const q = queue()
   if (!q.length) return true
-  if (!navigator.onLine || !onlineUrl()) return false
+  if (!isOnline() || !onlineUrl()) return false
   sending = true
   try {
     while (q.length) {

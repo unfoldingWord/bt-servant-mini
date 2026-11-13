@@ -1,91 +1,500 @@
 {
   "_": "The short commands BT Servant Mini understands without a model, the same categories in every app language. Each entry is a regular-expression fragment, matched case-insensitively as a whole word or phrase (no letter right before or after it). Add a word here, not a rule in the code; run web/tests/commands.json to check every language.",
   "intro": {
-    "en": ["intro", "introduction"],
-    "es": ["intro", "introducci[oó]n"],
-    "fr": ["intro", "introduction"],
-    "id": ["intro", "pengantar", "pendahuluan"],
-    "hi": ["इंट्रो", "परिचय", "भूमिका"],
-    "ar": ["مقدمة", "المقدمة", "تمهيد"]
+    "en": [
+      "intro",
+      "introduction"
+    ],
+    "es": [
+      "intro",
+      "introducci[oó]n"
+    ],
+    "fr": [
+      "intro",
+      "introduction"
+    ],
+    "id": [
+      "intro",
+      "pengantar",
+      "pendahuluan"
+    ],
+    "hi": [
+      "इंट्रो",
+      "परिचय",
+      "भूमिका"
+    ],
+    "ar": [
+      "مقدمة",
+      "المقدمة",
+      "تمهيد"
+    ]
   },
   "overview": {
-    "en": ["summary", "overview", "context", "background"],
-    "es": ["resumen", "panorama", "contexto", "trasfondo"],
-    "fr": ["r[ée]sum[ée]", "aper[çc]u", "contexte"],
-    "id": ["ringkasan", "gambaran", "konteks", "latar belakang"],
-    "hi": ["सारांश", "संदर्भ", "पृष्ठभूमि", "अवलोकन"],
-    "ar": ["ملخص", "سياق", "خلفية", "نظرة عامة"]
+    "en": [
+      "summary",
+      "overview",
+      "context",
+      "background"
+    ],
+    "es": [
+      "resumen",
+      "panorama",
+      "contexto",
+      "trasfondo"
+    ],
+    "fr": [
+      "r[ée]sum[ée]",
+      "aper[çc]u",
+      "contexte"
+    ],
+    "id": [
+      "ringkasan",
+      "gambaran",
+      "konteks",
+      "latar belakang"
+    ],
+    "hi": [
+      "सारांश",
+      "संदर्भ",
+      "पृष्ठभूमि",
+      "अवलोकन"
+    ],
+    "ar": [
+      "ملخص",
+      "سياق",
+      "خلفية",
+      "نظرة عامة"
+    ]
   },
   "about": {
-    "en": ["what is (?:the book of )?.+ about", "what happens in"],
-    "es": ["de qu[eé] (?:se )?trata", "qu[eé] pasa en"],
-    "fr": ["de quoi parle", "que se passe-t-il dans"],
-    "id": ["tentang apa", "apa yang terjadi (?:di|dalam)"],
-    "hi": ["किस बारे में", "में क्या होता है"],
-    "ar": ["عن ماذا يتحدث", "ماذا يتناول", "ماذا يحدث في"]
+    "en": [
+      "what is (?:the book of )?.+ about",
+      "what happens in"
+    ],
+    "es": [
+      "de qu[eé] (?:se )?trata",
+      "qu[eé] pasa en"
+    ],
+    "fr": [
+      "de quoi parle",
+      "que se passe-t-il dans"
+    ],
+    "id": [
+      "tentang apa",
+      "apa yang terjadi (?:di|dalam)"
+    ],
+    "hi": [
+      "किस बारे में",
+      "में क्या होता है"
+    ],
+    "ar": [
+      "عن ماذا يتحدث",
+      "ماذا يتناول",
+      "ماذا يحدث في"
+    ]
   },
   "tell": {
-    "en": ["tell me about", "explain"],
-    "es": ["h[aá]blame (?:de|del|sobre)", "cu[eé]ntame (?:de|del|sobre)", "expl[ií]came"],
-    "fr": ["parle-moi (?:de|du)", "raconte-moi", "explique-moi"],
-    "id": ["ceritakan(?: tentang)?", "jelaskan"],
-    "hi": ["के बारे में बताइए", "के बारे में बताओ", "समझाइए"],
-    "ar": ["أخبرني عن", "حدثني عن", "اشرح"]
+    "en": [
+      "tell me about",
+      "explain"
+    ],
+    "es": [
+      "h[aá]blame (?:de|del|sobre)",
+      "cu[eé]ntame (?:de|del|sobre)",
+      "expl[ií]came"
+    ],
+    "fr": [
+      "parle-moi (?:de|du)",
+      "raconte-moi",
+      "explique-moi"
+    ],
+    "id": [
+      "ceritakan(?: tentang)?",
+      "jelaskan"
+    ],
+    "hi": [
+      "के बारे में बताइए",
+      "के बारे में बताओ",
+      "समझाइए"
+    ],
+    "ar": [
+      "أخبرني عن",
+      "حدثني عن",
+      "اشرح"
+    ]
   },
   "chapter": {
-    "en": ["chapter", "ch"],
-    "es": ["cap[ií]tulo", "cap"],
-    "fr": ["chapitre", "chap"],
-    "id": ["pasal", "bab"],
-    "hi": ["अध्याय"],
-    "ar": ["الأصحاح", "أصحاح", "الإصحاح", "إصحاح", "فصل", "الفصل"]
+    "en": [
+      "chapter",
+      "ch"
+    ],
+    "es": [
+      "cap[ií]tulo",
+      "cap"
+    ],
+    "fr": [
+      "chapitre",
+      "chap"
+    ],
+    "id": [
+      "pasal",
+      "bab"
+    ],
+    "hi": [
+      "अध्याय"
+    ],
+    "ar": [
+      "الأصحاح",
+      "أصحاح",
+      "الإصحاح",
+      "إصحاح",
+      "فصل",
+      "الفصل"
+    ]
   },
   "notes": {
-    "en": ["notes?", "translation notes?"],
-    "es": ["notas?", "notas de traducci[oó]n"],
-    "fr": ["notes?", "notes de traduction"],
-    "id": ["catatan", "catatan terjemahan"],
-    "hi": ["नोट्स", "नोट", "टिप्पणी", "टिप्पणियाँ", "टिप्पणियां"],
-    "ar": ["ملاحظات", "الملاحظات", "ملاحظة"]
+    "en": [
+      "notes?",
+      "translation notes?"
+    ],
+    "es": [
+      "notas?",
+      "notas de traducci[oó]n"
+    ],
+    "fr": [
+      "notes?",
+      "notes de traduction"
+    ],
+    "id": [
+      "catatan",
+      "catatan terjemahan"
+    ],
+    "hi": [
+      "नोट्स",
+      "नोट",
+      "टिप्पणी",
+      "टिप्पणियाँ",
+      "टिप्पणियां"
+    ],
+    "ar": [
+      "ملاحظات",
+      "الملاحظات",
+      "ملاحظة"
+    ]
   },
   "questions": {
-    "en": ["questions?"],
-    "es": ["preguntas?"],
-    "fr": ["questions?"],
-    "id": ["pertanyaan"],
-    "hi": ["प्रश्न", "सवाल"],
-    "ar": ["أسئلة", "الأسئلة", "سؤال"]
+    "en": [
+      "questions?"
+    ],
+    "es": [
+      "preguntas?"
+    ],
+    "fr": [
+      "questions?"
+    ],
+    "id": [
+      "pertanyaan"
+    ],
+    "hi": [
+      "प्रश्न",
+      "सवाल"
+    ],
+    "ar": [
+      "أسئلة",
+      "الأسئلة",
+      "سؤال"
+    ]
   },
   "text": {
-    "en": ["text", "verse text"],
-    "es": ["texto"],
-    "fr": ["texte"],
-    "id": ["teks", "nas"],
-    "hi": ["पाठ"],
-    "ar": ["النص", "نص"]
+    "en": [
+      "text",
+      "verse text"
+    ],
+    "es": [
+      "texto"
+    ],
+    "fr": [
+      "texte"
+    ],
+    "id": [
+      "teks",
+      "nas"
+    ],
+    "hi": [
+      "पाठ"
+    ],
+    "ar": [
+      "النص",
+      "نص"
+    ]
   },
   "where": {
-    "en": ["which verse", "what verse", "where (?:does|is|do|did|was)", "in which"],
-    "es": ["(?:en )?qu[eé] vers[íi]culo", "d[óo]nde"],
-    "fr": ["quel verset", "o[ùu] (?:est|parle|se)"],
-    "id": ["ayat (?:mana|berapa)", "di mana"],
-    "hi": ["किस पद", "कहाँ", "कहां"],
-    "ar": ["أين", "في أي آية"]
+    "en": [
+      "which verse",
+      "what verse",
+      "where (?:does|is|do|did|was)",
+      "in which"
+    ],
+    "es": [
+      "(?:en )?qu[eé] vers[íi]culo",
+      "d[óo]nde"
+    ],
+    "fr": [
+      "quel verset",
+      "o[ùu] (?:est|parle|se)"
+    ],
+    "id": [
+      "ayat (?:mana|berapa)",
+      "di mana"
+    ],
+    "hi": [
+      "किस पद",
+      "कहाँ",
+      "कहां"
+    ],
+    "ar": [
+      "أين",
+      "في أي آية"
+    ]
   },
   "whole": {
-    "en": ["(?:whole|entire|full|all the) chapter", "chapter (?:in full|complete)"],
-    "es": ["cap[íi]tulo (?:completo|entero)", "todo el cap[íi]tulo"],
-    "fr": ["tout le chapitre", "le chapitre (?:entier|complet)"],
-    "id": ["(?:seluruh|semua) pasal", "pasal (?:lengkap|seluruhnya)"],
-    "hi": ["पूरा अध्याय", "सारा अध्याय"],
-    "ar": ["الأصحاح (?:كله|كاملا)", "كل الأصحاح"]
+    "en": [
+      "(?:whole|entire|full|all the) chapter",
+      "chapter (?:in full|complete)"
+    ],
+    "es": [
+      "cap[íi]tulo (?:completo|entero)",
+      "todo el cap[íi]tulo"
+    ],
+    "fr": [
+      "tout le chapitre",
+      "le chapitre (?:entier|complet)"
+    ],
+    "id": [
+      "(?:seluruh|semua) pasal",
+      "pasal (?:lengkap|seluruhnya)"
+    ],
+    "hi": [
+      "पूरा अध्याय",
+      "सारा अध्याय"
+    ],
+    "ar": [
+      "الأصحاح (?:كله|كاملا)",
+      "كل الأصحاح"
+    ]
   },
   "that": {
-    "en": ["(?:that|this) (?:verse|one|passage)"],
-    "es": ["(?:ese|este|aquel) (?:vers[íi]culo|pasaje)"],
-    "fr": ["(?:ce|cet) (?:verset|passage)"],
-    "id": ["ayat (?:itu|ini)"],
-    "hi": ["(?:उस|इस) पद"],
-    "ar": ["(?:تلك|هذه) الآية"]
+    "en": [
+      "(?:that|this) (?:verse|one|passage)"
+    ],
+    "es": [
+      "(?:ese|este|aquel) (?:vers[íi]culo|pasaje)"
+    ],
+    "fr": [
+      "(?:ce|cet) (?:verset|passage)"
+    ],
+    "id": [
+      "ayat (?:itu|ini)"
+    ],
+    "hi": [
+      "(?:उस|इस) पद"
+    ],
+    "ar": [
+      "(?:تلك|هذه) الآية"
+    ]
+  },
+  "terms": {
+    "en": [
+      "key ?terms?",
+      "key ?words?",
+      "important (?:terms|words)"
+    ],
+    "es": [
+      "palabras clave",
+      "t[ée]rminos clave",
+      "palabras importantes"
+    ],
+    "fr": [
+      "termes cl[ée]s",
+      "mots cl[ée]s",
+      "mots importants"
+    ],
+    "id": [
+      "istilah(?:-istilah)? kunci",
+      "kata(?:-kata)? kunci",
+      "istilah(?:-istilah)? penting"
+    ],
+    "hi": [
+      "मुख्य शब्द",
+      "प्रमुख शब्द",
+      "मुख्य शब्दों",
+      "प्रमुख शब्दों"
+    ],
+    "ar": [
+      "المصطلحات (?:الرئيسية|المهمة)",
+      "الكلمات (?:الرئيسية|المفتاحية)",
+      "مصطلحات (?:رئيسية|مهمة)"
+    ]
+  },
+  "again": {
+    "en": [
+      "repeat",
+      "again",
+      "say (?:it|that)",
+      "same (?:answer|thing)",
+      "(?:your|the|that) (?:last|previous) answer"
+    ],
+    "es": [
+      "rep[ií]te(?:lo|la|me)?",
+      "repetir",
+      "otra vez",
+      "de nuevo",
+      "la (?:[uú]ltima|anterior) respuesta",
+      "lo mismo"
+    ],
+    "fr": [
+      "r[ée]p[èe]te(?:-le)?",
+      "encore",
+      "(?:ta|la) (?:derni[èe]re|pr[ée]c[ée]dente) r[ée]ponse",
+      "la m[êe]me chose"
+    ],
+    "id": [
+      "ulangi",
+      "ulang",
+      "lagi",
+      "jawaban (?:terakhir|sebelumnya|tadi)"
+    ],
+    "hi": [
+      "दोहराएँ",
+      "दोहराइए",
+      "दोहराओ",
+      "फिर से",
+      "पिछला उत्तर"
+    ],
+    "ar": [
+      "كرر",
+      "أعد",
+      "مرة أخرى",
+      "الإجابة (?:الأخيرة|السابقة)"
+    ]
+  },
+  "help": {
+    "en": [
+      "what (?:else )?can you do",
+      "what (?:questions|things|kind of questions) can (?:you|I) (?:answer|ask|do)",
+      "how (?:do|can|should) I use (?:this|you|the app)",
+      "^\\s*help\\s*\\??\\s*$"
+    ],
+    "es": [
+      "qu[eé] (?:m[aá]s )?puedes hacer",
+      "qu[eé] (?:preguntas|cosas) (?:puedes|puedo) (?:responder|contestar|preguntar|hacer)",
+      "c[oó]mo (?:te )?(?:uso|usar)(?: la app| esta app)?",
+      "^\\s*ayuda\\s*\\??\\s*$"
+    ],
+    "fr": [
+      "que (?:peux|sais)-tu faire",
+      "quelles questions (?:peux-tu|puis-je)",
+      "comment (?:t'|l')?utiliser",
+      "^\\s*aide\\s*\\??\\s*$"
+    ],
+    "id": [
+      "apa (?:saja )?yang (?:bisa|dapat) (?:kamu|anda|engkau) (?:lakukan|jawab)",
+      "pertanyaan apa (?:saja )?yang (?:bisa|dapat)",
+      "bagaimana (?:cara )?(?:menggunakan|memakai)",
+      "^\\s*bantuan\\s*\\??\\s*$"
+    ],
+    "hi": [
+      "आप क्या (?:क्या )?कर सकते",
+      "कौन से प्रश्न",
+      "कैसे इस्तेमाल",
+      "कैसे उपयोग",
+      "^\\s*मदद\\s*\\??\\s*$"
+    ],
+    "ar": [
+      "ماذا (?:يمكنك|تستطيع) (?:أن )?(?:تفعل|تجيب)",
+      "ما (?:هي )?الأسئلة التي",
+      "كيف أستخدم",
+      "^\\s*مساعدة\\s*[؟?]?\\s*$"
+    ]
+  },
+  "replyIn": {
+    "_": "Keyed by the language the person wants the answer in (not the language of the words): each list holds the phrases of every app language that ask for it.",
+    "en": [
+      "(?:in|into) english",
+      "en ingl[eé]s",
+      "en anglais",
+      "(?:dalam )?bahasa inggris",
+      "अंग्रेज़ी में",
+      "अंग्रेजी में",
+      "بالإنجليزية",
+      "بالانجليزية",
+      "باللغة الإنجليزية"
+    ],
+    "es": [
+      "(?:in|into) spanish",
+      "en espa[ñn]ol",
+      "en espagnol",
+      "(?:dalam )?bahasa spanyol",
+      "स्पेनिश में",
+      "بالإسبانية",
+      "باللغة الإسبانية"
+    ],
+    "fr": [
+      "(?:in|into) french",
+      "en franc[eé]s",
+      "en fran[çc]ais",
+      "(?:dalam )?bahasa (?:prancis|perancis)",
+      "फ़्रेंच में",
+      "फ्रेंच में",
+      "بالفرنسية",
+      "باللغة الفرنسية"
+    ],
+    "id": [
+      "(?:in|into) (?:indonesian|bahasa(?: indonesia)?)",
+      "en indonesio",
+      "en indon[ée]sien",
+      "(?:dalam )?bahasa indonesia",
+      "इंडोनेशियाई में",
+      "بالإندونيسية",
+      "باللغة الإندونيسية"
+    ],
+    "hi": [
+      "(?:in|into) hindi",
+      "en hindi",
+      "(?:dalam )?bahasa hindi",
+      "हिंदी में",
+      "हिन्दी में",
+      "بالهندية",
+      "باللغة الهندية"
+    ],
+    "ar": [
+      "(?:in|into) arabic",
+      "en [aá]rabe",
+      "en arabe",
+      "(?:dalam )?bahasa arab",
+      "अरबी में",
+      "بالعربية",
+      "باللغة العربية"
+    ]
+  },
+  "replyVerb": {
+    "en": [
+      "(?:please )?(?:reply|answer|respond|write|show (?:it|me)|give (?:it|me)|say it)"
+    ],
+    "es": [
+      "(?:por favor )?(?:responde|contesta|escribe|mu[eé]stra(?:me|lo)?|d[ií]melo)"
+    ],
+    "fr": [
+      "(?:s'il te pla[iî]t )?(?:r[ée]ponds|[ée]cris|montre(?:-moi)?|dis-le)"
+    ],
+    "id": [
+      "(?:tolong )?(?:jawab|balas|tulis|tampilkan|katakan)"
+    ],
+    "hi": [
+      "(?:कृपया )?(?:उत्तर दें|जवाब दें|लिखें|बताएँ)"
+    ],
+    "ar": [
+      "(?:من فضلك )?(?:أجب|اكتب|قل)"
+    ]
   }
 }
