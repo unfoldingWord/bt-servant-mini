@@ -8,6 +8,7 @@ import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { articleForQuestion, keywords, resetSearch, searchVerses } from './search'
 import { md } from './md'
+import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, setOnline, type Turn } from './online'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -69,6 +70,15 @@ const UI: Record<string, UiText> = {
     appLang: 'لغة التطبيق', packs: 'حزم اللغات المثبتة', welcome: 'كيف أساعدك في ترجمتك؟', helps: 'لغة المساعدات', auto: 'لغة سؤالي',
   },
 }
+const ONLINE_T: Record<string, { label: string; writing: string; sources: string; toggle: string; note: string }> = {
+  en: { label: 'Online AI', writing: 'Writing with online AI…', sources: 'Helps found (sources)', toggle: 'Answers with online AI (when there is internet)', note: 'Your question and the helps found are sent to an online model. Without internet the app answers as usual.' },
+  es: { label: 'IA en línea', writing: 'Escribiendo con IA en línea…', sources: 'Ayudas encontradas (fuentes)', toggle: 'Respuestas con IA en línea (cuando haya internet)', note: 'Tu pregunta y las ayudas encontradas se envían a un modelo en línea. Sin internet, la app responde como siempre.' },
+  fr: { label: 'IA en ligne', writing: "Rédaction avec l'IA en ligne…", sources: 'Aides trouvées (sources)', toggle: 'Réponses avec IA en ligne (quand il y a internet)', note: "Votre question et les aides trouvées sont envoyées à un modèle en ligne. Sans internet, l'application répond comme d'habitude." },
+  id: { label: 'AI daring', writing: 'Menulis dengan AI daring…', sources: 'Bahan bantu yang ditemukan (sumber)', toggle: 'Jawaban dengan AI daring (saat ada internet)', note: 'Pertanyaan Anda dan bahan bantu yang ditemukan dikirim ke model daring. Tanpa internet, aplikasi menjawab seperti biasa.' },
+  hi: { label: 'ऑनलाइन AI', writing: 'ऑनलाइन AI से लिखा जा रहा है…', sources: 'मिली सहायता (स्रोत)', toggle: 'ऑनलाइन AI से उत्तर (जब इंटरनेट हो)', note: 'आपका प्रश्न और मिली सहायता एक ऑनलाइन मॉडल को भेजी जाती है। इंटरनेट के बिना ऐप सामान्य रूप से उत्तर देता है।' },
+  ar: { label: 'ذكاء اصطناعي عبر الإنترنت', writing: 'جارٍ الكتابة بالذكاء الاصطناعي عبر الإنترنت…', sources: 'المساعدات التي وُجدت (المصادر)', toggle: 'إجابات بالذكاء الاصطناعي عبر الإنترنت (عند توفر الإنترنت)', note: 'يُرسَل سؤالك والمساعدات التي وُجدت إلى نموذج عبر الإنترنت. دون إنترنت يجيب التطبيق كالمعتاد.' },
+}
+const OT = () => ONLINE_T[nav] ?? ONLINE_T.en!
 const UI_LANGS: [string, string][] = [['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['id', 'Bahasa Indonesia'], ['hi', 'हिन्दी'], ['ar', 'العربية']]
 const UI_KEY = 'btsm.ui'
 const PACK_KEY = 'btsm.helps'
@@ -92,7 +102,7 @@ const LOGO = document.querySelector('.brand svg')!.outerHTML
 
 // ------------------------------------------------------------------------------------------------------------ conversations
 
-type Msg = { who: 'me' | 'bot'; text?: string; intro?: string | null; info?: string; follow?: { label: string; sheet: Sheet }[]; meta?: string; ui?: string }
+type Msg = { who: 'me' | 'bot'; text?: string; intro?: string | null; info?: string; follow?: { label: string; sheet: Sheet }[]; meta?: string; ui?: string; ai?: { text: string; model: string } }
 type Hit = { book: string; ch: number; v: number }
 type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[] }
 const KEY = 'btsm.conversations.v1'
@@ -161,11 +171,26 @@ function el(tag: string, cls: string, text?: string): HTMLElement {
 function renderMsg(m: Msg): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
-  if (m.intro) d.appendChild(el('p', 'intro', m.intro))
+  // with an online answer, it comes first and the offline answer becomes its sources
+  let host: HTMLElement = d
+  if (m.ai) {
+    const ai = el('div', 'ai')
+    ai.appendChild(el('span', 'ai-badge', `${OT().label} · ${modelLabel(m.ai.model)}`))
+    const body = el('div', 'ai-text')
+    body.innerHTML = md(m.ai.text)
+    ai.appendChild(body)
+    d.appendChild(ai)
+    const src = document.createElement('details')
+    src.className = 'sources'
+    src.appendChild(el('summary', '', OT().sources))
+    d.appendChild(src)
+    host = src
+  }
+  if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.info) {
     const box = el('div', m.intro ? 'info' : 'plain md')
     box.innerHTML = md(m.info) // md() escapes everything first
-    d.appendChild(box)
+    host.appendChild(box)
   }
   if (m.text) d.appendChild(el('div', 'plain', m.text))
   if (m.follow?.length) {
@@ -286,6 +311,17 @@ function renderPanel() {
     hl.appendChild(b)
   }
   panel.appendChild(hl)
+  if (onlineAvailable()) {
+    panel.appendChild(el('h2', '', OT().label))
+    const lab = el('label', 'toggle') as HTMLLabelElement
+    const cb = document.createElement('input')
+    cb.type = 'checkbox'
+    cb.checked = onlineOn()
+    cb.onchange = () => setOnline(cb.checked)
+    lab.append(cb, el('span', '', OT().toggle))
+    panel.appendChild(lab)
+    panel.appendChild(el('p', 'note', OT().note))
+  }
   panel.appendChild(modelSection(nav, () => {
     setReady()
     renderPanel()
@@ -491,10 +527,29 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   c.msgs.push(m)
   c.updated = Date.now()
   save()
-  wait.replaceWith(renderMsg(m))
+  let node = renderMsg(m)
+  wait.replaceWith(node)
   log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   busy = false
   setReady()
+  // level 3: the online answer, if allowed and there is internet; the offline answer already stands
+  if (m.who === 'bot' && (m.info || m.intro) && onlineOn() && onlineAvailable() && navigator.onLine) {
+    const writing = el('p', 'ai pending', OT().writing)
+    node.prepend(writing)
+    const history: Turn[] = []
+    for (const x of c.msgs.slice(-7, -2)) {
+      if (x.who === 'me' && x.text) history.push({ role: 'user', text: x.text })
+      else if (x.who === 'bot') history.push({ role: 'assistant', text: x.ai?.text ?? x.intro ?? '' })
+    }
+    const res = await onlineAnswer(label, m.ui ?? nav, `${m.intro ?? ''}\n\n${m.info ?? ''}`, history)
+    if (res) {
+      m.ai = res
+      save()
+      const fresh = renderMsg(m)
+      node.replaceWith(fresh)
+      node = fresh
+    } else writing.remove()
+  }
 }
 
 function runSheet(label: string, sheet: Sheet, ui: string) {

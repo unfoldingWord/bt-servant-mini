@@ -8,3 +8,5 @@ app/src/lite/assets/www/packs/
 app/src/main/assets/www/
 app/src/main/jniLibs/
 web/desktop/
+worker/node_modules/
+worker/.wrangler/

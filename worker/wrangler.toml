@@ -1,0 +1,13 @@
+# BT Servant Mini's online helper: when the phone has internet and the person allows it, a larger open model
+# (Cloudflare Workers AI) writes a conversational answer from the translation helps the app already found on the phone.
+# No key lives in the app. Deploy only with Abel's OK (account: unfoldingWord, next to the language packs).
+name = "bt-servant-mini-ai"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[ai]
+binding = "AI"
+
+[vars]
+MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+MAX_CONTEXT = "7000"
