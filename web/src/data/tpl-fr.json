@@ -52,5 +52,9 @@
   "unknown": "Je n'ai pas compris ta question. Essaie avec une référence biblique, un terme clé ou un sujet de l'Académie.",
   "search": "Cela ressemble à une recherche dans le texte. La recherche libre ne fait pas encore partie de cet ensemble de recettes.",
   "res_name": "{res} {release}",
-  "no_intent": "Je ne peux pas répondre à cela avec les ressources installées."
+  "no_intent": "Je ne peux pas répondre à cela avec les ressources installées.",
+  "books_head": "Le terme clé « {title} » se trouve dans {v} versets de {b} livres. Par livre :",
+  "books_none": "Je n'ai trouvé aucun verset lié à « {title} ».",
+  "word_notes": "notes",
+  "word_links": "liens vers des termes clés"
 }

@@ -52,5 +52,9 @@
   "unknown": "No entendí qué preguntas. Prueba con una referencia bíblica, un término clave o un tema de la Academia.",
   "search": "Parece una búsqueda en el texto. La búsqueda libre aún no está en este conjunto de recetas.",
   "res_name": "{res} {release}",
-  "no_intent": "No puedo responder eso con los recursos instalados."
+  "no_intent": "No puedo responder eso con los recursos instalados.",
+  "books_head": "El término clave «{title}» está en {v} versículos de {b} libros. Por libro:",
+  "books_none": "No encontré versículos ligados a «{title}».",
+  "word_notes": "notas",
+  "word_links": "enlaces a términos clave"
 }

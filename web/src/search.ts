@@ -37,13 +37,18 @@ const STOP = new Set(
     // id
     'yang di ke dari dan atau apa siapa mana kapan bagaimana adalah itu ini ada dalam pada untuk dengan tentang ayat ayatnya alkitab ' +
     'kitab pasal bagian berbicara mengatakan berkata cerita tunjukkan ' +
+    // how a question names what it looks for, not what it looks for ("what books mention the word grace")
+    'mention mentions mentioned mentioning word words term terms books contain contains appear appears used uses use ' +
+    'menciona mencionan mencionado mencionada mencionar palabra palabras termino término terminos términos libros contiene contienen usa usan aparecen ' +
+    'mentionne mentionnent mot mots terme termes livres contient quels quelles cuales cuáles saja ' +
+    'menyebut menyebutkan kata istilah kitab-kitab memuat muncul ' +
     // what to show, not what to look for
     'notes note notas nota translation traduccion traducción traduction terjemahan catatan questions question preguntas pregunta pertanyaan text texto teks texte '
   ).split(/\s+/),
 )
 // ar
-const AR_STOP = new Set('في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
-const HI_STOP = new Set('टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता'.split(' '))
+const AR_STOP = new Set('أسفار الأسفار يرد ترد في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
+const HI_STOP = new Set('किन पुस्तकों किताबों पुस्तकें किताबें टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता'.split(' '))
 
 /** The content words of a question, longest first within the question order (names usually survive). */
 export function keywords(q: string): string[] {

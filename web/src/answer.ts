@@ -378,7 +378,30 @@ async function count(s: Sheet, l: Lang): Promise<Result> {
   for (const [b, [c]] of hit.books) { n += c!; rows.push([b, c!]) }
   rows.sort((a, b) => b[1] - a[1])
   cites.push(cite(hit.res, hit.release, 'map'))
-  return { answer: say(lang, 'count_bible', { n, what: what === 'terms' ? 'key term links' : 'notes', filter: filterTxt, list: rows.slice(0, 8).map(([b, c]) => `${bookName(lang, b)} ${c}`).join(', ') }), cites }
+  return { answer: say(lang, 'count_bible', { n, what: say(lang, what === 'terms' ? 'word_links' : 'word_notes'), filter: filterTxt, list: rows.slice(0, 8).map(([b, c]) => `${bookName(lang, b)} ${c}`).join(', ') }), cites }
+}
+/**
+ * "What books of the Bible mention grace?": every book whose verses link to the article, in Bible order, with how many
+ * verses in each. From the map of the whole Bible (English TWL), so it counts books that are not installed too.
+ */
+export async function booksWith(concept: string, packLang: string): Promise<Result> {
+  const own = await getLang(packLang)
+  const en = packLang === 'en' ? own : await getLang('en')
+  const l = own?.maps.xmap?.core ? own : en
+  const title = own ? names(own, concept) : l ? names(l, concept) : concept.split('/').pop()!
+  const lang = own?.lang ?? packLang
+  const hit = l ? mapCount(l, concept, 'terms') : null
+  const order = Object.keys(BOOK_EN)
+  const rows = [...(hit?.books ?? new Map<string, number[]>())]
+    .map(([b, c]) => [b, c[1] ?? c[0] ?? 0] as [string, number])
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+  if (!hit || !rows.length) return { answer: say(lang, 'books_none', { title }), cites: [] }
+  const v = rows.reduce((s, [, n]) => s + n, 0)
+  return {
+    answer: `**${say(lang, 'books_head', { title, v, b: rows.length })}**\n\n${rows.map(([b, n]) => `${bookName(lang, b)} ${n}`).join(' · ')}`,
+    cites: [cite(hit.res, hit.release, 'map'), `id:${concept}`],
+  }
 }
 /** Per-book counts from the map: the English tN / TWL (`xmap`), counted even for books that are not installed. */
 function mapCount(l: Lang, concept: string | null, what: string): { books: Map<string, number[]>; res: string; release: string } | null {

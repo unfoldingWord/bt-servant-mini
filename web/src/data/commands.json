@@ -496,5 +496,59 @@
     "ar": [
       "(?:من فضلك )?(?:أجب|اكتب|قل)"
     ]
+  },
+  "translateBook": {
+    "en": [
+      "how (?:do|can|should|would|could) (?:i|we|you|one) translate (?:the )?book",
+      "translat(?:e|ing) the book of"
+    ],
+    "es": [
+      "c[oó]mo (?:puedo |debo |podemos |debemos |se puede |hay que )?tradu(?:cir|zco|cimos) (?:el )?libro",
+      "c[oó]mo se traduce (?:el )?libro",
+      "traducir el libro de"
+    ],
+    "fr": [
+      "comment (?:puis-je |dois-je |pouvons-nous )?traduire (?:le )?livre",
+      "traduire le livre de"
+    ],
+    "id": [
+      "bagaimana (?:cara )?(?:saya |kami |kita )?menerjemahkan (?:kitab|buku)",
+      "menerjemahkan kitab"
+    ],
+    "hi": [
+      "(?:पुस्तक|किताब) का अनुवाद कैसे"
+    ],
+    "ar": [
+      "كيف (?:أترجم|نترجم|يمكنني ترجمة|يمكن ترجمة) (?:سفر|كتاب)",
+      "ترجمة سفر"
+    ]
+  },
+  "whichBooks": {
+    "en": [
+      "(?:in )?(?:what|which) books",
+      "books of the bible (?:that )?(?:mention|contain|use)"
+    ],
+    "es": [
+      "(?:en )?qu[eé] libros",
+      "(?:en )?cu[aá]les libros",
+      "libros de la biblia (?:que )?(?:mencionan|contienen|usan|hablan)"
+    ],
+    "fr": [
+      "(?:dans )?quels livres"
+    ],
+    "id": [
+      "kitab (?:apa|mana) saja",
+      "di kitab mana",
+      "kitab-kitab mana"
+    ],
+    "hi": [
+      "किन (?:पुस्तकों|किताबों) में",
+      "कौन-?सी (?:पुस्तकें|किताबें)"
+    ],
+    "ar": [
+      "أي الأسفار",
+      "في أي (?:أسفار|سفر)",
+      "ما الأسفار"
+    ]
   }
 }

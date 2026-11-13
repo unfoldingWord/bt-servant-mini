@@ -52,5 +52,9 @@
   "unknown": "I could not tell what you are asking. Try naming a Bible reference, a key term or an Academy topic.",
   "search": "That looks like a search over the text. Free-text search is not part of this recipe set yet.",
   "res_name": "{res} {release}",
-  "no_intent": "I cannot answer that with the installed resources."
+  "no_intent": "I cannot answer that with the installed resources.",
+  "books_head": "The key term «{title}» is in {v} verses of {b} books. By book:",
+  "books_none": "I found no verses linked to «{title}».",
+  "word_notes": "notes",
+  "word_links": "key term links"
 }

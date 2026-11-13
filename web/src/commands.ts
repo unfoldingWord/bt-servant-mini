@@ -4,7 +4,7 @@
 import data from './data/commands.json'
 
 export type Command = 'intro' | 'overview' | 'about' | 'tell' | 'chapter' | 'notes' | 'questions' | 'text' | 'where' | 'whole' | 'that'
-  | 'terms' | 'again' | 'help' | 'replyVerb'
+  | 'terms' | 'again' | 'help' | 'replyVerb' | 'translateBook' | 'whichBooks'
 
 const VOCAB = data as unknown as Record<Command, Record<string, string[]>>
 const cache = new Map<Command, RegExp>()
@@ -51,4 +51,5 @@ export function withoutReply(q: string): string {
 
 /** An introduction asked for: "Jonás 2 intro", "resumen de Jonás", "¿de qué trata Jonás 2?", "háblame del capítulo 2 de Jonás". */
 // (not when it names what to show: "explain the key terms of Titus 1" wants the key terms)
-export const asksIntro = (q: string): boolean => !kindOf(q) && (has('intro', q) || has('overview', q) || has('about', q) || (has('tell', q) && has('chapter', q)))
+// "¿Cómo puedo traducir el libro de Jonás?" also wants the book's introduction (its notes on translating the book)
+export const asksIntro = (q: string): boolean => !kindOf(q) && (has('intro', q) || has('overview', q) || has('about', q) || has('translateBook', q) || (has('tell', q) && has('chapter', q)))

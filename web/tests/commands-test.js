@@ -4,12 +4,12 @@
 // per case and returns the failures.
 const BOOK = { en: 'Jonah', es: 'Jonás', fr: 'Jonas', id: 'Yunus', hi: 'योना', ar: 'يونان' }
 const W = {
-  en: { notes: 'notes', questions: 'questions', word: 'grace', fish: 'fish', about: 'What is Jonah about?' },
-  es: { notes: 'notas', questions: 'preguntas', word: 'gracia', fish: 'pez', about: '¿De qué trata Jonás?' },
-  fr: { notes: 'notes', questions: 'questions', word: 'grâce', fish: 'poisson', about: 'De quoi parle Jonas ?' },
-  id: { notes: 'catatan', questions: 'pertanyaan', word: 'kasih karunia', fish: 'ikan', about: 'Tentang apa kitab Yunus?' },
-  hi: { notes: 'नोट्स', questions: 'प्रश्न', word: 'अनुग्रह', fish: 'मछली', about: 'योना किस बारे में है?' },
-  ar: { notes: 'ملاحظات', questions: 'أسئلة', word: 'نعمة', fish: 'حوت', about: 'عن ماذا يتحدث سفر يونان؟' },
+  en: { notes: 'notes', questions: 'questions', word: 'grace', fish: 'fish', about: 'What is Jonah about?', translate: 'How do I translate the book of Jonah?' },
+  es: { notes: 'notas', questions: 'preguntas', word: 'gracia', fish: 'pez', about: '¿De qué trata Jonás?', translate: '¿Cómo puedo traducir el libro de Jonás?' },
+  fr: { notes: 'notes', questions: 'questions', word: 'grâce', fish: 'poisson', about: 'De quoi parle Jonas ?', translate: 'Comment traduire le livre de Jonas ?' },
+  id: { notes: 'catatan', questions: 'pertanyaan', word: 'kasih karunia', fish: 'ikan', about: 'Tentang apa kitab Yunus?', translate: 'Bagaimana menerjemahkan kitab Yunus?' },
+  hi: { notes: 'नोट्स', questions: 'प्रश्न', word: 'अनुग्रह', fish: 'मछली', about: 'योना किस बारे में है?', translate: 'योना पुस्तक का अनुवाद कैसे करें?' },
+  ar: { notes: 'ملاحظات', questions: 'أسئلة', word: 'نعمة', fish: 'حوت', about: 'عن ماذا يتحدث سفر يونان؟', translate: 'كيف أترجم سفر يونان؟' },
 }
 // what each command must give: fields of the call sheet, or the first verse found by a search
 const CASES = (l) => {
@@ -21,6 +21,7 @@ const CASES = (l) => {
     [`${b} intro`, { ref: 'jon front:intro' }],
     [`${b} 2 intro`, { ref: 'jon 2:intro' }],
     [w.about, { ref: 'jon front:intro' }],
+    [w.translate, { ref: 'jon front:intro' }], // "how do I translate the book of Jonah": its introduction
     [w.word, { concept: 'tw:kt/grace' }],
     [`${b} ${w.fish}`, { first: '1:17' }],
   ]

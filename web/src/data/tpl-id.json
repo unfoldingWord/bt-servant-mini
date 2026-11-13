@@ -52,5 +52,9 @@
   "unknown": "Saya tidak dapat memahami pertanyaan Anda. Coba sebutkan rujukan Alkitab, istilah kunci, atau topik Akademi.",
   "search": "Itu tampaknya pencarian dalam teks. Pencarian teks bebas belum termasuk dalam kumpulan resep ini.",
   "res_name": "{res} {release}",
-  "no_intent": "Saya tidak dapat menjawab itu dengan sumber yang terpasang."
+  "no_intent": "Saya tidak dapat menjawab itu dengan sumber yang terpasang.",
+  "books_head": "Istilah kunci «{title}» ada dalam {v} ayat di {b} kitab. Per kitab:",
+  "books_none": "Saya tidak menemukan ayat yang terkait dengan «{title}».",
+  "word_notes": "catatan",
+  "word_links": "tautan istilah kunci"
 }

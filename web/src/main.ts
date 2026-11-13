@@ -1,6 +1,6 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { answerSheet, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
+import { answerSheet, booksWith, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { appVersion, isLite, LIMITED, modelOff, modelReady, modelState, PWA, slotsOf } from './model'
@@ -929,6 +929,22 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     setUiLang(ui)
     let others: { label: string; sheet: Sheet }[] = []
     let searched = ''
+    // "What books of the Bible mention grace?": every book with the verses that use the term (not a search on "mention"),
+    // when what is left of the question names one article; otherwise the question goes on as usual
+    if (q !== undefined && has('whichBooks', q)) {
+      const ids = await articleForQuestion(keywords(q).join(' '))
+      if (ids?.length === 1) {
+        const r = await booksWith(ids[0]!, sheet.lang ?? 'en')
+        answered = 'books'
+        const total = ((performance.now() - t0) / 1000).toFixed(1)
+        const article = { ...sheet, id: `f${Date.now()}`, intent: 'article', concept: ids[0]!, candidates: null, term: null } as Sheet
+        m = { who: 'bot', info: r.answer, ui, lang: sheet.lang, follow: [{ label: keywords(q).join(' '), sheet: article }],
+          meta: `${T.details} · ${total} s
+${meta}
+books with ${ids[0]}` }
+        throw { done: m }
+      }
+    }
     // "Who was John the Baptist?": the article, when the words after "who was" name one
     if (q !== undefined && !sheet.ref && ['unknown', 'search', 'article', 'advice', 'passage'].includes(sheet.intent) && !sheet.concept) {
       const ids = await articleForQuestion(q)
