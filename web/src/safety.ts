@@ -8,7 +8,7 @@ export type Choice = 'online' | 'usage' | 'discreet'
 const DONE = 'btsm.safety'
 
 type S = {
-  title: string; intro: string; confirm: string
+  title: string; intro: string; brief: string; confirm: string
   onlineH: string; onlineP: string; usageH: string; usageP: string
   yes: string; no: string; go: string; on: string; cancel: string; later: string
 }
@@ -16,6 +16,7 @@ const T: Record<string, S> = {
   en: {
     title: 'Before you start: your safety',
     intro: 'BT Servant Mini works without internet. Two things can use the internet, only if you allow them; and the app can be discreet on this phone. You can change all of it later in the menu.',
+    brief: 'BT Servant Mini works without internet. What follows uses the internet only if you allow it. You can change it later in the menu.',
     confirm: 'Before turning it on',
     onlineH: 'Answers with online AI (when there is internet)',
     onlineP: 'Your question and the helps found are sent to a server of unfoldingWord, and a larger AI writes the answer. Whoever watches the network (the internet provider, the owner of the Wi‑Fi, a government) cannot read them, but can see that this phone talks to unfoldingWord. Do not turn this on if, where you are, it is risky for people to know that you work on Bible translation.',
@@ -26,6 +27,7 @@ const T: Record<string, S> = {
   es: {
     title: 'Antes de empezar: tu seguridad',
     intro: 'BT Servant Mini funciona sin internet. Dos cosas pueden usar internet, solo si tú lo permites; y la app puede ser discreta en este teléfono. Puedes cambiar todo después en el menú.',
+    brief: 'BT Servant Mini funciona sin internet. Lo que sigue usa internet solo si tú lo permites. Puedes cambiarlo después en el menú.',
     confirm: 'Antes de activarlo',
     onlineH: 'Respuestas con IA en línea (cuando hay internet)',
     onlineP: 'Tu pregunta y las ayudas encontradas se envían a un servidor de unfoldingWord, y una IA más grande escribe la respuesta. Quien vigile la red (el proveedor de internet, el dueño del wifi, un gobierno) no puede leerlas, pero sí puede ver que este teléfono se comunica con unfoldingWord. No lo actives si en tu lugar es riesgoso que se sepa que trabajas en traducción bíblica.',
@@ -36,6 +38,7 @@ const T: Record<string, S> = {
   fr: {
     title: 'Avant de commencer : votre sécurité',
     intro: 'BT Servant Mini fonctionne sans internet. Deux choses peuvent utiliser internet, seulement si vous le permettez ; et l\'application peut être discrète sur ce téléphone. Vous pourrez tout changer plus tard dans le menu.',
+    brief: "BT Servant Mini fonctionne sans internet. Ce qui suit n'utilise internet que si vous l'autorisez. Vous pourrez le changer plus tard dans le menu.",
     confirm: 'Avant de l\'activer',
     onlineH: 'Réponses avec l\'IA en ligne (quand il y a internet)',
     onlineP: 'Votre question et les aides trouvées sont envoyées à un serveur d\'unfoldingWord, et une IA plus grande rédige la réponse. Quiconque surveille le réseau (le fournisseur d\'accès, le propriétaire du wifi, un gouvernement) ne peut pas les lire, mais peut voir que ce téléphone communique avec unfoldingWord. Ne l\'activez pas si, là où vous êtes, il est risqué que l\'on sache que vous travaillez à la traduction de la Bible.',
@@ -46,6 +49,7 @@ const T: Record<string, S> = {
   id: {
     title: 'Sebelum mulai: keamanan Anda',
     intro: 'BT Servant Mini bekerja tanpa internet. Ada dua hal yang dapat memakai internet, hanya jika Anda mengizinkannya; dan aplikasi dapat tersamar di ponsel ini. Semuanya bisa Anda ubah nanti di menu.',
+    brief: 'BT Servant Mini berfungsi tanpa internet. Hal berikut memakai internet hanya jika Anda mengizinkannya. Anda dapat mengubahnya nanti di menu.',
     confirm: 'Sebelum mengaktifkannya',
     onlineH: 'Jawaban dengan AI daring (saat ada internet)',
     onlineP: 'Pertanyaan Anda dan bantuan yang ditemukan dikirim ke server unfoldingWord, lalu AI yang lebih besar menulis jawabannya. Siapa pun yang mengawasi jaringan (penyedia internet, pemilik wifi, pemerintah) tidak dapat membacanya, tetapi dapat melihat bahwa ponsel ini berhubungan dengan unfoldingWord. Jangan aktifkan jika di tempat Anda berisiko bila orang tahu Anda bekerja dalam penerjemahan Alkitab.',
@@ -56,6 +60,7 @@ const T: Record<string, S> = {
   hi: {
     title: 'शुरू करने से पहले: आपकी सुरक्षा',
     intro: 'BT Servant Mini बिना इंटरनेट के चलता है। दो चीज़ें इंटरनेट का उपयोग कर सकती हैं, केवल तब जब आप अनुमति दें; और ऐप इस फ़ोन पर गुप्त रह सकता है। आप यह सब बाद में मेनू में बदल सकते हैं।',
+    brief: 'BT Servant Mini बिना इंटरनेट के काम करता है। नीचे दी गई चीज़ इंटरनेट का उपयोग तभी करती है जब आप अनुमति दें। आप इसे बाद में मेनू में बदल सकते हैं।',
     confirm: 'चालू करने से पहले',
     onlineH: 'ऑनलाइन AI से उत्तर (जब इंटरनेट हो)',
     onlineP: 'आपका प्रश्न और मिली हुई सहायताएँ unfoldingWord के एक सर्वर पर भेजी जाती हैं, और एक बड़ा AI उत्तर लिखता है। नेटवर्क पर नज़र रखने वाला कोई भी (इंटरनेट प्रदाता, वाई‑फ़ाई का मालिक, कोई सरकार) उन्हें पढ़ नहीं सकता, पर यह देख सकता है कि यह फ़ोन unfoldingWord से बात करता है। इसे चालू न करें यदि आपकी जगह पर लोगों का यह जानना जोखिम भरा है कि आप बाइबल अनुवाद का काम करते हैं।',
@@ -66,6 +71,7 @@ const T: Record<string, S> = {
   ar: {
     title: 'قبل أن تبدأ: سلامتك',
     intro: 'يعمل BT Servant Mini من دون إنترنت. هناك أمران يمكن أن يستخدما الإنترنت، فقط إذا سمحت بذلك؛ ويمكن أن يكون التطبيق متحفّظًا على هذا الهاتف. يمكنك تغيير كل ذلك لاحقًا من القائمة.',
+    brief: 'يعمل BT Servant Mini دون إنترنت. ما يلي يستخدم الإنترنت فقط إذا سمحت بذلك. يمكنك تغيير ذلك لاحقًا من القائمة.',
     confirm: 'قبل التفعيل',
     onlineH: 'إجابات بالذكاء الاصطناعي عبر الإنترنت (عند توفر الإنترنت)',
     onlineP: 'يُرسل سؤالك والمساعدات التي وُجدت إلى خادم تابع لـ unfoldingWord، ويكتب ذكاء اصطناعي أكبر الإجابة. من يراقب الشبكة (مزوّد الإنترنت، صاحب شبكة الواي فاي، حكومة) لا يستطيع قراءتها، لكنه يستطيع أن يرى أن هذا الهاتف يتصل بـ unfoldingWord. لا تفعّله إذا كان من الخطر في مكانك أن يُعرف أنك تعمل في ترجمة الكتاب المقدس.',
@@ -104,16 +110,16 @@ export function safetyAsked(): boolean {
  * One (from the menu): what it means, then Turn on / Cancel.
  */
 export function askSafety(lang: string, which: Choice[], done: (a: Partial<Record<Choice, boolean>> | null) => void,
-  current: Partial<Record<Choice, boolean | null>> = {}) {
+  current: Partial<Record<Choice, boolean | null>> = {}, first = which.length > 1) {
   const s = str(lang)
   document.querySelector('#safety')?.remove()
   const wrap = el('div', '')
   wrap.id = 'safety'
   const card = el('div', 'card')
   card.dir = 'auto'
-  const first = which.length > 1
   card.appendChild(el('h2', '', first ? s.title : s.confirm))
-  if (first) card.appendChild(el('p', '', s.intro))
+  // the long intro names online AI, usage counts and discreet mode: only when all three are asked (the Android app)
+  if (first) card.appendChild(el('p', '', which.length === 3 ? s.intro : s.brief))
   const answers: Partial<Record<Choice, boolean>> = {}
   const go = button(first ? s.go : s.on, 'primary', () => {
     if (first) {

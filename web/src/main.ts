@@ -1159,7 +1159,7 @@ function firstSafety() {
     if (a.online === false) setOnline(false)
     if (a.online) await turnOnline()
     setReady()
-  }, { online: stored('btsm.online'), usage: stored('btsm.usage'), discreet: discreetOn() || stored('btsm.discreet') })
+  }, { online: stored('btsm.online'), usage: stored('btsm.usage'), discreet: discreetOn() || stored('btsm.discreet') }, true)
 }
 try {
   if (!localStorage.getItem('btsm.onboarded')) showAbout(nav, () => { setReady(); firstSafety() })
