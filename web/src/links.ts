@@ -8,8 +8,23 @@ export type Target = { kind: 'article'; id: string } | { kind: 'ref'; ref: strin
 const TW = '(kt|names|other)'
 const TA = '(translate|checking|process|intro)'
 
-/** `ctx` is the id of the article the link is in, for links relative to it (`./faith.md`). */
-export function linkTarget(href: string, ctx = ''): Target | null {
+/**
+ * `label`: the link's text. A note writes `[1:4–16](ref:jon 1:4)`: the target names the book and the first verse, the label
+ * the whole range (sometimes across chapters, `1:17–2:10`). When the label is a reference, it wins.
+ * `ctx` is the id of the article the link is in, for links relative to it (`./faith.md`).
+ */
+export function linkTarget(href: string, ctx = '', label = ''): Target | null {
+  const t = target(href, ctx)
+  if (t?.kind !== 'ref') return t
+  // the label is the reference the note means; the target only names the book (some targets point elsewhere:
+  // Jonah's outline has `[1:17–2:10](ref:jon 1:1)`)
+  const m = /^(\d+):(\d+)(?:\s*[-–—]\s*(?:(\d+):)?(\d+))?$/.exec(label.trim())
+  const book = t.ref.split(' ')[0]
+  if (!m || !book) return t
+  if (!m[4]) return { kind: 'ref', ref: `${book} ${m[1]}:${m[2]}` }
+  return { kind: 'ref', ref: m[3] && m[3] !== m[1] ? `${book} ${m[1]}:${m[2]}-${m[3]}:${m[4]}` : `${book} ${m[1]}:${m[2]}-${m[4]}` }
+}
+function target(href: string, ctx: string): Target | null {
   const h = href.trim()
   let m: RegExpExecArray | null
   if ((m = /^(tw|ta):[a-z0-9_/-]+$/i.exec(h))) return { kind: 'article', id: h }

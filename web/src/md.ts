@@ -37,6 +37,23 @@ export function md(src: string, ctx = ''): string {
     }
     if (lines.every((l) => /^\s*[-*•]\s+/.test(l))) {
       out.push(`<ul>${lines.map((l) => `<li>${inline(l.replace(/^\s*[-*•]\s+/, ''))}</li>`).join('')}</ul>`)
+    } else if (lines.every((l) => /^\s*(\d+[.)]|[-*•])\s+/.test(l)) && /^\s*\d+[.)]\s+/.test(lines[0]!)) {
+      // a numbered list with bullets under its items (a book's outline): the bullets nest in the item above them
+      const start = Number(/^\s*(\d+)/.exec(lines[0]!)![1])
+      let html = ''
+      let open = false
+      for (const l of lines) {
+        if (/^\s*\d+[.)]\s+/.test(l)) {
+          if (open) html += '</ul>'
+          open = false
+          html += (html ? '</li>' : '') + `<li>${inline(l.replace(/^\s*\d+[.)]\s+/, ''))}`
+        } else {
+          if (!open) html += '<ul>'
+          open = true
+          html += `<li>${inline(l.replace(/^\s*[-*•]\s+/, ''))}</li>`
+        }
+      }
+      out.push(`<ol start="${start}">${html}${open ? '</ul>' : ''}</li></ol>`)
     } else if (lines.every((l) => /^\s*\d+[.)]\s+/.test(l))) {
       const start = Number(/^\s*(\d+)/.exec(lines[0]!)![1])
       out.push(`<ol start="${start}">${lines.map((l) => `<li>${inline(l.replace(/^\s*\d+[.)]\s+/, ''))}</li>`).join('')}</ol>`)

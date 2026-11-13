@@ -1,7 +1,7 @@
 // The interactive answer: a passage drawn in the bubble with its words tied to the notes and key terms that quote them,
 // and a bottom panel that opens what is tapped (the notes of a word, a note, an article) and follows the links inside it.
 // The panel keeps a stack, so "back" returns to where the reader was; "Open in chat" turns an article into a message.
-import { articleView, type Study, titleFor } from './answer'
+import { articleView, helpView, type Study, titleFor } from './answer'
 import { linkTarget } from './links'
 import { md } from './md'
 
@@ -63,6 +63,29 @@ export function fillTitles(root: HTMLElement, lang: string) {
 const ORDER = (label: string) => (/^(ULT|GLT)$/.test(label) ? 0 : /^(UST|GST)$/.test(label) ? 1 : 2)
 
 /** The passage in the bubble. */
+export type HelpItem = { kind: 'note' | 'question'; book: string; ch: number; v: number; snippet: string; id: string; lang: string; ref: string }
+/** The notes and questions a free search found, each a row that opens the whole note or question in the panel. */
+export function renderHelps(groups: { head: string; items: HelpItem[] }[]): HTMLElement {
+  const box = el('div', 'info helps')
+  for (const g of groups) {
+    if (!g.items.length) continue
+    box.appendChild(el('h4', '', g.head))
+    const list = el('ol', 'nl')
+    for (const h of g.items) {
+      const li = el('li')
+      const b = el('button', 'nrow')
+      b.type = 'button'
+      b.appendChild(el('strong', '', `${h.ref} `))
+      b.appendChild(document.createTextNode(h.snippet))
+      b.onclick = () => openPanel({ kind: 'help', lang: h.lang, book: h.book, id: h.id, which: h.kind, label: h.ref })
+      li.appendChild(b)
+      list.appendChild(li)
+    }
+    box.appendChild(list)
+  }
+  return box
+}
+
 export function renderStudy(s: Study): HTMLElement {
   const box = el('div', 'info study')
   box.appendChild(el('h3', '', s.head))
@@ -161,6 +184,7 @@ type View =
   | { kind: 'word'; study: Study; word: string; keys: string[]; root: HTMLElement }
   | { kind: 'note'; study: Study; i: number; root: HTMLElement }
   | { kind: 'article'; id: string; lang: string }
+  | { kind: 'help'; lang: string; book: string; id: string; which: 'note' | 'question'; label: string }
 
 const stack: View[] = []
 let sheet: { bg: HTMLElement; box: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; foot: HTMLElement } | null = null
@@ -245,7 +269,7 @@ async function draw() {
   sh.box.classList.add('open')
   sh.bg.classList.add('open')
   sh.body.scrollTop = 0
-  sh.body.dataset.lang = v.kind === 'article' ? v.lang : v.study.lang
+  sh.body.dataset.lang = v.kind === 'article' || v.kind === 'help' ? v.lang : v.study.lang
   if (v.kind === 'word') {
     sh.title.textContent = `«${v.word}»`
     const notes = v.keys.filter((k) => k[0] === 'n').map((k) => Number(k.slice(1)))
@@ -266,6 +290,25 @@ async function draw() {
       for (const i of notes) sh.body.appendChild(noteBlock(v.study, i))
     }
     if (!terms.length && !notes.length) sh.body.appendChild(el('p', 'muted', ui.noHelps))
+    return
+  }
+  if (v.kind === 'help') {
+    sh.title.textContent = v.label
+    const h = await helpView(v.lang, v.book, v.id, v.which)
+    if (stack[stack.length - 1] !== v) return
+    if (!h) {
+      sh.body.appendChild(el('p', 'muted', ui.missing))
+      return
+    }
+    sh.title.textContent = h.title
+    sh.body.appendChild(richText(h.md, v.lang))
+    const b = el('button', 'sheet-chat', ui.inChat)
+    b.type = 'button'
+    b.onclick = () => {
+      closePanel()
+      hooks?.ref(`${v.book} ${h.ref}`, h.title, v.lang)
+    }
+    sh.foot.appendChild(b)
     return
   }
   if (v.kind === 'note') {
@@ -298,7 +341,7 @@ document.addEventListener('click', (e) => {
   const a = (e.target as HTMLElement | null)?.closest?.('a.lk') as HTMLAnchorElement | null
   if (!a) return
   e.preventDefault()
-  const t = linkTarget(a.dataset.href ?? '', a.dataset.ctx ?? '')
+  const t = linkTarget(a.dataset.href ?? '', a.dataset.ctx ?? '', a.textContent ?? '')
   if (!t) return
   const lang = (a.closest('[data-lang]') as HTMLElement | null)?.dataset.lang ?? 'en'
   if (t.kind === 'article') openPanel({ kind: 'article', id: t.id, lang })

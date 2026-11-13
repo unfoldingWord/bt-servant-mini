@@ -70,9 +70,9 @@ const bookName = (lang: string, code: string): string =>
   (lang.startsWith('es') ? BOOK_ES : lang === 'ar' ? ((booknames as any).BOOK_AR as Record<string, string>) : BOOK_EN)[code] ?? code
 
 /** A note or an article in plain text: no headings, no links the reader cannot follow (as `clean` of language-pack-mcp). */
-export function clean(md: unknown): string {
+export function clean(md: unknown, keepHeadings = false): string {
   return String(md ?? '')
-    .replace(/^#+\s*/gm, '')
+    .replace(/^#+\s*/gm, (h) => (keepHeadings ? h : ''))
     // links stay: md() turns the ones the app can open ([[tw:kt/faith]], [1:2](ref:jon 1:2), ../kt/faith.md) into taps
     .replace(/\((?:ver|see):\s*rc:\/\/[^)\s]+\)/gi, '')
     .replace(/[ \t]+\./g, '.')
@@ -85,7 +85,8 @@ const clip = (s: string, n: number): string => (s.length > n ? s.slice(0, n).rep
 const resShort = (res: string): string => res.split('/').pop()!
 const upper = (res: string): string => resShort(res).toUpperCase()
 
-type Ref = { book: string; kind: 'book' | 'chapter' | 'verses' | 'bookintro' | 'chapintro'; ch?: number; v1?: number; v2?: number }
+/** `ch2`: the chapter of `v2` when a range crosses chapters (`jon 1:17-2:10`); otherwise `ch`. */
+type Ref = { book: string; kind: 'book' | 'chapter' | 'verses' | 'bookintro' | 'chapintro'; ch?: number; v1?: number; v2?: number; ch2?: number }
 function parseRef(ref: string): Ref | null {
   const m = /^([a-z0-9]{3})(?:\s+(.+))?$/.exec(ref.trim().toLowerCase())
   if (!m) return null
@@ -96,6 +97,7 @@ function parseRef(ref: string): Ref | null {
   let x: RegExpExecArray | null
   if ((x = /^(\d+):intro$/.exec(rest))) return { book, kind: 'chapintro', ch: +x[1]! }
   if ((x = /^(\d+)$/.exec(rest))) return { book, kind: 'chapter', ch: +x[1]! }
+  if ((x = /^(\d+):(\d+)-(\d+):(\d+)$/.exec(rest))) return { book, kind: 'verses', ch: +x[1]!, v1: +x[2]!, ch2: +x[3]!, v2: +x[4]! }
   if ((x = /^(\d+):(\d+)(?:-(\d+))?$/.exec(rest))) return { book, kind: 'verses', ch: +x[1]!, v1: +x[2]!, v2: x[3] ? +x[3] : +x[2]! }
   return null
 }
@@ -103,10 +105,11 @@ function rangeOf(r: Ref): [number, number] {
   const b = r.book
   if (r.kind === 'book' || r.kind === 'bookintro') return [verseId(b, 0, 0), verseId(b, 999, 999)]
   if (r.kind === 'chapter' || r.kind === 'chapintro') return [verseId(b, r.ch!, 0), verseId(b, r.ch!, 999)]
-  return [verseId(b, r.ch!, r.v1!), verseId(b, r.ch!, r.v2!)]
+  return [verseId(b, r.ch!, r.v1!), verseId(b, r.ch2 ?? r.ch!, r.v2!)]
 }
 const refLabel = (r: Ref): string =>
-  r.kind === 'book' ? '' : r.kind === 'bookintro' ? '' : r.kind === 'chapter' || r.kind === 'chapintro' ? String(r.ch) : `${r.ch}:${r.v1}${r.v2 !== r.v1 ? '-' + r.v2 : ''}`
+  r.kind === 'book' ? '' : r.kind === 'bookintro' ? '' : r.kind === 'chapter' || r.kind === 'chapintro' ? String(r.ch)
+    : r.ch2 !== undefined && r.ch2 !== r.ch ? `${r.ch}:${r.v1}-${r.ch2}:${r.v2}` : `${r.ch}:${r.v1}${r.v2 !== r.v1 ? '-' + r.v2 : ''}`
 
 const isIntroRow = (row: HelpRow): boolean => row.cols.isIntro === true || row.cols.isIntro === 'true'
 const inRange = (row: HelpRow, [from, to]: [number, number]): boolean => row.from <= to && row.to >= from
@@ -531,7 +534,8 @@ export async function answerSheet(s: Sheet): Promise<Result> {
     default: r = { answer: say(lang, s.intent === 'unknown' ? 'unknown' : 'no_intent'), cites: [] }
   }
   const src = r.cites.length ? sourceLine(lang, r.cites) : ''
-  if (src) r.answer += '\n\n_' + src + '_'
+  // *…*, not _…_: resource ids have underscores (es-419_gl), which break an underscore italic
+  if (src) r.answer += '\n\n*' + src + '*'
   return r
 }
 
@@ -686,4 +690,29 @@ export async function articleView(lang: string, id: string): Promise<{ title: st
 export async function titleFor(lang: string, id: string): Promise<string> {
   const l = (await getLang(lang)) ?? (await getLang('en'))
   return l ? titleOf(l, id) : id.split('/').pop()!
+}
+
+/** One note or question in full, for the panel: what a free search found cut short. */
+export async function helpView(lang: string, book: string, id: string, which: 'note' | 'question'): Promise<{ title: string; md: string; ref: string } | null> {
+  const l = await getLang(lang)
+  if (!l) return null
+  const model = await bookOf(l, book)
+  const row = (which === 'note' ? model?.notes : model?.questions)?.rows.find((x) => x.id === id)
+  if (!model || !row) return null
+  const title = `${bookName(l.lang, book)} ${row.ref}`
+  if (which === 'question') return { title, ref: row.ref, md: `**${String(row.cols.question ?? '')}**
+
+${String(row.cols.response ?? '')}` }
+  const al = await alignedOf(l, book, model)
+  const qs = quoteIn(al, row.quote)
+  const said = (qs.find((q) => /\/(ult|glt)$/.test(q.res)) ?? qs[0])?.text ?? ''
+  const orig = String(row.cols.quote ?? '')
+  const head = [said ? `«${said}»` : '', orig && orig !== said ? `(${orig})` : ''].filter(Boolean).join(' ')
+  const note = clean(row.cols.note, true) // the panel has room for the note's own headings
+  const academy = row.concept && !note.includes(row.concept) ? `
+
+[[${row.concept}]]` : ''
+  return { title, ref: row.ref, md: (head ? `**${head}**
+
+` : '') + note + academy }
 }

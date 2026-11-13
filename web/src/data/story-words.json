@@ -1,0 +1,47 @@
+{
+  "_": "Common words of Bible stories, to English, for searches in a language whose pack lacks the book (the question's words are then matched against the English text). Keys are folded: lowercase, no accents.",
+  "es": {
+    "mar": "sea", "pez": "fish", "peces": "fish", "ballena": "fish", "leon": "lion", "leones": "lion", "foso": "den",
+    "arca": "ark", "diluvio": "flood", "gigante": "giant", "piedra": "stone", "piedras": "stone", "fuego": "fire",
+    "horno": "furnace", "agua": "water", "aguas": "water", "rio": "river", "monte": "mountain", "montana": "mountain",
+    "desierto": "wilderness", "zarza": "bush", "serpiente": "serpent", "cordero": "lamb", "pan": "bread", "panes": "loaves",
+    "vino": "wine", "barca": "boat", "tormenta": "storm", "viento": "wind", "ciego": "blind", "leproso": "leprosy",
+    "tumba": "tomb", "sepulcro": "tomb", "cruz": "cross", "estrella": "star", "pesebre": "manger", "torre": "tower",
+    "muro": "wall", "muros": "walls", "trompetas": "trumpets", "tragado": "swallow", "trago": "swallow",
+    "dividio": "divided", "partio": "divided", "abrio": "divided", "cruzaron": "crossed", "mana": "manna", "codornices": "quail",
+    "becerro": "calf", "tablas": "tablets", "honda": "sling", "cabello": "hair", "pozo": "well", "escalera": "ladder"
+  },
+  "fr": {
+    "mer": "sea", "poisson": "fish", "poissons": "fish", "baleine": "fish", "lion": "lion", "lions": "lion", "fosse": "den",
+    "arche": "ark", "deluge": "flood", "geant": "giant", "pierre": "stone", "pierres": "stone", "feu": "fire",
+    "fournaise": "furnace", "eau": "water", "eaux": "water", "fleuve": "river", "montagne": "mountain", "desert": "wilderness",
+    "buisson": "bush", "serpent": "serpent", "agneau": "lamb", "pain": "bread", "pains": "loaves", "vin": "wine",
+    "barque": "boat", "tempete": "storm", "vent": "wind", "aveugle": "blind", "lepreux": "leprosy", "tombeau": "tomb",
+    "croix": "cross", "etoile": "star", "creche": "manger", "tour": "tower", "murailles": "walls", "trompettes": "trumpets",
+    "avale": "swallow", "englouti": "swallow", "ouvert": "divided", "fendit": "divided", "manne": "manna", "veau": "calf",
+    "fronde": "sling", "cheveux": "hair", "puits": "well", "echelle": "ladder"
+  },
+  "id": {
+    "laut": "sea", "ikan": "fish", "singa": "lion", "gua": "den", "bahtera": "ark", "raksasa": "giant", "batu": "stone",
+    "api": "fire", "perapian": "furnace", "air": "water", "sungai": "river", "gunung": "mountain", "gurun": "wilderness",
+    "semak": "bush", "ular": "serpent", "domba": "lamb", "roti": "bread", "anggur": "wine", "perahu": "boat",
+    "badai": "storm", "angin": "wind", "buta": "blind", "kusta": "leprosy", "kubur": "tomb", "salib": "cross",
+    "bintang": "star", "palungan": "manger", "menara": "tower", "tembok": "wall", "sangkakala": "trumpets",
+    "ditelan": "swallow", "menelan": "swallow", "terbelah": "divided", "membelah": "divided", "manna": "manna",
+    "lembu": "calf", "umban": "sling", "rambut": "hair", "sumur": "well", "tangga": "ladder"
+  },
+  "hi": {
+    "समुद्र": "sea", "मछली": "fish", "सिंह": "lion", "शेर": "lion", "मांद": "den", "जहाज": "ark", "जलप्रलय": "flood",
+    "पत्थर": "stone", "आग": "fire", "भट्ठी": "furnace", "पानी": "water", "नदी": "river", "पहाड़": "mountain",
+    "जंगल": "wilderness", "झाड़ी": "bush", "सांप": "serpent", "मेम्ना": "lamb", "रोटी": "bread", "दाखरस": "wine",
+    "नाव": "boat", "आंधी": "storm", "अंधा": "blind", "कब्र": "tomb", "क्रूस": "cross", "तारा": "star", "निगल": "swallow"
+  },
+  "ar": {
+    "البحر": "sea", "بحر": "sea", "الحوت": "fish", "حوت": "fish", "سمكة": "fish", "السمكة": "fish", "اسد": "lion", "الاسد": "lion",
+    "الاسود": "lion", "الجب": "den", "جب": "den", "الفلك": "ark", "فلك": "ark", "الطوفان": "flood", "طوفان": "flood",
+    "النار": "fire", "نار": "fire", "الاتون": "furnace", "حجر": "stone", "الماء": "water", "ماء": "water", "النهر": "river",
+    "نهر": "river", "الجبل": "mountain", "جبل": "mountain", "البرية": "wilderness", "العليقة": "bush", "الحية": "serpent",
+    "الخروف": "lamb", "خبز": "bread", "الخبز": "bread", "خمر": "wine", "السفينة": "boat", "العاصفة": "storm", "اعمى": "blind",
+    "القبر": "tomb", "قبر": "tomb", "الصليب": "cross", "النجم": "star", "المذود": "manger", "البرج": "tower", "ابتلع": "swallow"
+  }
+}

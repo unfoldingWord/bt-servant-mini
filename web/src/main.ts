@@ -1,13 +1,43 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { answerSheet, facts, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
-import { backPanel, fillTitles, renderStudy, setHooks, setViewLang } from './view'
+import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, buildSheet, fold, type Slots } from './sheet'
 import { modelReady, modelState, slotsOf } from './model'
 import { aboutLabel, languagesSection, modelLine, modelNotice, modelSection, PACK_NAMES, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
-import { articleForQuestion, asksAbout, keywords, resetSearch, searchVerses, versesOf } from './search'
+import { articleForQuestion, asksAbout, keywords, resetSearch, searchHelps, searchVerses, versesOf } from './search'
+
+// headings of the notes and questions a free search finds, in the app's language
+const HTS: Record<string, { notes: string; questions: string; note: string; question: string; onlyHelps: string }> = {
+  en: { notes: 'Translation notes that mention «{w}»', questions: 'Questions that mention «{w}»', note: 'Note', question: 'Question', onlyHelps: 'No verse has «{w}», but these helps do:' },
+  es: { notes: 'Notas de traducción que mencionan «{w}»', questions: 'Preguntas que mencionan «{w}»', note: 'Nota', question: 'Pregunta', onlyHelps: 'Ningún versículo tiene «{w}», pero estas ayudas sí:' },
+  fr: { notes: 'Notes de traduction qui mentionnent «{w}»', questions: 'Questions qui mentionnent «{w}»', note: 'Note', question: 'Question', onlyHelps: "Aucun verset n'a «{w}», mais ces aides oui :" },
+  id: { notes: 'Catatan terjemahan yang menyebut «{w}»', questions: 'Pertanyaan yang menyebut «{w}»', note: 'Catatan', question: 'Pertanyaan', onlyHelps: 'Tidak ada ayat dengan «{w}», tetapi alat bantu ini ada:' },
+  hi: { notes: '«{w}» का उल्लेख करने वाले अनुवाद नोट्स', questions: '«{w}» का उल्लेख करने वाले प्रश्न', note: 'नोट', question: 'प्रश्न', onlyHelps: 'किसी पद में «{w}» नहीं है, पर इन सहायक संसाधनों में है:' },
+  ar: { notes: 'ملاحظات الترجمة التي تذكر «{w}»', questions: 'الأسئلة التي تذكر «{w}»', note: 'ملاحظة', question: 'سؤال', onlyHelps: 'لا توجد آية فيها «{w}»، لكن هذه الأدوات المساعدة فيها:' },
+}
+const HT = () => HTS[nav] ?? HTS.en!
+/**
+ * A search snippet of a note as plain text: it is a cut piece of the note's Markdown, so a heading, a link or a bold can be
+ * half there. The marks go; the words stay (a link keeps its label, [[ta:translate/figs-metaphor]] becomes "figs metaphor").
+ */
+function plainSnippet(s: string): string {
+  return s
+    .replace(/[«»]/g, '')
+    .replace(/\[\[([^\]]*)\]\]?/g, (_, x: string) => x.split('/').pop()!.replace(/[-_]/g, ' '))
+    .replace(/\[([^\]]*)\]\([^)]*\)?/g, '$1')
+    .replace(/\]\([^)\s]*\)?/g, '')
+    .replace(/(^|[\s…(])(?:tw|ta):[\w/-]+\]\]\)?/g, '$1') // the end of a [[tw:…]] link whose start was cut off
+    .replace(/\]\]\)?/g, '')
+    .replace(/\[[^\]]*$/, '')
+    .replace(/(^|\s)#{1,6}\s+/g, '$1')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/(^|[\s(])[*_]([^*_\n]+)[*_](?=[\s).,;:!?]|$)/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 import { md } from './md'
 import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, setOnline, type Turn } from './online'
 
@@ -20,7 +50,7 @@ const UI: Record<string, UiText> = {
     ph: 'Ask about a verse or a word…', send: 'Send', loading: 'Starting the offline model…', ready: 'Works without internet',
     thinking: 'Looking in the translation helps…', failed: 'Something went wrong:', details: 'details',
     hello: 'Hello! I answer from the translation helps installed on this phone (notes, words, questions, Academy), without internet. Ask in English, Spanish, French, Indonesian, Hindi or Arabic.',
-    ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'What do the notes say about Ruth 1:16?'],
+    ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'Where was Jonah swallowed by the fish?', 'What do the notes say about Ruth 1:16?'],
     chats: 'Conversations', newChat: 'New conversation', max: 'You can keep up to 3 conversations. Delete one to start another.',
     del: 'Delete', confirmDel: 'Delete this conversation?', untitled: 'New conversation',
     appLang: 'App language', packs: 'Installed language packs', welcome: 'How can I help with your translation?', helps: 'Language of the helps', auto: 'Same as my question',
@@ -29,7 +59,7 @@ const UI: Record<string, UiText> = {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
     ready: 'Funciona sin internet', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
     hello: '¡Hola! Respondo con las ayudas de traducción instaladas en este teléfono (notas, palabras, preguntas, Academia), sin internet. Pregunta en español, inglés, francés, indonesio, hindi o árabe.',
-    ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Qué dice Jonás 3:9?'],
+    ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Dónde fue tragado Jonás por un pez?', '¿Qué dice Jonás 3:9?'],
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
     del: 'Borrar', confirmDel: '¿Borrar esta conversación?', untitled: 'Conversación nueva',
     appLang: 'Idioma de la app', packs: 'Paquetes de idioma instalados', welcome: '¿En qué te ayudo con tu traducción?', helps: 'Idioma de las ayudas', auto: 'El de mi pregunta',
@@ -38,7 +68,7 @@ const UI: Record<string, UiText> = {
     ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Fonctionne sans internet',
     thinking: 'Je cherche dans les aides à la traduction…', failed: 'Une erreur est survenue :', details: 'détails',
     hello: 'Bonjour ! Je réponds à partir des aides à la traduction installées sur ce téléphone, sans internet.',
-    ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?'],
+    ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?', 'Où Jonas a-t-il été avalé par le poisson ?'],
     chats: 'Conversations', newChat: 'Nouvelle conversation', max: "Vous pouvez garder 3 conversations. Supprimez-en une pour en commencer une autre.",
     del: 'Supprimer', confirmDel: 'Supprimer cette conversation ?', untitled: 'Nouvelle conversation',
     appLang: "Langue de l'application", packs: 'Paquets de langue installés', welcome: 'Comment puis-je aider votre traduction ?', helps: 'Langue des aides', auto: 'Celle de ma question',
@@ -47,7 +77,7 @@ const UI: Record<string, UiText> = {
     ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Bisa tanpa internet',
     thinking: 'Mencari di bahan bantu penerjemahan…', failed: 'Terjadi kesalahan:', details: 'detail',
     hello: 'Halo! Saya menjawab dari bahan bantu penerjemahan yang terpasang di ponsel ini, tanpa internet.',
-    ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?'],
+    ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?', 'Di mana Yunus ditelan ikan?'],
     chats: 'Percakapan', newChat: 'Percakapan baru', max: 'Anda bisa menyimpan 3 percakapan. Hapus satu untuk memulai yang lain.',
     del: 'Hapus', confirmDel: 'Hapus percakapan ini?', untitled: 'Percakapan baru',
     appLang: 'Bahasa aplikasi', packs: 'Paket bahasa terpasang', welcome: 'Apa yang bisa saya bantu untuk terjemahan Anda?', helps: 'Bahasa bahan bantu', auto: 'Sesuai pertanyaan saya',
@@ -56,7 +86,7 @@ const UI: Record<string, UiText> = {
     ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'बिना इंटरनेट चलता है',
     thinking: 'अनुवाद सहायता में खोज रहा हूँ…', failed: 'कुछ गलत हो गया:', details: 'विवरण',
     hello: 'नमस्ते! मैं इस फ़ोन पर स्थापित अनुवाद सहायता से, बिना इंटरनेट के, उत्तर देता हूँ।',
-    ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?'],
+    ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?', 'योना को मछली ने कहाँ निगल लिया?'],
     chats: 'बातचीत', newChat: 'नई बातचीत', max: 'आप 3 बातचीत रख सकते हैं। नई शुरू करने के लिए एक हटाएँ।',
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
     appLang: 'ऐप की भाषा', packs: 'स्थापित भाषा पैकेज', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?', helps: 'सहायता की भाषा', auto: 'मेरे प्रश्न वाली',
@@ -65,7 +95,7 @@ const UI: Record<string, UiText> = {
     ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'يعمل دون إنترنت',
     thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
     hello: 'مرحبًا! أجيب من مساعدات الترجمة المثبتة على هذا الهاتف (الملاحظات والكلمات والأسئلة والأكاديمية)، دون إنترنت.',
-    ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'ساعدني في ترجمة يونان ١'],
+    ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'أين ابتلع الحوت يونان؟', 'ساعدني في ترجمة يونان ١'],
     chats: 'المحادثات', newChat: 'محادثة جديدة', max: 'يمكنك الاحتفاظ بثلاث محادثات. احذف واحدة لتبدأ أخرى.',
     del: 'حذف', confirmDel: 'حذف هذه المحادثة؟', untitled: 'محادثة جديدة',
     appLang: 'لغة التطبيق', packs: 'حزم اللغات المثبتة', welcome: 'كيف أساعدك في ترجمتك؟', helps: 'لغة المساعدات', auto: 'لغة سؤالي',
@@ -108,6 +138,8 @@ type Msg = {
   ai?: { text: string; model: string }
   /** the passage drawn with tappable words (kept for the last messages only); lang: the pack the answer came from; ctx: its article */
   study?: Study; lang?: string; ctx?: string
+  /** the notes and questions a free search found, each opened whole in the panel */
+  helps?: { head: string; items: HelpItem[] }[]
 }
 type Hit = { book: string; ch: number; v: number }
 type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[] }
@@ -204,6 +236,7 @@ function renderMsg(m: Msg): HTMLElement {
     fillTitles(box, m.lang ?? 'en')
     host.appendChild(box)
   }
+  if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   if (m.text) d.appendChild(el('div', 'plain', m.text))
   if (m.follow?.length) {
     const f = el('div', 'follow')
@@ -472,7 +505,11 @@ function isOpen(q: string, sheet: Sheet): boolean {
   if (sheet.ref) return false
   if (WHERE.test(q)) return keywords(q).length >= 1
   if (kindOf(q) && keywords(q).length >= 2) return true // "notes about Abraham sacrificing Isaac"
-  return ['unknown', 'advice', 'passage'].includes(sheet.intent) && keywords(q).length >= 2
+  // a keyword first: with no article for it ("pez", "Jonah fish", "Moisés mar") the words become a free search
+  if (sheet.intent === 'article' && !sheet.concept && !sheet.candidates?.length) return keywords(q).length >= 1
+  // nothing understood and no article: even one word is worth a search ("ballena") rather than "I could not tell"
+  if (sheet.intent === 'unknown') return keywords(q).length >= 1
+  return ['advice', 'passage'].includes(sheet.intent) && keywords(q).length >= 2
 }
 
 /** What the person wants to see of a verse, when the question says it. */
@@ -540,9 +577,19 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
         const used = res.how === 'concepts' ? res.concepts : res.how === 'text' ? (res.hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
         const follow: { label: string; sheet: Sheet }[] = []
         for (const h of res.hits.slice(0, 4)) follow.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, ['text', 'notes']) })
-        m = { who: 'bot', intro: searchIntro(res.how, used, ui), ui, follow,
-          info: res.hits.map((h) => `**${bookLabel(ui, h.book)} ${h.ch}:${h.v}** — ${h.text.replace(/\s+/g, ' ').trim()}`).join('\n\n') || undefined,
-          meta: `${T.details} · ${total} s\n${meta}${searched}` }
+        // the notes and questions that contain the same words, each a button to its verse's notes or questions
+        const helps = await searchHelps(q, sheet.lang).catch(() => [])
+        const NL2 = '\n\n'
+        const info = res.hits.map((h) => `**${bookLabel(ui, h.book)} ${h.ch}:${h.v}** — ${h.text.replace(/\s+/g, ' ').trim()}`).join(NL2)
+        const words = res.keywords.join(' ')
+        // each note or question is a row: its snippet as plain text, and a tap opens it whole in the panel
+        const groups = (['note', 'question'] as const).map((k) => ({
+          head: (k === 'note' ? HT().notes : HT().questions).replace('{w}', words),
+          items: helps.filter((h) => h.kind === k).map((h) => ({ ...h, snippet: plainSnippet(h.snippet), ref: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}` })),
+        })).filter((g) => g.items.length)
+        m = { who: 'bot', intro: res.hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words), ui, follow,
+          info: info || undefined, helps: groups.length ? groups : undefined,
+          meta: `${T.details} · ${total} s\n${meta}${searched}${helps.length ? `\nhelps: ${helps.length}` : ''}` }
         throw { done: m }
       }
       // "notes about Jonah swallowed by the fish": straight to the notes of the best verse; the other verses as buttons

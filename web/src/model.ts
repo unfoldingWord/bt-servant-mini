@@ -97,10 +97,16 @@ export async function saveToDownloads(name: string, bytes: Uint8Array, mime = 'a
 export async function slotsOf(question: string): Promise<{ slots: Slots | null; raw: string; ms: number }> {
   if (!modelReady()) return { slots: null, raw: '(no model on this phone yet: references and searches only)', ms: 0 }
   const t0 = performance.now()
-  const r = await complete({
-    prompt: prompt.template.replace('<<Q>>', question.replace(/\s+/g, ' ').trim()),
-    temperature: 0, seed: 0, n_predict: 200, stop: ['<end_of_turn>'], cache_prompt: true,
-  })
+  let r: any
+  try {
+    r = await complete({
+      prompt: prompt.template.replace('<<Q>>', question.replace(/\s+/g, ' ').trim()),
+      temperature: 0, seed: 0, n_predict: 200, stop: ['<end_of_turn>'], cache_prompt: true,
+    })
+  } catch (e) {
+    // the model did not answer (it stopped, or is still starting): go on as without a model, references and searches
+    return { slots: null, raw: `(the model did not answer: ${e instanceof Error ? e.message : String(e)})`, ms: Math.round(performance.now() - t0) }
+  }
   const raw: string = r.content ?? ''
   const ms = Math.round(performance.now() - t0)
   let txt = raw.trim()
