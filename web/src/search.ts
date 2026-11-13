@@ -7,7 +7,7 @@ import { textOfRange } from '@lpc/query/passage'
 import glossary from './data/kt-glossary.json'
 import booknames from './data/booknames.json'
 import books from './data/books.json'
-import { openLang } from './packs'
+import { installedLangs, openLang } from './packs'
 import { fold } from './sheet'
 
 const STOP = new Set(
@@ -66,11 +66,15 @@ export function resetSearch() {
 async function names(): Promise<Map<string, string[]>> {
   if (NAMES) return NAMES
   const m = new Map<string, string[]>()
-  const add = (n: string, id: string) => {
-    const k = fold(n.replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim()
+  const put = (k: string, id: string) => {
     if (k.length >= 3 && !m.get(k)?.includes(id)) m.set(k, [...(m.get(k) ?? []), id])
   }
-  for (const pl of ['en', 'es-419']) {
+  // "John (the Baptist)": both "john" and "john the baptist"
+  const add = (n: string, id: string) => {
+    put(fold(n.replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim(), id)
+    if (/\(/.test(n)) put(fold(n.replace(/[()]/g, ' ')).replace(/[,;]/g, ' ').replace(/\s+/g, ' ').trim(), id)
+  }
+  for (const pl of await installedLangs()) {
     try {
       const { maps } = await lang(pl)
       for (const [id, ns] of Object.entries<string[]>(maps.map?.core?.names ?? {}))
@@ -221,6 +225,34 @@ async function byText(words: string[], packLang: string): Promise<Found[]> {
     }
   }
   return []
+}
+
+/**
+ * "Who was John the Baptist?", "¿Qué es la gracia?", "Siapa Musa?": when what follows the question words is the name of a
+ * Translation Words article, the article (or the articles that share the name) instead of a verse search.
+ */
+const ASKS: RegExp[] = [
+  /^(?:who|what)(?:'s| is| was| were| are)?\s+(?:the\s+|a\s+|an\s+)?(.+)$/i,
+  /^(?:tell me about|explain)\s+(?:the\s+)?(.+)$/i,
+  /^(?:qui[eé]n(?:es)?|qu[eé]|cu[aá]l)\s+(?:es|era|fue|son|eran|fueron|significa)\s+(?:el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.+)$/i,
+  /^(?:h[aá]blame de|expl[ií]came)\s+(?:el\s+|la\s+|los\s+|las\s+)?(.+)$/i,
+  /^(?:qui|que|qu'|qu’)\s*(?:est|était|étaient|sont|signifie)(?:-ce que|-ce qu')?\s+(?:le\s+|la\s+|les\s+|l'|l’)?(.+)$/i,
+  /^(?:siapa(?:kah)?|apa(?:kah)?)\s+(?:itu\s+|adalah\s+|arti\s+)?(.+?)(?:\s+itu)?$/i,
+  /^(.+?)\s+(?:कौन|क्या)\s+(?:था|थे|थी|है|हैं)$/,
+  /^(?:من|ما|ماذا)\s+(?:هو|هي|كان|كانت|هم|يعني)?\s*(.+)$/,
+]
+export async function articleForQuestion(q: string): Promise<string[] | null> {
+  const t = q.trim().replace(/[¿?!¡.؟।]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const m = await names()
+  for (const re of ASKS) {
+    const hit = re.exec(t)
+    if (!hit?.[1]) continue
+    const k = fold(hit[1]).replace(/[«»"“”']/g, '').replace(/\s+/g, ' ').trim()
+    const ids = m.get(k) ?? m.get(k.replace(/^(el|la|los|las|the|le|les|l)\s+/, '')) ?? m.get(k.replace(/^ال/, ''))
+      ?? (!k.includes(' ') ? conceptOf(k, m) : null) // one name with a close spelling: Moïse ~ Moses
+    if (ids?.length) return ids.filter((id) => id.startsWith('tw:'))
+  }
+  return null
 }
 
 export async function searchVerses(question: string, term: string | null, packLang: string): Promise<SearchResult> {

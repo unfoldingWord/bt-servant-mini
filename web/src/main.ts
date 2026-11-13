@@ -6,7 +6,7 @@ import { modelReady, modelState, slotsOf } from './model'
 import { aboutLabel, languagesSection, modelLine, modelSection, PACK_NAMES, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
-import { keywords, resetSearch, searchVerses } from './search'
+import { articleForQuestion, keywords, resetSearch, searchVerses } from './search'
 import { md } from './md'
 
 type UiText = {
@@ -356,6 +356,28 @@ function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
   return slots
 }
 
+/** The language of a question when the model did not say: by script, then by common words; else the app's language. */
+const COMMON: Record<string, RegExp> = {
+  en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says)\b/gi,
+  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice)\b/gi,
+  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|verset|notes?|dit)\b/gi,
+  id: /\b(apa|siapa|bagaimana|di mana|yang|adalah|tolong|ayat|catatan|kata|dalam|itu)\b/gi,
+}
+function guessLang(q: string): string {
+  if (/[؀-ۿ]/.test(q)) return 'ar'
+  if (/[ऀ-ॿ]/.test(q)) return 'hi'
+  let best = nav
+  let most = 0
+  for (const [l, re] of Object.entries(COMMON)) {
+    const n = q.match(re)?.length ?? 0
+    if (n > most) {
+      most = n
+      best = l
+    }
+  }
+  return best
+}
+
 /** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
 function refInText(slots: Slots, q: string): Slots {
   if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter) return slots
@@ -432,6 +454,11 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     setUiLang(ui)
     let others: { label: string; sheet: Sheet }[] = []
     let searched = ''
+    // "Who was John the Baptist?": the article, when the words after "who was" name one
+    if (q !== undefined && !sheet.ref && ['unknown', 'search', 'article', 'advice', 'passage'].includes(sheet.intent) && !sheet.concept) {
+      const ids = await articleForQuestion(q)
+      if (ids?.length) sheet = { ...sheet, intent: ids.length === 1 ? 'article' : 'choose', concept: ids.length === 1 ? ids[0]! : null, candidates: ids.length > 1 ? ids : null, term: null }
+    }
     if (q !== undefined && isOpen(q, sheet)) {
       const res = await searchVerses(q, sheet.term, sheet.lang)
       const hitSheet = async (h: Hit, what: string[]) => (await buildSheet(`h${Date.now()}`, passageOf(h, what, ui), helpsLang)).sheet
@@ -483,7 +510,7 @@ form.addEventListener('submit', (e) => {
   const c = conv()
   respond(c, q, async () => {
     const { slots, raw, ms } = await slotsOf(q)
-    const s0 = refInText(slots ?? { intent: 'unknown', lang: nav }, q)
+    const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
     // the script says the language even when the model does not know it: Arabic letters, Devanagari
     if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
     else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
