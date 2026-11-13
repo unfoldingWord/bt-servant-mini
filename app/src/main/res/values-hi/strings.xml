@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The neutral name of discreet mode (web/src/protect.ts has the same names). -->
+<resources>
+    <string name="discreet_name">अध्ययन नोट्स</string>
+</resources>

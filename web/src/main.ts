@@ -41,6 +41,7 @@ function plainSnippet(s: string): string {
 }
 import { md } from './md'
 import { askSafety, closeSafety, safetyAsked } from './safety'
+import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
@@ -151,6 +152,12 @@ const MAX = 3
 let convs: Conv[] = []
 let current = ''
 function load() {
+  // conversations not kept (menu > Safety): nothing is read or written on the phone
+  if (!keepHistory()) {
+    try { localStorage.removeItem(KEY) } catch {}
+    if (!convs.length) newConv()
+    return
+  }
   try {
     const d = JSON.parse(localStorage.getItem(KEY) ?? 'null')
     if (d && Array.isArray(d.convs)) {
@@ -165,7 +172,8 @@ function save() {
   // the interactive passage is kept for the last messages of each conversation; older ones show their text answer
   for (const c of convs) c.msgs.slice(0, -8).forEach((m) => delete m.study)
   try {
-    localStorage.setItem(KEY, JSON.stringify({ convs, current }))
+    if (keepHistory()) localStorage.setItem(KEY, JSON.stringify({ convs, current }))
+    else localStorage.removeItem(KEY)
   } catch {}
 }
 function newConv(): Conv | null {
@@ -189,6 +197,7 @@ function applyUi() {
   input.placeholder = T.ph
   btn.setAttribute('aria-label', T.send)
   menu.setAttribute('aria-label', T.chats)
+  applyBrand(nav)
 }
 function setUi(l: string) {
   nav = l
@@ -284,7 +293,7 @@ function renderConv() {
   for (const m of c.msgs) log.appendChild(renderMsg(m))
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
-type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs' | 'usage'
+type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs' | 'usage' | 'safety'
 let panelView: PanelView = 'main'
 const MTS: Record<string, { language: string; on: string; off: string; none: string; installed: string; back: string }> = {
   en: { language: 'Language', on: 'On', off: 'Off', none: 'None', installed: 'installed', back: 'Back' },
@@ -367,6 +376,7 @@ function renderPanel() {
   row(modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
   row(packsTitle(nav), `${INSTALLED.length} ${MT().installed}`, go('packs'))
   row(UT().title, usageOn() ? MT().on : MT().off, go('usage'))
+  row(PT(nav).title, protectSummary(nav, MT().off), go('safety'))
   const aboutRow = el('button', 'mrow') as HTMLButtonElement
   aboutRow.type = 'button'
   aboutRow.append(el('span', 'mrow-t', aboutLabel(nav)), el('span', 'mrow-c', '›'))
@@ -390,12 +400,13 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
     panelView = 'main'
     renderPanel()
   }
-  const titles = { language: MT().language, online: OT().label, model: modelTitle(nav), packs: packsTitle(nav), usage: UT().title }
+  const titles = { language: MT().language, online: OT().label, model: modelTitle(nav), packs: packsTitle(nav), usage: UT().title, safety: PT(nav).title }
   head.append(back, el('h2', '', titles[v]))
   panel.appendChild(head)
   if (v === 'language') renderLanguageView()
   else if (v === 'online') renderOnlineView()
   else if (v === 'usage') renderUsageView()
+  else if (v === 'safety') panel.appendChild(protectView(nav, eraseAll, () => renderPanel()))
   else if (v === 'model') panel.appendChild(modelSection(nav, () => {
     setReady()
     renderPanel()
@@ -528,9 +539,18 @@ function renderUsageView() {
   const sent = lastSent()
   if (sent) panel.appendChild(el('p', 'note', UT().sent.replace('{d}', sent)))
 }
+/** Menu > Safety > Erase all conversations now. */
+function eraseAll() {
+  convs = []
+  current = ''
+  try { localStorage.removeItem(KEY) } catch {}
+  newConv()
+  renderConv()
+}
 const closePanel = () => panel.classList.remove('show')
 // Android's back button (MainActivity.onBackPressed): the bottom panel, then the About page, then the menu; else it leaves
 ;(window as any).__back = (): boolean => {
+  if (locked()) return false // the back button leaves the app; it never opens it
   if (closeSafety()) return true
   if (backPanel()) return true
   const about = document.querySelector('#about')
@@ -878,6 +898,9 @@ input.addEventListener('keydown', (e) => {
   }
 })
 
+// a PIN (menu > Safety) covers the app before anything shows, and again after a minute away
+lock(nav)
+watchAway(() => nav)
 load()
 renderConv()
 let INSTALLED: string[] = []
@@ -909,8 +932,9 @@ function firstSafety() {
     const v = localStorage.getItem(k)
     return v === '1' ? true : v === '0' ? false : null
   }
-  askSafety(nav, onlineAvailable() ? ['online', 'usage'] : ['usage'], async (a) => {
+  askSafety(nav, onlineAvailable() ? ['online', 'usage', 'discreet'] : ['usage', 'discreet'], async (a) => {
     if (!a) return
+    if (a.discreet !== undefined) setDiscreet(a.discreet, nav)
     if (a.usage !== undefined) {
       setUsageOn(a.usage)
       if (a.usage) count('opens')
@@ -918,7 +942,7 @@ function firstSafety() {
     if (a.online === false) setOnline(false)
     if (a.online) await turnOnline()
     setReady()
-  }, { online: stored('btsm.online'), usage: stored('btsm.usage') })
+  }, { online: stored('btsm.online'), usage: stored('btsm.usage'), discreet: discreetOn() || stored('btsm.discreet') })
 }
 try {
   if (!localStorage.getItem('btsm.onboarded')) showAbout(nav, () => { setReady(); firstSafety() })

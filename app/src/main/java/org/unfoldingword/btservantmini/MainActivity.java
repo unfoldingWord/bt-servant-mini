@@ -2,6 +2,10 @@ package org.unfoldingword.btservantmini;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.content.ComponentName;
+import android.content.pm.PackageManager;
+import android.view.WindowManager;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
@@ -81,6 +85,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        applyDiscreet();
         WebView.setWebContentsDebuggingEnabled(true);
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
@@ -337,7 +342,41 @@ public class MainActivity extends Activity {
         }
     }
 
+    // ------------------------------------------------------------------------------------------------- discreet mode
+
+    private boolean isDiscreet() { return getSharedPreferences("btsm", MODE_PRIVATE).getBoolean("discreet", false); }
+
+    /** Discreet mode: no screenshots and a blank thumbnail in recent apps, and the neutral name on the task. */
+    private void applyDiscreet() {
+        boolean on = isDiscreet();
+        if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        setTaskDescription(new ActivityManager.TaskDescription(on ? getString(R.string.discreet_name) : "BT Servant Mini"));
+    }
+
+    /** Turns one home-screen entry on and the other off (AndroidManifest: .Launcher and .Discreet). */
+    private void setLauncher(boolean discreet) {
+        String ns = MainActivity.class.getName().substring(0, MainActivity.class.getName().lastIndexOf('.'));
+        PackageManager pm = getPackageManager();
+        pm.setComponentEnabledSetting(new ComponentName(getPackageName(), ns + ".Discreet"),
+                discreet ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+        pm.setComponentEnabledSetting(new ComponentName(getPackageName(), ns + ".Launcher"),
+                discreet ? PackageManager.COMPONENT_ENABLED_STATE_DISABLED : PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
+    }
+
     private class Bridge {
+        @JavascriptInterface
+        public boolean discreet() { return isDiscreet(); }
+
+        @JavascriptInterface
+        public void setDiscreet(boolean on) {
+            getSharedPreferences("btsm", MODE_PRIVATE).edit().putBoolean("discreet", on).apply();
+            runOnUiThread(() -> {
+                applyDiscreet();
+                try { setLauncher(on); } catch (Exception e) { Log.w(TAG, "launcher switch: " + e); }
+            });
+        }
+
         @JavascriptInterface
         public boolean ready() { return ready; }
 
