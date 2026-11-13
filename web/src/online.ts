@@ -35,16 +35,16 @@ export function setOnline(on: boolean) {
 }
 
 export type Turn = { role: 'user' | 'assistant'; text: string }
-/** The online answer, or null when it cannot be had (off, no internet, server error, too slow). */
+/** The online answer, or null when it cannot be had (off, no internet, server error, more than 45 s). */
 export async function onlineAnswer(question: string, lang: string, helps: string, history: Turn[]): Promise<{ text: string; model: string } | null> {
   if (!onlineOn() || !onlineAvailable() || !navigator.onLine) return null
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 30000)
+  const timer = setTimeout(() => ctrl.abort(), 45000) // with the passage context an answer can take 20-30 s
   try {
     const r = await fetch(`${onlineUrl()}/v1/answer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-BTSM-Key': onlineKey(), ...(onlineSession() ? { Authorization: `Bearer ${onlineSession()!.token}` } : {}) },
-      body: JSON.stringify({ question, lang, helps: helps.slice(0, 7000), history: history.slice(-4) }),
+      body: JSON.stringify({ question, lang, helps: helps.slice(0, 9500), history: history.slice(-4) }),
       signal: ctrl.signal,
     })
     onlineProblem = ''

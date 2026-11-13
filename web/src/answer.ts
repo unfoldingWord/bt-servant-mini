@@ -218,8 +218,11 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       : ref.kind === 'chapter' ? rows.find((x) => x !== bookIntro && x.from === verseId(ref.book, ref.ch!, 1)) : bookIntro
     const what_ = ref.kind === 'bookintro' || ref.kind === 'book' ? book : `${book} ${ref.ch}`
     if (row) {
-      out.push('### ' + say(lang, 'intro_head', { what: what_ }))
-      out.push(clean(row.cols.note))
+      const note = clean(row.cols.note, true)
+      // a note with its own title needs no second one; its headings go under the answer's
+      if (!/^#/.test(note)) out.push('### ' + say(lang, 'intro_head', { what: what_ }))
+      out.push(note.replace(/^#{1,2}\s/gm, '### '))
+      facts.intro = what_
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} intro, note ${row.id}`))
     } else out.push(say(lang, 'intro_none', { what: what_ }))
   }
@@ -715,4 +718,41 @@ ${String(row.cols.response ?? '')}` }
   return { title, ref: row.ref, md: (head ? `**${head}**
 
 ` : '') + note + academy }
+}
+
+// ------------------------------------------------------------------------------------------------- context for online AI
+
+/**
+ * What the online model needs to say what is happening in a passage before it says how to translate it: the verses around
+ * it in the simple text (UST/GST), the chapter's introduction and the start of the book's introduction (what the book is
+ * about, its outline). Each part is cut to a size, so the whole stays compact. Empty for anything but a verse range.
+ */
+export async function passageContext(s: Sheet): Promise<string> {
+  if (!s.ref || !['passage', 'advice'].includes(s.intent)) return ''
+  const ref = parseRef(s.ref)
+  if (!ref || ref.kind !== 'verses') return ''
+  const l = await getLang(s.lang)
+  const model = l ? await bookOf(l, ref.book) : undefined
+  if (!l || !model) return ''
+  const book = bookName(l.lang, ref.book)
+  const parts: string[] = []
+  // the verses around, numbered, from the simple text (or the first text)
+  const simple = model.texts.find((t) => /\/(ust|gst)$/.test(t.res)) ?? model.texts[0]
+  if (simple) {
+    const first = Math.max(1, (ref.v1 ?? 1) - 3)
+    const lastCh = ref.ch2 ?? ref.ch!
+    const from = verseId(ref.book, ref.ch!, first)
+    const to = verseId(ref.book, lastCh, (ref.v2 ?? ref.v1 ?? 1) + 3)
+    const pieces = simple.pieces as unknown as [string, boolean][]
+    const verses = verseSlices(ref.book, simple.events as any, pieces.length, from, to)
+      .map(({ v, start, end }) => `${v} ${pieces.slice(start, end).map((p) => p[0]).join('').replace(/\{/g, ' ').replace(/\}/g, '').replace(/\s+/g, ' ').trim()}`)
+      .join(' ')
+    if (verses && !wrongScript(l.lang, verses)) parts.push(`## Surrounding verses, ${book} ${ref.ch} (${resShort(simple.res).toUpperCase()})\n${clip(verses, 1400)}`)
+  }
+  const intros = (model.notes?.rows ?? []).filter(isIntroRow)
+  const bookIntro = intros[0]
+  const chapIntro = intros.find((x) => x !== bookIntro && x.from === verseId(ref.book, ref.ch!, 1))
+  if (chapIntro) parts.push(`## Introduction to ${book} ${ref.ch} (translation notes)\n${clip(clean(chapIntro.cols.note), 1300)}`)
+  if (bookIntro) parts.push(`## Introduction to ${book} (translation notes, beginning)\n${clip(clean(bookIntro.cols.note), 1600)}`)
+  return parts.join('\n\n')
 }

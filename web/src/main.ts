@@ -1,12 +1,13 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { answerSheet, facts, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
+import { answerSheet, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, buildSheet, fold, type Slots } from './sheet'
 import { modelOff, modelReady, modelState, slotsOf } from './model'
 import { aboutLabel, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
+import { asksIntro, chapterNumber, has, kindOf } from './commands'
 import { articleForQuestion, asksAbout, keywords, resetSearch, searchHelps, searchVerses, versesOf } from './search'
 
 // headings of the notes and questions a free search finds, in the app's language
@@ -571,6 +572,22 @@ function guessLang(q: string): string {
 }
 
 /** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
+/** "Introduction to Jonah", "Introducción a Jonás 1", "¿De qué trata el libro de Jonás?": the book or chapter asked about. */
+function introAsked(q: string, lang: string): Slots | null {
+  if (!asksIntro(q)) return null
+  const t = q.replace(/[¿?!¡.,;:«»"“”؟]/g, ' ').replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  const words = t.split(/\s+/).filter(Boolean)
+  const chFirst = chapterNumber(t)
+  for (let i = 0; i < words.length; i++)
+    for (let k = 3; k >= 1; k--) {
+      const code = bookCode(lang, words.slice(i, i + k).join(' '))
+      if (!code) continue
+      const ch = /^\d+$/.test(words[i + k] ?? '') ? Number(words[i + k]) : chFirst
+      return { intent: 'passage', book: code, chapter: ch, verse_start: null, verse_end: null, what: ['intro'], lang } as Slots
+    }
+  return null
+}
+
 function refInText(slots: Slots, q: string): Slots {
   if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter) return slots
   const t = q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
@@ -589,11 +606,10 @@ function refInText(slots: Slots, q: string): Slots {
 }
 
 /** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
-const WHERE = /(en )?qu[ée] vers[íi]culo|d[óo]nde|which verse|what verse|where (does|is|do)|in which|quel verset|o[ùu] (est|parle)|ayat (mana|berapa)|di mana|किस पद|कहाँ|أين|في أي آية/i
 function isOpen(q: string, sheet: Sheet): boolean {
   if (sheet.intent === 'search') return true
   if (sheet.ref) return false
-  if (WHERE.test(q)) return keywords(q).length >= 1
+  if (has('where', q)) return keywords(q).length >= 1
   if (kindOf(q) && keywords(q).length >= 2) return true // "notes about Abraham sacrificing Isaac"
   // a keyword first: with no article for it ("pez", "Jonah fish", "Moisés mar") the words become a free search
   if (sheet.intent === 'article' && !sheet.concept && !sheet.candidates?.length) return keywords(q).length >= 1
@@ -602,30 +618,24 @@ function isOpen(q: string, sheet: Sheet): boolean {
   return ['advice', 'passage'].includes(sheet.intent) && keywords(q).length >= 2
 }
 
-/** What the person wants to see of a verse, when the question says it. */
-function kindOf(q: string): string[] | null {
-  return /not[ae]s?\b|catatan|टिप्पणि|ملاحظات/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न/i.test(q) ? ['questions']
-    : /\b(text|texto|teks|texte)\b|पाठ|النص/i.test(q) ? ['text'] : null
-}
 const ORDINALS: [RegExp, number][] = [
   [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल|الأول/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर|الثاني/i, 1],
   [/\b(third|tercer[oa]?|troisième|ketiga)\b|तीसर|الثالث/i, 2], [/\b(fourth|cuart[oa]|quatrième|keempat)\b|चौथ/i, 3],
 ]
 /** "The whole chapter": the chapter of the last passage. */
-const WHOLE = /(whole|entire|full|all the) chapter|chapter (in full|complete)|cap[íi]tulo (completo|entero)|todo el cap[íi]tulo|(tout le|le chapitre) (chapitre|entier|complet)|(seluruh|semua) pasal|pasal (lengkap|seluruhnya)|पूरा अध्याय|सारा अध्याय|الأصحاح (كله|كاملا)|كل الأصحاح/i
-const THAT = /\b(that|this) (verse|one|passage)|\b(ese|este|aquel) (vers[íi]culo|pasaje)|\b(ce|cet) (verset|passage)|\bayat (itu|ini)\b|(उस|इस) पद|(تلك|هذه) الآية/i
+
 /** A follow-up with no book of its own: "the second one" (a search result), "that verse" or "and the questions?" (the last verse shown). */
 function pickFound(q: string, slots: Slots, c: Conv): { hit: Hit; what: string[] } | null {
-  const named = !THAT.test(q) && slots.book && fold(q).includes(fold(slots.book)) && bookCode(slots.lang ?? nav, slots.book)
+  const named = !has('that', q) && slots.book && fold(q).includes(fold(slots.book)) && bookCode(slots.lang ?? nav, slots.book)
   if (named) return null
   const ord = ORDINALS.find(([re]) => re.test(q))?.[1]
   const kind = kindOf(q)
   const lastM = /^([0-9a-z]{3}) (\d+)/.exec(c.last?.ref ?? '')
-  if (WHOLE.test(q) && lastM) return { hit: { book: lastM[1]!, ch: +lastM[2]!, v: 0 }, what: kind ?? ['text'] }
+  if (has('whole', q) && lastM) return { hit: { book: lastM[1]!, ch: +lastM[2]!, v: 0 }, what: kind ?? ['text'] }
   if (ord !== undefined && c.found?.length) return { hit: c.found[Math.min(ord, c.found.length - 1)]!, what: kind ?? ['text', 'notes'] }
   const m = /^([0-9a-z]{3}) (\d+):(\d+)/.exec(c.last?.ref ?? '')
   if (!m) return null
-  if (THAT.test(q) || (kind && keywords(q).length === 0))
+  if (has('that', q) || (kind && keywords(q).length === 0))
     return { hit: { book: m[1]!, ch: +m[2]!, v: +m[3]! }, what: kind ?? ['text', 'notes'] }
   return null
 }
@@ -644,6 +654,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   log.appendChild(wait)
   wait.scrollIntoView({ block: 'end', behavior: 'smooth' })
   const t0 = performance.now()
+  let onlineCtx = '' // the passage's context for online AI (surrounding verses, introductions)
   let m: Msg
   try {
     let { sheet, ui, meta, q } = await make()
@@ -687,6 +698,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
       for (const h of res.hits.slice(1, 4)) others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, kind) })
     }
     const r = await answerSheet(sheet)
+    if (onlineOn() && onlineAvailable()) onlineCtx = await passageContext(sheet).catch(() => '')
     // Only a name ("John the Baptist"): the article, and also the verses that mention him (each opens its text and notes)
     if (q !== undefined && sheet.intent === 'article' && sheet.concept && !asksAbout(q)) {
       const hits = (await versesOf([sheet.concept], sheet.lang)).slice(0, 6)
@@ -730,7 +742,10 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
       if (x.who === 'me' && x.text) history.push({ role: 'user', text: x.text })
       else if (x.who === 'bot') history.push({ role: 'assistant', text: x.ai?.text ?? x.intro ?? '' })
     }
-    const res = await onlineAnswer(label, m.ui ?? nav, `${m.intro ?? ''}\n\n${m.info ?? ''}`, history)
+    // the answer found on the phone first (cut to leave room), then the passage's context
+    const found = `${m.intro ?? ''}\n\n${m.info ?? ''}`
+    const helps = onlineCtx ? `${found.length > 5000 ? found.slice(0, 5000) + ' …' : found}\n\n# Context of the passage\n\n${onlineCtx}` : found
+    const res = await onlineAnswer(label, m.ui ?? nav, helps, history)
     if (res) {
       m.ai = res
       save()
@@ -774,12 +789,16 @@ form.addEventListener('submit', (e) => {
     // the script says the language even when the model does not know it: Arabic letters, Devanagari
     if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
     else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
+    // a command word next to a reference ("Jonás 1:3 notas") says what to show, with or without a model
+    const shown = kindOf(q)
+    if (shown && s0.book && s0.chapter && !(s0.what ?? []).length) Object.assign(s0, { intent: 'passage', what: shown })
     const picked = pickFound(q, s0, c)
     if (picked) {
       const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? nav), helpsLang)
       return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
     }
-    const s = withContext(s0, c.last, q)
+    const asked = introAsked(q, s0.lang ?? nav)
+    const s = asked ? { ...asked, lang: s0.lang ?? nav } : withContext(s0, c.last, q)
     const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, helpsLang)
     return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
   })

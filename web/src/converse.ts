@@ -95,8 +95,18 @@ const bookFor = (ui: string, code: string): string =>
   (ui === 'es' ? (booknames as any).BOOK_ES : ui === 'ar' ? (booknames as any).BOOK_AR : (booknames as any).BOOK_EN)[code] ?? code
 
 /** The sentence before the found information, or null when the answer already speaks for itself (not understood, not found). */
+const INTRO: Record<L, { found: string; label: string }> = {
+  en: { found: 'Here is the introduction to {what}.', label: 'Introduction to {what}' },
+  es: { found: 'Esta es la introducción a {what}.', label: 'Introducción a {what}' },
+  fr: { found: "Voici l'introduction à {what}.", label: 'Introduction à {what}' },
+  id: { found: 'Ini pengantar untuk {what}.', label: 'Pengantar {what}' },
+  hi: { found: 'यह {what} का परिचय है।', label: '{what} का परिचय' },
+  ar: { found: 'هذه مقدمة {what}.', label: 'مقدمة {what}' },
+}
+
 export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): string | null {
   const w = W[lang(ui)]
+  if (facts.kind === 'passage' && facts.intro && !facts.texts && !facts.notes) return fill(INTRO[lang(ui)].found, { what: facts.intro })
   if (facts.kind === 'passage') {
     const items: string[] = []
     if (facts.texts) items.push(w.text(facts.texts))
@@ -129,6 +139,10 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string):
   if (!sheet.what.includes('questions')) out.push({ label: w.lQuestions, sheet: same(['questions']) })
   if (!sheet.what.includes('text')) out.push({ label: w.lText, sheet: same(['text']) })
   if (facts.next) out.push({ label: `${w.lNext} (${bookFor(ui, code!)} ${facts.next})`, sheet: same(sheet.what, `${code} ${facts.next}`) })
+  // the chapter's and the book's introductions: the context a translator needs, one tap away
+  const label = INTRO[lang(ui)].label
+  out.push({ label: fill(label, { what: `${bookFor(ui, code!)} ${ch}` }), sheet: same(['intro'], `${code} ${ch}:intro`) })
+  out.push({ label: fill(label, { what: bookFor(ui, code!) }), sheet: same(['intro'], `${code} front:intro`) })
   return out
 }
 

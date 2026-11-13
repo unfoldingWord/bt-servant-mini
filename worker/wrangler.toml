@@ -12,7 +12,7 @@ binding = "AI"
 
 [vars]
 MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
-MAX_CONTEXT = "7000"
+MAX_CONTEXT = "9500"
 # answers a day for everyone together, and for one signed-in person: a ceiling on the cost of Workers AI
 DAILY_CAP = "300"
 PERSON_DAILY_CAP = "40"
