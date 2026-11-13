@@ -1,7 +1,9 @@
 # BT Servant Mini's online helper: when the phone has internet and the person allows it, a larger open model
 # (Cloudflare Workers AI) writes a conversational answer from the translation helps the app already found on the phone.
-# No key lives in the app. Deploy only with Abel's OK (account: unfoldingWord, next to the language packs).
+# No key lives in the app. Deployed with Abel's OK on Nov 13 (account: unfoldingWord): https://bt-servant-mini-ai.unfoldingword.workers.dev
 name = "bt-servant-mini-ai"
+account_id = "5a3ffd86280d3ed086be76d955829242" # unfoldingWord
+workers_dev = true
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
@@ -11,3 +13,13 @@ binding = "AI"
 [vars]
 MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 MAX_CONTEXT = "7000"
+# answers a day for everyone together, and for one signed-in person: a ceiling on the cost of Workers AI
+DAILY_CAP = "300"
+PERSON_DAILY_CAP = "40"
+# The Google OAuth web client id the app signs in with. Set it and sign-in is required (secrets: APP_KEY, SESSION_SECRET).
+# GOOGLE_CLIENT_ID = "....apps.googleusercontent.com"
+
+# today's counts (all, and per person by a hash of their Google id); they expire after 3 days
+[[kv_namespaces]]
+binding = "USAGE"
+id = "bf8577e478ce40f89310784803a152d7"

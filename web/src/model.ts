@@ -15,6 +15,7 @@ declare global {
       status(): string
       flavor(): string
       version(): string
+      onlineKey?(): string
       downloadModel(url: string, sha: string, size: string): void
       pickModel(sha: string): void
       exportModel(name: string): string
@@ -54,6 +55,20 @@ export function modelState(): ModelState {
   const s = window.Android.status()
   const i = s.indexOf(':')
   return { state: (i < 0 ? s : s.slice(0, i)) as ModelState['state'], detail: i < 0 ? '' : s.slice(i + 1) }
+}
+const OFF_KEY = 'btsm.model.off'
+/** The person chose no model: the app answers references and searches only (the model stays on the phone). */
+export function modelOff(): boolean {
+  try {
+    return localStorage.getItem(OFF_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+export function setModelOff(off: boolean) {
+  try {
+    localStorage.setItem(OFF_KEY, off ? '1' : '0')
+  } catch {}
 }
 export function modelReady(): boolean {
   return window.Android ? window.Android.ready() : true
@@ -95,6 +110,7 @@ export async function saveToDownloads(name: string, bytes: Uint8Array, mime = 'a
 
 /** The slots for one question; `raw` is what the model wrote, for the details view. Without a model: no slots. */
 export async function slotsOf(question: string): Promise<{ slots: Slots | null; raw: string; ms: number }> {
+  if (modelOff()) return { slots: null, raw: '(model turned off: references and searches only)', ms: 0 }
   if (!modelReady()) return { slots: null, raw: '(no model on this phone yet: references and searches only)', ms: 0 }
   const t0 = performance.now()
   let r: any

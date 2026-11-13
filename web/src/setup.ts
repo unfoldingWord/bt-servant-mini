@@ -1,11 +1,11 @@
 // The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
-import { appVersion, downloadModel, exportModel, isLite, MODEL, modelState, pickModelFile, saveToDownloads } from './model'
+import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelState, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { availableLangs, downloadLang, exportPack, importPack, installedLangs, openLang, origin, removeLang } from './packs'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
-  model: string; mReady: string; mMissing: string; mDown: string; mImport: string; mStart: string; mError: string
+  model: string; mReady: string; mMissing: string; mDown: string; mImport: string; mStart: string; mError: string; mOff: string; none: string
   download: string; loadFile: string; share: string; saved: string; langs: string; shipped: string; added: string; remove: string
   addLangs: string; online: string; offline: string; noneNew: string; loadPack: string; working: string; failed: string
   setup: string
@@ -24,7 +24,7 @@ const STR: Record<string, S> = {
     version: 'Version', full: 'complete (model and base languages included)', lite: 'light (model and languages added on the phone)',
     start: 'Start', close: 'Close', setup: 'To start, this light version needs the model (once):',
     model: 'Model', mReady: 'Ready', mMissing: 'Not on this phone yet: only references and searches work', mDown: 'Downloading', mImport: 'Loading',
-    mStart: 'Starting', mError: 'Problem', download: 'Download', loadFile: 'Load from a file (SD card, phone memory)', share: 'Share (save to Downloads)',
+    mStart: 'Starting', mOff: 'Off: references and searches only', none: 'None (references and searches only)', mError: 'Problem', download: 'Download', loadFile: 'Load from a file (SD card, phone memory)', share: 'Share (save to Downloads)',
     saved: 'Saved in Downloads', langs: 'Languages on this phone', shipped: 'included', added: 'added', remove: 'Remove',
     addLangs: 'Add languages', online: 'Look on the server (internet)', offline: 'No internet, or the server did not answer.',
     noneNew: 'The server has no other languages yet.', loadPack: 'Load a .tcpack file', working: 'Working…', failed: 'It did not work:',
@@ -42,7 +42,7 @@ const STR: Record<string, S> = {
     version: 'Versión', full: 'completa (con el modelo y los idiomas base)', lite: 'light (modelo e idiomas se agregan en el teléfono)',
     start: 'Empezar', close: 'Cerrar', setup: 'Para empezar, esta versión light necesita el modelo (una sola vez):',
     model: 'Modelo', mReady: 'Listo', mMissing: 'Aún no está en este teléfono: solo funcionan referencias y búsquedas', mDown: 'Descargando', mImport: 'Cargando',
-    mStart: 'Iniciando', mError: 'Problema', download: 'Descargar', loadFile: 'Cargar desde un archivo (tarjeta SD, memoria)', share: 'Compartir (guardar en Descargas)',
+    mStart: 'Iniciando', mOff: 'Apagado: solo referencias y búsquedas', none: 'Ninguno (solo referencias y búsquedas)', mError: 'Problema', download: 'Descargar', loadFile: 'Cargar desde un archivo (tarjeta SD, memoria)', share: 'Compartir (guardar en Descargas)',
     saved: 'Guardado en Descargas', langs: 'Idiomas en este teléfono', shipped: 'incluido', added: 'agregado', remove: 'Quitar',
     addLangs: 'Agregar idiomas', online: 'Buscar en el servidor (internet)', offline: 'Sin internet, o el servidor no respondió.',
     noneNew: 'El servidor todavía no tiene otros idiomas.', loadPack: 'Cargar un archivo .tcpack', working: 'Trabajando…', failed: 'No funcionó:',
@@ -60,7 +60,7 @@ const STR: Record<string, S> = {
     version: 'Version', full: 'complète (modèle et langues de base inclus)', lite: 'légère (modèle et langues ajoutés sur le téléphone)',
     start: 'Commencer', close: 'Fermer', setup: 'Pour commencer, cette version légère a besoin du modèle (une seule fois) :',
     model: 'Modèle', mReady: 'Prêt', mMissing: 'Pas encore sur ce téléphone : seules les références et recherches fonctionnent', mDown: 'Téléchargement', mImport: 'Chargement',
-    mStart: 'Démarrage', mError: 'Problème', download: 'Télécharger', loadFile: 'Charger un fichier (carte SD, mémoire)', share: 'Partager (enregistrer dans Téléchargements)',
+    mStart: 'Démarrage', mOff: 'Éteint : références et recherches seulement', none: 'Aucun (références et recherches seulement)', mError: 'Problème', download: 'Télécharger', loadFile: 'Charger un fichier (carte SD, mémoire)', share: 'Partager (enregistrer dans Téléchargements)',
     saved: 'Enregistré dans Téléchargements', langs: 'Langues sur ce téléphone', shipped: 'incluse', added: 'ajoutée', remove: 'Retirer',
     addLangs: 'Ajouter des langues', online: 'Chercher sur le serveur (internet)', offline: "Pas d'internet, ou le serveur n'a pas répondu.",
     noneNew: "Le serveur n'a pas encore d'autres langues.", loadPack: 'Charger un fichier .tcpack', working: 'En cours…', failed: 'Échec :',
@@ -78,7 +78,7 @@ const STR: Record<string, S> = {
     version: 'Versi', full: 'lengkap (model dan bahasa dasar sudah ada)', lite: 'ringan (model dan bahasa ditambahkan di ponsel)',
     start: 'Mulai', close: 'Tutup', setup: 'Untuk mulai, versi ringan ini perlu modelnya (sekali saja):',
     model: 'Model', mReady: 'Siap', mMissing: 'Belum ada di ponsel ini: hanya rujukan dan pencarian yang bekerja', mDown: 'Mengunduh', mImport: 'Memuat',
-    mStart: 'Memulai', mError: 'Masalah', download: 'Unduh', loadFile: 'Muat dari berkas (kartu SD, memori ponsel)', share: 'Bagikan (simpan ke Unduhan)',
+    mStart: 'Memulai', mOff: 'Mati: hanya rujukan dan pencarian', none: 'Tidak ada (hanya rujukan dan pencarian)', mError: 'Masalah', download: 'Unduh', loadFile: 'Muat dari berkas (kartu SD, memori ponsel)', share: 'Bagikan (simpan ke Unduhan)',
     saved: 'Tersimpan di Unduhan', langs: 'Bahasa di ponsel ini', shipped: 'bawaan', added: 'ditambahkan', remove: 'Hapus',
     addLangs: 'Tambah bahasa', online: 'Cari di server (internet)', offline: 'Tidak ada internet, atau server tidak menjawab.',
     noneNew: 'Server belum punya bahasa lain.', loadPack: 'Muat berkas .tcpack', working: 'Sedang bekerja…', failed: 'Gagal:',
@@ -96,7 +96,7 @@ const STR: Record<string, S> = {
     version: 'संस्करण', full: 'पूर्ण (मॉडल और मूल भाषाएँ शामिल)', lite: 'हल्का (मॉडल और भाषाएँ फ़ोन पर जोड़ी जाती हैं)',
     start: 'शुरू करें', close: 'बंद करें', setup: 'शुरू करने के लिए इस हल्के संस्करण को मॉडल चाहिए (एक बार):',
     model: 'मॉडल', mReady: 'तैयार', mMissing: 'अभी इस फ़ोन पर नहीं: केवल संदर्भ और खोज चलते हैं', mDown: 'डाउनलोड हो रहा है', mImport: 'लोड हो रहा है',
-    mStart: 'शुरू हो रहा है', mError: 'समस्या', download: 'डाउनलोड करें', loadFile: 'फ़ाइल से लोड करें (SD कार्ड, फ़ोन मेमोरी)', share: 'साझा करें (डाउनलोड में सहेजें)',
+    mStart: 'शुरू हो रहा है', mOff: 'बंद: केवल संदर्भ और खोज', none: 'कोई नहीं (केवल संदर्भ और खोज)', mError: 'समस्या', download: 'डाउनलोड करें', loadFile: 'फ़ाइल से लोड करें (SD कार्ड, फ़ोन मेमोरी)', share: 'साझा करें (डाउनलोड में सहेजें)',
     saved: 'डाउनलोड में सहेजा गया', langs: 'इस फ़ोन पर भाषाएँ', shipped: 'शामिल', added: 'जोड़ी गई', remove: 'हटाएँ',
     addLangs: 'भाषाएँ जोड़ें', online: 'सर्वर पर खोजें (इंटरनेट)', offline: 'इंटरनेट नहीं है, या सर्वर ने उत्तर नहीं दिया।',
     noneNew: 'सर्वर पर अभी और भाषाएँ नहीं हैं।', loadPack: '.tcpack फ़ाइल लोड करें', working: 'काम हो रहा है…', failed: 'नहीं हुआ:',
@@ -114,7 +114,7 @@ const STR: Record<string, S> = {
     version: 'الإصدار', full: 'كاملة (النموذج واللغات الأساسية مضمّنة)', lite: 'خفيفة (يُضاف النموذج واللغات على الهاتف)',
     start: 'ابدأ', close: 'إغلاق', setup: 'لتبدأ، تحتاج هذه النسخة الخفيفة إلى النموذج (مرة واحدة):',
     model: 'النموذج', mReady: 'جاهز', mMissing: 'ليس على هذا الهاتف بعد: تعمل المراجع والبحث فقط', mDown: 'جارٍ التنزيل', mImport: 'جارٍ التحميل',
-    mStart: 'جارٍ التشغيل', mError: 'مشكلة', download: 'تنزيل', loadFile: 'تحميل من ملف (بطاقة SD، ذاكرة الهاتف)', share: 'مشاركة (حفظ في التنزيلات)',
+    mStart: 'جارٍ التشغيل', mOff: 'مُطفأ: الشواهد والبحث فقط', none: 'لا شيء (الشواهد والبحث فقط)', mError: 'مشكلة', download: 'تنزيل', loadFile: 'تحميل من ملف (بطاقة SD، ذاكرة الهاتف)', share: 'مشاركة (حفظ في التنزيلات)',
     saved: 'حُفظ في التنزيلات', langs: 'اللغات على هذا الهاتف', shipped: 'مضمّنة', added: 'مضافة', remove: 'إزالة',
     addLangs: 'إضافة لغات', online: 'البحث في الخادم (إنترنت)', offline: 'لا يوجد إنترنت، أو لم يُجب الخادم.',
     noneNew: 'لا توجد لغات أخرى على الخادم بعد.', loadPack: 'تحميل ملف ‎.tcpack', working: 'جارٍ العمل…', failed: 'لم ينجح:',
@@ -145,7 +145,7 @@ export function modelLine(lang: string): string {
   const s = str(lang)
   const { state, detail } = modelState()
   switch (state) {
-    case 'ready': return s.mReady
+    case 'ready': return modelOff() ? s.mOff : s.mReady
     case 'missing': return s.mMissing
     case 'downloading': return `${s.mDown} ${detail}%`
     case 'importing': case 'copying': return `${s.mImport}${detail ? ` ${detail}%` : ''}`
@@ -171,6 +171,13 @@ export function modelSection(lang: string, refresh: () => void): HTMLElement {
     row.append(btn(s.share, () => { const err = exportModel(); alertish(box, err ? `${s.failed} ${err}` : s.saved) }))
   }
   box.appendChild(row)
+  // which model answers: none (references and searches only) or one on the phone; the choice is kept
+  if (state === 'ready') {
+    const pick = el('div', 'langs')
+    const choose = (off: boolean) => () => { setModelOff(off); refresh() }
+    pick.append(btn(s.none, choose(true), modelOff() ? 'on' : ''), btn(MODEL.label, choose(false), modelOff() ? '' : 'on'))
+    box.insertBefore(pick, row)
+  }
   return box
 }
 function alertish(box: HTMLElement, text: string) {
@@ -278,6 +285,9 @@ export function showAbout(lang: string, refresh: () => void) {
   document.body.appendChild(wrap)
 }
 export const aboutLabel = (lang: string) => str(lang).about
+/** The names of the model and languages views of the menu. */
+export const modelTitle = (lang: string) => str(lang).model
+export const packsTitle = (lang: string) => str(lang).langs
 
 // desktop testing only (no Android bridge): reach the pack functions from the console
 if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, openLang }

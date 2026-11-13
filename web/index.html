@@ -163,6 +163,21 @@
   .sheet-chat { width: 100%; font: 600 14px system-ui, sans-serif; color: #fff; background: var(--accent); border: 0; border-radius: 10px;
     padding: 10px; cursor: pointer; }
   .muted { color: var(--muted); }
+  /* menu: settings as rows (name, current value, ›); each opens its own view in the panel */
+  .mrows { display: flex; flex-direction: column; margin-top: 14px; border-top: 1px solid var(--line); }
+  .mrow { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; width: 100%;
+    text-align: start; background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 11px 4px; color: var(--fg); cursor: pointer; min-height: 52px; }
+  .mrow:active { background: var(--line); }
+  .mrow-t { font: 500 15px/1.3 system-ui, sans-serif; grid-column: 1; }
+  .mrow-s { font: 13px/1.35 system-ui, sans-serif; color: var(--muted); grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mrow-c { grid-column: 2; grid-row: 1 / span 2; font-size: 20px; color: var(--faint); }
+  [dir="rtl"] .mrow-c { transform: scaleX(-1); }
+  .subhead { display: flex; align-items: center; gap: 4px; margin: -4px 0 8px; }
+  #panel .subhead h2 { margin: 0; font: 600 17px/1.3 Georgia, "Noto Serif", serif; text-transform: none; letter-spacing: 0; color: var(--fg); }
+  .subhead .back { font: 24px/1 system-ui, sans-serif; color: var(--muted); background: transparent; border: 0; padding: 4px 10px 6px 2px; cursor: pointer; }
+  [dir="rtl"] .subhead .back { transform: scaleX(-1); }
+  #panel h3 { font: 600 12px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 14px 0 8px; }
+  #panel.sub .setup > h2:first-child { display: none; }
 </style>
 </head>
 <body>

@@ -3,8 +3,8 @@
 import { answerSheet, facts, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, buildSheet, fold, type Slots } from './sheet'
-import { modelReady, modelState, slotsOf } from './model'
-import { aboutLabel, languagesSection, modelLine, modelNotice, modelSection, PACK_NAMES, showAbout } from './setup'
+import { modelOff, modelReady, modelState, slotsOf } from './model'
+import { aboutLabel, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { articleForQuestion, asksAbout, keywords, resetSearch, searchHelps, searchVerses, versesOf } from './search'
@@ -39,7 +39,7 @@ function plainSnippet(s: string): string {
     .trim()
 }
 import { md } from './md'
-import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, setOnline, type Turn } from './online'
+import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -101,13 +101,13 @@ const UI: Record<string, UiText> = {
     appLang: 'لغة التطبيق', packs: 'حزم اللغات المثبتة', welcome: 'كيف أساعدك في ترجمتك؟', helps: 'لغة المساعدات', auto: 'لغة سؤالي',
   },
 }
-const ONLINE_T: Record<string, { label: string; writing: string; sources: string; toggle: string; note: string }> = {
-  en: { label: 'Online AI', writing: 'Writing with online AI…', sources: 'Helps found (sources)', toggle: 'Answers with online AI (when there is internet)', note: 'Your question and the helps found are sent to an online model. Without internet the app answers as usual.' },
-  es: { label: 'IA en línea', writing: 'Escribiendo con IA en línea…', sources: 'Ayudas encontradas (fuentes)', toggle: 'Respuestas con IA en línea (cuando haya internet)', note: 'Tu pregunta y las ayudas encontradas se envían a un modelo en línea. Sin internet, la app responde como siempre.' },
-  fr: { label: 'IA en ligne', writing: "Rédaction avec l'IA en ligne…", sources: 'Aides trouvées (sources)', toggle: 'Réponses avec IA en ligne (quand il y a internet)', note: "Votre question et les aides trouvées sont envoyées à un modèle en ligne. Sans internet, l'application répond comme d'habitude." },
-  id: { label: 'AI daring', writing: 'Menulis dengan AI daring…', sources: 'Bahan bantu yang ditemukan (sumber)', toggle: 'Jawaban dengan AI daring (saat ada internet)', note: 'Pertanyaan Anda dan bahan bantu yang ditemukan dikirim ke model daring. Tanpa internet, aplikasi menjawab seperti biasa.' },
-  hi: { label: 'ऑनलाइन AI', writing: 'ऑनलाइन AI से लिखा जा रहा है…', sources: 'मिली सहायता (स्रोत)', toggle: 'ऑनलाइन AI से उत्तर (जब इंटरनेट हो)', note: 'आपका प्रश्न और मिली सहायता एक ऑनलाइन मॉडल को भेजी जाती है। इंटरनेट के बिना ऐप सामान्य रूप से उत्तर देता है।' },
-  ar: { label: 'ذكاء اصطناعي عبر الإنترنت', writing: 'جارٍ الكتابة بالذكاء الاصطناعي عبر الإنترنت…', sources: 'المساعدات التي وُجدت (المصادر)', toggle: 'إجابات بالذكاء الاصطناعي عبر الإنترنت (عند توفر الإنترنت)', note: 'يُرسَل سؤالك والمساعدات التي وُجدت إلى نموذج عبر الإنترنت. دون إنترنت يجيب التطبيق كالمعتاد.' },
+const ONLINE_T: Record<string, { label: string; writing: string; sources: string; toggle: string; note: string; signIn: string; signedIn: string; signOut: string; signInNote: string; relogin: string; limit: string }> = {
+  en: { label: 'Online AI', writing: 'Writing with online AI…', sources: 'Helps found (sources)', toggle: 'Answers with online AI (when there is internet)', note: 'Your question and the helps found are sent to an online model. Without internet the app answers as usual.', signIn: "Sign in with Google", signedIn: "Signed in{n}", signOut: "Sign out", signInNote: "Online AI asks you to sign in with Google. The service keeps only a code for your account, to count your answers of the day.", relogin: "Your online AI session ended: sign in again in the menu.", limit: "Online AI has reached today's limit; the answer below is from the phone." },
+  es: { label: 'IA en línea', writing: 'Escribiendo con IA en línea…', sources: 'Ayudas encontradas (fuentes)', toggle: 'Respuestas con IA en línea (cuando haya internet)', note: 'Tu pregunta y las ayudas encontradas se envían a un modelo en línea. Sin internet, la app responde como siempre.', signIn: "Iniciar sesión con Google", signedIn: "Sesión iniciada{n}", signOut: "Cerrar sesión", signInNote: "La IA en línea pide iniciar sesión con Google. El servicio solo guarda un código de tu cuenta, para contar tus respuestas del día.", relogin: "Tu sesión de IA en línea terminó: vuelve a iniciarla en el menú.", limit: "La IA en línea llegó al límite de hoy; la respuesta de abajo es la del teléfono." },
+  fr: { label: 'IA en ligne', writing: "Rédaction avec l'IA en ligne…", sources: 'Aides trouvées (sources)', toggle: 'Réponses avec IA en ligne (quand il y a internet)', note: "Votre question et les aides trouvées sont envoyées à un modèle en ligne. Sans internet, l'application répond comme d'habitude.", signIn: "Se connecter avec Google", signedIn: "Connecté{n}", signOut: "Se déconnecter", signInNote: "L'IA en ligne demande de se connecter avec Google. Le service ne garde qu'un code de votre compte, pour compter vos réponses du jour.", relogin: "Votre session d'IA en ligne a pris fin : reconnectez-vous dans le menu.", limit: "L'IA en ligne a atteint la limite du jour ; la réponse ci-dessous vient du téléphone." },
+  id: { label: 'AI daring', writing: 'Menulis dengan AI daring…', sources: 'Bahan bantu yang ditemukan (sumber)', toggle: 'Jawaban dengan AI daring (saat ada internet)', note: 'Pertanyaan Anda dan bahan bantu yang ditemukan dikirim ke model daring. Tanpa internet, aplikasi menjawab seperti biasa.', signIn: "Masuk dengan Google", signedIn: "Sudah masuk{n}", signOut: "Keluar", signInNote: "AI daring meminta Anda masuk dengan Google. Layanan hanya menyimpan sebuah kode akun Anda, untuk menghitung jawaban Anda hari ini.", relogin: "Sesi AI daring Anda berakhir: masuk lagi di menu.", limit: "AI daring sudah mencapai batas hari ini; jawaban di bawah berasal dari ponsel." },
+  hi: { label: 'ऑनलाइन AI', writing: 'ऑनलाइन AI से लिखा जा रहा है…', sources: 'मिली सहायता (स्रोत)', toggle: 'ऑनलाइन AI से उत्तर (जब इंटरनेट हो)', note: 'आपका प्रश्न और मिली सहायता एक ऑनलाइन मॉडल को भेजी जाती है। इंटरनेट के बिना ऐप सामान्य रूप से उत्तर देता है।', signIn: "Google से साइन इन करें", signedIn: "साइन इन है{n}", signOut: "साइन आउट", signInNote: "ऑनलाइन AI के लिए Google से साइन इन करना होता है। सेवा आपके खाते का केवल एक कोड रखती है, आज के आपके उत्तर गिनने के लिए।", relogin: "आपका ऑनलाइन AI सत्र समाप्त हो गया: मेनू में फिर से साइन इन करें।", limit: "ऑनलाइन AI आज की सीमा तक पहुँच गया; नीचे का उत्तर फ़ोन से है।" },
+  ar: { label: 'ذكاء اصطناعي عبر الإنترنت', writing: 'جارٍ الكتابة بالذكاء الاصطناعي عبر الإنترنت…', sources: 'المساعدات التي وُجدت (المصادر)', toggle: 'إجابات بالذكاء الاصطناعي عبر الإنترنت (عند توفر الإنترنت)', note: 'يُرسَل سؤالك والمساعدات التي وُجدت إلى نموذج عبر الإنترنت. دون إنترنت يجيب التطبيق كالمعتاد.', signIn: "تسجيل الدخول باستخدام Google", signedIn: "تم تسجيل الدخول{n}", signOut: "تسجيل الخروج", signInNote: "يطلب الذكاء الاصطناعي عبر الإنترنت تسجيل الدخول باستخدام Google. لا تحتفظ الخدمة إلا برمز لحسابك، لعدّ إجاباتك اليومية.", relogin: "انتهت جلسة الذكاء الاصطناعي عبر الإنترنت: سجّل الدخول مجددًا من القائمة.", limit: "بلغ الذكاء الاصطناعي عبر الإنترنت حدّ اليوم؛ الإجابة أدناه من الهاتف." },
 }
 const OT = () => ONLINE_T[nav] ?? ONLINE_T.en!
 const UI_LANGS: [string, string][] = [['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['id', 'Bahasa Indonesia'], ['hi', 'हिन्दी'], ['ar', 'العربية']]
@@ -281,7 +281,21 @@ function renderConv() {
   for (const m of c.msgs) log.appendChild(renderMsg(m))
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
+type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs'
+let panelView: PanelView = 'main'
+const MTS: Record<string, { language: string; on: string; off: string; none: string; installed: string; back: string }> = {
+  en: { language: 'Language', on: 'On', off: 'Off', none: 'None', installed: 'installed', back: 'Back' },
+  es: { language: 'Idioma', on: 'Activada', off: 'Apagada', none: 'Ninguno', installed: 'instalados', back: 'Atrás' },
+  fr: { language: 'Langue', on: 'Activée', off: 'Désactivée', none: 'Aucun', installed: 'installées', back: 'Retour' },
+  id: { language: 'Bahasa', on: 'Aktif', off: 'Mati', none: 'Tidak ada', installed: 'terpasang', back: 'Kembali' },
+  hi: { language: 'भाषा', on: 'चालू', off: 'बंद', none: 'कोई नहीं', installed: 'इंस्टॉल', back: 'वापस' },
+  ar: { language: 'اللغة', on: 'مفعّل', off: 'مُطفأ', none: 'لا شيء', installed: 'مثبّتة', back: 'رجوع' },
+}
+const MT = () => MTS[nav] ?? MTS.en!
+
 function renderPanel() {
+  panel.classList.remove('sub')
+  if (panelView !== 'main') return renderSubPanel(panelView)
   panel.innerHTML = ''
   panel.appendChild(el('h2', '', T.chats))
   for (const c of convs) {
@@ -331,7 +345,69 @@ function renderPanel() {
   }
   panel.appendChild(add)
   if (convs.length >= MAX) panel.appendChild(el('p', 'note', T.max))
-  panel.appendChild(el('h2', '', T.appLang))
+  // under the conversations, one row per setting: its name, what it is now, and a tap opens it
+  const list = el('div', 'mrows')
+  const row = (title: string, sub: string, open: () => void) => {
+    const b = el('button', 'mrow') as HTMLButtonElement
+    b.type = 'button'
+    b.append(el('span', 'mrow-t', title), el('span', 'mrow-s', sub), el('span', 'mrow-c', '›'))
+    b.onclick = open
+    list.appendChild(b)
+  }
+  const go = (v: PanelView) => () => {
+    panelView = v
+    renderPanel()
+  }
+  const uiName = UI_LANGS.find(([c]) => c === nav)?.[1] ?? nav
+  row(MT().language, `${uiName} · ${helpsLang ? PACK_NAMES[helpsLang] ?? helpsLang : T.auto}`, go('language'))
+  if (onlineAvailable()) row(OT().label, onlineOn() && (!signInAvailable() || onlineSession()) ? MT().on : MT().off, go('online'))
+  row(modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
+  row(packsTitle(nav), `${INSTALLED.length} ${MT().installed}`, go('packs'))
+  const aboutRow = el('button', 'mrow') as HTMLButtonElement
+  aboutRow.type = 'button'
+  aboutRow.append(el('span', 'mrow-t', aboutLabel(nav)), el('span', 'mrow-c', '›'))
+  aboutRow.onclick = () => {
+    closePanel()
+    showAbout(nav, () => setReady())
+  }
+  list.appendChild(aboutRow)
+  panel.appendChild(list)
+}
+
+/** One setting's own view in the panel, with a way back to the menu. */
+function renderSubPanel(v: Exclude<PanelView, 'main'>) {
+  panel.innerHTML = ''
+  panel.classList.add('sub')
+  const head = el('div', 'subhead')
+  const back = el('button', 'back', '‹') as HTMLButtonElement
+  back.type = 'button'
+  back.setAttribute('aria-label', MT().back)
+  back.onclick = () => {
+    panelView = 'main'
+    renderPanel()
+  }
+  const titles = { language: MT().language, online: OT().label, model: modelTitle(nav), packs: packsTitle(nav) }
+  head.append(back, el('h2', '', titles[v]))
+  panel.appendChild(head)
+  if (v === 'language') renderLanguageView()
+  else if (v === 'online') renderOnlineView()
+  else if (v === 'model') panel.appendChild(modelSection(nav, () => {
+    setReady()
+    renderPanel()
+  }))
+  else {
+    const panelLang = nav
+    languagesSection(nav, () => {
+      refreshInstalled()
+      renderPanel()
+    }).then((box) => {
+      if (panel.classList.contains('show') && panelView === 'packs' && panelLang === nav) panel.appendChild(box)
+    })
+  }
+}
+
+function renderLanguageView() {
+  panel.appendChild(el('h3', '', T.appLang))
   const langs = el('div', 'langs')
   for (const [code, name] of UI_LANGS) {
     const b = el('button', code === nav ? 'on' : '', name) as HTMLButtonElement
@@ -340,7 +416,7 @@ function renderPanel() {
     langs.appendChild(b)
   }
   panel.appendChild(langs)
-  panel.appendChild(el('h2', '', T.helps))
+  panel.appendChild(el('h3', '', T.helps))
   const hl = el('div', 'langs')
   for (const code of [null, ...INSTALLED]) {
     const b = el('button', code === helpsLang ? 'on' : '', code ? PACK_NAMES[code] ?? code : T.auto) as HTMLButtonElement
@@ -356,35 +432,47 @@ function renderPanel() {
     hl.appendChild(b)
   }
   panel.appendChild(hl)
-  if (onlineAvailable()) {
-    panel.appendChild(el('h2', '', OT().label))
+}
+
+function renderOnlineView() {
+  {
     const lab = el('label', 'toggle') as HTMLLabelElement
     const cb = document.createElement('input')
     cb.type = 'checkbox'
-    cb.checked = onlineOn()
-    cb.onchange = () => setOnline(cb.checked)
+    // with sign-in (a build that has a Google client id), turning it on asks for a sign-in first
+    const needsSignIn = signInAvailable()
+    cb.checked = onlineOn() && (!needsSignIn || !!onlineSession())
+    const status = el('p', 'note')
+    cb.onchange = async () => {
+      if (cb.checked && needsSignIn && !onlineSession()) {
+        cb.checked = false
+        cb.disabled = true
+        const r = await signIn()
+        cb.disabled = false
+        if (!r.ok) {
+          status.textContent = `${T.failed} ${r.error}`
+          return
+        }
+        cb.checked = true
+      }
+      setOnline(cb.checked)
+      renderPanel()
+    }
     lab.append(cb, el('span', '', OT().toggle))
     panel.appendChild(lab)
-    panel.appendChild(el('p', 'note', OT().note))
+    panel.appendChild(el('p', 'note', needsSignIn ? `${OT().note} ${OT().signInNote}` : OT().note))
+    const session = onlineSession()
+    if (needsSignIn && session) {
+      const row = el('div', 'langs')
+      row.append(el('span', 'note', OT().signedIn.replace('{n}', session.name ? `: ${session.name}` : '')))
+      const out = el('button', '', OT().signOut) as HTMLButtonElement
+      out.type = 'button'
+      out.onclick = () => { signOut(); setOnline(false); renderPanel() }
+      row.append(out)
+      panel.appendChild(row)
+    }
+    panel.appendChild(status)
   }
-  panel.appendChild(modelSection(nav, () => {
-    setReady()
-    renderPanel()
-  }))
-  const panelLang = nav
-  languagesSection(nav, () => {
-    refreshInstalled()
-    renderPanel()
-  }).then((box) => {
-    if (panel.classList.contains('show') && panelLang === nav) panel.insertBefore(box, panel.querySelector('.about-link'))
-  })
-  const about = el('button', 'about-link', aboutLabel(nav)) as HTMLButtonElement
-  about.type = 'button'
-  about.onclick = () => {
-    closePanel()
-    showAbout(nav, () => setReady())
-  }
-  panel.appendChild(about)
 }
 const closePanel = () => panel.classList.remove('show')
 // Android's back button (MainActivity.onBackPressed): the bottom panel, then the About page, then the menu; else it leaves
@@ -392,10 +480,12 @@ const closePanel = () => panel.classList.remove('show')
   if (backPanel()) return true
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
+  if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
   if (panel.classList.contains('show')) { closePanel(); return true }
   return false
 }
 menu.onclick = () => {
+  panelView = 'main'
   if (panel.classList.toggle('show')) renderPanel()
 }
 
@@ -410,7 +500,7 @@ status.onclick = () => showAbout(nav, () => setReady())
 notice.onclick = () => { if (!panel.classList.contains('show')) menu.click() }
 
 function setReady() {
-  const ok = modelReady()
+  const ok = modelReady() && !modelOff()
   const { state } = modelState()
   const line = ok ? T.ready : modelLine(nav)
   status.textContent = ''
@@ -419,7 +509,7 @@ function setReady() {
   status.dataset.ok = String(ok)
   status.dataset.state = state
   // the message itself goes under the bar, only when something needs attention (no model, downloading, a problem)
-  notice.hidden = ok
+  notice.hidden = ok || (state === 'ready' && modelOff()) // a model turned off on purpose needs no warning
   notice.textContent = ok ? '' : modelNotice(nav)
   // without a model the app still answers references and searches
   btn.disabled = busy || ['copying', 'starting', 'importing'].includes(state)
@@ -647,6 +737,10 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
       const fresh = renderMsg(m)
       node.replaceWith(fresh)
       node = fresh
+    } else if (onlineProblem) {
+      // say why there is no online answer this time; the phone's answer stands
+      writing.classList.remove('pending')
+      writing.textContent = onlineProblem === 'signin' ? OT().relogin : OT().limit
     } else writing.remove()
   }
 }

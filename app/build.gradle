@@ -1,5 +1,26 @@
 plugins { id 'com.android.application' }
 
+// The online service's key (btsm.onlineKey in local.properties, never in the repository), XOR-ed so the APK has no plain copy.
+// It keeps casual use and scripts away from the service; a determined person can still dig it out of an APK.
+def onlineKey = {
+    def p = new Properties()
+    def f = rootProject.file('local.properties')
+    if (f.exists()) f.withInputStream { p.load(it) }
+    def k = (p.getProperty('btsm.onlineKey') ?: '').trim()
+    def mask = 'bt-servant-mini'
+    def out = new StringBuilder()
+    k.eachWithIndex { c, i -> out.append(String.format('%02x', ((int) c.charAt(0)) ^ ((int) mask.charAt(i % mask.length())))) }
+    out.toString()
+}()
+// The Google OAuth web client id the online service checks sign-ins against (btsm.googleClientId in local.properties). Not a
+// secret; empty means this build asks for no sign-in (see the issue "Google sign-in for online AI").
+def googleClientId = {
+    def p = new Properties()
+    def f = rootProject.file('local.properties')
+    if (f.exists()) f.withInputStream { p.load(it) }
+    (p.getProperty('btsm.googleClientId') ?: '').trim()
+}()
+
 android {
     namespace 'org.unfoldingword.btservantmini'
     compileSdk 35
@@ -10,7 +31,10 @@ android {
         versionCode 17
         versionName '0.9.1-mini'
         ndk { abiFilters 'arm64-v8a' }
+        buildConfigField 'String', 'ONLINE_KEY_X', "\"${onlineKey}\""
+        buildConfigField 'String', 'GOOGLE_CLIENT_ID', "\"${googleClientId}\""
     }
+    buildFeatures { buildConfig true }
     buildTypes { debug { minifyEnabled false } }
     // full: the model and the base language packs inside (~350 MB); lite: neither (~30 MB), they are downloaded or loaded
     // from a file on first use. Same application id: one replaces the other, keeping conversations and added packs.
@@ -26,4 +50,10 @@ android {
     sourceSets { lite { assets.srcDirs = ['src/lite/assets'] } }
 }
 
-dependencies { implementation 'androidx.webkit:webkit:1.12.1' }
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    // Sign in with Google for online AI (Credential Manager); inactive while btsm.googleClientId is not set
+    implementation 'androidx.credentials:credentials:1.3.0'
+    implementation 'androidx.credentials:credentials-play-services-auth:1.3.0'
+    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
+}

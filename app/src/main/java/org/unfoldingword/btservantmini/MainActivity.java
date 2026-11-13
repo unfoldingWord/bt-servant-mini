@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
@@ -20,7 +21,17 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.GetCredentialException;
 import androidx.webkit.WebViewAssetLoader;
+
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 
 import org.json.JSONObject;
 
@@ -337,6 +348,43 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String flavor() { return hasModelAsset() ? "full" : "lite"; }
 
+        /** Whether this build signs in with Google for online AI (it has a client id). */
+        @JavascriptInterface
+        public boolean signInAvailable() { return !BuildConfig.GOOGLE_CLIENT_ID.isEmpty(); }
+
+        /** Sign in with Google; the answer goes to window.__signin({idToken, name} | {error}). */
+        @JavascriptInterface
+        public void signIn() {
+            runOnUiThread(() -> {
+                if (BuildConfig.GOOGLE_CLIENT_ID.isEmpty()) { signInReply(null, null, "sign-in is not set up in this build"); return; }
+                GetCredentialRequest request = new GetCredentialRequest.Builder()
+                        .addCredentialOption(new GetSignInWithGoogleOption.Builder(BuildConfig.GOOGLE_CLIENT_ID).build())
+                        .build();
+                CredentialManager.create(MainActivity.this).getCredentialAsync(MainActivity.this, request, new CancellationSignal(),
+                        (r) -> runOnUiThread(r),
+                        new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                            @Override public void onResult(GetCredentialResponse response) {
+                                Credential c = response.getCredential();
+                                if (c instanceof CustomCredential && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(c.getType())) {
+                                    GoogleIdTokenCredential g = GoogleIdTokenCredential.createFrom(c.getData());
+                                    signInReply(g.getIdToken(), g.getGivenName(), null);
+                                } else signInReply(null, null, "unexpected credential");
+                            }
+                            @Override public void onError(GetCredentialException e) { signInReply(null, null, String.valueOf(e.getMessage())); }
+                        });
+            });
+        }
+
+        /** The online service's key, kept XOR-ed in the APK (see app/build.gradle); empty when the build has none. */
+        @JavascriptInterface
+        public String onlineKey() {
+            String x = BuildConfig.ONLINE_KEY_X;
+            String mask = "bt-servant-mini";
+            StringBuilder out = new StringBuilder();
+            for (int i = 0; i + 1 < x.length(); i += 2) out.append((char) (Integer.parseInt(x.substring(i, i + 2), 16) ^ mask.charAt((i / 2) % mask.length())));
+            return out.toString();
+        }
+
         @JavascriptInterface
         public String version() {
             try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
@@ -413,6 +461,14 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> web.evaluateJavascript(js, null));
             });
         }
+    }
+
+    private void signInReply(String idToken, String name, String error) {
+        try {
+            JSONObject o = new JSONObject();
+            if (idToken != null) { o.put("idToken", idToken); o.put("name", name == null ? "" : name); } else o.put("error", error);
+            web.evaluateJavascript("window.__signin && window.__signin(" + o + ")", null);
+        } catch (Exception ignored) { }
     }
 
     /** Back closes what the page has open (the bottom panel, the menu) before it leaves the app. */
