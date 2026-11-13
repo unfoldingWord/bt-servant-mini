@@ -1,0 +1,4 @@
+# The installable web app runs the model with several threads, which needs a cross-origin isolated page.
+/app/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp

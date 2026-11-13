@@ -2,6 +2,8 @@
 // home screen, the screen hidden in recent apps, no screenshots), a PIN to open the app, and conversations that are not
 // kept. None of this encrypts anything: it protects from a quick look, not from someone with time and the unlocked phone.
 
+import { PWA } from './model'
+
 const DISCREET = 'btsm.discreet'
 const PIN = 'btsm.pin'
 const HISTORY = 'btsm.history' // 'keep' (default) | 'none'
@@ -243,7 +245,8 @@ export function watchAway(lang: () => string) {
 export function protectView(lang: string, eraseAll: () => void, changed: () => void): HTMLElement {
   const s = PT(lang)
   const box = el('div', 'protect')
-  // discreet mode
+  // discreet mode (the Android app only: a web app cannot change its home-screen name and icon, or block screenshots)
+  if (!PWA) {
   box.appendChild(el('h3', '', s.discreetH))
   const lab = el('label', 'toggle') as HTMLLabelElement
   const cb = el('input') as HTMLInputElement
@@ -255,6 +258,7 @@ export function protectView(lang: string, eraseAll: () => void, changed: () => v
   }
   lab.append(cb, el('span', '', fill(s.discreetToggle, lang)))
   box.append(lab, el('p', 'note', fill(s.discreetNote, lang)))
+  }
   // PIN
   box.appendChild(el('h3', '', s.pinH))
   box.appendChild(el('p', 'note', s.pinNote))

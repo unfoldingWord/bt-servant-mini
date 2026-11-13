@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "bt-servant-mini-web",
+      "dependencies": {
+        "@wllama/wllama": "3.8.1",
+      },
+    },
+  },
+  "packages": {
+    "@wllama/wllama": ["@wllama/wllama@3.8.1", "", {}, "sha512-Pl7BEJhPU8OHnV/yhn3DFZYhLLOdSHh+4TND79WCftHnlUAdQPAsyc/CfIOY+4mVxvf5VW3Xw3Uf7BBfotS1gw=="],
+  }
+}

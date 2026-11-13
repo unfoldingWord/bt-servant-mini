@@ -1,0 +1,1 @@
+{ "name": "bt-servant-mini-web", "private": true, "type": "module", "dependencies": { "@wllama/wllama": "3.8.1" } }

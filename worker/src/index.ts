@@ -20,6 +20,11 @@ export interface Env {
   PERSON_DAILY_CAP: string
   /** The app's key (a Worker secret): requests without it are refused. Unset, the service is open (local `wrangler dev`). */
   APP_KEY?: string
+  /**
+   * Pages allowed without the key (comma-separated origins): the installable web app, whose code is public and so cannot
+   * hold a key. A browser always sends the true Origin; a script elsewhere can fake it, which the daily caps bound.
+   */
+  ALLOWED_ORIGINS?: string
   /** The Google OAuth web client id the app signs in with (the ID token's audience). Unset, no sign-in is required. */
   GOOGLE_CLIENT_ID?: string
   /** Signs the sessions this service gives out (a Worker secret). */
@@ -247,7 +252,8 @@ export default {
     if (url.pathname === '/health') return json({ ok: true, model: env.MODEL, signIn: !!env.GOOGLE_CLIENT_ID })
     if (req.method !== 'POST' || !['/v1/answer', '/v1/session', '/v1/usage', '/v1/feedback'].includes(url.pathname)) return json({ error: 'not found' }, 404)
     // the app's key: anyone who only found the address gets nothing
-    if (env.APP_KEY && !same(req.headers.get('X-BTSM-Key') ?? '', env.APP_KEY)) return json({ error: 'unauthorized' }, 401)
+    const fromApp = (env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean).includes(req.headers.get('Origin') ?? '')
+    if (env.APP_KEY && !same(req.headers.get('X-BTSM-Key') ?? '', env.APP_KEY) && !fromApp) return json({ error: 'unauthorized' }, 401)
     const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
     if (url.pathname === '/v1/usage') {
       if (usageLimited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)

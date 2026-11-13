@@ -6,6 +6,13 @@ import prompt from './data/prompt.json'
 import models from './data/models.json'
 import type { Slots } from './sheet'
 import { PACKS_SERVER } from './packs'
+import { webComplete, webInit, webLoad, webState } from './webmodel'
+
+// The installable web app (build.py defines __PWA__ for its bundle): the model runs in the browser (webmodel.ts).
+import version from './data/version.json'
+declare const __PWA__: boolean
+export const PWA = typeof __PWA__ !== 'undefined' && __PWA__
+if (PWA) webInit()
 
 declare global {
   interface Window {
@@ -36,6 +43,10 @@ window.__llm = (id, result) => {
 let seq = 0
 async function complete(body: object): Promise<any> {
   const json = JSON.stringify(body)
+  if (PWA) {
+    const b = body as { prompt: string; n_predict: number; stop: string[] }
+    return { content: await webComplete(b.prompt, b.n_predict, b.stop) }
+  }
   if (window.Android) {
     const id = String(++seq)
     const raw = await new Promise<string>((res) => {
@@ -51,6 +62,7 @@ async function complete(body: object): Promise<any> {
 
 export type ModelState = { state: 'ready' | 'missing' | 'copying' | 'starting' | 'downloading' | 'importing' | 'error'; detail: string }
 export function modelState(): ModelState {
+  if (PWA) return webState()
   if (!window.Android) return { state: 'ready', detail: '' }
   const s = window.Android.status()
   const i = s.indexOf(':')
@@ -71,12 +83,14 @@ export function setModelOff(off: boolean) {
   } catch {}
 }
 export function modelReady(): boolean {
+  if (PWA) return webState().state === 'ready'
   return window.Android ? window.Android.ready() : true
 }
-export const appVersion = (): string => (window.Android ? window.Android.version() : 'desktop')
-export const isLite = (): boolean => (window.Android ? window.Android.flavor() === 'lite' : false)
+export const appVersion = (): string => (PWA ? `${version.version}-web` : window.Android ? window.Android.version() : 'desktop')
+export const isLite = (): boolean => (PWA ? true : window.Android ? window.Android.flavor() === 'lite' : false)
 export const MODEL = models.models[0]!
 export function downloadModel() {
+  if (PWA) return void webLoad()
   window.Android?.downloadModel(PACKS_SERVER + MODEL.path, MODEL.sha256, String(MODEL.bytes))
 }
 export function pickModelFile() {

@@ -1,6 +1,6 @@
 // The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
-import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelState, pickModelFile, saveToDownloads, setModelOff } from './model'
+import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelState, pickModelFile, PWA, saveToDownloads, setModelOff } from './model'
 import { availableLangs, downloadLang, exportPack, importPack, installedLangs, openLang, origin, removeLang } from './packs'
 
 type S = {
@@ -168,12 +168,29 @@ export function modelSection(lang: string, refresh: () => void): HTMLElement {
   const s = str(lang)
   const box = el('div', 'setup')
   box.appendChild(el('h2', '', s.model))
-  box.appendChild(el('p', 'packs', `${MODEL.label} · ${modelLine(lang)}`))
+  const line = box.appendChild(el('p', 'packs', `${MODEL.label} · ${modelLine(lang)}`))
   const { state } = modelState()
   const row = el('div', 'langs')
+  // while it downloads or starts, the line follows it; when it ends, the section is drawn again (and the page refreshed)
+  const busy = (st: string) => st === 'downloading' || st === 'starting' || st === 'importing' || st === 'copying'
+  const follow = () => {
+    let ticks = 0
+    const t = setInterval(() => {
+      if (!box.isConnected) return clearInterval(t)
+      line.textContent = `${MODEL.label} · ${modelLine(lang)}`
+      const now = modelState().state
+      // the phone may take a moment to report the download: "missing" right after the tap is not the end
+      if (busy(now) || (now === 'missing' && ++ticks < 6)) return void row.replaceChildren()
+      clearInterval(t)
+      box.replaceWith(modelSection(lang, refresh))
+      refresh()
+    }, 500)
+  }
+  if (busy(state)) follow()
   if (state === 'missing' || state === 'error') {
-    row.append(btn(`${s.download} (${mb(MODEL.bytes)})`, () => { downloadModel(); setTimeout(refresh, 500) }, 'on'), btn(s.loadFile, () => pickModelFile()))
-  } else if (state === 'ready') {
+    row.append(btn(`${s.download} (${mb(MODEL.bytes)})`, () => { downloadModel(); refresh(); follow() }, 'on'))
+    if (!PWA) row.append(btn(s.loadFile, () => pickModelFile()))
+  } else if (state === 'ready' && !PWA) {
     row.append(btn(s.share, () => { const err = exportModel(); alertish(box, err ? `${s.failed} ${err}` : s.saved) }))
   }
   box.appendChild(row)

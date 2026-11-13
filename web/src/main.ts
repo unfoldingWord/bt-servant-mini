@@ -3,7 +3,7 @@
 import { answerSheet, facts, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
-import { appVersion, isLite, modelOff, modelReady, modelState, slotsOf } from './model'
+import { appVersion, isLite, modelOff, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
@@ -41,6 +41,7 @@ function plainSnippet(s: string): string {
 }
 import { md } from './md'
 import { askSafety, closeSafety, safetyAsked } from './safety'
+import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
@@ -149,6 +150,8 @@ type Msg = {
   rating?: 'up' | 'down'; reported?: boolean
   /** nothing could be answered: a link to About, which says what the app can and cannot do */
   limits?: boolean
+  /** no language on the phone, or not the one asked in: a button to the languages view */
+  packs?: boolean
 }
 type Hit = { book: string; ch: number; v: number }
 type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[]
@@ -232,6 +235,19 @@ const LIMITS: Record<string, string> = {
   en: 'What this app can and cannot do ›', es: 'Lo que esta app puede y no puede hacer ›', fr: 'Ce que cette application peut et ne peut pas faire ›',
   id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
 }
+// Without the language: the light build starts with none, and a question in a language that is not here finds nothing.
+// Saying so (and where to add it) instead of "I didn't find…", which reads as a fault of the app.
+const NOPACK: Record<string, { none: string; missing: string; add: string }> = {
+  en: { none: 'There is no language on this phone yet, so I have nothing to search in. Add one below: from the internet, or from a file someone shared with you.', missing: '{lang} is not on this phone, and I found nothing in the languages that are ({have}). Add {lang} to search in it.', add: 'Add languages ›' },
+  es: { none: 'Todavía no hay ningún idioma en este teléfono, así que no tengo dónde buscar. Añade uno aquí abajo: desde internet o desde un archivo que alguien te compartió.', missing: '{lang} no está en este teléfono, y no encontré nada en los idiomas que sí están ({have}). Añade {lang} para buscar en él.', add: 'Añadir idiomas ›' },
+  fr: { none: "Il n'y a encore aucune langue sur ce téléphone, je n'ai donc rien où chercher. Ajoutez-en une ci-dessous : par internet, ou depuis un fichier qu'on vous a partagé.", missing: "{lang} n'est pas sur ce téléphone, et je n'ai rien trouvé dans les langues qui y sont ({have}). Ajoutez {lang} pour y chercher.", add: 'Ajouter des langues ›' },
+  id: { none: 'Belum ada bahasa di ponsel ini, jadi saya tidak punya tempat untuk mencari. Tambahkan satu di bawah: dari internet, atau dari file yang dibagikan seseorang kepada Anda.', missing: '{lang} tidak ada di ponsel ini, dan saya tidak menemukan apa pun dalam bahasa yang ada ({have}). Tambahkan {lang} untuk mencari di dalamnya.', add: 'Tambah bahasa ›' },
+  hi: { none: 'इस फ़ोन पर अभी कोई भाषा नहीं है, इसलिए मेरे पास खोजने के लिए कुछ नहीं है। नीचे से एक जोड़ें: इंटरनेट से, या किसी की आपके साथ साझा की गई फ़ाइल से।', missing: '{lang} इस फ़ोन पर नहीं है, और जो भाषाएँ हैं ({have}) उनमें मुझे कुछ नहीं मिला। उसमें खोजने के लिए {lang} जोड़ें।', add: 'भाषाएँ जोड़ें ›' },
+  ar: { none: 'لا توجد أي لغة على هذا الهاتف بعد، لذا ليس لدي ما أبحث فيه. أضف لغة من الأسفل: من الإنترنت، أو من ملف شاركه أحدهم معك.', missing: '{lang} ليست على هذا الهاتف، ولم أجد شيئًا في اللغات الموجودة ({have}). أضف {lang} للبحث فيها.', add: 'إضافة لغات ›' },
+}
+const NP = (ui: string) => NOPACK[ui] ?? NOPACK.en!
+/** The pack a question's language is answered from ("es" → "es-419"). */
+const packCode = (l: string) => (l.startsWith('es') ? 'es-419' : l.startsWith('pt') ? 'pt-br' : l)
 function renderMsg(m: Msg): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
@@ -270,6 +286,17 @@ function renderMsg(m: Msg): HTMLElement {
       f.appendChild(b)
     }
     d.appendChild(f)
+  }
+  // the language is missing: straight to where it is added
+  if (m.packs) {
+    const a = el('button', 'about-link', NP(m.ui ?? nav).add) as HTMLButtonElement
+    a.type = 'button'
+    a.onclick = () => {
+      panelView = 'packs'
+      panel.classList.add('show')
+      renderPanel()
+    }
+    d.appendChild(a)
   }
   // could not answer: what the app can and cannot do is in About
   if (m.limits) {
@@ -892,6 +919,11 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   let onlineCtx = '' // the passage's context for online AI (surrounding verses, introductions)
   let m: Msg
   try {
+    // no language on this phone (the light build before its first download): nothing to search, say so before anything runs
+    if (!(await installedLangs()).length) {
+      answered = 'nopacks'
+      throw { done: { who: 'bot', intro: NP(nav).none, ui: nav, packs: true, meta: `${T.details} · 0.0 s\nno language packs on this phone` } }
+    }
     let { sheet, ui, meta, q } = await make()
     qLang = sheet.lang ?? ui
     setUiLang(ui)
@@ -925,7 +957,14 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
           items: helps.filter((h) => h.kind === k).map((h) => ({ ...h, snippet: plainSnippet(h.snippet), ref: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}` })),
         })).filter((g) => g.items.length)
         answered = 'search'
-        m = { who: 'bot', intro: res.hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words), ui, follow,
+        // nothing found, and the question's language is not on the phone: that is why, more likely than the words
+        const want = packCode(ui) // the question's language (the sheet's is the pack it fell back to)
+        const have = await installedLangs()
+        const absent = !res.hits.length && !helps.length && !have.includes(want)
+        if (absent) answered = 'nopack'
+        m = { who: 'bot', ui, follow, packs: absent || undefined,
+          intro: absent ? NP(ui).missing.replaceAll('{lang}', PACK_NAMES[want] ?? want).replace('{have}', have.map((l) => PACK_NAMES[l] ?? l).join(', '))
+            : res.hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words),
           info: info || undefined, helps: groups.length ? groups : undefined,
           meta: `${T.details} · ${total} s\n${meta}${searched}${helps.length ? `\nhelps: ${helps.length}` : ''}` }
         throw { done: m }
@@ -968,7 +1007,7 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   count(`kind.${answered}`)
   if (qLang) count(`lang.${qLang}`)
   if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
-  if (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length)) m.limits = true
+  if (!m.packs && (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length))) m.limits = true
   count('secs', Math.round((performance.now() - t0) / 1000))
   c.msgs.push(m)
   c.updated = Date.now()
@@ -979,7 +1018,8 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
   busy = false
   setReady()
   // level 3: the online answer, if allowed and there is internet; the offline answer already stands
-  if (m.who === 'bot' && (m.info || m.intro) && onlineOn() && onlineAvailable() && isOnline()) {
+  // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
+  if (m.who === 'bot' && (m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()) {
     const writing = el('p', 'ai pending', OT().writing)
     node.prepend(writing)
     const history: Turn[] = []
@@ -1098,6 +1138,8 @@ setTimeout(() => sendUsage(), 5000)
 window.addEventListener('online', () => { sendUsage(); sendFeedback() })
 setTimeout(() => sendFeedback(), 6000)
 if (!isOnline()) netNote('off')
+// the installable web app, in the browser: how to install it
+if (PWA) pwaHint(nav)
 // first launch: what BT Servant Mini is (and, in the light build, getting the model), then what may use the internet. An
 // install from before this question gets the question once, with its current settings marked.
 function firstSafety() {
@@ -1106,7 +1148,8 @@ function firstSafety() {
     const v = localStorage.getItem(k)
     return v === '1' ? true : v === '0' ? false : null
   }
-  askSafety(nav, onlineAvailable() ? ['online', 'usage', 'discreet'] : ['usage', 'discreet'], async (a) => {
+  const ask: ('online' | 'usage' | 'discreet')[] = [...(onlineAvailable() ? ['online' as const] : []), 'usage', ...(PWA ? [] : ['discreet' as const])]
+  askSafety(nav, ask, async (a) => {
     if (!a) return
     if (a.discreet !== undefined) setDiscreet(a.discreet, nav)
     if (a.usage !== undefined) {

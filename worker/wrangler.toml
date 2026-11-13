@@ -16,6 +16,8 @@ MAX_CONTEXT = "9500"
 # answers a day for everyone together, and for one signed-in person: a ceiling on the cost of Workers AI
 DAILY_CAP = "300"
 PERSON_DAILY_CAP = "40"
+# the installable web app (site/app) has no key: its origin is allowed instead
+ALLOWED_ORIGINS = "https://bt-servant-mini.unfoldingword.workers.dev"
 # The Google OAuth web client id the app signs in with. Set it and sign-in is required (secrets: APP_KEY, SESSION_SECRET).
 # GOOGLE_CLIENT_ID = "....apps.googleusercontent.com"
 
