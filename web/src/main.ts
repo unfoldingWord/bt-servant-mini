@@ -41,6 +41,7 @@ function plainSnippet(s: string): string {
 }
 import { md } from './md'
 import { askSafety, closeSafety, safetyAsked } from './safety'
+import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
@@ -144,6 +145,8 @@ type Msg = {
   study?: Study; lang?: string; ctx?: string
   /** the notes and questions a free search found, each opened whole in the panel */
   helps?: { head: string; items: HelpItem[] }[]
+  /** the person's thumbs on this answer, and whether they sent a report about it */
+  rating?: 'up' | 'down'; reported?: boolean
 }
 type Hit = { book: string; ch: number; v: number }
 type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[] }
@@ -260,6 +263,39 @@ function renderMsg(m: Msg): HTMLElement {
     }
     d.appendChild(f)
   }
+  // thumbs up or down, and with a thumbs down a report (feedback.ts)
+  if (m.info || m.intro || m.ai || m.text || m.helps) {
+    let bar = el('div', 'rate')
+    let said = ''
+    const draw = () => {
+      const fresh = feedbackBar(m.ui ?? nav, m.rating, !!m.reported, rate, report)
+      if (said) fresh.appendChild(el('span', 'done', said))
+      bar.replaceWith(fresh)
+      bar = fresh
+    }
+    const rate = (r: 'up' | 'down' | null) => {
+      m.rating = r ?? undefined
+      if (r) count(`rate.${r}`)
+      save()
+      draw()
+    }
+    const report = () => {
+      const c = convs.find((x) => x.msgs.includes(m))
+      const upTo = c ? c.msgs.slice(0, c.msgs.indexOf(m) + 1) : [m]
+      askReport(m.ui ?? nav, upTo.map(reportMsg), async (r) => {
+        if (!r) return
+        m.reported = true
+        save()
+        said = FT(m.ui ?? nav).queued
+        draw()
+        const res = await submitReport(r)
+        said = res === 'sent' ? FT(m.ui ?? nav).sent : FT(m.ui ?? nav).queued
+        draw()
+      })
+    }
+    d.appendChild(bar)
+    draw()
+  }
   if (m.meta) {
     const det = document.createElement('details')
     det.appendChild(el('summary', '', m.meta.split('\n')[0]))
@@ -268,6 +304,10 @@ function renderMsg(m: Msg): HTMLElement {
   }
   return d
 }
+/** One message as a report carries it: the words shown, the online answer, and the details (what the model understood). */
+const reportMsg = (m: Msg): ReportMsg => m.who === 'me'
+  ? { who: 'me', text: m.text }
+  : { who: 'bot', text: m.text, intro: m.intro ?? undefined, info: m.info, ai: m.ai?.text, details: m.meta }
 function renderConv() {
   log.innerHTML = ''
   const c = conv()
@@ -552,6 +592,7 @@ const closePanel = () => panel.classList.remove('show')
 ;(window as any).__back = (): boolean => {
   if (locked()) return false // the back button leaves the app; it never opens it
   if (closeSafety()) return true
+  if (closeReport()) return true
   if (backPanel()) return true
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
@@ -571,6 +612,16 @@ let polling = false
 // the status explains itself: a tap opens About, which says what works without internet
 status.style.cursor = 'pointer'
 status.onclick = () => showAbout(nav, () => setReady())
+// so does the logo and the name
+{
+  const brand = $('header .brand')
+  brand.style.cursor = 'pointer'
+  brand.setAttribute('role', 'button')
+  brand.tabIndex = 0
+  brand.setAttribute('aria-label', aboutLabel(nav))
+  brand.onclick = () => showAbout(nav, () => setReady())
+  brand.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); brand.click() } }
+}
 // the notice opens the menu, where the model can be downloaded or loaded
 notice.onclick = () => { if (!panel.classList.contains('show')) menu.click() }
 
@@ -923,7 +974,8 @@ setSnapshot(() => ({
 }))
 count('opens')
 setTimeout(() => sendUsage(), 5000)
-window.addEventListener('online', () => sendUsage())
+window.addEventListener('online', () => { sendUsage(); sendFeedback() })
+setTimeout(() => sendFeedback(), 6000)
 // first launch: what BT Servant Mini is (and, in the light build, getting the model), then what may use the internet. An
 // install from before this question gets the question once, with its current settings marked.
 function firstSafety() {

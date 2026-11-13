@@ -60,6 +60,9 @@ export function setSnapshot(f: () => Snapshot) {
   snapshot = f
 }
 
+/** The app's description as reports send it (version, languages, model, memory). */
+export const appSnapshot = (): Snapshot => snapshot()
+
 /** Exactly what the next report would send: the days that have ended, and the description of the app. */
 export function pendingReport(): { days: { d: string; c: Counts }[] } & Snapshot {
   const d = read()

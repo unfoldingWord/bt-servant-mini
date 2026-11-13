@@ -2,6 +2,7 @@
 //   POST /v1/session { idToken }  -> { token, name, exp }   a Google sign-in becomes a session of 30 days
 //   POST /v1/answer  { question, lang, helps, history? } -> { text, model }   with the session, when sign-in is required
 //   POST /v1/usage   { days: [{ d, c }], app, flavor, ui, packs, model, online, mem } -> { ok }   usage counts (opt-in)
+//   POST /v1/feedback { reasons, comment, conversation, reported, app, ... } -> { ok }   a report on one answer
 // The app sends the question and the translation helps it already found on the phone; the model answers from them only,
 // in the person's language, and names its sources. It does not search, keep the questions, or see other conversations.
 //
@@ -145,6 +146,48 @@ async function addUsage(env: Env, report: NonNullable<ReturnType<typeof usageRep
   }
 }
 
+// ------------------------------------------------------------------------------------------------------------ feedback
+
+// A person's report on one answer (web/src/feedback.ts): what went wrong, a comment, and the conversation up to that answer
+// if they left it in. Kept 180 days in KV as fb:<time>:<random>; nothing about the sender (address) is kept.
+// worker/scripts/feedback.mjs prints them.
+const REASONS = new Set(['understood', 'wrong', 'missing', 'language', 'error', 'slow', 'other'])
+const feedbackSeen = new Map<string, number[]>()
+function feedbackLimited(ip: string): boolean {
+  const now = Date.now()
+  const times = (feedbackSeen.get(ip) ?? []).filter((t) => now - t < 60_000)
+  times.push(now)
+  feedbackSeen.set(ip, times)
+  if (feedbackSeen.size > 5000) feedbackSeen.clear()
+  return times.length > 5
+}
+const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v ? v.slice(0, max) : undefined)
+/** The report, checked and reduced to its known fields; null when it is not one. */
+function feedbackReport(b: any): Record<string, unknown> | null {
+  if (!b || b.v !== 1 || !Array.isArray(b.conversation) || !b.conversation.length || b.conversation.length > 12) return null
+  const conversation = []
+  for (const m of b.conversation) {
+    if (!m || (m.who !== 'me' && m.who !== 'bot')) return null
+    const x: Record<string, string> = { who: m.who }
+    for (const k of ['text', 'intro', 'info', 'ai', 'details']) {
+      const v = str(m[k], 4100)
+      if (v) x[k] = v
+    }
+    conversation.push(x)
+  }
+  const reasons = Array.isArray(b.reasons) ? [...new Set(b.reasons.filter((r: unknown) => typeof r === 'string' && REASONS.has(r)))] : []
+  const pick = (v: unknown, re: RegExp) => (typeof v === 'string' && re.test(v) ? v : undefined)
+  return {
+    received: new Date().toISOString().slice(0, 16),
+    reasons, comment: str(b.comment, 2000) ?? '', conversation,
+    reported: Number.isInteger(b.reported) ? Math.min(Math.max(b.reported, 0), conversation.length - 1) : conversation.length - 1,
+    app: pick(b.app, /^[\w.-]{1,24}$/), flavor: pick(b.flavor, /^(full|lite|desktop)$/), ui: pick(b.ui, /^(en|es|fr|id|hi|ar)$/),
+    model: pick(b.model, /^[a-z]{1,12}$/), online: typeof b.online === 'boolean' ? b.online : undefined,
+    mem: typeof b.mem === 'number' && b.mem > 0 && b.mem <= 64 ? b.mem : undefined,
+    packs: Array.isArray(b.packs) ? b.packs.filter((p: unknown) => typeof p === 'string' && CODE.test(p)).slice(0, 20) : [],
+  }
+}
+
 // ------------------------------------------------------------------------------------------------------------ sign-in
 
 const b64url = (bytes: ArrayBuffer | Uint8Array): string =>
@@ -202,7 +245,7 @@ export default {
     const url = new URL(req.url)
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
     if (url.pathname === '/health') return json({ ok: true, model: env.MODEL, signIn: !!env.GOOGLE_CLIENT_ID })
-    if (req.method !== 'POST' || !['/v1/answer', '/v1/session', '/v1/usage'].includes(url.pathname)) return json({ error: 'not found' }, 404)
+    if (req.method !== 'POST' || !['/v1/answer', '/v1/session', '/v1/usage', '/v1/feedback'].includes(url.pathname)) return json({ error: 'not found' }, 404)
     // the app's key: anyone who only found the address gets nothing
     if (env.APP_KEY && !same(req.headers.get('X-BTSM-Key') ?? '', env.APP_KEY)) return json({ error: 'unauthorized' }, 401)
     const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown'
@@ -212,6 +255,20 @@ export default {
       if (!report) return json({ error: 'not a usage report' }, 400)
       await addUsage(env, report)
       return json({ ok: true, days: report.days.length })
+    }
+    if (url.pathname === '/v1/feedback') {
+      if (feedbackLimited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)
+      const raw = await req.text()
+      if (raw.length > 150_000) return json({ error: 'too large' }, 413)
+      let body: unknown = null
+      try { body = JSON.parse(raw) } catch {}
+      const report = feedbackReport(body)
+      if (!report) return json({ error: 'not a report' }, 400)
+      if (env.USAGE) {
+        const key = `fb:${new Date().toISOString()}:${crypto.randomUUID().slice(0, 8)}`
+        await env.USAGE.put(key, JSON.stringify(report), { expirationTtl: 180 * 86400 })
+      }
+      return json({ ok: true })
     }
     if (limited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)
 
