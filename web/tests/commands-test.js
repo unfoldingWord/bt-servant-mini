@@ -30,7 +30,8 @@ const CASES = (l) => {
 async function commandTests(langs = Object.keys(BOOK)) {
   const wait = async () => {
     await new Promise((r) => setTimeout(r, 600))
-    for (let k = 0; k < 60; k++) {
+    // up to a minute: the first search of a fresh page loads every pack's names and notes (up to ~40 s on a desktop)
+    for (let k = 0; k < 200; k++) {
       await new Promise((r) => setTimeout(r, 300))
       if (!document.querySelector('.pending')) return
     }
