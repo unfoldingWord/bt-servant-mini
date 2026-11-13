@@ -119,7 +119,7 @@ export type SearchResult = { keywords: string[]; concepts: string[]; hits: Found
 const BOOKS: string[] = Object.keys((booknames as any).BOOK_EN).filter((c) => c !== 'obs')
 const verseText = (model: BookModel, from: number, to: number): string => {
   const t = model.texts.find((x) => /\/(ult|glt)$/.test(x.res)) ?? model.texts.find((x) => /\/bsb$/.test(x.res)) ?? model.texts[0]
-  return t ? textOfRange(model.book, t.pieces as any, t.events as any, from, to) : ''
+  return t ? textOfRange(model.book, t.pieces as any, t.events as any, from, to).replace(/[{}]/g, '') : ''
 }
 const parseRef = (ref: string): [number, number] => {
   const m = /^(\d+):(\d+)/.exec(ref)
@@ -241,6 +241,15 @@ const ASKS: RegExp[] = [
   /^(.+?)\s+(?:कौन|क्या)\s+(?:था|थे|थी|है|हैं)$/,
   /^(?:من|ما|ماذا)\s+(?:هو|هي|كان|كانت|هم|يعني)?\s*(.+)$/,
 ]
+/** Whether the question asks about something ("who was…", "¿qué es…?") rather than only naming it ("John the Baptist"). */
+export function asksAbout(q: string): boolean {
+  const t = q.trim().replace(/[¿?!¡.؟।]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return ASKS.some((re) => re.test(t))
+}
+/** The verses whose words link to an article (a person, a key term), best first. */
+export async function versesOf(ids: string[], packLang = 'en'): Promise<Found[]> {
+  return byConcepts([ids], [], packLang)
+}
 export async function articleForQuestion(q: string): Promise<string[] | null> {
   const t = q.trim().replace(/[¿?!¡.؟।]+/g, ' ').replace(/\s+/g, ' ').trim()
   const m = await names()
@@ -252,6 +261,10 @@ export async function articleForQuestion(q: string): Promise<string[] | null> {
       ?? (!k.includes(' ') ? conceptOf(k, m) : null) // one name with a close spelling: Moïse ~ Moses
     if (ids?.length) return ids.filter((id) => id.startsWith('tw:'))
   }
+  // the name alone: "John the Baptist", "Juan el Bautista", "gracia" (exact names only, no close spellings)
+  const k = fold(t).replace(/[«»"“”']/g, '').replace(/\s+/g, ' ').trim()
+  const ids = m.get(k) ?? m.get(k.replace(/^(el|la|los|las|the|le|les|l)\s+/, '')) ?? m.get(k.replace(/^ال/, ''))
+  if (ids?.length) return ids.filter((id) => id.startsWith('tw:'))
   return null
 }
 

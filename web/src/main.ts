@@ -6,7 +6,7 @@ import { modelReady, modelState, slotsOf } from './model'
 import { aboutLabel, languagesSection, modelLine, modelSection, PACK_NAMES, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
-import { articleForQuestion, keywords, resetSearch, searchVerses } from './search'
+import { articleForQuestion, asksAbout, keywords, resetSearch, searchVerses, versesOf } from './search'
 import { md } from './md'
 import { modelLabel, onlineAnswer, onlineAvailable, onlineOn, setOnline, type Turn } from './online'
 
@@ -517,6 +517,22 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
       for (const h of res.hits.slice(1, 4)) others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, kind) })
     }
     const r = await answerSheet(sheet)
+    // Only a name ("John the Baptist"): the article, and also the verses that mention him (each opens its text and notes)
+    if (q !== undefined && sheet.intent === 'article' && sheet.concept && !asksAbout(q)) {
+      const hits = (await versesOf([sheet.concept], sheet.lang)).slice(0, 6)
+      if (hits.length) {
+        c.found = hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v }))
+        const title = /«([^»]+)»/.exec(intro(sheet, facts, ui) ?? '')?.[1] ?? q
+        const NL2 = '\n\n'
+        r.answer += NL2 + '### ' + searchIntro('concepts', [title], ui).replace(/[:：]\s*$/, '') + NL2 +
+          hits.map((h) => `**${bookLabel(ui, h.book)} ${h.ch}:${h.v}** — ${h.text.replace(/\s+/g, ' ').trim()}`).join(NL2)
+        for (const h of hits.slice(0, 4))
+          others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: (await buildSheet(`h${Date.now()}`, passageOf(h, ['text', 'notes'], ui), helpsLang)).sheet })
+      }
+    }
+    // "Which John do you mean?": each article as a button
+    for (const o of r.options ?? [])
+      others.push({ label: o.title, sheet: { ...sheet, id: `f${Date.now()}`, intent: 'article', concept: o.id, candidates: null, term: null } })
     const total = ((performance.now() - t0) / 1000).toFixed(1)
     m = { who: 'bot', intro: intro(sheet, facts, ui), info: r.answer, follow: [...followups(sheet, facts, ui), ...others], ui,
       meta: `${T.details} · ${total} s\n${meta}${searched}\n${JSON.stringify(sheet, null, 1)}` }

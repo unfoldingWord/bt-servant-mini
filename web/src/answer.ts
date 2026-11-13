@@ -20,7 +20,13 @@ export type Sheet = {
 }
 /** What the last answer found, for the conversational sentence around it (set by the recipes, read by converse.ts). */
 export let facts: Record<string, any> = {}
-export type Result = { answer: string; cites: string[] }
+/** options: the articles to pick from, when the answer asks "which do you mean?" (the app shows them as buttons). */
+export type Result = { answer: string; cites: string[]; options?: { id: string; title: string }[] }
+/** Bible text as a reader sees it: the braces that mark implied words in the ULT/UST are left out. */
+const plain = (t: string): string => t.replace(/[{}]/g, '')
+/** A text in another script than its pack's language is not that language (BSOJ's ar ARST New Testament is the English UST, Nov 2026). */
+const SCRIPT: Record<string, RegExp> = { ar: /[؀-ۿ]/, hi: /[ऀ-ॿ]/ }
+const wrongScript = (lang: string, text: string): boolean => !!SCRIPT[lang] && !SCRIPT[lang]!.test(text)
 
 const BOOK_EN: Record<string, string> = {
   gen: 'Genesis', exo: 'Exodus', lev: 'Leviticus', num: 'Numbers', deu: 'Deuteronomy', jos: 'Joshua', jdg: 'Judges', rut: 'Ruth',
@@ -70,6 +76,7 @@ export function clean(md: unknown): string {
     .replace(/\((?:ver|see):\s*(?:\[\[[^\]]+\]\]|rc:\/\/[^)\s]+)\)/gi, '')
     .replace(/\[\[([^\]]+)\]\]/g, '$1')
     .replace(/\[([^\]]+)\]\((?:ref|rc):[^)]*\)/g, '$1') // [1:2](ref:jon 1:2): a link the reader cannot follow here
+    .replace(/\[([^\]]+)\]\([^)\s]*\.md\)/g, '$1') // (See also: [christian](./kt/christian.md)): the name, without the file
     .replace(/[ \t]+\./g, '.')
     .replace(/(?<!\.)\.\.(?!\.)/g, '.')
     .replace(/\n{3,}/g, '\n\n')
@@ -222,8 +229,8 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       // ULT/UST (GLT/GST in Spanish); a language whose texts have other names shows them all
       const wanted = s.version ? '/' + verKey(s.version as 'ult' | 'ust') : ''
       if (wanted && model.texts.some((x) => x.res.endsWith(wanted)) && !t.res.endsWith(wanted)) continue
-      const text = textOfRange(ref.book, t.pieces as any, t.events as any, range[0], range[1])
-      if (!text) continue
+      const text = plain(textOfRange(ref.book, t.pieces as any, t.events as any, range[0], range[1]))
+      if (!text || wrongScript(lang, text)) continue
       any = true
       facts.texts++
       out.push(say(lang, 'text_line', { label: `**${key.toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }))
@@ -313,16 +320,19 @@ async function choose(s: Sheet, l: Lang): Promise<Result> {
   const lang = l.lang
   const lines = ['**' + say(lang, 'choose_head') + '**', '']
   const cites: string[] = []
+  const options: { id: string; title: string }[] = []
   for (const [i, id] of (s.candidates ?? []).entries()) {
     const a = await l.r.article(id, 'all')
     const secs = a.data?.sections ?? []
     const d = secs.find((x) => x.role === 'definition') ?? secs.find((x) => x.role === 'description') ?? secs[0]
     const def = d ? firstSentence(clean(d.md).replace(/^#+.*$/gm, ' ')) : ''
-    lines.push(say(lang, 'choose_line', { n: i + 1, title: a.data?.title ?? (await titleOf(l, id)), def }))
+    const title = a.data?.title ?? (await titleOf(l, id))
+    options.push({ id, title })
+    lines.push(say(lang, 'choose_line', { n: i + 1, title, def }))
     for (const c of a.cites.slice(0, 1)) cites.push(cite(c.res, c.release, id))
     cites.push(`id:${id}`)
   }
-  return { answer: lines.join('\n'), cites }
+  return { answer: lines.join('\n'), cites, options }
 }
 
 async function count(s: Sheet, l: Lang): Promise<Result> {
@@ -479,8 +489,8 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
     const uKey = textKey(model, 'ust')
     const simple = model.texts.find((t) => t.res === uKey)
     if (simple) {
-      const text = textOfRange(ref.book, simple.pieces as any, simple.events as any, range[0], range[1])
-      if (text) {
+      const text = plain(textOfRange(ref.book, simple.pieces as any, simple.events as any, range[0], range[1]))
+      if (text && !wrongScript(lang, text)) {
         out.push(say(lang, 'advice_simple', { label: upper(simple.res), text }))
         cites.push(cite(simple.res, releaseOf(model, simple.res), `${ref.book} ${refLabel(ref)}`))
       }
