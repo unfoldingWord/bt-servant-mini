@@ -43,6 +43,36 @@ export function setOnline(on: boolean) {
   } catch {}
 }
 
+/**
+ * The question read online into the call sheet (the phone model's job), when the person turned the online helper on and there
+ * is a connection: a 70B model reads free questions better than the phone's 270M, above all in English and Spanish. Null on
+ * any problem or after 8 s, and the phone model reads it instead. Unlike an answer, a failure here changes nothing on screen.
+ */
+export async function onlineSlots(question: string): Promise<{ slots: any; model: string; ms: number } | null> {
+  if (!onlineOn() || !onlineAvailable() || !isOnline()) return null
+  if (signInAvailable() && !onlineSession()) return null
+  const t0 = performance.now()
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 8000) // measured: median 3 s, 90% under 5 s, worst 7 s
+  try {
+    const r = await fetch(`${onlineUrl()}/v1/slots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-BTSM-Key': onlineKey(), ...(onlineSession() ? { Authorization: `Bearer ${onlineSession()!.token}` } : {}) },
+      body: JSON.stringify({ question }),
+      signal: ctrl.signal,
+    })
+    if (!r.ok) return null
+    const j = await r.json()
+    const s = j?.slots
+    if (!s || typeof s !== 'object' || typeof s.intent !== 'string') return null
+    return { slots: s, model: String(j.model ?? ''), ms: Math.round(performance.now() - t0) }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export type Turn = { role: 'user' | 'assistant'; text: string }
 /** The online answer, or null when it cannot be had (off, no internet, server error, more than 45 s). */
 export async function onlineAnswer(question: string, lang: string, helps: string, history: Turn[]): Promise<{ text: string; model: string } | null> {

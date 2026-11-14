@@ -1,6 +1,8 @@
 // BT Servant Mini — online helper (level 3).
 //   POST /v1/session { idToken }  -> { token, name, exp }   a Google sign-in becomes a session of 30 days
 //   POST /v1/answer  { question, lang, helps, history? } -> { text, model }   with the session, when sign-in is required
+//   POST /v1/slots   { question } -> { slots, model }   the question read into the app's call sheet (the phone model's job,
+//                    done online when the person turned the online helper on); same key, sign-in and caps (its own counters)
 //   POST /v1/usage   { days: [{ d, c }], app, flavor, ui, packs, model, online, mem } -> { ok }   usage counts (opt-in)
 //   POST /v1/feedback { reasons, comment, conversation, reported, app, ... } -> { ok }   a report on one answer
 // The app sends the question and the translation helps it already found on the phone; the model answers from them only,
@@ -9,6 +11,8 @@
 // Who may ask: the app's key (X-BTSM-Key, a Worker secret), a signed-in person (when GOOGLE_CLIENT_ID is set), a few answers
 // a minute per address, and daily caps per person and for everyone (KV), so the cost of Workers AI has a ceiling even if
 // the key is dug out of an APK.
+
+import SLOTS from './slots-prompt.json'
 
 export interface Env {
   AI: { run(model: string, input: unknown): Promise<any> }
@@ -243,6 +247,35 @@ async function session(env: Env, req: Request): Promise<string | null> {
   return typeof who === 'string' && exp > Date.now() ? who : null
 }
 
+// ------------------------------------------------------------------------------------------------------- reading a question
+
+// The rules, worked examples and schema measured in fase0-mini-servant (py/eval_online.py writes data/online-prompt.json;
+// copy it here as slots-prompt.json). Several questions a minute are normal: each asked question is read once.
+const slotsSeen = new Map<string, number[]>()
+function slotsLimited(ip: string): boolean {
+  const now = Date.now()
+  const times = (slotsSeen.get(ip) ?? []).filter((t) => now - t < 60_000)
+  times.push(now)
+  slotsSeen.set(ip, times)
+  if (slotsSeen.size > 5000) slotsSeen.clear()
+  return times.length > 20
+}
+async function readQuestion(env: Env, question: string): Promise<Record<string, unknown> | null> {
+  const messages: { role: string; content: string }[] = [{ role: 'system', content: SLOTS.rules }]
+  for (const s of SLOTS.shots) messages.push({ role: 'user', content: s.q }, { role: 'assistant', content: s.a })
+  messages.push({ role: 'user', content: question })
+  const out = await env.AI.run(SLOTS.model || env.MODEL, {
+    messages, max_tokens: 200, temperature: 0, response_format: { type: 'json_schema', json_schema: SLOTS.schema },
+  })
+  let d: any = out?.response
+  if (typeof d === 'string') {
+    try { d = JSON.parse(d.trim()) } catch { return null }
+  }
+  if (!d || typeof d !== 'object' || typeof d.intent !== 'string') return null
+  if (d.verse_end != null && d.verse_end === d.verse_start) d.verse_end = null // one verse has no end
+  return d
+}
+
 // --------------------------------------------------------------------------------------------------------------- main
 
 export default {
@@ -250,7 +283,7 @@ export default {
     const url = new URL(req.url)
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
     if (url.pathname === '/health') return json({ ok: true, model: env.MODEL, signIn: !!env.GOOGLE_CLIENT_ID })
-    if (req.method !== 'POST' || !['/v1/answer', '/v1/session', '/v1/usage', '/v1/feedback'].includes(url.pathname)) return json({ error: 'not found' }, 404)
+    if (req.method !== 'POST' || !['/v1/answer', '/v1/slots', '/v1/session', '/v1/usage', '/v1/feedback'].includes(url.pathname)) return json({ error: 'not found' }, 404)
     // the app's key: anyone who only found the address gets nothing
     const fromApp = (env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean).includes(req.headers.get('Origin') ?? '')
     if (env.APP_KEY && !same(req.headers.get('X-BTSM-Key') ?? '', env.APP_KEY) && !fromApp) return json({ error: 'unauthorized' }, 401)
@@ -276,7 +309,7 @@ export default {
       }
       return json({ ok: true })
     }
-    if (limited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)
+    if (url.pathname === '/v1/slots' ? slotsLimited(ip) : limited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)
 
     let body: { question?: unknown; lang?: unknown; helps?: unknown; history?: unknown; idToken?: unknown }
     try {
@@ -300,9 +333,24 @@ export default {
       if (!who) return json({ error: 'sign in', signIn: true }, 401)
       person = who
     }
-    if ((await count(env, 'all')) >= (Number(env.DAILY_CAP) || 300)) return json({ error: 'daily limit reached for today', limit: 'all' }, 429)
-    if (person !== 'anyone' && (await count(env, `p:${person}`)) >= (Number(env.PERSON_DAILY_CAP) || 40))
+    // reading a question: its own counters, five times the answers' caps (it is a short call, and every question needs one)
+    const pre = url.pathname === '/v1/slots' ? 'slots:' : ''
+    const times = pre ? 5 : 1
+    if ((await count(env, `${pre}all`)) >= (Number(env.DAILY_CAP) || 300) * times) return json({ error: 'daily limit reached for today', limit: 'all' }, 429)
+    if (person !== 'anyone' && (await count(env, `${pre}p:${person}`)) >= (Number(env.PERSON_DAILY_CAP) || 40) * times)
       return json({ error: 'your daily limit is reached', limit: 'person' }, 429)
+    if (pre) {
+      const q = typeof body.question === 'string' ? body.question.trim().slice(0, 600) : ''
+      if (!q) return json({ error: 'no question' }, 400)
+      try {
+        const slots = await readQuestion(env, q)
+        if (!slots) return json({ error: 'no sheet' }, 502)
+        await Promise.all([bump(env, 'slots:all'), person !== 'anyone' ? bump(env, `slots:p:${person}`) : Promise.resolve()])
+        return json({ slots, model: SLOTS.model || env.MODEL })
+      } catch (e) {
+        return json({ error: e instanceof Error ? e.message : String(e) }, 502)
+      }
+    }
 
     const question = typeof body.question === 'string' ? body.question.trim().slice(0, 600) : ''
     const lang = typeof body.lang === 'string' ? body.lang : 'en'

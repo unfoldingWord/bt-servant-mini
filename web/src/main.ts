@@ -45,7 +45,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
+import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -1211,7 +1211,11 @@ form.addEventListener('submit', (e) => {
   respond(c, q0, async () => {
     // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
-    const { slots, raw, ms } = await slotsOf(q)
+    // with the online helper on and a connection, the online model reads the question; otherwise (or if it fails) the phone's
+    const on = await onlineSlots(q)
+    if (on) count('read.online')
+    const { slots, raw, ms } = on ? { slots: on.slots, raw: `(read online by ${modelLabel(on.model)})
+${JSON.stringify(on.slots)}`, ms: on.ms } : await slotsOf(q)
     const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
     if (s0.phrase) s0.phrase = cleanPhrase(s0.phrase, q)
     // the script says the language even when the model does not know it: Arabic letters, Devanagari

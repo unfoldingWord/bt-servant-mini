@@ -1,0 +1,230 @@
+{
+ "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+ "rules": "You read one question from a Bible translator and fill a JSON call sheet for an app that looks up translation helps.\nCopy words from the question; use null when the question does not say.\nintent: passage (show a verse or chapter, its notes, questions, key terms or a book introduction), article (the meaning of a word or\nidea), count (how many), rank (which are most common), resources (what languages or helps exist), advice (how to translate a quoted\nphrase), search (find where a word appears in the notes), unknown (not about these helps).\nbook: the book name exactly as the question writes it (same spelling and language), without words like \"book of\"; null if none.\nchapter, verse_start: numbers; verse_end only for a range.\nwhat: [\"text\"] unless the question asks for notes, questions, terms (key terms / words) or intro (introduction); [] for article,\nresources, advice and search.\nversion: \"ult\" or \"ust\" only if the question says ULT or UST.\nterm: for article and search, the word or idea asked about, copied from the question; for advice, the figure of speech named in\nthe question's language (metaphor, simile, hyperbole, personification, idiom...); null otherwise.\nphrase: for advice, the quoted words to translate, copied exactly.\nlang: the language the question is written in: en, es, fr, id, hi or ar.\nother_language: a language the question names (in English, e.g. \"Indonesian\"), else null.\nHow this app reads some questions:\n- How to translate something people where the translator lives do not know (\"we have no snow, how do I say snow?\"): article,\n  term = that thing. With a verse named (\"Genesis 1:1 says wheat, but we have no wheat\"): passage, what [\"notes\"], term = the thing.\n- What a word means in a passage (\"what does grace mean in Ruth 3?\"): passage, what [\"terms\"], term = the word.\n- Which books mention or talk about a word: count, what [\"terms\"], term = the word, no book.\n- How to translate a whole book (\"I am translating the book of James, how do I translate it?\"): passage, what [\"intro\"].\n- One verse: verse_end null.\nReply with the JSON object only.",
+ "shots": [
+  {
+   "q": "Quote Psalm chapter 30 for me. (the ULT)",
+   "a": "{\"intent\":\"passage\",\"book\":\"Psalm\",\"chapter\":30,\"verse_start\":null,\"verse_end\":null,\"what\":[\"text\"],\"version\":\"ult\",\"term\":null,\"phrase\":null,\"lang\":\"en\",\"other_language\":null}"
+  },
+  {
+   "q": "फिलेमोन 1 3 पर कौन-से अनुवाद नोट्स हैं?",
+   "a": "{\"intent\":\"passage\",\"book\":\"फिलेमोन\",\"chapter\":1,\"verse_start\":3,\"verse_end\":null,\"what\":[\"notes\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"hi\",\"other_language\":null}"
+  },
+  {
+   "q": "Muesrta 2 cr 27 con sus notas.",
+   "a": "{\"intent\":\"passage\",\"book\":\"2 cr\",\"chapter\":27,\"verse_start\":null,\"verse_end\":null,\"what\":[\"text\",\"notes\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"es\",\"other_language\":null}"
+  },
+  {
+   "q": "Désolé de te déranger, mais Que veut dire le mot « télévision » dans la Bible ?",
+   "a": "{\"intent\":\"article\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"télévision\",\"phrase\":null,\"lang\":\"fr\",\"other_language\":null}"
+  },
+  {
+   "q": "ما معنى كلمة 'تلفاز' في الكتاب المقدس؟",
+   "a": "{\"intent\":\"article\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"تلفاز\",\"phrase\":null,\"lang\":\"ar\",\"other_language\":null}"
+  },
+  {
+   "q": "Una pregunta: no hay palabra para trigo en mi idioma como la traduzco",
+   "a": "{\"intent\":\"article\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"trigo\",\"phrase\":null,\"lang\":\"es\",\"other_language\":null}"
+  },
+  {
+   "q": "كم ملاحظة عن تشخيص في 1 كورنثوس الأصحاح 9؟",
+   "a": "{\"intent\":\"count\",\"book\":\"1 كورنثوس\",\"chapter\":9,\"verse_start\":null,\"verse_end\":null,\"what\":[\"notes\"],\"version\":null,\"term\":\"تشخيص\",\"phrase\":null,\"lang\":\"ar\",\"other_language\":null}"
+  },
+  {
+   "q": "¿Cuántas notas de traducción tiene gálatas capítulo 1?",
+   "a": "{\"intent\":\"count\",\"book\":\"gálatas\",\"chapter\":1,\"verse_start\":null,\"verse_end\":null,\"what\":[\"notes\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"es\",\"other_language\":null}"
+  },
+  {
+   "q": "अध्याय २, हबक्कूक में समझ के कितने प्रश्न हैं",
+   "a": "{\"intent\":\"count\",\"book\":\"हबक्कूक\",\"chapter\":2,\"verse_start\":null,\"verse_end\":null,\"what\":[\"questions\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"hi\",\"other_language\":null}"
+  },
+  {
+   "q": "السلام عليكم! ما الصور البلاغية الأكثر تكرارًا في الأصحاح ١٦ من القضاة؟",
+   "a": "{\"intent\":\"rank\",\"book\":\"القضاة\",\"chapter\":16,\"verse_start\":null,\"verse_end\":null,\"what\":[\"notes\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"ar\",\"other_language\":null}"
+  },
+  {
+   "q": "Give me the most common translation difficulties in 2 kings chapter 24.",
+   "a": "{\"intent\":\"rank\",\"book\":\"2 kings\",\"chapter\":24,\"verse_start\":null,\"verse_end\":null,\"what\":[\"notes\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"en\",\"other_language\":null}"
+  },
+  {
+   "q": "कृपया, कुलुस्सियों की पुस्तक के नोट्स में किस तरह की बातें सबसे अधिक आती हैं?",
+   "a": "{\"intent\":\"rank\",\"book\":\"कुलुस्सियों\",\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[\"notes\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"hi\",\"other_language\":null}"
+  },
+  {
+   "q": "¿en qué idiomas vienen las ayudas? ¿está el swahili?",
+   "a": "{\"intent\":\"resources\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"es\",\"other_language\":\"Swahili\"}"
+  },
+  {
+   "q": "Comment appelle-t-on 'prophète' dans les Translation Words en espagnol ",
+   "a": "{\"intent\":\"resources\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"prophète\",\"phrase\":null,\"lang\":\"fr\",\"other_language\":\"Spanish\"}"
+  },
+  {
+   "q": "ما أدوات الترجمة المتوفرة في اللغة الإسبانية؟",
+   "a": "{\"intent\":\"resources\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"ar\",\"other_language\":\"Spanish\"}"
+  },
+  {
+   "q": "नमस्ते! यशायाह 40:6 के \"सब प्राणी घास के समान हैं\" (उपमा) का अनुवाद कैसे करूँ?",
+   "a": "{\"intent\":\"advice\",\"book\":\"यशायाह\",\"chapter\":40,\"verse_start\":6,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"उपमा\",\"phrase\":\"सब प्राणी घास के समान हैं\",\"lang\":\"hi\",\"other_language\":null}"
+  },
+  {
+   "q": "Dans verset 4 de Psaumes 91, « Il te couvrira de ses plumes » : quelle figure est-ce et comment la traduire ?",
+   "a": "{\"intent\":\"advice\",\"book\":\"Psaumes\",\"chapter\":91,\"verse_start\":4,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"métaphore\",\"phrase\":\"Il te couvrira de ses plumes\",\"lang\":\"fr\",\"other_language\":null}"
+  },
+  {
+   "q": "Perdona la molestia, pero Ayúdame a traducir \"de su boca salía una espada aguda de dos filos\" de apocalipsis 1.16.",
+   "a": "{\"intent\":\"advice\",\"book\":\"apocalipsis\",\"chapter\":1,\"verse_start\":16,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"metáfora\",\"phrase\":\"de su boca salía una espada aguda de dos filos\",\"lang\":\"es\",\"other_language\":null}"
+  },
+  {
+   "q": "Oye, ¿Qué notas mencionan puerta?",
+   "a": "{\"intent\":\"search\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"puerta\",\"phrase\":null,\"lang\":\"es\",\"other_language\":null}"
+  },
+  {
+   "q": "أهلا، ابحث عن \"بذرة\"",
+   "a": "{\"intent\":\"search\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"بذرة\",\"phrase\":null,\"lang\":\"ar\",\"other_language\":null}"
+  },
+  {
+   "q": "Find where \"seed\" shows up in the notes.",
+   "a": "{\"intent\":\"search\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"seed\",\"phrase\":null,\"lang\":\"en\",\"other_language\":null}"
+  },
+  {
+   "q": "كيف حال الطقس في الدار البيضاء اليوم؟",
+   "a": "{\"intent\":\"unknown\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"ar\",\"other_language\":null}"
+  },
+  {
+   "q": "What time is it in Tokyo?",
+   "a": "{\"intent\":\"unknown\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"en\",\"other_language\":null}"
+  },
+  {
+   "q": "???",
+   "a": "{\"intent\":\"unknown\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"es\",\"other_language\":null}"
+  },
+  {
+   "q": "Hello! How do I translate salt if there is no salt where I live?",
+   "a": "{\"intent\":\"article\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[],\"version\":null,\"term\":\"salt\",\"phrase\":null,\"lang\":\"en\",\"other_language\":null}"
+  },
+  {
+   "q": "Lucas 2:1 dice león, pero en mi pueblo no conocen león. ¿Cómo lo traduzco?",
+   "a": "{\"intent\":\"passage\",\"book\":\"Lucas\",\"chapter\":2,\"verse_start\":1,\"verse_end\":null,\"what\":[\"notes\"],\"version\":null,\"term\":\"león\",\"phrase\":null,\"lang\":\"es\",\"other_language\":null}"
+  },
+  {
+   "q": "Halo! Di ayat 5 dari Yakobus pasal 1, apa itu nabi?",
+   "a": "{\"intent\":\"passage\",\"book\":\"Yakobus\",\"chapter\":1,\"verse_start\":5,\"verse_end\":null,\"what\":[\"terms\"],\"version\":null,\"term\":\"nabi\",\"phrase\":null,\"lang\":\"id\",\"other_language\":null}"
+  },
+  {
+   "q": "Dans quels livres aparaît justifier ?",
+   "a": "{\"intent\":\"count\",\"book\":null,\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[\"terms\"],\"version\":null,\"term\":\"justifier\",\"phrase\":null,\"lang\":\"fr\",\"other_language\":null}"
+  },
+  {
+   "q": "माफ़ कीजिए, मैं निर्गमन पुस्तक का अनुवाद कैसे करूँ",
+   "a": "{\"intent\":\"passage\",\"book\":\"निर्गमन\",\"chapter\":null,\"verse_start\":null,\"verse_end\":null,\"what\":[\"intro\"],\"version\":null,\"term\":null,\"phrase\":null,\"lang\":\"hi\",\"other_language\":null}"
+  }
+ ],
+ "schema": {
+  "type": "object",
+  "properties": {
+   "intent": {
+    "type": "string",
+    "enum": [
+     "passage",
+     "article",
+     "count",
+     "rank",
+     "resources",
+     "advice",
+     "search",
+     "unknown"
+    ]
+   },
+   "book": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "chapter": {
+    "type": [
+     "integer",
+     "null"
+    ]
+   },
+   "verse_start": {
+    "type": [
+     "integer",
+     "null"
+    ]
+   },
+   "verse_end": {
+    "type": [
+     "integer",
+     "null"
+    ]
+   },
+   "what": {
+    "type": "array",
+    "items": {
+     "type": "string",
+     "enum": [
+      "text",
+      "notes",
+      "questions",
+      "terms",
+      "intro"
+     ]
+    }
+   },
+   "version": {
+    "type": [
+     "string",
+     "null"
+    ],
+    "enum": [
+     "ult",
+     "ust",
+     null
+    ]
+   },
+   "term": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "phrase": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "lang": {
+    "type": "string",
+    "enum": [
+     "en",
+     "es",
+     "id",
+     "hi",
+     "fr",
+     "ar"
+    ]
+   },
+   "other_language": {
+    "type": [
+     "string",
+     "null"
+    ]
+   }
+  },
+  "required": [
+   "intent",
+   "book",
+   "chapter",
+   "verse_start",
+   "verse_end",
+   "what",
+   "version",
+   "term",
+   "phrase",
+   "lang",
+   "other_language"
+  ]
+ }
+}
