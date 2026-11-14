@@ -1,6 +1,6 @@
 // The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
-import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
+import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { availableLangs, downloadLang, exportPack, importPack, installedLangs, openLang, origin, removeLang } from './packs'
 
 type S = {
@@ -8,7 +8,7 @@ type S = {
   model: string; mReady: string; mMissing: string; mDown: string; mImport: string; mStart: string; mError: string; mOff: string; none: string
   download: string; loadFile: string; share: string; saved: string; langs: string; shipped: string; added: string; remove: string
   addLangs: string; online: string; offline: string; noneNew: string; loadPack: string; working: string; failed: string
-  setup: string
+  setup: string; newer: string; update: string
 }
 const STR: Record<string, S> = {
   en: {
@@ -24,6 +24,7 @@ const STR: Record<string, S> = {
     ],
     version: 'Version', full: 'complete (model and base languages included)', lite: 'light (model and languages added on the phone)',
     start: 'Start', close: 'Close', setup: 'To start, this light version needs the model (once):',
+    newer: 'A newer model is available: it understands more questions, in more languages.', update: 'Update the model',
     model: 'Model', mReady: 'Ready', mMissing: 'Not on this phone yet: only references and searches work', mDown: 'Downloading', mImport: 'Loading',
     mStart: 'Starting', mOff: 'Off: references and searches only', none: 'None (references and searches only)', mError: 'Problem', download: 'Download', loadFile: 'Load from a file (SD card, phone memory)', share: 'Share (save to Downloads)',
     saved: 'Saved in Downloads', langs: 'Languages on this phone', shipped: 'included', added: 'added', remove: 'Remove',
@@ -43,6 +44,7 @@ const STR: Record<string, S> = {
     ],
     version: 'Versión', full: 'completa (con el modelo y los idiomas base)', lite: 'light (modelo e idiomas se agregan en el teléfono)',
     start: 'Empezar', close: 'Cerrar', setup: 'Para empezar, esta versión light necesita el modelo (una sola vez):',
+    newer: 'Hay un modelo más nuevo: entiende más preguntas, en más idiomas.', update: 'Actualizar el modelo',
     model: 'Modelo', mReady: 'Listo', mMissing: 'Aún no está en este teléfono: solo funcionan referencias y búsquedas', mDown: 'Descargando', mImport: 'Cargando',
     mStart: 'Iniciando', mOff: 'Apagado: solo referencias y búsquedas', none: 'Ninguno (solo referencias y búsquedas)', mError: 'Problema', download: 'Descargar', loadFile: 'Cargar desde un archivo (tarjeta SD, memoria)', share: 'Compartir (guardar en Descargas)',
     saved: 'Guardado en Descargas', langs: 'Idiomas en este teléfono', shipped: 'incluido', added: 'agregado', remove: 'Quitar',
@@ -62,6 +64,7 @@ const STR: Record<string, S> = {
     ],
     version: 'Version', full: 'complète (modèle et langues de base inclus)', lite: 'légère (modèle et langues ajoutés sur le téléphone)',
     start: 'Commencer', close: 'Fermer', setup: 'Pour commencer, cette version légère a besoin du modèle (une seule fois) :',
+    newer: 'Un modèle plus récent est disponible : il comprend plus de questions, dans plus de langues.', update: 'Mettre à jour le modèle',
     model: 'Modèle', mReady: 'Prêt', mMissing: 'Pas encore sur ce téléphone : seules les références et recherches fonctionnent', mDown: 'Téléchargement', mImport: 'Chargement',
     mStart: 'Démarrage', mOff: 'Éteint : références et recherches seulement', none: 'Aucun (références et recherches seulement)', mError: 'Problème', download: 'Télécharger', loadFile: 'Charger un fichier (carte SD, mémoire)', share: 'Partager (enregistrer dans Téléchargements)',
     saved: 'Enregistré dans Téléchargements', langs: 'Langues sur ce téléphone', shipped: 'incluse', added: 'ajoutée', remove: 'Retirer',
@@ -81,6 +84,7 @@ const STR: Record<string, S> = {
     ],
     version: 'Versi', full: 'lengkap (model dan bahasa dasar sudah ada)', lite: 'ringan (model dan bahasa ditambahkan di ponsel)',
     start: 'Mulai', close: 'Tutup', setup: 'Untuk mulai, versi ringan ini perlu modelnya (sekali saja):',
+    newer: 'Ada model yang lebih baru: memahami lebih banyak pertanyaan, dalam lebih banyak bahasa.', update: 'Perbarui model',
     model: 'Model', mReady: 'Siap', mMissing: 'Belum ada di ponsel ini: hanya rujukan dan pencarian yang bekerja', mDown: 'Mengunduh', mImport: 'Memuat',
     mStart: 'Memulai', mOff: 'Mati: hanya rujukan dan pencarian', none: 'Tidak ada (hanya rujukan dan pencarian)', mError: 'Masalah', download: 'Unduh', loadFile: 'Muat dari berkas (kartu SD, memori ponsel)', share: 'Bagikan (simpan ke Unduhan)',
     saved: 'Tersimpan di Unduhan', langs: 'Bahasa di ponsel ini', shipped: 'bawaan', added: 'ditambahkan', remove: 'Hapus',
@@ -100,6 +104,7 @@ const STR: Record<string, S> = {
     ],
     version: 'संस्करण', full: 'पूर्ण (मॉडल और मूल भाषाएँ शामिल)', lite: 'हल्का (मॉडल और भाषाएँ फ़ोन पर जोड़ी जाती हैं)',
     start: 'शुरू करें', close: 'बंद करें', setup: 'शुरू करने के लिए इस हल्के संस्करण को मॉडल चाहिए (एक बार):',
+    newer: 'एक नया मॉडल उपलब्ध है: यह ज़्यादा प्रश्न, ज़्यादा भाषाओं में समझता है।', update: 'मॉडल अपडेट करें',
     model: 'मॉडल', mReady: 'तैयार', mMissing: 'अभी इस फ़ोन पर नहीं: केवल संदर्भ और खोज चलते हैं', mDown: 'डाउनलोड हो रहा है', mImport: 'लोड हो रहा है',
     mStart: 'शुरू हो रहा है', mOff: 'बंद: केवल संदर्भ और खोज', none: 'कोई नहीं (केवल संदर्भ और खोज)', mError: 'समस्या', download: 'डाउनलोड करें', loadFile: 'फ़ाइल से लोड करें (SD कार्ड, फ़ोन मेमोरी)', share: 'साझा करें (डाउनलोड में सहेजें)',
     saved: 'डाउनलोड में सहेजा गया', langs: 'इस फ़ोन पर भाषाएँ', shipped: 'शामिल', added: 'जोड़ी गई', remove: 'हटाएँ',
@@ -119,6 +124,7 @@ const STR: Record<string, S> = {
     ],
     version: 'الإصدار', full: 'كاملة (النموذج واللغات الأساسية مضمّنة)', lite: 'خفيفة (يُضاف النموذج واللغات على الهاتف)',
     start: 'ابدأ', close: 'إغلاق', setup: 'لتبدأ، تحتاج هذه النسخة الخفيفة إلى النموذج (مرة واحدة):',
+    newer: 'يتوفر نموذج أحدث: يفهم أسئلة أكثر بلغات أكثر.', update: 'تحديث النموذج',
     model: 'النموذج', mReady: 'جاهز', mMissing: 'ليس على هذا الهاتف بعد: تعمل المراجع والبحث فقط', mDown: 'جارٍ التنزيل', mImport: 'جارٍ التحميل',
     mStart: 'جارٍ التشغيل', mOff: 'مُطفأ: الشواهد والبحث فقط', none: 'لا شيء (الشواهد والبحث فقط)', mError: 'مشكلة', download: 'تنزيل', loadFile: 'تحميل من ملف (بطاقة SD، ذاكرة الهاتف)', share: 'مشاركة (حفظ في التنزيلات)',
     saved: 'حُفظ في التنزيلات', langs: 'اللغات على هذا الهاتف', shipped: 'مضمّنة', added: 'مضافة', remove: 'إزالة',
@@ -187,6 +193,11 @@ export function modelSection(lang: string, refresh: () => void): HTMLElement {
     }, 500)
   }
   if (busy(state)) follow()
+  // the phone has another model than the one the app now expects (the lite build after an update): offer the new one
+  if (state === 'ready' && modelOutdated()) {
+    box.appendChild(el('p', 'note', s.newer))
+    row.append(btn(`${s.update} (${mb(MODEL.bytes)})`, () => { downloadModel(); refresh(); follow() }, 'on'))
+  }
   if (state === 'missing' || state === 'error') {
     row.append(btn(`${s.download} (${mb(MODEL.bytes)})`, () => { downloadModel(); refresh(); follow() }, 'on'))
     if (!LIMITED) row.append(btn(s.loadFile, () => pickModelFile()))
@@ -312,6 +323,7 @@ export const aboutLabel = (lang: string) => str(lang).about
 export const whatYouCanAsk = (lang: string): string => str(lang).body.slice(1, 3).join('\n\n')
 /** The names of the model and languages views of the menu. */
 export const modelTitle = (lang: string) => str(lang).model
+export const modelNewer = (lang: string) => str(lang).newer
 export const packsTitle = (lang: string) => str(lang).langs
 
 // desktop testing only (no Android bridge): reach the pack functions from the console

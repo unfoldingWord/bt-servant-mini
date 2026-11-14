@@ -145,9 +145,13 @@ public class MainActivity extends Activity {
             if (!model.exists() && old.exists() && old.renameTo(model)) Log.i(TAG, "model file renamed");
             if (hasModelAsset()) {
                 long size = getAssets().openFd(MODEL_ASSET).getLength();
-                if (!model.exists() || model.length() != size) {
+                // copied again when the APK changes: a newer model can have exactly the old one's size (0.9.5's does)
+                File mark = new File(getFilesDir(), "model.asset");
+                String apk = String.valueOf(BuildConfig.VERSION_CODE);
+                if (!model.exists() || model.length() != size || !apk.equals(readText(mark))) {
                     state = "copying";
                     try (InputStream in = getAssets().open(MODEL_ASSET)) { copyInto(in, size, model, null); }
+                    writeText(mark, apk);
                 }
             }
             if (!model.exists()) {
@@ -178,12 +182,33 @@ public class MainActivity extends Activity {
                 if (size > 0) detail = String.valueOf(100 * done / size);
             }
         }
-        if (sha != null && !sha.isEmpty() && !hex(md.digest()).equalsIgnoreCase(sha)) {
+        String got = hex(md.digest());
+        if (sha != null && !sha.isEmpty() && !got.equalsIgnoreCase(sha)) {
             tmp.delete();
             throw new IllegalStateException("the file is not the expected model (sha256 differs)");
         }
         if (target.exists() && !target.delete()) throw new IllegalStateException("cannot replace the model file");
         if (!tmp.renameTo(target)) throw new IllegalStateException("cannot place the model file");
+        // which model this is, so the page can tell when the server has a newer one (lite build)
+        writeText(new File(getFilesDir(), "model.sha"), got);
+    }
+
+    private static String readText(File f) {
+        try (FileInputStream in = new FileInputStream(f)) {
+            byte[] b = new byte[(int) Math.min(f.length(), 256)];
+            int n = in.read(b);
+            return n > 0 ? new String(b, 0, n, java.nio.charset.StandardCharsets.UTF_8).trim() : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static void writeText(File f, String text) {
+        try (FileOutputStream out = new FileOutputStream(f)) {
+            out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            Log.w(TAG, "write " + f.getName() + ": " + e);
+        }
     }
 
     private static String hex(byte[] b) {
@@ -421,6 +446,10 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String flavor() { return hasModelAsset() ? "full" : "lite"; }
+
+        /** The sha256 of the model on the phone, "" when unknown (installed before 0.9.5). */
+        @JavascriptInterface
+        public String modelSha() { return readText(new File(getFilesDir(), "model.sha")); }
 
         /** Whether this build signs in with Google for online AI (it has a client id). */
         @JavascriptInterface

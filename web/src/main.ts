@@ -3,8 +3,8 @@
 import { answerSheet, booksWith, facts, linkedVerses, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
-import { appVersion, isLite, LIMITED, modelOff, modelReady, modelState, PWA, slotsOf } from './model'
-import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
+import { appVersion, isLite, LIMITED, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
+import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
@@ -781,6 +781,11 @@ function setReady() {
   // the message itself goes under the bar, only when something needs attention (no model, downloading, a problem)
   notice.hidden = ok || (state === 'ready' && modelOff()) // a model turned off on purpose needs no warning
   notice.textContent = ok ? '' : modelNotice(nav)
+  // a newer model on the server than the one on the phone (lite build after an update): say so, the menu has the button
+  if (ok && modelOutdated()) {
+    notice.hidden = false
+    notice.textContent = `${modelTitle(nav)}: ${modelNewer(nav)}`
+  }
   // without a model the app still answers references and searches
   btn.disabled = busy || ['copying', 'starting', 'importing'].includes(state)
   if (!['ready', 'missing', 'error'].includes(state) && !polling) {
@@ -984,7 +989,8 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
     // "¿Cómo traduzco cordero si en mi pueblo solo hay llamas?": the article of the term, then "Translate Unknowns" (tA); the
     // passage's helps as a button when the question names one. Only when the question names an article: otherwise as usual.
     if (q !== undefined && (has('howTranslate', q) || has('noWord', q)) && !has('translateBook', q)) {
-      const id = await termArticle(q, ui)
+      // the model's own term first ("…no sheep. How do I translate lamb?" -> lamb), then the question's words
+      const id = (sheet.concept?.startsWith('tw:') ? sheet.concept : null) ?? await termArticle(q, ui)
       // with no article for the thing ("pez grande"), "there is no … where I live" still wants "Translate Unknowns"
       if (id || (has('noWord', q) && sheet.ref)) {
         const base = { ...sheet, id: `t${Date.now()}`, ref: null, what: [], phrase: null, candidates: null, term: null } as Sheet

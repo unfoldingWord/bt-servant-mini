@@ -42,6 +42,8 @@ declare global {
       saveEnd(): string
       /** 'ios' in the iOS app (absent on Android) */
       platform?(): string
+      /** sha256 of the model on the phone, '' when unknown (Android 0.9.5+) */
+      modelSha?(): string
     }
     __llm?: (id: string, result: string) => void
   }
@@ -102,6 +104,16 @@ export function modelReady(): boolean {
 export const appVersion = (): string => (PWA ? `${version.version}-web` : window.Android ? window.Android.version() : 'desktop')
 export const isLite = (): boolean => (PWA ? true : window.Android ? window.Android.flavor() === 'lite' : false)
 export const MODEL = models.models[0]!
+/** The Android app has a model, but not the one this version expects (it records the sha256 of what it installs). */
+export function modelOutdated(): boolean {
+  try {
+    const A = window.Android
+    if (PWA || !A?.modelSha || modelState().state !== 'ready') return false
+    return A.modelSha().toLowerCase() !== MODEL.sha256.toLowerCase()
+  } catch {
+    return false
+  }
+}
 export function downloadModel() {
   if (PWA) return void webLoad()
   window.Android?.downloadModel(PACKS_SERVER + MODEL.path, MODEL.sha256, String(MODEL.bytes))

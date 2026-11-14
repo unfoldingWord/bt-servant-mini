@@ -28,8 +28,8 @@ android {
         applicationId 'org.unfoldingword.btservantmini'
         minSdk 26
         targetSdk 35
-        versionCode 20
-        versionName '0.9.4-mini'
+        versionCode 21
+        versionName '0.9.5-mini'
         ndk { abiFilters 'arm64-v8a' }
         buildConfigField 'String', 'ONLINE_KEY_X', "\"${onlineKey}\""
         buildConfigField 'String', 'GOOGLE_CLIENT_ID', "\"${googleClientId}\""
