@@ -550,7 +550,7 @@ export const startsBook = (q: string): boolean => !!startBookCode(q) || (has('tr
 // is the book's (or the chapter's) introduction, as before, and a path through it starts (graph.ts Path): each answer on it
 // says where it is and offers the next step first. Proposed, never imposed: anything can be asked any time.
 type Phrases = Record<string, string[]>
-const G_DATA = guideWords as unknown as { offTopic: Phrases; bible: Phrases; translate: Phrases; review: Phrases }
+const G_DATA = guideWords as unknown as { offTopic: Phrases; weak: Phrases; bible: Phrases; translate: Phrases; review: Phrases }
 const anyOf = (p: Phrases) => new RegExp(`(?<![\\p{L}\\p{M}])(?:${Object.values(p).flat().join('|')})(?![\\p{L}\\p{M}])`, 'giu')
 const TASK_TRANSLATE = anyOf(G_DATA.translate)
 const TASK_REVIEW = anyOf(G_DATA.review)
@@ -657,11 +657,18 @@ export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
   at?: string
   /** the person announced a task on a book ("Voy a traducir Rut", "I'm reviewing Jonah 2"): a path through it starts (pathStart) */
   path?: PathStart
+  /** why the question cannot be out of scope: the reader read a book, a term or an intent, or the conversation is on a passage */
+  inScope?: string
   /** what code answers by itself, with no sheet to answer: past a book's end, how many verses or chapters */
   note?: { text: string; fromText: boolean } }
 /** The reading step once the slots are known (from the phone's model, the online one, or none): code reads what they missed. */
 export async function readQuestion(q: string, read: { slots: Slots | null; raw: string; ms: number }, c: ConvState, target: string | null): Promise<Made> {
   const { slots, raw, ms } = read
+  // never out of scope (ROUTES 'out-of-scope') over a reading of the question (a book, a term, a known intent: the phone's or the
+  // online reader), nor while the conversation is on a passage (its state, before this question changes it)
+  const heard = !!slots && (!!slots.book || !!slots.term || ['passage', 'article', 'count', 'rank', 'advice', 'resources'].includes(slots.intent ?? ''))
+  const inScope = heard ? 'read by the reader' : stateLine(c) && c.state?.s.book ? 'the conversation is on a passage' : undefined
+  const scope = inScope ? { inScope } : {}
   const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
   if (s0.phrase) s0.phrase = cleanPhrase(s0.phrase, q)
   // the script says the language even when the model does not know it: Arabic letters, Devanagari
@@ -673,7 +680,8 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   // a follow-up with no reference of its own, completed from the state by code: only when the reader gave nothing usable
   // (no reader, "unknown", a passage with no book), never over a good reading; not when it picks a search result
   const unread = !slots || !slots.intent || slots.intent === 'unknown' || (slots.intent === 'passage' && !slots.book)
-  const fu = unread && ordinalPick(q) === undefined ? followUp(q, s0, c) : null
+  // (without a greeting or thanks before it: "gracias, ¿y el siguiente?" is "¿y el siguiente?")
+  const fu = unread && ordinalPick(q) === undefined ? followUp(withoutWeak(q), s0, c) : null
   if (fu) {
     // checked against the book: past its ends it says so ("Ruth 4:22 is the last verse of Ruth")
     const checked = await boundsCheck(fu, fu.slots.lang ?? env.nav)
@@ -681,7 +689,7 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
       const { sheet, ui } = await buildSheet(`q${Date.now()}`, fu.slots, env.helpsLang)
       return { sheet, ui, meta: `model ${ms} ms
 ${raw}
-(follow-up by code: ${fu.how}, checked against the book)`, q, note: { text: checked.note, fromText: !!fu.counted } }
+(follow-up by code: ${fu.how}, checked against the book)`, q, note: { text: checked.note, fromText: !!fu.counted }, ...scope }
     }
     let s = target ? { ...checked.slots, lang: target } : checked.slots
     // "who is speaking here?" names no article: the passage with its notes, not its key terms
@@ -694,7 +702,7 @@ ${raw}
     // "how many times does lamb appear in this chapter?": the article a word names exactly (not "appear")
     const named = fu.termWords ? [...(await articlesNamed(fu.termWords))].filter((id) => id.startsWith('tw:')) : []
     if (named.length === 1) Object.assign(sheet, { concept: named[0]!, candidates: null, what: ['terms'] })
-    return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up by code: ${fu.how})`, q }
+    return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up by code: ${fu.how})`, q, ...scope }
   }
   const picked = pickFound(q, s0, c)
   if (picked) {
@@ -712,7 +720,7 @@ ${raw}
   if (target) s = { ...s, book: s.book ? bookCode(s.lang ?? env.nav, s.book) ?? s.book : s.book, lang: target }
   keepState(c, s)
   const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : env.helpsLang)
-  return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q, ...(path ? { path } : {}) }
+  return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q, ...(path ? { path } : {}), ...scope }
 }
 
 // What may stand next to a reference that is only a reference ("muéstrame Rut 2:3", "montre-moi Ruth 2:3 s'il te plaît")
@@ -1391,13 +1399,37 @@ async function otherSteps(x: Ctx, steps: Follow[]): Promise<Follow[]> {
 // ------------------------------------------------------------------------------------------------------- out of scope
 // "What's the weather tomorrow?", "¿Quién ganó el partido?", "Bonjour": nothing Mini helps with. Today such a question searched
 // anyway ("hello" found hell); now one line says what Mini helps with and two or three buttons lead back. Detected
-// conservatively: a word of data/guide.json `offTopic` must be there, and nothing about the Bible or its helps.
+// conservatively: a word of data/guide.json `offTopic` must be there and nothing about the Bible or its helps, or only `weak`
+// words (a greeting, thanks, "how much", "what time") with nothing else ("hello, who is Naomi?" is answered). Never when the
+// reader read something (a book, a term, a known intent) or the conversation is on a passage (readQuestion `inScope`).
 const OFF_TOPIC = anyOf(G_DATA.offTopic)
+const WEAK = anyOf(G_DATA.weak)
 const BIBLE_WORDS = anyOf(G_DATA.bible)
 const HELP_WORDS: Command[] = ['intro', 'notes', 'questions', 'terms', 'verse', 'chapter', 'translateBook', 'howTranslate', 'translateThis', 'bookWord']
 const hit = (re: RegExp, q: string) => { re.lastIndex = 0; const a = re.test(q); re.lastIndex = 0; const b = re.test(fold(q)); re.lastIndex = 0; return a || b }
-/** Whether a question says something Mini does not help with (a word of `offTopic`): the gate before {@link aboutBible}. */
-export const offTopic = (q: string): boolean => hit(OFF_TOPIC, q)
+/** A question without its off-topic and weak words (as typed, then without accents). */
+const withoutOffTopic = (q: string): string => {
+  const out = (s: string) => s.replace(OFF_TOPIC, ' ').replace(WEAK, ' ')
+  return out(fold(out(q)))
+}
+/** A question without its greetings, thanks and the like (`weak`), or as it is when nothing else is left. */
+export function withoutWeak(q: string): string {
+  WEAK.lastIndex = 0
+  const t = q.replace(WEAK, ' ').replace(/^[\s,.;:!¡¿،]+/u, '').replace(/\s+/g, ' ').trim()
+  WEAK.lastIndex = 0
+  return t || q
+}
+/** Whether a question has a word of `offTopic` or `weak`: the gate before {@link outOfScopeQ}. */
+export const offTopic = (q: string): boolean => hit(OFF_TOPIC, q) || hit(WEAK, q)
+/**
+ * Whether a typed question is out of scope (with no reading of it and no passage in the conversation): an off-topic word and
+ * nothing about the Bible ({@link aboutBible}); or weak words only, nothing else left once they are out.
+ */
+export async function outOfScopeQ(q: string, ui: string): Promise<boolean> {
+  if (!offTopic(q)) return false
+  if (!hit(OFF_TOPIC, q) && keywords(withoutOffTopic(q)).length) return false
+  return !(await aboutBible(q, ui))
+}
 /**
  * Whether anything in a question is about the Bible or its helps: a reference, a book's name, a help word (notes, verse,
  * translate…), a word of `bible` (God, church, Scripture…), a key term of the packs named exactly, a Translation Academy title.
@@ -1411,8 +1443,7 @@ export async function aboutBible(q: string, ui: string): Promise<boolean> {
     for (let k = 3; k >= 1; k--) if (i + k <= words.length && bookExact(words.slice(i, i + k).join(' '))) return true
   // the rest, once the off-topic words are out: a key term named there ("the weather in Jerusalem"), not one the off-topic words
   // look like ("hello" is not hell, "gracias" not grace, "terima kasih" not love)
-  const rest = fold(q.replace(OFF_TOPIC, ' ')).replace(OFF_TOPIC, ' ')
-  OFF_TOPIC.lastIndex = 0
+  const rest = withoutOffTopic(q)
   const kw = keywords(rest)
   if (kw.length && [...(await articlesNamed(kw).catch(() => new Set<string>()))].some((id) => id.startsWith('tw:'))) return true
   if (!kw.length) return false
@@ -1466,10 +1497,11 @@ ${x.meta}` },
     }),
   },
   {
-    // a typed question about nothing Mini helps with (the weather, a match, a price, "hello"): what it helps with, and ways back
+    // a typed question about nothing Mini helps with (the weather, a match, "hello!"): what it helps with, and ways back; never
+    // over a reading of it, nor in a conversation on a passage
     name: 'out-of-scope',
-    when: (x) => x.q !== undefined && !x.at && offTopic(x.q),
-    run: async (x) => ((await aboutBible(x.q!, x.ui)) ? null : outOfScope(x)),
+    when: (x) => x.q !== undefined && !x.at && !x.inScope && offTopic(x.q),
+    run: async (x) => ((await outOfScopeQ(x.q!, x.ui)) ? outOfScope(x) : null),
   },
   {
     // "How do I translate idioms?", "What book should I translate first?", "How do I set up a translation team?": the Translation
@@ -1934,6 +1966,47 @@ export function returnTo(c: ConvState, id: string, ui: string): Made | null {
   return { sheet, ui, meta: '(back to an earlier point: no model call)', at: id }
 }
 
+// ------------------------------------------------------------------------------------------------ drift: a new conversation
+/** The conversations the phone keeps (main.ts): a drift's [New conversation] says so when they are all taken. */
+export const MAX_CONVS = 3
+export const roomForNew = (conversations: number): boolean => conversations < MAX_CONVS
+/** A message as moveOut needs it (main.ts Msg). */
+type Moved = { who: string; node?: string; pathLine?: string; back?: Follow; pathBack?: Follow; drift?: boolean }
+/**
+ * Drift, [New conversation]: the answer `m` and the question before it leave conversation `c` (its point too; `c` goes on from
+ * the point before, or from nothing), and come back as the messages and graph of a new conversation whose first point it is
+ * (main.ts makes that conversation, then returnTo its point). A path goes with it only when this answer started it
+ * (`pathLine`), and the path it replaced comes back to `c`. Null when `m` is not an answer with a point in `c`.
+ */
+export function moveOut<M extends Moved>(c: ConvState & { msgs: M[] }, m: M, ui: string): { msgs: M[]; graph: Graph; title: string } | null {
+  const i = c.msgs.indexOf(m)
+  const n = nodeOf(c.graph, m.node)
+  if (i < 0 || !n || !c.graph) return null
+  const from = c.msgs[i - 1]?.who === 'me' ? i - 1 : i
+  const moved = c.msgs.splice(from, i - from + 1)
+  c.graph.nodes = c.graph.nodes.filter((x) => x.id !== n.id)
+  // (its point was the last: the others keep their messages' places)
+  if (n.parent && nodeOf(c.graph, n.parent)) returnTo(c, n.parent, ui)
+  else {
+    c.graph.cur = null
+    c.last = null
+    c.found = []
+    delete c.state
+  }
+  // its way back led to a point of the old conversation: none in the new one
+  const msgs = moved.map((x) => ({ ...x, drift: undefined, back: undefined, pathBack: undefined }))
+  msgs[msgs.length - 1]!.node = n.id
+  const graph: Graph = { nodes: [{ ...n, parent: null, edge: 'start', drift: 'moved', msg: msgs.length - 1 }], cur: n.id }
+  if (m.pathLine && c.graph.path) {
+    graph.path = c.graph.path
+    if (c.graph.pathBefore) c.graph.path = c.graph.pathBefore
+    else delete c.graph.path
+  }
+  delete c.graph.pathBefore
+  const q = moved[0]?.who === 'me' ? (moved[0] as { text?: string }).text : undefined
+  return { msgs, graph, title: (q ?? n.label).slice(0, 48) }
+}
+
 // ------------------------------------------------------------------------------------------------- the path, per answer
 /** The sections of a book's chapter (none when it has no such chapter or no text on the phone). */
 const secsOf = (p: Path, ch: number | null): Promise<Sec[]> => (ch ? sectionsOf(p.book, ch, p.lang).catch(() => []) : Promise.resolve([]))
@@ -1957,10 +2030,13 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   const ref = done.ref ?? x.sheet.ref
   const P = place(ref)
   const g = (c.graph ??= newGraph())
+  // (the path before this answer, kept while a new conversation is offered for it: main.ts moves only the new one)
+  delete g.pathBefore
   let at: Path | null = null
   if (made.path && P?.book === made.path.book) {
-    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, v: null }
+    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null }
     reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book))
+    if (reply.drift && g.path) g.pathBefore = g.path
   } else if (g.path) at = stepOf(g.path, ref, x.sheet.what ?? [], await secsOf(g.path, P?.ch ?? null))
   const p = g.path
   if (at) {
@@ -1970,8 +2046,8 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
     const nx = nextStep(at, await secsOf(at, ch), at.step === 5 ? await secsOf(at, ch + 1) : [])
     const sheet = nx ? pathSheet(nx, x.sheet) : null
     if (nx && sheet) {
-      // the next step first; a button to the same passage and helps is that step (the first section under an introduction)
-      const same = (f: Follow) => f.sheet?.intent === 'passage' && f.sheet.ref === sheet.ref && f.sheet.what.join() === sheet.what.join()
+      // the next step first; a button to the same passage with those helps is that step ("First section: Ruth 1:1–5", "Notes")
+      const same = (f: Follow) => f.sheet?.intent === 'passage' && f.sheet.ref === sheet.ref && sheet.what.every((w) => f.sheet!.what.includes(w))
       reply.follow = [{ label: pathLabel(x.ui, nx, 'next'), sheet, pathNext: true },...(reply.follow ?? []).filter((f) => !same(f))].slice(0, MAX_FOLLOW)
     }
     return
@@ -1980,7 +2056,7 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   // (near it). When the way back of the graph goes to that very step, it is that button, named as the way back to the path
   if (!p || P?.book === p.book || done.answered === 'edge' || done.answered === 'nopack') return
   const t = stepTarget(p)
-  const to = (f: Follow | undefined) => !!f && f.back !== undefined && f.sheet?.ref === t?.ref && f.sheet?.what.join() === t?.what.join()
+  const to = (f: Follow | undefined) => !!f && f.back !== undefined && !!t && f.sheet?.ref === t.ref && t.what.every((w) => f.sheet!.what.includes(w))
   if (t && to(reply.back)) {
     reply.back = { ...reply.back!, label: pathLabel(x.ui, p, 'toPath'), toPath: true }
     return
