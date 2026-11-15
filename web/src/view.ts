@@ -3,6 +3,7 @@
 // The panel keeps a stack, so "back" returns to where the reader was; "Open in chat" turns an article into a message.
 import { articleView, helpView, type Study, titleFor } from './answer'
 import { focusOrder, focusWords, SHOWN, wordsOf } from './focus'
+import { type Card, cardsT, firstLine } from './helpcards'
 import { linkTarget } from './links'
 import { md } from './md'
 import { count } from './usage'
@@ -85,6 +86,67 @@ export function renderHelps(groups: { head: string; items: HelpItem[] }[]): HTML
     box.appendChild(list)
   }
   return box
+}
+
+/**
+ * The helps under an online answer, as cards in sight (helpcards.ts chooses them): a kind, a title and a first line, each a
+ * button that opens what the phone's answer opens (a note or an article in the panel; the text and the answer itself in the
+ * fold below, through `reveal`). An article's first line is read when drawn, in a line kept for it, so nothing moves.
+ */
+export function renderHelpCards(cards: Card[], o: {
+  ui: string; lang: string; study?: Study; helps?: { head: string; items: HelpItem[] }[]; reveal: (what: 'text' | 'answer') => void
+}): HTMLElement {
+  const L = cardsT(o.ui)
+  const box = el('section', 'hcards')
+  box.setAttribute('aria-label', L.head)
+  box.appendChild(el('h4', 'hc-head', L.head))
+  const list = el('div', 'hc-list')
+  for (const c of cards) {
+    const b = el('button', `hc hc-${c.kind}`)
+    b.type = 'button'
+    const meta = el('span', 'hc-meta')
+    const title = el('span', 'hc-title', c.title)
+    const line = el('span', 'hc-line', c.line)
+    title.dir = line.dir = 'auto' // a title or line in Arabic reads right to left in any app language
+    b.append(meta, title, line)
+    if (c.kind === 'article') {
+      const lang = o.study?.terms.some((t) => t.id === c.id) ? o.study.lang : o.lang
+      b.dataset.id = c.id
+      b.dataset.kind = c.id.startsWith('ta:') ? L.ta : L.tw
+      setCited(b, c.cited, L)
+      // (drawn as the app starts, the packs may not be open yet: tried again later, a few times)
+      const waits = [1500, 4000, 10000, 20000]
+      const read = (n: number) => articleView(lang, c.id).then((a) => {
+        if (!a) throw 0
+        if (title.textContent === c.id.split('/').pop()!.replace(/[-_]/g, ' ')) title.textContent = a.title
+        line.textContent = firstLine(a.md)
+      }).catch(() => { if (n < waits.length && b.isConnected) setTimeout(() => read(n + 1), waits[n]) })
+      if (!c.line) setTimeout(() => read(0), 0)
+      b.onclick = () => openPanel({ kind: 'article', id: c.id, lang })
+    } else if (c.kind === 'note' && o.study) {
+      meta.textContent = o.study.long ? `${L.note} · ${c.ref}` : L.note
+      b.onclick = () => openPanel({ kind: 'note', study: o.study!, i: c.i, root: box })
+    } else if (c.kind === 'help') {
+      meta.textContent = c.head
+      const h = o.helps?.[c.g]?.items[c.i]
+      if (h) b.onclick = () => openPanel({ kind: 'help', lang: h.lang, book: h.book, id: h.id, which: h.kind, label: h.ref })
+    } else if (c.kind === 'text') {
+      meta.textContent = `${L.text} · ${c.label}`
+      b.onclick = () => o.reveal('text')
+    } else b.onclick = () => o.reveal('answer')
+    list.appendChild(b)
+  }
+  box.appendChild(list)
+  return box
+}
+function setCited(b: HTMLElement, cited: boolean, L: ReturnType<typeof cardsT>) {
+  b.classList.toggle('cited', cited)
+  const meta = b.querySelector('.hc-meta')
+  if (meta) meta.textContent = cited ? `${L.cited} · ${b.dataset.kind}` : b.dataset.kind ?? ''
+}
+/** The online answer arrived: its articles' cards say so, where they stand (no card moves). */
+export function markCited(root: HTMLElement, ids: string[], ui: string) {
+  for (const b of root.querySelectorAll<HTMLElement>('.hc[data-id]')) setCited(b, ids.includes(b.dataset.id ?? ''), cardsT(ui))
 }
 
 /**
