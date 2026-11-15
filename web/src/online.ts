@@ -48,7 +48,7 @@ export function setOnline(on: boolean) {
  * is a connection: a 70B model reads free questions better than the phone's 270M, above all in English and Spanish. Null on
  * any problem or after 8 s, and the phone model reads it instead. Unlike an answer, a failure here changes nothing on screen.
  */
-export async function onlineSlots(question: string): Promise<{ slots: any; model: string; ms: number } | null> {
+export async function onlineSlots(question: string, state = ''): Promise<{ slots: any; model: string; ms: number } | null> {
   if (!onlineOn() || !onlineAvailable() || !isOnline()) return null
   if (signInAvailable() && !onlineSession()) return null
   const t0 = performance.now()
@@ -58,7 +58,8 @@ export async function onlineSlots(question: string): Promise<{ slots: any; model
     const r = await fetch(`${onlineUrl()}/v1/slots`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-BTSM-Key': onlineKey(), ...(onlineSession() ? { Authorization: `Bearer ${onlineSession()!.token}` } : {}) },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question: (state ? `${state}
+` : '') + question }),
       signal: ctrl.signal,
     })
     if (!r.ok) return null

@@ -35,10 +35,15 @@ export function bookExact(name: string): string | null {
   for (const t of Object.values(books as Record<string, Record<string, string>>)) if (t[k]) return t[k]!
   return null
 }
+let CODES: Set<string> | undefined
 export function bookCode(lang: string, name: string | null | undefined): string | null {
   if (!name) return null
   const k = normBook(name)
   const tables = books as Record<string, Record<string, string>>
+  // a code itself ("rut"): a follow-up's book comes from the conversation's state, where books are kept as codes
+  // (before normBook's spacing: it turns "1jn" into "1 jn", which is in no table)
+  const raw = fold(name).trim()
+  if (/^[1-3]?[a-z]{2,3}$/.test(raw) && (CODES ??= new Set(Object.values(tables).flatMap((t) => Object.values(t)))).has(raw)) return raw
   for (const l of [lang, ...Object.keys(tables).filter((x) => x !== lang)]) {
     const c = tables[l]?.[k]
     if (c) return c

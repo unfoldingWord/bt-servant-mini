@@ -3,7 +3,7 @@
 import { answerSheet, booksWith, facts, linkedVerses, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
-import { appVersion, isLite, LIMITED, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
+import { appVersion, followUps, isLite, LIMITED, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
 import { bookLabel, followups, intro, searchIntro } from './converse'
@@ -155,6 +155,8 @@ type Msg = {
 }
 type Hit = { book: string; ch: number; v: number }
 type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[]
+  /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
+  state?: { s: Record<string, unknown>; at: number }
   /** the last question asked (without its "reply in …"), to ask it again in another language ("repeat that in Indonesian") */
   prevQ?: string }
 const KEY = 'btsm.conversations.v1'
@@ -799,6 +801,30 @@ function setReady() {
 }
 
 /** A follow-up ("and verse 4?") names no book: take the book (and chapter) of the last passage of this conversation. */
+// ---------------------------------------------------------------------------------------------------- follow-up state
+// The conversation, compacted to what a follow-up needs: the last question's sheet, only its non-empty fields, with the book
+// as a code (about 30 tokens). Code keeps it, not the model; it is replaced at every question, dropped by a question about
+// nothing in particular, and forgotten after 30 minutes. The reader decides what to take from it (trained with new-topic rows).
+const STATE_KEYS = ['intent', 'book', 'chapter', 'verse_start', 'verse_end', 'what', 'term'] as const
+const STATE_MS = 30 * 60_000
+function stateLine(c: Conv): string {
+  if (!c.state || Date.now() - c.state.at > STATE_MS) return ''
+  return `STATE ${JSON.stringify(c.state.s)}`
+}
+function keepState(c: Conv, s: Slots) {
+  if (!['passage', 'count', 'article', 'advice', 'rank'].includes(s.intent ?? '')) {
+    delete c.state
+    return
+  }
+  const code = s.book ? bookCode(s.lang ?? nav, s.book) : null
+  const out: Record<string, unknown> = {}
+  for (const k of STATE_KEYS) {
+    const v = k === 'book' ? code : (s as Record<string, unknown>)[k]
+    if (v !== null && v !== undefined && !(Array.isArray(v) && !v.length)) out[k] = v
+  }
+  c.state = { s: out, at: Date.now() }
+}
+
 function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
   const m = /^([0-9a-z]{3}) (\d+)/.exec(last?.ref ?? '')
   if (!m) return slots
@@ -1212,10 +1238,14 @@ form.addEventListener('submit', (e) => {
     // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
     // with the online helper on and a connection, the online model reads the question; otherwise (or if it fails) the phone's
-    const on = await onlineSlots(q)
+    // a follow-up ("and the notes?", "and verse 5?") is read with the previous question's compact state; the phone model
+    // gets it only when trained for it (followUps)
+    const st = stateLine(c)
+    const on = await onlineSlots(q, st)
     if (on) count('read.online')
-    const { slots, raw, ms } = on ? { slots: on.slots, raw: `(read online by ${modelLabel(on.model)})
-${JSON.stringify(on.slots)}`, ms: on.ms } : await slotsOf(q)
+    const local = followUps() ? st : ''
+    const { slots, raw, ms } = on ? { slots: on.slots, raw: `${st ? `${st}\n` : ''}(read online by ${modelLabel(on.model)})
+${JSON.stringify(on.slots)}`, ms: on.ms } : await slotsOf(q, local).then((r) => ({ ...r, raw: local ? `${local}\n${r.raw}` : r.raw }))
     const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
     if (s0.phrase) s0.phrase = cleanPhrase(s0.phrase, q)
     // the script says the language even when the model does not know it: Arabic letters, Devanagari
@@ -1233,6 +1263,7 @@ ${JSON.stringify(on.slots)}`, ms: on.ms } : await slotsOf(q)
     let s = asked ? { ...asked, lang: s0.lang ?? nav } : withContext(s0, c.last, q)
     // asked in one language, wanted in another: the book by its code, then the other language's pack and words
     if (target) s = { ...s, book: s.book ? bookCode(s.lang ?? nav, s.book) ?? s.book : s.book, lang: target }
+    keepState(c, s)
     const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : helpsLang)
     return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
   })

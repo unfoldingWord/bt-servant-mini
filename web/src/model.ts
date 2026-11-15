@@ -104,6 +104,8 @@ export function modelReady(): boolean {
 export const appVersion = (): string => (PWA ? `${version.version}-web` : window.Android ? window.Android.version() : 'desktop')
 export const isLite = (): boolean => (PWA ? true : window.Android ? window.Android.flavor() === 'lite' : false)
 export const MODEL = models.models[0]!
+/** Whether the model on this phone reads a follow-up's state (trained with it, models.json "followups"), and is that model. */
+export const followUps = (): boolean => !!(MODEL as { followups?: boolean }).followups && !modelOutdated()
 /** The Android app has a model, but not the one this version expects (it records the sha256 of what it installs). */
 export function modelOutdated(): boolean {
   try {
@@ -148,14 +150,20 @@ export async function saveToDownloads(name: string, bytes: Uint8Array, mime = 'a
 }
 
 /** The slots for one question; `raw` is what the model wrote, for the details view. Without a model: no slots. */
-export async function slotsOf(question: string): Promise<{ slots: Slots | null; raw: string; ms: number }> {
+/**
+ * The slots for one question; `raw` is what the model wrote, for the details view. Without a model: no slots.
+ * `state` (a follow-up): the compact state of the conversation's previous turn, a line "STATE {...}" put before the question;
+ * only a model trained for it gets one (followUps()), or it would copy the state into every question.
+ */
+export async function slotsOf(question: string, state = ''): Promise<{ slots: Slots | null; raw: string; ms: number }> {
   if (modelOff()) return { slots: null, raw: '(model turned off: references and searches only)', ms: 0 }
   if (!modelReady()) return { slots: null, raw: '(no model on this phone yet: references and searches only)', ms: 0 }
   const t0 = performance.now()
   let r: any
   try {
     r = await complete({
-      prompt: prompt.template.replace('<<Q>>', question.replace(/\s+/g, ' ').trim()),
+      prompt: prompt.template.replace('<<Q>>', (state ? `${state}
+` : '') + question.replace(/\s+/g, ' ').trim()),
       temperature: 0, seed: 0, n_predict: 200, stop: ['<end_of_turn>'], cache_prompt: true,
     })
   } catch (e) {
