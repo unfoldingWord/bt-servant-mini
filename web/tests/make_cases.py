@@ -285,6 +285,8 @@ def quechua():
 # nothing fits (pipeline.ts route `search`, search.ts rankVerses; Nov 15, phase "two months": one search that always returns
 # something). Code alone reads them unless slots are given (the report of Nov 14 was read as "the book of Jonah").
 G17 = '/^1sa 17:/'
+# an answer that states one verse as THE place it happens
+NOT_WHERE = '^(It is in|Está en|C.est dans|Ada di|إنه في|यह .{0,40} में है:)'
 FINDALL = [
     # (id, lang, question, slots, expectations)
     ('en-abraham', 'en', 'In which verse does Abraham sacrifice Isaac?', None, {'route': 'search', 'ref': '/^gen 22:/'}),
@@ -298,7 +300,7 @@ FINDALL = [
     ('en-marriage', 'en', 'What important marriage custom is in Ruth?', None, {'route': 'intro', 'ref': 'rut front:intro'}),
     ('en-hyperbole', 'en', 'hyperbole', None, {'route': 'article', 'concept': 'ta:translate/figs-hyperbole'}),
     ('en-merism', 'en', 'merism', None, {'route': 'article', 'concept': 'ta:translate/figs-merism'}),
-    ('en-none', 'en', 'rapture', None, {'route': 'search', 'useful': False, 'has': ['rapture', 'one word']}),
+    ('en-none', 'en', 'rapture', None, {'route': 'search', 'useful': False, 'has': ['rapture', 'a reference'], 'not': ['one word']}),
     ('es-jonah-book', 'es', '¿Dónde fue tragado Jonás por un pez?', {'intent': 'passage', 'book': 'Jonás', 'lang': 'es'},
      {'route': 'search', 'ref': 'jon 1:17', 'has': ['^Está en Jonás 1:17']}),
     ('es-abraham', 'es', '¿En qué versículo Abraham sacrifica a Isaac?', None, {'route': 'search', 'ref': '/^gen 22:/'}),
@@ -306,7 +308,7 @@ FINDALL = [
     ('es-snow', 'es', '¿Dónde se habla de la nieve?', None, {'route': 'search', 'has': ['nieve|snow']}),
     ('es-marriage', 'es', '¿Qué costumbre matrimonial hay en Rut?', None, {'route': 'intro', 'ref': 'rut front:intro'}),
     ('es-hyperbole', 'es', 'hipérbole', None, {'route': 'article', 'concept': 'ta:translate/figs-hyperbole'}),
-    ('es-none', 'es', 'arrebatamiento', None, {'route': 'search', 'useful': False, 'has': ['arrebatamiento', 'una sola palabra']}),
+    ('es-none', 'es', 'arrebatamiento', None, {'route': 'search', 'useful': False, 'has': ['arrebatamiento', 'una referencia'], 'not': ['una sola palabra']}),
     ('fr-jonah', 'fr', 'Où Jonas a-t-il été avalé par un poisson ?', None, {'route': 'search', 'ref': 'jon 1:17'}),
     ('fr-goliath', 'fr', 'Où David a-t-il tué Goliath ?', None, {'route': 'search', 'ref': G17}),
     ('id-jonah', 'id', 'Di mana Yunus ditelan ikan besar?', None, {'route': 'search', 'ref': 'jon 1:17'}),
@@ -318,6 +320,20 @@ FINDALL = [
     ('ar-jonah', 'ar', 'أين ابتلع الحوت يونان؟', None, {'route': 'search', 'ref': 'jon 1:17'}),
     ('ar-goliath', 'ar', 'أين قتل داود جليات؟', None, {'route': 'search', 'ref': G17}),
     ('ar-snow', 'ar', 'أين يذكر الثلج؟', None, {'route': 'search', 'has': ['ثلج|الثلج|ٱلثَّلْجِ|الثَّلْجِ|ثَلْج']}),
+    # review of Nov 15: one verse is THE answer only when it is clearly ahead ("Jesus" and "born" are in many verses alike)
+    ('not-en-born', 'en', 'Where was Jesus born?', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-es-born', 'es', 'dónde nació Jesús', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-ar-born', 'ar', 'أين ولد يسوع', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-hi-born', 'hi', 'यीशु का जन्म कहाँ हुआ?', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-en-boat', 'en', 'Where is the boat?', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-en-car', 'en', 'Where did Jesus park his car?', None, {'not': [NOT_WHERE]}),
+    # the Spanish pack's only "matrimonio" is in a verse it cannot show: English verses, not the introduction to Ruth
+    ('es-marriage-verses', 'es', '¿Qué dice la Biblia sobre el matrimonio?', None, {'route': 'search', 'ref': '/^[1-3a-z]{3} \\d+:\\d+$/'}),
+    # nothing to find: say so, suggest no word no pack has, no article by a close spelling ("internet" is not "intercede")
+    ('none-en-asdf', 'en', 'asdf', None, {'route': 'search', 'useful': False, 'not': ['\\*\\*asdf\\*\\*']}),
+    ('none-en-keys', 'en', 'qwerty zxcvb', None, {'route': 'search', 'useful': False}),
+    ('none-en-phone', 'en', 'Where is the smartphone in the Bible?', None, {'route': 'search', 'useful': False}),
+    ('none-es-internet', 'es', '¿Dónde aparece el internet?', None, {'route': 'search', 'useful': False, 'notConcept': 'intercede'}),
 ]
 
 

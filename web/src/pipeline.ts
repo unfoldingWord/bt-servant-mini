@@ -4,7 +4,7 @@ import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQue
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
-import { articleForQuestion, asksAbout, GOOD_COVERAGE, introFor, keywords, searchHelps, searchVerses, versesOf } from './search'
+import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { hasLang, installedLangs, openLang } from './packs'
 import type { HelpItem } from './view'
@@ -516,6 +516,8 @@ export type Answered = {
 /** What the routes work on: the question's sheet as it goes, and what earlier routes added to it. */
 type Ctx = Made & {
   c: ConvState; t0: number; others: Follow[]; searched: string
+  /** a sentence before the answer's own: a free search answered by something else than verses says so */
+  lead?: string
   /** the call sheet's answer, once the `sheet` route has run */
   r?: Result
 }
@@ -530,7 +532,12 @@ const hitSheet = async (h: Hit, what: string[], ui: string) => (await buildSheet
 /** A free search's best verse holds this much of the rarity of its words (or all of them): the verses are the answer. */
 const GOOD = GOOD_COVERAGE
 /** Below this, verses with some of the words are not shown: they would be unrelated (search.ts, Strength.coverage). */
-const RELAX = 0.4
+const RELAX = RELAX_COVERAGE
+/**
+ * "Where does X happen?" says "It is in …" (one verse as the answer) only when the question names two things or more and its
+ * best verse is this far ahead of the next passage's: "Where was Jesus born?" has many verses with Jesus and born alike.
+ */
+const CLEAR = 1.2
 /**
  * No verse holds the words of a free search well: an article all of them name (Translation Words, "kinsman redeemer"), a
  * Translation Academy article (its title or listed words, without asking for a word of training: "metaphors in Jonah"), a
@@ -543,6 +550,7 @@ async function findBeyondVerses(x: Ctx, words: string[]): Promise<boolean> {
   const ids = (await articleForQuestion(words.join(' ')))?.filter((id) => id.startsWith('tw:'))
   if (ids?.length === 1) {
     x.sheet = { ...base, intent: 'article', concept: ids[0]!, ref: null, what: [] } as Sheet
+    x.lead = FT(x.ui).article.replace('{all}', words.join(' '))
     x.searched += `\nfindall: article ${ids[0]}`
     return true
   }
@@ -553,6 +561,7 @@ async function findBeyondVerses(x: Ctx, words: string[]): Promise<boolean> {
     for (const l of [x.sheet.lang, 'en', ...(await installedLangs())]) {
       if (!(await hasTa(l, ta.id))) continue
       x.sheet = { ...base, intent: 'article', concept: ta.id, lang: l, ref: null, what: [] } as Sheet
+      x.lead = FT(x.ui).academy.replace('{all}', words.join(' '))
       x.searched += `\nfindall: academy ${ta.id} (${ta.how})`
       return true
     }
@@ -560,6 +569,7 @@ async function findBeyondVerses(x: Ctx, words: string[]): Promise<boolean> {
   const intro = await introFor(x.q!, x.sheet.lang)
   if (intro) {
     x.sheet = { ...base, intent: 'passage', concept: null, ref: intro.ref, what: ['intro'], lang: intro.lang } as Sheet
+    x.lead = FT(x.ui).intro.replace('{all}', words.join(' '))
     x.searched += `\nfindall: introduction ${intro.ref}`
     return true
   }
@@ -698,9 +708,12 @@ export const ROUTES: Route[] = [
       const cover = st ? st.coverage : 1
       const good = res.hits.length > 0 && (!st || st.full || cover >= GOOD)
       x.searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}` +
-        (st ? `\nfindall: ${good ? 'verses' : 'weak'}, coverage ${cover.toFixed(2)}, found ${JSON.stringify(st.matched)}, not ${JSON.stringify(st.missing)}` : '')
+        (st ? `\nfindall: ${good ? 'verses' : 'weak'}, coverage ${cover.toFixed(2)}, margin ${st.margin.toFixed(2)}, found ${JSON.stringify(st.matched)}, not ${JSON.stringify(st.missing)}` : '')
       const kind = kindOf(q)
-      if (!good && (await findBeyondVerses(x, res.keywords))) return null
+      if (!good && (await findBeyondVerses(x, res.keywords))) {
+        c.found = [] // "the second one" must not pick an earlier search's verse
+        return null
+      }
       const usable = good || (res.hits.length > 0 && cover >= RELAX)
       // the notes and questions that contain the same words, each a button to its verse's notes or questions
       const helps0 = usable && kind ? [] : await searchHelps(q, x.sheet.lang).catch(() => [])
@@ -708,10 +721,13 @@ export const ROUTES: Route[] = [
       const helpsFirst = !good && helps0.some((h) => h.all)
       // nothing has the words well ("cebada" with "pueblo" and "traduzco"): the article one of them names, with its verses
       if (!usable && !helpsFirst) {
-        const id = await termArticle(q, ui)
+        const id0 = await termArticle(q, ui)
+        // only an article a word names (not a close spelling: "internet" would be "intercede")
+        const id = id0 && (await articlesNamed(res.keywords)).has(id0) ? id0 : null
         if (id) {
           x.sheet = { ...x.sheet, intent: 'article', concept: id, candidates: null, term: null, ref: null, phrase: null } as Sheet
           x.searched += `\nrescued: ${id}`
+          if (res.keywords.length) x.lead = FT(ui).article.replace('{all}', res.keywords.join(' '))
           c.found = []
           return null
         }
@@ -731,7 +747,11 @@ export const ROUTES: Route[] = [
       for (const h of hits.slice(0, 4)) follow.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
       const line = (h: (typeof hits)[number], whole = false) => `**${hitLabel(ui, h)}** — ${(whole ? h.full ?? h.text : h.text).replace(/\s+/g, ' ').trim()}`
       // "where does it happen?": the verse it happens in first, whole, then the others
-      const where = good && hits.length > 0 && (has('where', q) || asksWhere(q))
+      // one verse as THE answer only when the question names two things or more and that verse is clearly ahead of the next
+      // one shown (read as a book, "Jonah": the next one of that book)
+      const ahead = hits[1]?.score ? (hits[0]?.score ?? 0) / hits[1].score : Infinity
+      const where = good && hits.length > 0 && (has('where', q) || asksWhere(q)) && res.keywords.length >= 2 && ahead >= CLEAR &&
+        (!scope || hits[0]!.book === scope)
       const info = where
         ? [line(hits[0]!, true), ...(hits.length > 1 ? [`### ${FT(ui).others}`, ...hits.slice(1).map((h) => line(h))] : [])].join('\n\n')
         : hits.map((h) => line(h)).join('\n\n')
@@ -810,7 +830,8 @@ export const ROUTES: Route[] = [
       const { sheet, ui, r } = x
       const said = intro(sheet, facts, ui)
       const study = await studyOf(sheet).catch(() => null)
-      const reply: Reply = { intro: said, info: r!.answer, follow: [...followups(sheet, facts, ui), ...x.others], ui,
+      // a free search answered by an article or an introduction says so first
+      const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: [...followups(sheet, facts, ui), ...x.others], ui,
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
         meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\n${JSON.stringify(sheet, null, 1)}` }
       if (sheet.ref && sheet.intent === 'passage') x.c.last = sheet

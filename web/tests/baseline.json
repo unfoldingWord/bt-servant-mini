@@ -9,10 +9,10 @@
    "empty": 3
   },
   "langs": {
-   "pass": 80,
+   "pass": 81,
    "total": 102,
-   "known": 22,
-   "empty": 14
+   "known": 21,
+   "empty": 13
   },
   "new18": {
    "pass": 10,
@@ -57,10 +57,10 @@
    "empty": 0
   },
   "findall": {
-   "pass": 29,
-   "total": 29,
+   "pass": 40,
+   "total": 40,
    "known": 0,
-   "empty": 2
+   "empty": 6
   }
  }
 }

@@ -174,7 +174,9 @@ function conceptOf(word: string, m: Map<string, string[]>, strict = false): stri
 }
 
 /** A verse found: `text` as a list shows it (a snippet around the words, or the whole verse), `full` the whole verse. */
-export type Found = { book: string; ch: number; v: number; text: string; why: string; full?: string }
+export type Found = { book: string; ch: number; v: number; text: string; why: string; full?: string
+  /** the verse's rarity score (rankVerses): how far the first verse is ahead of the next */
+  score?: number }
 export type SearchResult = {
   keywords: string[]; concepts: string[]; hits: Found[]; how: 'concepts' | 'text' | 'none'
   /** whether the best verse (or its neighbours) holds every word, and how much of the words' rarity it holds */
@@ -377,11 +379,15 @@ export function quotedPhrases(q: string): string[][] {
 }
 /** A best verse that holds this much of the rarity of the question's words fits well (pipeline.ts: the verses are the answer). */
 export const GOOD_COVERAGE = 0.75
+/** Below this, verses with some of the words are unrelated (pipeline.ts does not show them). */
+export const RELAX_COVERAGE = 0.4
 /** What a search looked for and what its best verse holds, by the question's words. */
 export type Strength = {
   full: boolean; coverage: number; matched: string[]; missing: string[]
-  /** the rarest word the pack has (a one-word search to suggest), else the longest */
+  /** the rarest word the pack has (a one-word search to suggest); none when no pack has any */
   rarest: string | null
+  /** the best verse's score over the next passage's (Infinity: no other); 1 is a tie */
+  margin: number
 }
 type Looked = { label: string; term: Term }
 /** The terms of a question in a pack: each word with its other forms, its English (in the English pack), the article it names. */
@@ -412,13 +418,24 @@ function termsFor(kw: string[], phrases: string[][], pl: string, packLang: strin
  * answers; otherwise the pack whose best verse holds the most. Up to six verses, one per passage, none much weaker than the best.
  */
 async function rankedSearch(kw: string[], phrases: string[][], packLang: string, m: Map<string, string[]>): Promise<{ hits: (Found & { snippet: string })[]; strength: Strength }> {
-  let best: { pl: string; looked: Looked[]; ranking: Ranking; s: Strength } | null = null
+  let best: { pl: string; looked: Looked[]; shown: RankedVerse[]; s: Strength } | null = null
+  const texts = new Map<RankedVerse, { text: string; snippet: string }>()
+  const textOf = async (h: RankedVerse) => { let t = texts.get(h); if (!t) texts.set(h, (t = await h.more())); return t }
   for (const pl of await packsFor([...kw, ...phrases.flat()], packLang)) {
     const r = await reader(pl)
     const looked = termsFor(kw, phrases, pl, packLang, m)
     if (!looked.length) continue
     const ranking = await rankVerses(r, looked.map((l) => l.term), { limit: 40, skipRes: SKIP_TEXT, mainRes: MAIN_TEXT })
-    const top = ranking.hits[0]
+    // the verses that can be shown: found by words their shown text has (hi GST has Jonah's words under Matthew 1:16), and
+    // with a text in this pack. How well the pack fits is said by the first of them, not by a verse it cannot show (es-419:
+    // "matrimonio" in a verse with no main text stopped the search before English)
+    const shown: RankedVerse[] = []
+    for (const h of ranking.hits) {
+      if (!h.shown && (h.own & ~h.text) === 0) continue
+      if (shown.length < 8 && !(await textOf(h)).text) continue
+      shown.push(h)
+    }
+    const top = shown[0]
     if (!top) continue
     // a word the pack does not have weighs as much as the rarest word it has: a word of another language, a question word, a
     // name spelled otherwise (none found: as much as a word in one verse)
@@ -432,29 +449,34 @@ async function rankedSearch(kw: string[], phrases: string[][], packLang: string,
       full: looked.every((_, i) => top.own & (1 << i)), coverage: total ? got / total : 0,
       matched: looked.filter((_, i) => covered & (1 << i)).map((l) => l.label), missing: looked.filter((_, i) => !(covered & (1 << i))).map((l) => l.label),
       rarest: looked.map((l, i) => ({ l: l.label, w: ranking.df[i] ? ranking.idf[i]! : -1 })).filter((t) => t.w > 0).sort((a, b) => b.w - a.w)[0]?.l ?? null,
+      margin: 1,
     }
-    if (!best || s.coverage > best.s.coverage) best = { pl, looked, ranking, s }
-    // a verse that fits well: the next packs are not read (English, indexed for a question in Hindi, is 30-45 MB more)
-    if (s.full || s.coverage >= GOOD_COVERAGE) break
+    if (!best || s.coverage > best.s.coverage) best = { pl, looked, shown, s }
+    // a verse that fits well: the next packs are not read (English, indexed for a question in Arabic, is 30-45 MB more). The
+    // question's own pack, when it holds most of the Bible (ar), is left only when it has hardly anything (RELAX_COVERAGE); a
+    // pack of a few books (id: 9, hi: mostly the New Testament) lacks most stories, and a word it lacks means the book is
+    // elsewhere
+    const whole = pl === packLang && ranking.verses >= 20_000
+    if (s.full || s.coverage >= (whole ? RELAX_COVERAGE : GOOD_COVERAGE)) break
   }
-  if (!best) return { hits: [], strength: { full: false, coverage: 0, matched: [], missing: [...phrases.map((p) => p.join(' ')), ...kw], rarest: [...kw].sort((a, b) => b.length - a.length)[0] ?? null } }
-  const { ranking } = best
-  const top = ranking.hits[0]!
+  // nothing found anywhere: no word to suggest (a word no pack has would find nothing again)
+  if (!best) return { hits: [], strength: { full: false, coverage: 0, matched: [], missing: [...phrases.map((p) => p.join(' ')), ...kw], rarest: null, margin: 1 } }
+  const top = best.shown[0]!
   const kept: RankedVerse[] = []
-  for (const h of ranking.hits) {
+  for (const h of best.shown) {
     if (h.score < top.score / 2) break
-    // found by words its shown text does not have (hi GST has Jonah's words under Matthew 1:16): the verse would not show them
-    if (!h.shown && (h.own & ~h.text) === 0) continue
     const all = h.own | h.near
     // one verse per passage: a verse two or three from one already kept, holding nothing it does not, adds nothing
     if (kept.some((k) => k.book === h.book && k.ch === h.ch && Math.abs(k.v - h.v) <= 3 && ((k.own | k.near) & all) === all)) continue
     kept.push(h)
     if (kept.length >= 6) break
   }
+  // how far the best verse is ahead of the next passage's ("Where was Jesus born?": many verses hold Jesus and born alike)
+  best.s.margin = kept[1] ? top.score / kept[1].score : Infinity
   const why = `text:${best.s.matched.join(' ')}`
   const hits = await Promise.all(kept.map(async (h) => {
-    const t = await h.more()
-    return { book: h.book, ch: h.ch, v: h.v, text: t.text, snippet: t.snippet, why }
+    const t = await textOf(h)
+    return { book: h.book, ch: h.ch, v: h.v, text: t.text, snippet: t.snippet, why, score: h.score }
   }))
   return { hits: hits.filter((h) => h.text), strength: best.s }
 }
@@ -477,6 +499,18 @@ export async function introFor(question: string, packLang: string): Promise<{ re
     if (hit) return { ref: `${hit.book} ${hit.ref}`, lang: pl }
   }
   return null
+}
+
+/**
+ * The Translation Words articles the words name exactly or but for an ending (each word, and two words together): a free search
+ * rescued by an article must have one of them, not a close spelling ("internet" is not "intercede").
+ */
+export async function articlesNamed(words: string[]): Promise<Set<string>> {
+  const m = await names()
+  const out = new Set<string>()
+  const tries = [...words, ...words.slice(0, -1).map((w, i) => `${w} ${words[i + 1]}`)]
+  for (const w of tries) for (const id of conceptOf(w, m, true) ?? []) out.add(id)
+  return out
 }
 
 export type HelpHit = {
@@ -570,6 +604,6 @@ export async function searchVerses(question: string, term: string | null, packLa
   // a word that names an article (a name, a key term): the verses that mention it, whole; else the words in context
   const how = !hits.length ? 'none' : concepts.length && !phrases.length ? 'concepts' : 'text'
   // a list shows the words found in context for a text search, the whole verse for names and key terms
-  const shown = hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v, text: how === 'text' ? h.snippet : h.text, full: h.text, why: how === 'text' ? h.why : 'concepts' }))
+  const shown = hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v, text: how === 'text' ? h.snippet : h.text, full: h.text, why: how === 'text' ? h.why : 'concepts', score: h.score }))
   return { keywords: kw, concepts, hits: shown, how, strength }
 }
