@@ -8,6 +8,7 @@ export type Command = 'intro' | 'overview' | 'about' | 'tell' | 'chapter' | 'not
   // the words of a follow-up read by code (pipeline.ts followUp): "and the next verse?", "what does lamb mean here?",
   // "how many times in this chapter?", "translate this", and the small words around them ("and", "what about", "show me")
   | 'next' | 'previous' | 'verse' | 'here' | 'thisChapter' | 'howMany' | 'translateThis' | 'this' | 'also'
+  | 'there' | 'range' | 'bookWord'
 
 const VOCAB = data as unknown as Record<Command, Record<string, string[]>>
 const cache = new Map<Command, RegExp>()

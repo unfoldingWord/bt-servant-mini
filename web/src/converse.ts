@@ -11,7 +11,7 @@ const W: Record<L, {
   text: (n: number) => string; notes: (n: number) => string; questions: (n: number) => string; terms: (n: number) => string; and: string
   found: string[]; nothing: string; article: string[]; choose: string[]; counted: string[]; advice: string[]; resources: string[]
   lNotes: string; lQuestions: string; lTerms: string; lNext: string; lText: string
-  lPrev: string; lPrevCh: string; lChapter: string; lAcademy: string
+  lPrev: string; lPrevCh: string; lNextCh: string; lChapter: string; lAcademy: string
 }> = {
   en: {
     text: (n) => (n === 1 ? 'the verse text' : `the text in ${n} versions`), notes: (n) => (n === 1 ? '1 translation note' : `${n} translation notes`),
@@ -24,7 +24,7 @@ const W: Record<L, {
     advice: ['For «{phrase}», this is what the translation helps say:', 'Here is the help I found for «{phrase}»:'],
     resources: ['This is what is on this phone:'],
     lNotes: 'Notes', lQuestions: 'Questions', lTerms: 'Key terms', lNext: 'Next verse', lText: 'Verse text',
-    lPrev: 'Previous verse', lPrevCh: 'Previous chapter', lChapter: 'Whole chapter', lAcademy: 'Academy: {title}',
+    lPrev: 'Previous verse', lPrevCh: 'Previous chapter', lNextCh: 'Next chapter', lChapter: 'Whole chapter', lAcademy: 'Academy: {title}',
   },
   es: {
     text: (n) => (n === 1 ? 'el texto del versículo' : `el texto en ${n} versiones`), notes: (n) => (n === 1 ? '1 nota de traducción' : `${n} notas de traducción`),
@@ -37,7 +37,7 @@ const W: Record<L, {
     advice: ['Para «{phrase}», esto dicen las ayudas de traducción:', 'Esto encontré para «{phrase}»:'],
     resources: ['Esto es lo que hay en este teléfono:'],
     lNotes: 'Notas', lQuestions: 'Preguntas', lTerms: 'Palabras clave', lNext: 'Versículo siguiente', lText: 'Texto',
-    lPrev: 'Versículo anterior', lPrevCh: 'Capítulo anterior', lChapter: 'Capítulo completo', lAcademy: 'Academia: {title}',
+    lPrev: 'Versículo anterior', lPrevCh: 'Capítulo anterior', lNextCh: 'Capítulo siguiente', lChapter: 'Capítulo completo', lAcademy: 'Academia: {title}',
   },
   fr: {
     text: (n) => (n === 1 ? 'le texte du verset' : `le texte en ${n} versions`), notes: (n) => (n === 1 ? '1 note de traduction' : `${n} notes de traduction`),
@@ -50,7 +50,7 @@ const W: Record<L, {
     advice: ['Pour «{phrase}», voici ce que disent les aides à la traduction :'],
     resources: ['Voici ce qui se trouve sur ce téléphone :'],
     lNotes: 'Notes', lQuestions: 'Questions', lTerms: 'Mots clés', lNext: 'Verset suivant', lText: 'Texte',
-    lPrev: 'Verset précédent', lPrevCh: 'Chapitre précédent', lChapter: 'Chapitre entier', lAcademy: 'Académie : {title}',
+    lPrev: 'Verset précédent', lPrevCh: 'Chapitre précédent', lNextCh: 'Chapitre suivant', lChapter: 'Chapitre entier', lAcademy: 'Académie : {title}',
   },
   id: {
     text: (n) => (n === 1 ? 'teks ayat' : `teks dalam ${n} versi`), notes: (n) => `${n} catatan terjemahan`,
@@ -63,7 +63,7 @@ const W: Record<L, {
     advice: ['Untuk «{phrase}», ini kata bahan bantu penerjemahan:'],
     resources: ['Ini yang ada di ponsel ini:'],
     lNotes: 'Catatan', lQuestions: 'Pertanyaan', lTerms: 'Istilah kunci', lNext: 'Ayat berikutnya', lText: 'Teks',
-    lPrev: 'Ayat sebelumnya', lPrevCh: 'Pasal sebelumnya', lChapter: 'Seluruh pasal', lAcademy: 'Akademi: {title}',
+    lPrev: 'Ayat sebelumnya', lPrevCh: 'Pasal sebelumnya', lNextCh: 'Pasal berikutnya', lChapter: 'Seluruh pasal', lAcademy: 'Akademi: {title}',
   },
   hi: {
     text: (n) => (n === 1 ? 'पद का पाठ' : `${n} संस्करणों में पाठ`), notes: (n) => `${n} अनुवाद टिप्पणियाँ`,
@@ -76,7 +76,7 @@ const W: Record<L, {
     advice: ['«{phrase}» के लिए अनुवाद सहायता यह कहती है:'],
     resources: ['इस फ़ोन पर यह है:'],
     lNotes: 'टिप्पणियाँ', lQuestions: 'प्रश्न', lTerms: 'मुख्य शब्द', lNext: 'अगला पद', lText: 'पाठ',
-    lPrev: 'पिछला पद', lPrevCh: 'पिछला अध्याय', lChapter: 'पूरा अध्याय', lAcademy: 'अकादमी: {title}',
+    lPrev: 'पिछला पद', lPrevCh: 'पिछला अध्याय', lNextCh: 'अगला अध्याय', lChapter: 'पूरा अध्याय', lAcademy: 'अकादमी: {title}',
   },
   ar: {
     text: (n) => (n === 1 ? 'نص الآية' : `النص في ${n} ترجمات`), notes: (n) => `${n} من ملاحظات الترجمة`,
@@ -89,7 +89,7 @@ const W: Record<L, {
     advice: ['بخصوص «{phrase}»، هذا ما تقوله مساعدات الترجمة:'],
     resources: ['هذا ما يوجد على هذا الهاتف:'],
     lNotes: 'الملاحظات', lQuestions: 'الأسئلة', lTerms: 'الكلمات الرئيسية', lNext: 'الآية التالية', lText: 'النص',
-    lPrev: 'الآية السابقة', lPrevCh: 'الأصحاح السابق', lChapter: 'الأصحاح كله', lAcademy: 'الأكاديمية: {title}',
+    lPrev: 'الآية السابقة', lPrevCh: 'الأصحاح السابق', lNextCh: 'الأصحاح التالي', lChapter: 'الأصحاح كله', lAcademy: 'الأكاديمية: {title}',
   },
 }
 const lang = (ui: string): L => (['en', 'es', 'fr', 'id', 'hi', 'ar'].includes(ui) ? (ui as L) : 'en')
@@ -135,13 +135,13 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
 
 export type Followup = { label: string; sheet: Sheet }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
-const MAX_FOLLOW = 9
+export const MAX_FOLLOW = 9
 /**
  * Next steps the person can tap under a passage: they carry a ready call sheet, so they do not go through the model again.
  * The helps not shown yet, the verse before and after, the whole chapter, `extra` (the Translation Academy article the
  * notes cite, pipeline.ts), and the chapter's and the book's introductions.
  */
-export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, extra: Followup[] = []): Followup[] {
+export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, extra: Followup[] = [], bounds: Map<number, number> | null = null): Followup[] {
   const w = W[lang(ui)]
   const m = /^([0-9a-z]{3}) (\d+)(?::(\d+)(?:-(\d+))?)?$/.exec(sheet.ref ?? '')
   if (sheet.intent !== 'passage' || !m || facts.kind !== 'passage') return extra
@@ -153,11 +153,17 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, 
   if (!sheet.what.includes('questions')) out.push({ label: w.lQuestions, sheet: same(['questions']) })
   if (!sheet.what.includes('terms')) out.push({ label: w.lTerms, sheet: same(['terms']) })
   if (!sheet.what.includes('text')) out.push({ label: w.lText, sheet: same(['text']) })
+  // (bounds: chapter -> its last verse, when the book is in a pack: verse 1 goes back to the chapter before's last verse)
+  const c = +ch!
   if (v1) {
-    if (+v1 > 1) out.push({ label: `${w.lPrev} (${book} ${ch}:${+v1 - 1})`, sheet: same(sheet.what, `${code} ${ch}:${+v1 - 1}`) })
+    const prev = +v1 > 1 ? `${c}:${+v1 - 1}` : c > 1 && bounds?.get(c - 1) ? `${c - 1}:${bounds.get(c - 1)}` : null
+    if (prev) out.push({ label: `${w.lPrev} (${book} ${prev})`, sheet: same(sheet.what, `${code} ${prev}`) })
     if (facts.next) out.push({ label: `${w.lNext} (${book} ${facts.next})`, sheet: same(sheet.what, `${code} ${facts.next}`) })
     out.push({ label: `${w.lChapter} (${book} ${ch})`, sheet: same(['text', 'notes'], `${code} ${ch}`) })
-  } else if (+ch! > 1) out.push({ label: `${w.lPrevCh} (${book} ${+ch! - 1})`, sheet: same(sheet.what, `${code} ${+ch! - 1}`) })
+  } else {
+    if (c > 1) out.push({ label: `${w.lPrevCh} (${book} ${c - 1})`, sheet: same(sheet.what, `${code} ${c - 1}`) })
+    if (bounds?.has(c + 1)) out.push({ label: `${w.lNextCh} (${book} ${c + 1})`, sheet: same(sheet.what, `${code} ${c + 1}`) })
+  }
   out.push(...extra)
   // the chapter's and the book's introductions: the context a translator needs, one tap away
   const label = INTRO[lang(ui)].label

@@ -211,7 +211,60 @@ def followup_more():
             b = first[(before, lang)] if isinstance(before, str) else {'q': before[lang], 'slots': None}
             out.append({'id': f'fu-{lang}-{kind}-code', 'set': 'followup-more', 'lang': lang, 'before': [b], 'q': q, 'slots': None, 'expect': e,
                         'from': 'follow-ups read by code (Nov 15): kinds the 48 lack, and new topics'})
+    # the review of Nov 15: each question with what a correct reader gives (-read: code must not override it) and with none (-code)
+    for i, lang, first_q, first_ref, q, read, e_read, e_code in FU_REVIEW:
+        bk, ch, v = first_ref
+        b = {'q': first_q, 'slots': {'intent': 'passage', 'book': bk, 'chapter': ch, 'verse_start': v, 'what': ['text'], 'lang': lang}}
+        for mode, slots, e in [('read', read, e_read), ('code', None, e_code if e_code is not None else e_read)]:
+            out.append({'id': f'fu-{lang}-{i}-{mode}', 'set': 'followup-more', 'lang': lang, 'before': [b], 'q': q, 'slots': slots, 'expect': e,
+                        'from': 'review of ms/followups, round 1 (Nov 15): ' + ('a correct reader' if mode == 'read' else 'no reader')})
     return out
+
+
+def P(lang, book, ch, v=None, v2=None, what=('text',)):
+    return {'intent': 'passage', 'book': book, 'chapter': ch, 'verse_start': v, 'verse_end': v2, 'what': list(what), 'lang': lang}
+
+
+RUT23 = ('rut', 2, 3)
+def UNK(lang):
+    return {'intent': 'unknown', 'lang': lang}
+def EDGE(rx):
+    return {'route': 'edge', 'ref': None, 'useful': False, 'has': [rx]}
+def NOT_HERE(ref):
+    return {'route': ['article', 'choose', 'search', 'translate-unknown', 'books', 'intro'], 'notRef': ref, 'useful': False}
+# id, lang, first question, its passage, the follow-up, a correct reader's slots, what the answer must be (with them; without, if different)
+FU_REVIEW = [
+    ('range', 'en', 'Show me Ruth 2:3', RUT23, 'and verses 3-5?', P('en', 'rut', 2, 3, 5), {'route': ['passage'], 'ref': 'rut 2:3-5'}, None),
+    ('chv_range', 'en', 'Show me Ruth 2:3', RUT23, 'and 1:3-5?', P('en', 'rut', 1, 3, 5), {'route': ['passage'], 'ref': 'rut 1:3-5'}, None),
+    ('ch_verse', 'en', 'Show me Ruth 2:3', RUT23, 'and chapter 3 verse 5?', P('en', 'rut', 3, 5), {'route': ['passage'], 'ref': 'rut 3:5'}, None),
+    ('next_n', 'en', 'Show me Ruth 2:3', RUT23, 'show me the next 3 verses', P('en', 'rut', 2, 4, 6), {'route': ['passage'], 'ref': 'rut 2:4-6'}, None),
+    ('next_book', 'en', 'Show me Ruth 2:3', RUT23, 'and the next book?', P('en', '1sa', 1, what=('intro',)), {'route': ['intro'], 'ref': '1sa 1:intro'}, NOT_HERE('rut 2:4')),
+    ('verses_n', 'en', 'Show me Ruth 2:3', RUT23, 'How many verses are in this chapter?', UNK('en'), {'route': 'count', 'ref': 'rut 2', 'has': ['\\b23 verses']}, None),
+    ('chapters_n', 'en', 'Show me Ruth 2:3', RUT23, 'How many chapters are there?', UNK('en'), {'route': 'count', 'has': ['\\b4 chapters']}, None),
+    ('books_n', 'en', 'Show me Ruth 2:3', RUT23, 'How many books are there in the Bible?', UNK('en'), NOT_HERE('rut 2'), None),
+    ('famine', 'en', 'Show me Ruth 1:1', ('rut', 1, 1), 'What does it mean that there was a famine?', {'intent': 'article', 'term': 'famine', 'lang': 'en'},
+     {'route': ['article'], 'concept': 'tw:other/famine'}, NOT_HERE('rut 1:1')),
+    ('famine', 'es', 'Muéstrame Rut 1:1', ('rut', 1, 1), '¿Qué significa que allí había hambre?', {'intent': 'article', 'term': 'hambre', 'lang': 'es'},
+     # "hambre" names no Spanish article: a free search, which finds Ruth 1:1 by its words (not by the state); never the meaning route
+     {'route': ['article', 'search'], 'useful': False}, None),
+    ('next_book', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y el siguiente libro?', UNK('es'), NOT_HERE('rut 2:4'), None),
+    ('range', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y los versículos 3 al 5?', P('es', 'rut', 2, 3, 5), {'route': ['passage'], 'ref': 'rut 2:3-5'}, None),
+    ('ch_verse', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y el capítulo 3 versículo 5?', P('es', 'rut', 3, 5), {'route': ['passage'], 'ref': 'rut 3:5'}, None),
+    ('new_ref', 'es', 'Muéstrame Rut 2:3', RUT23, '¿Y Juan 3:16?', P('es', 'jhn', 3, 16), {'route': ['passage'], 'ref': 'jhn 3:16'}, None),
+    ('range', 'fr', 'Montre-moi Ruth 2:3', RUT23, 'et les versets 3 à 5 ?', P('fr', 'rut', 2, 3, 5), {'route': ['passage'], 'ref': 'rut 2:3-5'}, None),
+    # Arabic: "العدد" is "the verse" and the book of Numbers: a reader that says Numbers wins; with no reader, a bare
+    # "العدد 5" right after a passage is its verse 5
+    ('numbers', 'ar', 'اعرض راعوث 2:3', RUT23, 'العدد 5', P('ar', 'num', 5), {'route': ['passage'], 'ref': 'num 5'}, {'route': ['passage'], 'ref': 'rut 2:5'}),
+    ('notes_es', 'en', 'Show me Ruth 2:3', RUT23, 'and the notes in Spanish?', P('es', 'rut', 2, 3, what=('notes',)), {'route': ['passage'], 'ref': 'rut 2:3', 'has': ['[Nn]ota']}, None),
+    # past the book's ends: it says so, in the question's language
+    ('end_verse', 'en', 'Show me Ruth 4:22', ('rut', 4, 22), 'and the next verse?', UNK('en'), EDGE('last verse of Ruth'), None),
+    ('end_chapter', 'en', 'Show me Ruth 4:22', ('rut', 4, 22), 'and the next chapter?', UNK('en'), EDGE('4 chapters'), None),
+    ('first_verse', 'en', 'Show me Ruth 1:1', ('rut', 1, 1), 'and the previous verse?', UNK('en'), EDGE('first verse of Ruth'), None),
+    ('prev_ch_end', 'en', 'Show me Ruth 2:1', ('rut', 2, 1), 'and the previous verse?', UNK('en'), {'route': ['passage'], 'ref': 'rut 1:22'}, None),
+    ('verse_50', 'en', 'Show me Ruth 2:3', RUT23, 'what about verse 50?', UNK('en'), EDGE('23 verses'), None),
+    ('chapter_9', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y el capítulo 9?', UNK('es'), EDGE('4 capítulos'), None),
+    ('end_verse', 'ar', 'اعرض راعوث 4:22', ('rut', 4, 22), 'والآية التالية؟', UNK('ar'), EDGE('الأخيرة'), None),
+]
 
 
 # The user reports (Nov 13-14) and what the answer should be. slots None: code alone reads the question.

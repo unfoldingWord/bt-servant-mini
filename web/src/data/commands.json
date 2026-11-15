@@ -125,15 +125,15 @@
   },
   "chapter": {
     "en": [
-      "chapter",
+      "chapters?",
       "ch"
     ],
     "es": [
-      "cap[ií]tulo",
+      "cap[ií]tulos?",
       "cap"
     ],
     "fr": [
-      "chapitre",
+      "chapitres?",
       "chap"
     ],
     "id": [
@@ -149,7 +149,11 @@
       "الإصحاح",
       "إصحاح",
       "فصل",
-      "الفصل"
+      "الفصل",
+      "أصحاحات",
+      "الأصحاحات",
+      "إصحاحات",
+      "فصول"
     ]
   },
   "notes": {
@@ -725,38 +729,53 @@
   "here": {
     "en": [
       "here",
-      "there",
       "in (?:this|that|the same) (?:verse|passage)"
     ],
     "es": [
       "aqu[ií]",
-      "ah[ií]",
-      "all[ií]",
       "ac[aá]",
       "en (?:este|ese|el mismo) (?:vers[ií]culo|pasaje)"
     ],
     "fr": [
       "ici",
-      "là",
       "dans ce (?:verset|passage)"
     ],
     "id": [
-      "di situ",
       "di sini",
-      "di sana",
       "(?:di |dalam )?ayat (?:ini|itu|tersebut)"
     ],
     "hi": [
-      "वहाँ",
-      "वहां",
       "यहाँ",
       "यहां",
       "(?:इस|उस|इसी) पद में"
     ],
     "ar": [
       "هنا",
-      "هناك",
       "في (?:هذه|تلك) الآية"
+    ]
+  },
+  "there": {
+    "en": [
+      "there"
+    ],
+    "es": [
+      "ah[ií]",
+      "all[ií]",
+      "all[aá]"
+    ],
+    "fr": [
+      "là"
+    ],
+    "id": [
+      "di situ",
+      "di sana"
+    ],
+    "hi": [
+      "वहाँ",
+      "वहां"
+    ],
+    "ar": [
+      "هناك"
     ]
   },
   "thisChapter": {
@@ -856,6 +875,64 @@
       "هذا",
       "هذه",
       "ذلك"
+    ]
+  },
+  "range": {
+    "en": [
+      "to",
+      "through",
+      "thru"
+    ],
+    "es": [
+      "al",
+      "a",
+      "hasta"
+    ],
+    "fr": [
+      "à",
+      "au",
+      "a"
+    ],
+    "id": [
+      "sampai",
+      "hingga",
+      "s/d"
+    ],
+    "hi": [
+      "से",
+      "तक"
+    ],
+    "ar": [
+      "إلى",
+      "الى",
+      "حتى"
+    ]
+  },
+  "bookWord": {
+    "en": [
+      "books?"
+    ],
+    "es": [
+      "libros?"
+    ],
+    "fr": [
+      "livres?"
+    ],
+    "id": [
+      "kitab",
+      "buku"
+    ],
+    "hi": [
+      "पुस्तक",
+      "पुस्तकें",
+      "किताब",
+      "किताबें"
+    ],
+    "ar": [
+      "و?سفر",
+      "و?السفر",
+      "و?أسفار",
+      "و?كتاب"
     ]
   },
   "also": {
