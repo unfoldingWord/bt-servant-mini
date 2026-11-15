@@ -14,6 +14,10 @@ test('a chapter\'s sections come from the BSB headings, else 5 verses each', asy
   expect(await sectionsOf('rut', 1, 'en')).toEqual([[1, 5], [6, 18], [19, 22]])
   // Ruth 2 has one heading only (the whole chapter): blocks of 5 verses
   expect((await sectionsOf('rut', 2, 'en'))[0]).toEqual([1, 5])
+  // Psalm 119: no 1-verse section from the title's heading, and its 176 verses in blocks of 8
+  const psa = await sectionsOf('psa', 119, 'en')
+  expect(psa[0]).toEqual([1, 8])
+  expect(psa.length).toBe(22)
 })
 
 test('the reporter\'s phone (en + es-419): no introduction to Numbers 6, said plainly, with the passage before', async () => {

@@ -431,6 +431,11 @@ export function boundsOf(code: string): Promise<Map<number, number> | null> {
   }
   return boundsCache.get(code)!
 }
+/** After a language is added or removed: the books' chapters and sections are read again (main.ts onPacksChanged). */
+export function resetBooks() {
+  boundsCache.clear()
+  headsCache.clear()
+}
 /**
  * A follow-up's numbers checked against the book: "the next verse" at a chapter's end is the first of the next chapter, "the
  * previous verse" of verse 1 the last of the chapter before; past the book's ends (or "verse 50", "chapter 9") it says so
@@ -1004,6 +1009,28 @@ async function introsOf(code: string, l: string, want?: number | 'front'): Promi
   }
   return null
 }
+// "Notes in English, from the Arabic pack.": an introduction answered from another pack (the Arabic pack has English notes)
+const LANG_NAMES: Record<string, Record<string, string>> = {
+  en: { en: 'English', es: 'Spanish', fr: 'French', id: 'Indonesian', hi: 'Hindi', ar: 'Arabic' },
+  es: { en: 'inglés', es: 'español', fr: 'francés', id: 'indonesio', hi: 'hindi', ar: 'árabe' },
+  fr: { en: 'anglais', es: 'espagnol', fr: 'français', id: 'indonésien', hi: 'hindi', ar: 'arabe' },
+  id: { en: 'Inggris', es: 'Spanyol', fr: 'Prancis', id: 'Indonesia', hi: 'Hindi', ar: 'Arab' },
+  hi: { en: 'अंग्रेज़ी', es: 'स्पेनिश', fr: 'फ़्रेंच', id: 'इंडोनेशियाई', hi: 'हिंदी', ar: 'अरबी' },
+  ar: { en: 'الإنجليزية', es: 'الإسبانية', fr: 'الفرنسية', id: 'الإندونيسية', hi: 'الهندية', ar: 'العربية' },
+}
+const FROM_T: Record<string, string> = {
+  en: 'Notes in {notes}, from the {pack} pack.', es: 'Notas en {notes}, del paquete de {pack}.', fr: 'Notes en {notes}, du paquet {pack}.',
+  id: 'Catatan dalam bahasa {notes}, dari paket bahasa {pack}.', hi: '{notes} में टिप्पणियाँ, {pack} पैकेज से।', ar: 'ملاحظات باللغة {notes}، من حزمة اللغة {pack}.',
+}
+function fromPack(ui: string, pack: string, text: string): string {
+  const names = LANG_NAMES[ui] ?? LANG_NAMES.en!
+  const base = (l: string) => (l.startsWith('es') ? 'es' : l.startsWith('pt') ? 'pt' : l)
+  const name = (l: string) => names[base(l)] ?? env.packName(l)
+  // the notes' own language: by their script, else by their words (the Arabic pack's notes of Numbers are English)
+  const body = text.replace(/^[#*].*$/gm, ' ')
+  const notes = /[؀-ۿ]{3}/.test(body) ? 'ar' : /[ऀ-ॿ]{3}/.test(body) ? 'hi' : guessLang(body.slice(0, 600))
+  return (FROM_T[ui] ?? FROM_T.en!).replace('{notes}', name(notes)).replace('{pack}', name(pack))
+}
 /** An introduction the sheet's pack does not have, from another installed pack that has it (null: none has it). */
 export async function introElsewhere(sheet: Sheet): Promise<string | null> {
   const m = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(sheet.ref ?? '')
@@ -1053,8 +1080,15 @@ async function outlineStarts(code: string, ch: number, l: string, last: number):
       const chapIntro = rows.find((y: any) => y !== rows[0] && y.from === verseId(code, ch, 1))
       for (const row of [chapIntro, rows[0]].filter(Boolean)) {
         const starts = new Set<number>()
-        for (const m of String(row.cols.note ?? '').matchAll(/(?<![\d:])(\d+):(\d+)\s*[-–]\s*(?:(\d+):)?(\d+)/g)) {
+        // (Arabic and Devanagari digits read as ASCII ones)
+        const note = String(row.cols.note ?? '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+          .replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d)))
+        for (const m of note.matchAll(/(?<![\d:])(\d+):(\d+)\s*[-–]\s*(?:(\d+):)?(\d+)/g)) {
           if (+m[1]! !== ch || (m[3] && +m[3] !== ch) || +m[4]! >= last || +m[4]! < +m[2]!) continue
+          // a range of another book in the prose ("see Genesis 12:1-3")
+          const named = /([\p{L}\p{M}]+(?:\s+[\p{L}\p{M}]+)?)\s*$/u.exec(note.slice(Math.max(0, m.index! - 30), m.index!))?.[1]
+          const other = named?.split(/\s+/).map((_, i, w) => bookCode(x, w.slice(i).join(' '))).find(Boolean)
+          if (other && other !== code) continue
           starts.add(+m[2]!).add(+m[4]! + 1)
         }
         if (starts.size) return [...starts].sort((a, b) => a - b)
@@ -1073,7 +1107,17 @@ export async function sectionsOf(code: string, ch: number, l: string): Promise<[
   if (!splits(starts)) starts = await outlineStarts(code, ch, l, last)
   if (!splits(starts)) { starts = []; for (let v = 1; v <= last; v += 5) starts.push(v) }
   starts = [...new Set([1, ...starts.filter((v) => v >= 1 && v <= last)])].sort((a, b) => a - b)
-  return starts.map((v, i) => [v, (starts[i + 1] ?? last + 1) - 1] as [number, number])
+  // a heading before verse 1 and another before verse 2 (a psalm's title) make a 1-verse section: one section
+  if (starts[1] === 2) starts.splice(1, 1)
+  const out: [number, number][] = []
+  starts.forEach((v, i) => {
+    const end = (starts[i + 1] ?? last + 1) - 1
+    // a long section (Psalm 119, 176 verses) in blocks of about 8 verses
+    const n = end - v + 1 > 30 ? Math.ceil((end - v + 1) / 8) : 1
+    const size = Math.ceil((end - v + 1) / n)
+    for (let a = v; a <= end; a += size) out.push([a, Math.min(end, a + size - 1)])
+  })
+  return out
 }
 const secRef = (ch: number, [a, b]: [number, number]) => (a === b ? `${ch}:${a}` : `${ch}:${a}-${b}`)
 /** "First section: Ruth 1:1–5" (or "Next section: …"), a button to its text and notes. */
@@ -1187,6 +1231,8 @@ type Ctx = Made & {
   lead?: string
   /** the call sheet's answer, once the `sheet` route has run */
   r?: Result
+  /** where the answer's notes come from when another pack had them ("Notes in English, from the Arabic pack.") */
+  from?: string
 }
 type Done = Omit<Answered, 'route' | 'sheet'>
 /** A step of the answer: when it applies, and what it does. A step returns the answer, or null to let the next step go on. */
@@ -1564,10 +1610,21 @@ ${x.meta}` },
     when: (x) => x.sheet.intent === 'passage' && /:intro$/.test(x.sheet.ref ?? '') && !facts.intro,
     run: async (x) => {
       const l = await introElsewhere(x.sheet).catch(() => null)
-      if (l) {
-        x.sheet = { ...x.sheet, lang: l }
-        x.r = await answerSheet(x.sheet)
-      }
+      if (!l) return null
+      // only the notes come from there: the sheet (and every button under the answer) stays in the person's pack
+      const r = await answerSheet({ ...x.sheet, lang: l })
+      if (!facts.intro) return null
+      const [, code, at] = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(x.sheet.ref!)!
+      const what = at === 'front' ? bookLabel(x.ui, code!) : `${bookLabel(x.ui, code!)} ${at}`
+      const wrong = String(facts.intro)
+      // the book as the person names it, not as the other pack does ("العدد 6"), in what answer.ts wrote above the notes:
+      // the heading (without the pack's code), the source line, the introduction's heading
+      let n = 0
+      r.answer = r.answer.split('\n').map((line) =>
+        /^(#{2,3} |\*)/.test(line) && n++ < 3 ? line.replace(wrong, what).replace(/^(## .*) \([a-z]{2,3}(?:-\w+)?\)$/, '$1') : line).join('\n')
+      facts.intro = what
+      x.r = r
+      x.from = fromPack(x.ui, l, r.answer)
       return null
     },
   },
@@ -1607,6 +1664,7 @@ ${x.meta}` },
       // an introduction the helps do not have: say so, and offer what there is (the passage before this one among it)
       const none = sheet.intent === 'passage' && !found.intro ? await noIntro(sheet, ui, x.c.last).catch(() => null) : null
       if (none) said = none.said
+      if (x.from) said = [said, x.from].filter(Boolean).join(' ')
       const study = await studyOf(sheet).catch(() => null)
       const steps = await packSteps(sheet, study, ui).catch(() => [])
       const bounds = sheet.intent === 'passage' && sheet.ref ? await boundsOf(sheet.ref.slice(0, 3)).catch(() => null) : null

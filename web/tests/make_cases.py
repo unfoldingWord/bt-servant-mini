@@ -40,7 +40,7 @@ KNOWN = {
     **{i: R_TU for i in ['advice-rut-1-13-hand-of-yahweh', 'advice-jon-2-10-vomited-nonote', 'advice-tit-3-5-lavamiento',
                          'advice-rut-1-14-alzaron-voces', 'advice-tit-1-12-malas-bestias', 'evl-id-04', 'evl-hi-04', 'evl-hi-27',
                          'evl-hi-28', 'evl-fr-04', 'evl-fr-10', 'evl-fr-27', 'evl-fr-28', 'evl-ar-04']},
-    **{i: R_HI for i in ['evl-hi-05', 'evl-hi-07', 'evl-hi-14', 'evl-hi-15', 'evl-hi-17', 'evl-hi-22', 'fu-hi-what', 'fu-hi-count_ch',
+    **{i: R_HI for i in ['evl-hi-05', 'evl-hi-14', 'evl-hi-15', 'evl-hi-22', 'fu-hi-what', 'fu-hi-count_ch',
                          'fu-hi-what-code', 'fu-hi-count_ch-code', 'fu-hi-new_passage-code']},
     **{i: R_OPEN for i in ['evl-hi-26', 'evl-ar-26']},
     **{i: R_TERM for i in ['evl-hi-21', 'evl-ar-19', 'evl-ar-20', 'evl-ar-21', 'new-id-unknown', 'new-ar-unknown', 'fu-hi-new_topic',
@@ -316,6 +316,18 @@ def reports():
     ]
     out += [{'id': i, 'set': 'reports', 'lang': lang, 'q': q, 'slots': s, 'before': [], 'expect': e, 'from': 'user reports Nov 15'}
             for i, lang, q, s, e in nov15]
+    # Nov 15 on 0.10.0 (en + es-419): after an introduction, the first section of a chapter ("Rut 1:1-5"), under a section the
+    # next one; "Introduction to Numbers 6" (the en pack has no Numbers notes, the ar pack has the English ones) after a passage
+    num6 = {'route': 'intro', 'ref': 'num 6:intro', 'has': ['Nazirite'], 'not': ["didn't find anything", 'العدد'], 'follow': ['^num 6 text']}
+    sections = [
+        ('start-rut-section', 'es', 'Voy a empezar a traducir el libro de Rut', [], {'ref': 'rut front:intro', 'follow': ['^rut 1:1-5 text,notes$', '^rut 1:intro', '^ta:translate/translate-process$']}),
+        ('chapter-intro-section', 'en', 'Introduction to Ruth 1', [], {'ref': 'rut 1:intro', 'follow': ['^rut 1:1-5 text,notes$', '^rut 1 text']}),
+        ('section-next', 'es', 'Rut 1:1-5', [], {'ref': 'rut 1:1-5', 'follow': ['^rut 1:6-18 text,notes$']}),
+        ('intro-num-6', 'en', 'Introduction to Numbers 6', [{'q': 'Ruth 1:16'}], {**num6, 'follow': ['^num 6 text', '^num front:intro']}),
+        ('intro-num-6-es', 'es', 'Introducción a Números 6', [{'q': 'Rut 1:16'}], {**num6, 'has': ['Nazirite', 'Números 6', 'del paquete']}),
+    ]
+    out += [{'id': i, 'set': 'reports', 'lang': lang, 'q': q, 'slots': None, 'before': b, 'expect': e, 'from': 'user reports Nov 15 (0.10.0)'}
+            for i, lang, q, b, e in sections]
     return out
 
 
