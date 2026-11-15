@@ -2,6 +2,7 @@
 // Cloudflare Workers AI) writes a conversational answer from the helps the app already found on the phone. The question and
 // those helps leave the phone; nothing else does. Without internet or on any error the offline answer stands alone.
 import online from './data/online.json'
+import { MAX_CONTEXT } from './context'
 
 const KEY = 'btsm.online'
 const URL_KEY = 'btsm.onlineUrl' // for testing against a local `wrangler dev`
@@ -112,7 +113,7 @@ export async function onlineAnswer(question: string, lang: string, helps: string
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 45000) // with the passage context an answer can take 20-30 s
   try {
-    const cut = helps.slice(0, 9500)
+    const cut = helps.slice(0, MAX_CONTEXT)
     const found = withSources(sources, cut, lang)
     const r = await fetch(`${onlineUrl()}/v1/answer`, {
       method: 'POST',
