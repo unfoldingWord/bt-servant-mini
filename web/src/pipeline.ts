@@ -5,7 +5,7 @@ import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
-import { bookLabel, followups, intro, searchIntro } from './converse'
+import { academyLabel, bookLabel, followups, intro, searchIntro } from './converse'
 import { hasLang, installedLangs, openLang } from './packs'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -624,6 +624,45 @@ async function relatedOf(lang: string, id: string, max = 3): Promise<{ id: strin
   const names = ((await r.maps()) as any).map?.core?.names ?? {}
   return [...rel].sort((a, b) => rank(a) - rank(b)).filter((x) => names[x]?.length).slice(0, max).map((x) => ({ id: x, title: String(names[x][0]) }))
 }
+/** An article's name in a pack (the first of its names), or null when the pack does not list it. */
+async function nameIn(lang: string, id: string): Promise<string | null> {
+  const names = ((await (await openLang(lang)).maps()) as any).map?.core?.names ?? {}
+  return names[id]?.length ? String(names[id][0]) : null
+}
+/**
+ * The next steps that need the packs, each a ready sheet (no model call): under a passage, the Translation Academy article
+ * its first note that cites one cites; under a Translation Words article, the articles it links to ("See also: sheep,
+ * shepherd", "How to Translate Unknowns"); under a Translation Academy article, its related articles.
+ */
+async function packSteps(sheet: Sheet, study: Study | null, ui: string): Promise<Follow[]> {
+  const article = (id: string, l: string): Sheet =>
+    ({ ...sheet, id: `f${Date.now()}`, intent: 'article', concept: id, lang: l, ref: null, what: [], phrase: null, candidates: null, term: null, version: null })
+  if (sheet.intent === 'passage' && study) {
+    const id = study.notes.find((n) => n.concept?.startsWith('ta:'))?.concept
+    if (!id) return []
+    for (const l of new Set([sheet.lang, 'en'])) {
+      if (!(await hasTa(l, id))) continue
+      const title = await nameIn(l, id)
+      return title ? [{ label: academyLabel(ui, title), sheet: article(id, l) }] : []
+    }
+    return []
+  }
+  if (sheet.intent !== 'article' || !sheet.concept) return []
+  if (sheet.concept.startsWith('ta:')) return (await relatedOf(sheet.lang, sheet.concept)).map((o) => ({ label: o.title, sheet: article(o.id, sheet.lang) }))
+  if (!sheet.concept.startsWith('tw:')) return []
+  const a = (await (await openLang(sheet.lang)).article(sheet.concept, 'all')).data
+  const md = (a?.sections ?? []).filter((s) => s.role !== 'bible-references').map((s) => String(s.md ?? '')).join('\n')
+  const out: Follow[] = []
+  // [sheep](../other/sheep.md), [How to Translate Unknowns](rc://en/ta/man/translate/translate-unknown)
+  for (const m of md.matchAll(/\[([^\]]+)\]\((?:\.\.\/(kt|other|names)\/([\w-]+)\.md|rc:\/\/[^/]+\/ta\/man\/([\w-]+)\/([\w-]+))\)/g)) {
+    const id = m[2] ? `tw:${m[2]}/${m[3]}` : `ta:${m[4]}/${m[5]}`
+    if (id === sheet.concept || out.some((o) => o.sheet.concept === id)) continue
+    const ok = id.startsWith('ta:') ? await hasTa(sheet.lang, id) : !!(await nameIn(sheet.lang, id))
+    if (ok) out.push({ label: id.startsWith('ta:') ? academyLabel(ui, m[1]!) : m[1]!, sheet: article(id, sheet.lang) })
+    if (out.length >= 4) break
+  }
+  return out
+}
 const clipTo = (s: string, n: number): string => (s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + ' …' : s)
 // the sentence before the article
 const TA_T: Record<string, string> = {
@@ -971,13 +1010,16 @@ export const ROUTES: Route[] = [
     run: async (x) => {
       const { sheet, ui, r } = x
       const said = intro(sheet, facts, ui)
+      const found = facts // the answer's own facts (the steps below read the packs)
       const study = await studyOf(sheet).catch(() => null)
+      const steps = await packSteps(sheet, study, ui).catch(() => [])
+      const follow = sheet.intent === 'passage' ? followups(sheet, found, ui, steps) : [...followups(sheet, found, ui), ...steps]
       // a free search answered by an article or an introduction says so first
-      const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: [...followups(sheet, facts, ui), ...x.others], ui,
+      const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: [...follow, ...x.others], ui,
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
         meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\n${JSON.stringify(sheet, null, 1)}` }
       if (sheet.ref && sheet.intent === 'passage') x.c.last = sheet
-      if (x.c.state && facts.kind === 'passage' && sheet.ref) x.c.state.next = { ref: sheet.ref, next: facts.next ?? null }
+      if (x.c.state && found.kind === 'passage' && sheet.ref) x.c.state.next = { ref: sheet.ref, next: found.next ?? null }
       return {
         answered: sheet.intent === 'passage' ? (/intro/.test(sheet.ref ?? '') ? 'intro' : 'passage') : sheet.intent,
         ref: sheet.ref, concept: sheet.concept, found: r!.cites.length + (r!.options?.length ?? 0), reply,
