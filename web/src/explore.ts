@@ -313,7 +313,7 @@ function ensure() {
 }
 
 /** Opens Browse (where it was left, else its first view). `from`: the entry point, for the usage counts. */
-export function openExplore(from: 'bar' | 'menu' | 'welcome') {
+export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
   if (!hooks || document.querySelector('#lock')) return
   count('explore.open')
   count(`explore.from.${from}`)
@@ -323,6 +323,15 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome') {
   b.root.classList.add('open')
   b.root.focus({ preventScroll: true })
   draw()
+}
+/** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
+export function openExploreAt(at: { book?: string; manual?: string; lang?: string }) {
+  if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
+    stack.length = 0
+    stack.push({ k: 'home', tab: at.book ? 'bible' : 'academy' })
+    stack.push(at.book ? { k: 'book', code: at.book, lang: at.lang } : { k: 'manual', m: at.manual as Manual, lang: at.lang })
+  }
+  openExplore('answer')
 }
 /** Closes Browse; the focus goes back to what opened it (not under the lock: `refocus` false). */
 export function closeExplore(refocus = true) {
