@@ -144,7 +144,11 @@ export type Again = { q?: string; sheet?: Sheet; label?: string }
  * `back`: the way back to an earlier point of the conversation (graph.ts; the point's id): main.ts goes back there instead of
  * asking the sheet as a new question. '' marks a button back to the passage before that has no point yet (pipeline.ts noIntro).
  */
-export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: Again; back?: string }
+export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: Again; back?: string
+  /** "← Back to the path: …" (pipeline.ts pathStep): drawn like the way back */
+  toPath?: boolean
+  /** "Next: Ruth 1:2 · notes", the light path's next step (first under the answer, marked) */
+  pathNext?: boolean }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
 
