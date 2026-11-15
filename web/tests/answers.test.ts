@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type Case, check, loadCases, type Outcome, runCase } from './harness'
+import { type Case, check, loadCases, offersNext, type Outcome, runCase } from './harness'
 
 const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall']
 // ANSWERS=fast (build.py's default): only the cases marked fast, a minute at most; the scores are compared on a full run
@@ -21,6 +21,19 @@ const knownFails: string[] = []
 const sizes: Record<string, number> = {}
 const slow: [number, string][] = []
 const empties: string[] = []
+/**
+ * Every answer offers next steps (Abel, Nov 15): checked on every case, the known ones too. The cases allowed to answer with
+ * none, each with its reason (none today; an error is not an answer: main.ts gives it "Try again" and Browse).
+ */
+const NO_NEXT: Record<string, string> = {}
+/**
+ * The steps whose answers may come with only the general ways forward that answer() adds when a step made no buttons of its
+ * own (reply.fallback): route/step -> why. Any other answer that relies on it fails, so a new route cannot hide behind it.
+ */
+const NO_OWN_STEPS: Record<string, string> = {}
+const fallbacks: string[] = []
+const withoutNext: string[] = []
+let checkedNext = 0
 /**
  * An empty answer: no source cited (found 0), or nothing to read but its first sentence (no text, no notes or questions, no
  * passage). Counted over every case, also those where finding nothing is right (the weather): the empty rate of a set is how
@@ -45,6 +58,14 @@ for (const f of FILES)
         slow.push([performance.now() - t, k.id])
         const bad = check(k, o)
         if (o.route === 'failed') bad.unshift(`error: ${o.text}`)
+        if (o.route !== 'failed') {
+          checkedNext++
+          if (!offersNext(o) && !NO_NEXT[k.id]) withoutNext.push(`${k.set} ${k.id}: ${k.q} -> ${o.route}/${o.step}`)
+          expect(offersNext(o) || !!NO_NEXT[k.id], `${k.id}: the answer offers no next step (${o.route}/${o.step})`).toBe(true)
+          const fell = !!(o.reply as { fallback?: boolean } | null)?.fallback
+          if (fell) fallbacks.push(`${k.id} (${o.route}/${o.step})`)
+          expect(!fell || !!NO_OWN_STEPS[`${o.route}/${o.step}`], `${k.id}: only the general ways forward, the route made no next step (${o.route}/${o.step})`).toBe(true)
+        }
         const s = (scores[k.set] ??= { pass: 0, total: 0, known: 0 })
         s.total++
         if (!bad.length) s.pass++
@@ -67,6 +88,7 @@ test('every set keeps its baseline score', () => {
   const all = Object.values(scores).reduce((a, s) => [a[0]! + (s.empty ?? 0), a[1]! + s.total], [0, 0])
   lines.push(`${'all'.padEnd(14)} empty ${all[0]}/${all[1]} (${all[1] ? Math.round((100 * all[0]!) / all[1]!) : 0}%)`)
   console.log(`\nAnswers per set:\n${lines.join('\n')}`)
+  console.log(`next steps: ${checkedNext - withoutNext.length}/${checkedNext} answers offer one, ${checkedNext - fallbacks.length} their route's own${fallbacks.length ? ` (general ways forward only: ${fallbacks.join(', ')})` : ''}${withoutNext.length ? `; without: ${withoutNext.join('; ')}` : ''}`)
   console.log(`slowest: ${slow.sort((a, b) => b[0] - a[0]).slice(0, 5).map(([ms, id]) => `${id} ${(ms / 1000).toFixed(1)} s`).join(', ')}`)
   if (empties.length) console.log(`\nEmpty answers (${empties.length}):\n${empties.join('\n')}`)
   if (knownFails.length) console.log(`\nKnown-open (${knownFails.length}):\n${knownFails.join('\n')}`)

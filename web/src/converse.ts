@@ -133,21 +133,71 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
   return null
 }
 
-export type Followup = { label: string; sheet: Sheet }
+/**
+ * A next step under an answer: a ready call sheet (no model call), or Browse opened at a book or a Translation Academy manual
+ * (`browse`), or the same question asked again (`again`, after an error).
+ */
+export type Browse = { book?: string; manual?: string; lang?: string }
+/** What "Try again" asks again: the question as the person typed it, or the button's sheet (with its label) */
+export type Again = { q?: string; sheet?: Sheet; label?: string }
+export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: Again }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
+
+/** The words of the next steps that are not about one verse: a chapter to read, Browse, try again. */
+const NX: Record<L, { read: string; notesOf: string; termsOf: string; browseBook: string; browseAcademy: string; browse: string; again: string; howName: string; howThing: string }> = {
+  en: { read: 'Read {ref}', notesOf: 'Notes on {ref}', termsOf: 'Key terms of {ref}', browseBook: 'Browse {book}', browseAcademy: 'Browse Translation Academy', browse: 'Browse the Bible and the helps', again: 'Try again', howName: 'How to translate this name', howThing: 'How to translate it' },
+  es: { read: 'Leer {ref}', notesOf: 'Notas de {ref}', termsOf: 'Palabras clave de {ref}', browseBook: 'Explorar {book}', browseAcademy: 'Explorar Translation Academy', browse: 'Explorar la Biblia y las ayudas', again: 'Intentar de nuevo', howName: 'Cómo traducir este nombre', howThing: 'Cómo traducirlo' },
+  fr: { read: 'Lire {ref}', notesOf: 'Notes sur {ref}', termsOf: 'Mots clés de {ref}', browseBook: 'Parcourir {book}', browseAcademy: 'Parcourir Translation Academy', browse: 'Parcourir la Bible et les aides', again: 'Réessayer', howName: 'Comment traduire ce nom', howThing: 'Comment le traduire' },
+  id: { read: 'Baca {ref}', notesOf: 'Catatan {ref}', termsOf: 'Istilah kunci {ref}', browseBook: 'Jelajahi {book}', browseAcademy: 'Jelajahi Translation Academy', browse: 'Jelajahi Alkitab dan bahan bantu', again: 'Coba lagi', howName: 'Cara menerjemahkan nama ini', howThing: 'Cara menerjemahkannya' },
+  hi: { read: '{ref} पढ़ें', notesOf: '{ref} की टिप्पणियाँ', termsOf: '{ref} के मुख्य शब्द', browseBook: '{book} ब्राउज़ करें', browseAcademy: 'Translation Academy ब्राउज़ करें', browse: 'बाइबल और सहायता ब्राउज़ करें', again: 'फिर से कोशिश करें', howName: 'इस नाम का अनुवाद कैसे करें', howThing: 'इसका अनुवाद कैसे करें' },
+  ar: { read: 'اقرأ {ref}', notesOf: 'ملاحظات {ref}', termsOf: 'الكلمات الرئيسية في {ref}', browseBook: 'تصفّح {book}', browseAcademy: 'تصفّح Translation Academy', browse: 'تصفّح الكتاب المقدس والمساعدات', again: 'حاول مرة أخرى', howName: 'كيف أترجم هذا الاسم', howThing: 'كيف أترجمه' },
+}
+export const nextWords = (ui: string) => NX[lang(ui)]
+/** "Introduction to Jonah", in the app's language. */
+export const introLabel = (ui: string, what: string): string => fill(INTRO[lang(ui)].label, { what })
+/** Browse: at a book, at a Translation Academy manual, or where it was left. */
+export function browseStep(ui: string, at: Browse = {}): Followup {
+  const n = NX[lang(ui)]
+  return { label: at.book ? fill(n.browseBook, { book: bookFor(ui, at.book) }) : at.manual ? n.browseAcademy : n.browse, browse: at }
+}
+/** The same question asked again (an answer that failed): none when there is nothing to ask again with. */
+export const againStep = (ui: string, again: Again | undefined): Followup[] =>
+  again?.q || again?.sheet ? [{ label: NX[lang(ui)].again, again }] : []
+
 /**
  * Next steps the person can tap under a passage: they carry a ready call sheet, so they do not go through the model again.
  * The helps not shown yet, the verse before and after, the whole chapter, `extra` (the Translation Academy article the
- * notes cite, pipeline.ts), and the chapter's and the book's introductions.
+ * notes cite, pipeline.ts), and the chapter's and the book's introductions. Under an introduction: under the book's, its
+ * chapter 1 (text, its introduction, the notes of 1:1, its key terms); under a chapter's, its text, the notes of its first
+ * verse and the next chapter's introduction; `extra` after the first three, Browse at the book last.
  */
 export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, extra: Followup[] = [], bounds: Map<number, number> | null = null): Followup[] {
   const w = W[lang(ui)]
+  const same = (what: string[], ref = sheet.ref!): Sheet => ({ ...sheet, id: `f${Date.now()}`, ref, what, version: null })
+  const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(sheet.ref ?? '')
+  if (sheet.intent === 'passage' && im) {
+    const [, code, at] = im
+    const book = bookFor(ui, code!)
+    const n = NX[lang(ui)]
+    const label = INTRO[lang(ui)].label
+    const ch = at === 'front' ? 1 : +at!
+    const out: Followup[] = [{ label: fill(n.read, { ref: `${book} ${ch}` }), sheet: same(['text', 'notes'], `${code} ${ch}`) }]
+    if (at === 'front') out.push({ label: fill(label, { what: `${book} 1` }), sheet: same(['intro'], `${code} 1:intro`) })
+    out.push({ label: fill(n.notesOf, { ref: `${book} ${ch}:1` }), sheet: same(['notes'], `${code} ${ch}:1`) })
+    out.push(...extra)
+    if (at === 'front') out.push({ label: fill(n.termsOf, { ref: `${book} 1` }), sheet: same(['terms'], `${code} 1`) })
+    else {
+      if (!bounds || bounds.has(ch + 1)) out.push({ label: fill(label, { what: `${book} ${ch + 1}` }), sheet: same(['intro'], `${code} ${ch + 1}:intro`) })
+      out.push({ label: fill(label, { what: book }), sheet: same(['intro'], `${code} front:intro`) })
+    }
+    out.push(browseStep(ui, { book: code!, lang: sheet.lang }))
+    return out.slice(0, MAX_FOLLOW)
+  }
   const m = /^([0-9a-z]{3}) (\d+)(?::(\d+)(?:-(\d+))?)?$/.exec(sheet.ref ?? '')
   if (sheet.intent !== 'passage' || !m || facts.kind !== 'passage') return extra
   const [, code, ch, v1] = m
   const book = bookFor(ui, code!)
-  const same = (what: string[], ref = sheet.ref!): Sheet => ({ ...sheet, id: `f${Date.now()}`, ref, what, version: null })
   const out: Followup[] = []
   if (!sheet.what.includes('notes')) out.push({ label: w.lNotes, sheet: same(['notes']) })
   if (!sheet.what.includes('questions')) out.push({ label: w.lQuestions, sheet: same(['questions']) })

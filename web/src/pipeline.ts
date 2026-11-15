@@ -5,8 +5,8 @@ import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
-import { academyLabel, bookLabel, followups, intro, MAX_FOLLOW, searchIntro } from './converse'
-import { hasLang, installedLangs, openLang } from './packs'
+import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro } from './converse'
+import { CANON, hasLang, installedLangs, openLang } from './packs'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
@@ -108,7 +108,12 @@ export const TERM_T: Record<string, { unknown: string; meaning: string; inRef: s
   hi: { unknown: 'जब कोई चीज़ वहाँ नहीं होती जहाँ आप अनुवाद करते हैं, तो सहायताएँ यह कहती हैं:', meaning: '«{term}» का अर्थ यह है:', inRef: '{ref} में यह {list} में आता है।', all: '{ref}: सभी सहायताएँ' },
   ar: { unknown: 'عندما لا يوجد شيء حيث تترجم، هذا ما تقوله المساعدات:', meaning: 'هذا معنى «{term}»:', inRef: 'في {ref} يرد في {list}.', all: '{ref}: كل المساعدات' },
 }
-export const TT = (ui: string) => TERM_T[ui] ?? TERM_T.en!
+// "¿Cómo debo traducir el nombre de Jonás?": the sentence before the name's article and "How to Translate Names"
+const TERM_NAME: Record<string, string> = {
+  en: 'For a name, this is what the helps say:', es: 'Para un nombre, esto dicen las ayudas:', fr: 'Pour un nom, voici ce que disent les aides :',
+  id: 'Untuk sebuah nama, inilah kata bahan bantu:', hi: 'किसी नाम के लिए सहायताएँ यह कहती हैं:', ar: 'بخصوص الأسماء، هذا ما تقوله المساعدات:',
+}
+export const TT = (ui: string) => ({ ...(TERM_T[ui] ?? TERM_T.en!), name: TERM_NAME[ui] ?? TERM_NAME.en! })
 /** "jon 1:17" as the person reads it: "Jonás 1:17". */
 export const refLabelOf = (ui: string, ref: string): string => { const [code, rest] = ref.split(' '); return `${bookLabel(ui, code!)}${rest ? ' ' + rest.replace(/^front:intro$/, '') : ''}`.trim() }
 /**
@@ -136,6 +141,17 @@ export async function termArticle(q: string, ui: string): Promise<string | null>
     if (ids?.length === 1) return ids[0]!
   }
   return null
+}
+/**
+ * "¿Cómo debo traducir el nombre de Jonás?": the person's or place's article the question names, a book's name too ("Jonás"
+ * is the prophet here, not his book); else the article of the other words (termArticle), without the word "name".
+ */
+async function nameArticle(q: string, ui: string): Promise<string | null> {
+  const t = strip(q.replace(new RegExp(NAME_RE.source, 'giu'), ' '), ['howTranslate'])
+  const kw = keywords(t).filter((k) => !SITUATION.has(fold(k)) && !MEAN_WORDS.has(fold(k)))
+  const people = [...(await articlesNamed(kw))].filter((id) => id.startsWith('tw:names/'))
+  if (people.length === 1) return people[0]!
+  return termArticle(t, ui)
 }
 /** The phrase the model took from the question, without the question's own words ("que quiere decir eso", "como traduzco"). */
 export function cleanPhrase(phrase: string, q: string): string | null {
@@ -484,9 +500,46 @@ export function guessLang(q: string): string {
   return best
 }
 
+// "Voy a empezar a traducir Jonás", "I want to translate Ruth", "Je vais traduire Jonas": about to translate a book (a report
+// of Nov 15: the introduction came with no next step). The book's introduction, then how to start (Translation Academy).
+const START_BOOK = new RegExp('(?<![\\p{L}\\p{M}])(?:' + [
+  "(?:voy|vamos|van|va) a (?:empezar a |comenzar a |iniciar (?:la )?|)tradu(?:cir|ccion)", "(?:empezar|comenzar|empiezo|comienzo|empezamos|comenzamos) (?:a |con )?(?:tradu(?:cir|ccion)|la traducci[oó]n)",
+  "quiero (?:empezar a )?traducir", "queremos (?:empezar a )?traducir",
+  "(?:i|we) (?:want|plan|need) to (?:start |begin )?translat(?:e|ing)", "(?:i am|we are|i'm|we're) (?:going|about) to (?:start |begin )?translat(?:e|ing)","(?:start|begin|starting|beginning) (?:to )?translat(?:e|ing)",
+  "(?:je vais|nous allons|on va) (?:commencer à )?traduire", "(?:commencer|commence) à traduire", "je veux traduire",
+  "(?:saya|kami|kita) (?:akan |mau |ingin )?(?:mulai )?menerjemahkan", "mulai menerjemahkan",
+  "अनुवाद (?:शुरू|करना चाहता|करना चाहती|करने वाला|करने वाली)", "(?:سأبدأ|سنبدأ|أريد|نريد|سوف) (?:أن )?(?:ب)?(?:ترجمة|أترجم|نترجم)", "سأترجم", "سنترجم",
+].join('|') + ')(?![\\p{L}\\p{M}])', 'iu')
+/** "how do I translate the name …", "el nombre de …": a question about a name */
+const NAME_RE = /(?<![\p{L}\p{M}])(?:names?|nombres?|nom|noms|nama|नाम|اسم|الاسم|أسماء)(?![\p{L}\p{M}])/iu
+// the words that may stand around the book's name in "I want to translate the book of Ruth"
+const START_FILLER = new Set((
+  'the book of i we to now please also ' + 'el libro de del la a ya ahora por favor tambien ' + 'le livre du de la maintenant ' +
+  'kitab buku sekarang ' + 'पुस्तक किताब की का अब ' + 'سفر كتاب الآن'
+).split(' ').map(fold))
+/**
+ * The book a question is about starting to translate ("Voy a empezar a traducir Jonás", "I want to translate the book of Ruth"),
+ * only when nothing else is left once the start words, the book's exact name and a few small words are taken out: "I want to
+ * translate Jonah's prayer", "…Lamb of God in John", "Vamos a traducir la Biblia" ask something else (review of Nov 15).
+ */
+export function startBookCode(q: string): string | null {
+  const tb = new RegExp(pattern('translateBook').source, 'giu')
+  const sb = new RegExp(START_BOOK.source, 'giu')
+  if (!sb.test(q) && !sb.test(fold(q)) && !has('translateBook', q)) return null
+  const t = fold(q.replace(sb, ' ').replace(tb, ' ')).replace(sb, ' ').replace(tb, ' ')
+  const words = t.replace(/[¿?!¡.,;:«»"“”؟،]/g, ' ').split(/\s+/).filter((w) => w && !START_FILLER.has(w))
+  return words.length && words.length <= 3 ? bookExact(words.join(' ')) : null
+}
+/** Whether the question is about starting to translate a book ("voy a empezar a traducir Jonás", "how do I translate the book of Ruth?"). */
+export const startsBook = (q: string): boolean => !!startBookCode(q) || (has('translateBook', q) && !NAME_RE.test(q))
+
 /** "Introduction to Jonah", "Introducción a Jonás 1", "¿De qué trata el libro de Jonás?": the book or chapter asked about. */
 export function introAsked(q: string, lang: string): Slots | null {
-  if (!asksIntro(q)) return null
+  // "Voy a empezar a traducir Jonás" too: the start words and the book's name, nothing else
+  if (!asksIntro(q)) {
+    const code = startBookCode(q)
+    return code ? ({ intent: 'passage', book: code, chapter: null, verse_start: null, verse_end: null, what: ['intro'], lang } as Slots) : null
+  }
   const t = q.replace(/[¿?!¡.,;:«»"“”؟]/g, ' ').replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
   const words = t.split(/\s+/).filter(Boolean)
   const chFirst = chapterNumber(t)
@@ -761,7 +814,13 @@ async function relatedOf(lang: string, id: string, max = 3): Promise<{ id: strin
   const linked = [...text.matchAll(/\]\((?:\.\.\/)+(?:([a-z]+)\/)?([\w-]+)\/01\.md\)/g)].map((m) => `ta:${m[1] ?? manual}/${m[2]}`)
   const rank = (x: string) => (linked.includes(x) ? linked.indexOf(x) : 100 + (x.startsWith(group + '/') ? 0 : 100))
   const names = ((await r.maps()) as any).map?.core?.names ?? {}
-  return [...rel].sort((a, b) => rank(a) - rank(b)).filter((x) => names[x]?.length).slice(0, max).map((x) => ({ id: x, title: String(names[x][0]) }))
+  // only those the pack can show (older packs name all four manuals but carry one: "not installed on this device")
+  const out: { id: string; title: string }[] = []
+  for (const x of [...rel].sort((a, b) => rank(a) - rank(b))) {
+    if (out.length >= max) break
+    if (names[x]?.length && (await hasTa(lang, x))) out.push({ id: x, title: String(names[x][0]) })
+  }
+  return out
 }
 /** An article's name in a pack (the first of its names), or null when the pack does not list it. */
 async function nameIn(lang: string, id: string): Promise<string | null> {
@@ -795,13 +854,130 @@ async function packSteps(sheet: Sheet, study: Study | null, ui: string): Promise
   // [sheep](../other/sheep.md), [How to Translate Unknowns](rc://en/ta/man/translate/translate-unknown)
   for (const m of md.matchAll(/\[([^\]]+)\]\((?:\.\.\/(kt|other|names)\/([\w-]+)\.md|rc:\/\/[^/]+\/ta\/man\/([\w-]+)\/([\w-]+))\)/g)) {
     const id = m[2] ? `tw:${m[2]}/${m[3]}` : `ta:${m[4]}/${m[5]}`
-    if (id === sheet.concept || out.some((o) => o.sheet.concept === id)) continue
+    if (id === sheet.concept || out.some((o) => o.sheet?.concept === id)) continue
     const ok = id.startsWith('ta:') ? await hasTa(sheet.lang, id) : !!(await nameIn(sheet.lang, id))
     if (ok) out.push({ label: id.startsWith('ta:') ? academyLabel(ui, m[1]!) : m[1]!, sheet: article(id, sheet.lang) })
     if (out.length >= 4) break
   }
   return out
 }
+// ----------------------------------------------------------------------------------------------------------- next steps
+// Every answer offers next steps (Abel, Nov 15: "every answer must offer follow-up options"): buttons built by code, the most
+// useful first. The ones that need the packs are made here; converse.ts makes those about one passage.
+const articleSheet = (base: Sheet, id: string, l: string): Sheet =>
+  ({ ...base, id: `f${Date.now()}`, intent: 'article', concept: id, lang: l, ref: null, what: [], phrase: null, candidates: null, term: null, version: null })
+const passageSheet = (base: Sheet, ref: string, what: string[], l = base.lang): Sheet =>
+  ({ ...base, id: `f${Date.now()}`, intent: 'passage', ref, what, lang: l, concept: null, phrase: null, candidates: null, term: null, version: null })
+/** A Translation Academy article as a button, from the first pack that can show it (the sheet's, English, the others). */
+async function taStep(base: Sheet, id: string, ui: string): Promise<Follow | null> {
+  for (const l of new Set([base.lang, 'en', ...(await installedLangs())])) {
+    if (!(await hasTa(l, id))) continue
+    const title = await nameIn(l, id)
+    return title ? { label: academyLabel(ui, title), sheet: articleSheet(base, id, l) } : null
+  }
+  return null
+}
+/** A Translation Words article as a button, by its name in the sheet's pack. */
+async function twStep(base: Sheet, id: string): Promise<Follow | null> {
+  const title = (await nameIn(base.lang, id).catch(() => null)) ?? (await nameIn('en', id).catch(() => null))
+  return title ? { label: title, sheet: articleSheet(base, id, base.lang) } : null
+}
+/** The verses with an article's term, from the sheet's pack, else the English one (the Spanish key-term links are fewer). */
+async function versesAny(id: string, l: string) {
+  for (const x of new Set([l, 'en'])) {
+    const hits = await versesOf([id], x).catch(() => [])
+    if (hits.length) return hits
+  }
+  return []
+}
+/** The first verses where an article's term stands, each a button to its text and notes. */
+async function verseSteps(base: Sheet, id: string, ui: string, n = 3): Promise<Follow[]> {
+  const hits = (await versesAny(id, base.lang)).slice(0, n)
+  const out: Follow[] = []
+  for (const h of hits) out.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
+  return out
+}
+/** The books listed, each as its first verse with the term (from the installed books), in Bible order. */
+async function bookFirsts(base: Sheet, id: string, ui: string, n = 5): Promise<Follow[]> {
+  const hits = await versesAny(id, base.lang)
+  const first = new Map<string, Hit>()
+  const at = (h: Hit) => h.ch * 1000 + h.v
+  for (const h of hits) if (!first.has(h.book) || at(h) < at(first.get(h.book)!)) first.set(h.book, h)
+  const order = [...first.values()].sort((a, b) => CANON.indexOf(a.book) - CANON.indexOf(b.book)).slice(0, n)
+  const out: Follow[] = []
+  for (const h of order) out.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
+  return out
+}
+/** An article's title as its button says it ("Academy: How to Translate Names" -> "How to Translate Names"). */
+const titleOfStep = (follow: Follow[], id: string): string | undefined => {
+  const f = follow.find((x) => x.sheet?.concept === id)
+  return f ? (id.startsWith('ta:') ? f.label.replace(/^[^:]+:\s*/, '') : f.label) : undefined
+}
+/** "How to translate it": the Translation Academy article for a Translation Words article (names, things unknown where one translates). */
+const howToOf = (id: string): string | null =>
+  id.startsWith('tw:names/') ? 'ta:translate/translate-names' : id.startsWith('tw:other/') ? 'ta:translate/translate-unknown' : null
+/** The Translation Academy articles about starting to translate (all four manuals' packs have them, Nov 2026). */
+const START_TA = ['ta:translate/translate-process', 'ta:translate/first-draft']
+/** The pack that has a book (for Browse to open it there), the sheet's first. */
+async function packWithBook(code: string, l: string): Promise<string | null> {
+  for (const x of new Set([l, env.helpsLang ?? l, 'en', ...(await installedLangs())])) {
+    try { if ((await openLang(x)).installed(`book:${code}`)) return x } catch {}
+  }
+  return null
+}
+/** A book the packs have, for an example to tap: the one named, else Jonah, Ruth, else the first there is. */
+async function exampleBook(l: string, named: string | null): Promise<{ code: string; lang: string } | null> {
+  for (const code of [named, 'jon', 'rut'].filter((x): x is string => !!x)) {
+    const p = await packWithBook(code, l)
+    if (p) return { code, lang: p }
+  }
+  for (const code of CANON) {
+    const p = await packWithBook(code, l)
+    if (p) return { code, lang: p }
+  }
+  return null
+}
+/** Ways forward when nothing (or little) was found: an example passage to read, "Finding Answers" (Translation Academy), Browse. */
+async function wayForward(base: Sheet, ui: string, named: string | null = null): Promise<Follow[]> {
+  const out: Follow[] = []
+  const ex = await exampleBook(base.lang, named).catch(() => null)
+  if (ex) out.push({ label: nextWords(ui).read.replace('{ref}', `${bookLabel(ui, ex.code)} 1`), sheet: passageSheet(base, `${ex.code} 1`, ['text', 'notes'], ex.lang) })
+  const fa = await taStep(base, 'ta:intro/finding-answers', ui).catch(() => null)
+  if (fa) out.push(fa)
+  out.push(browseStep(ui))
+  return out
+}
+/** A book and its introduction to go on with (a note past a book's end, a count in a chapter). */
+async function bookSteps(base: Sheet, ui: string): Promise<Follow[]> {
+  const m = /^([0-9a-z]{3})(?: (\d+))?/.exec(base.ref ?? '')
+  if (!m) return []
+  const [, code, ch] = m
+  const book = bookLabel(ui, code!)
+  const b = await boundsOf(code!).catch(() => null)
+  // past the book's end ("the next chapter" after Ruth 4): its last chapter
+  const c = !ch ? 1 : b && !b.has(+ch) ? Math.max(1, Math.min(+ch, Math.max(...b.keys()))) : +ch
+  const out: Follow[] = [{ label: nextWords(ui).read.replace('{ref}', `${book} ${c}`), sheet: passageSheet(base, `${code} ${c}`, ['text', 'notes']) }]
+  out.push({ label: introLabel(ui, book), sheet: passageSheet(base, `${code} front:intro`, ['intro']) })
+  out.push(browseStep(ui, { book: code! }))
+  return out
+}
+/** Each button once (the same sheet or the same Browse), at most MAX_FOLLOW; Browse at a book opens the pack that has it. */
+async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
+  const seen = new Set<string>()
+  const out: Follow[] = []
+  for (const f of follow) {
+    const key = f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''}` : `again ${f.again?.q ?? f.again?.label ?? ""}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (f.browse?.book) {
+      const p = await packWithBook(f.browse.book, f.browse.lang ?? l).catch(() => null)
+      if (!p) continue
+      out.push({ ...f, browse: { ...f.browse, lang: p } })
+    } else out.push(f)
+  }
+  return out.slice(0, MAX_FOLLOW)
+}
+
 const clipTo = (s: string, n: number): string => (s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + ' …' : s)
 // the sentence before the article
 const TA_T: Record<string, string> = {
@@ -812,7 +988,7 @@ const TA_T: Record<string, string> = {
 
 // -------------------------------------------------------------------------------------------------------------- the answer
 
-export type Follow = { label: string; sheet: Sheet }
+export type Follow = Followup
 /** An answer as data: main.ts draws it (and adds the online answer, the thumbs, the report). */
 export type Reply = {
   text?: string; intro?: string | null; info?: string; follow?: Follow[]; meta?: string; ui?: string
@@ -824,6 +1000,10 @@ export type Reply = {
   limits?: boolean
   /** no language on the phone, or not the one asked in: a button to the languages view */
   packs?: boolean
+  /** the next steps are the general ways forward the answer step added, the route having made none */
+  fallback?: boolean
+  /** the articles online AI is given as sources (its first is `ctx`): a Translation Words article and the Translation Academy one its text links to */
+  sources?: { id: string; title?: string }[]
 }
 /** The answer, what kind it was (for the usage counts), and what tests check: the route-table step that made it, its target, how many sources it shows. */
 export type Answered = {
@@ -896,6 +1076,50 @@ async function findBeyondVerses(x: Ctx, words: string[]): Promise<boolean> {
   return false
 }
 
+/**
+ * The next steps under an answer that is not a passage: a Translation Words article, its verses (when the name-verses step did
+ * not list them), how to translate it, the articles it links to; a Translation Academy article, its related ones and its manual
+ * in Browse; a count, the verses or the passage counted; a ranking, the articles ranked; advice on a verse, its helps and the
+ * article cited; the rest, ways forward.
+ */
+async function otherSteps(x: Ctx, steps: Follow[]): Promise<Follow[]> {
+  const { sheet, ui, r } = x
+  const id = sheet.concept
+  const cited = (r?.cites ?? []).filter((c) => c.startsWith('id:')).map((c) => c.slice(3))
+  const article = async (a: string) => (a.startsWith('ta:') ? taStep(sheet, a, ui) : twStep(sheet, a))
+  const some = async (ids: string[]) => (await Promise.all(ids.map((a) => article(a).catch(() => null)))).filter((f): f is Follow => !!f)
+  const m = /^([0-9a-z]{3})(?: (\d+))?(?::(\d+))?/.exec(sheet.ref ?? '')
+  const passage = (what: string[]) => sheet.ref ? [{ label: TT(ui).all.replace('{ref}', refLabelOf(ui, sheet.ref)), sheet: passageSheet(sheet, sheet.ref, what) }] : []
+  switch (sheet.intent) {
+    case 'article': {
+      if (!id) return steps
+      if (id.startsWith('ta:')) return [...steps, browseStep(ui, { manual: id.slice(3, id.indexOf('/')), lang: sheet.lang })]
+      const verses = x.others.length ? [] : await verseSteps(sheet, id, ui)
+      const how = howToOf(id)
+      const howB = how && !steps.some((f) => f.sheet?.concept === how) ? await taStep(sheet, how, ui).catch(() => null) : null
+      // the Academy article first among the links ("How to Translate Names")
+      const ta = steps.filter((f) => f.sheet?.concept?.startsWith('ta:'))
+      return [...verses, ...(howB ? [howB] : []), ...ta, ...steps.filter((f) => !ta.includes(f))]
+    }
+    case 'count': {
+      const out: Follow[] = []
+      if (id && sheet.ref && m?.[2]) {
+        for (const v of (await linkedVerses(sheet.ref, id, sheet.lang).catch(() => [])).slice(0, 4))
+          out.push({ label: `${bookLabel(ui, m[1]!)} ${v}`, sheet: passageSheet(sheet, `${m[1]} ${v}`, ['text', 'notes']) })
+      } else if (id) out.push(...(await bookFirsts(sheet, id, ui, 4)))
+      if (sheet.ref) out.push(...passage(sheet.what.length ? sheet.what : ['notes']))
+      if (id) out.push(...(await some([id])))
+      if (m) out.push(...(await bookSteps(sheet, ui)))
+      // a count of nothing named (no article, no passage): the ways forward
+      return out.length ? out : wayForward(sheet, ui)
+    }
+    case 'rank': return [...(await some(cited.slice(0, 5))), ...passage(['notes'])]
+    case 'advice': return [...passage(['text', 'notes', 'questions', 'terms']), ...(await some(cited.filter((c) => c.startsWith('ta:')).slice(0, 2))), ...(m ? await bookSteps(sheet, ui) : [])]
+    case 'choose': return steps
+  }
+  return [...steps, ...(await wayForward(sheet, ui, m?.[1] ?? null))]
+}
+
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
   {
@@ -905,7 +1129,7 @@ export const ROUTES: Route[] = [
     when: (x) => x.note !== undefined,
     run: async (x) => ({
       answered: x.note!.fromText ? 'count' : 'edge', ref: x.note!.fromText ? x.sheet.ref : null, concept: null, found: x.note!.fromText ? 1 : 0,
-      reply: { info: x.note!.text, ui: x.ui, meta: `${env.details} · ${secs(x)} s
+      reply: { info: x.note!.text, ui: x.ui, follow: await bookSteps(x.sheet, x.ui).catch(() => []), meta: `${env.details} · ${secs(x)} s
 ${x.meta}` },
     }),
   },
@@ -939,8 +1163,13 @@ ${x.meta}` },
         // "Choosing What to Translate" ends with its advice (start with Open Bible Stories): about 4,700 characters
         info = [parts[0], clipTo(body, 5000), src].filter(Boolean).join('\n\n')
       }
-      const follow = (await relatedOf(lang, m.id).catch(() => [])).map((o) =>
+      const follow: Follow[] = (await relatedOf(lang, m.id).catch(() => [])).map((o) =>
         ({ label: o.title, sheet: { ...asked, id: `f${Date.now()}`, concept: o.id } as Sheet }))
+      // "How do I translate the name Moses?": Moses' article first
+      const who = m.id === 'ta:translate/translate-names' && NAME_RE.test(q!) ? await nameArticle(q!, ui).catch(() => null) : null
+      const whoB = who?.startsWith('tw:names/') ? await twStep(asked, who) : null
+      if (whoB) follow.unshift(whoB)
+      follow.push(browseStep(ui, { manual: m.id.slice(3, m.id.indexOf('/')), lang }))
       return {
         answered: 'article', ref: null, concept: m.id, found: r.cites.length,
         reply: { intro: TA_T[ui] ?? TA_T.en!, info, follow, ui, lang, ctx: m.id,
@@ -955,18 +1184,34 @@ ${x.meta}` },
     when: ({ q }) => q !== undefined && (has('howTranslate', q) || has('noWord', q)) && !has('translateBook', q),
     run: async (x) => {
       const { sheet, ui, q } = x
+      // "¿Cómo debo traducir el nombre de Jonás?": the name, not the article "name" (a report of Nov 15)
+      const named = NAME_RE.test(q!) ? await nameArticle(q!, ui) : null
       // the model's own term first ("…no sheep. How do I translate lamb?" -> lamb), then the question's words
-      const id = (sheet.concept?.startsWith('tw:') ? sheet.concept : null) ?? await termArticle(q!, ui)
+      const id = named ?? (sheet.concept?.startsWith('tw:') ? sheet.concept : null) ?? await termArticle(q!, ui)
       // with no article for the thing ("pez grande"), "there is no … where I live" still wants "Translate Unknowns"
       if (!id && !(has('noWord', q!) && sheet.ref)) return null
+      // a name (Jonah): the article and "How to Translate Names"; anything else: "Translate Unknowns"
+      // (only a person's or place's article: "the name Yahweh" is a key term, translated as its article says)
+      const isName = !!id && id.startsWith('tw:names/')
+      const taId = isName ? 'ta:translate/translate-names' : 'ta:translate/translate-unknown'
       const base = { ...sheet, id: `t${Date.now()}`, ref: null, what: [], phrase: null, candidates: null, term: null } as Sheet
       const art = id ? await answerSheet({ ...base, intent: 'article', concept: id }) : null
-      const ta = await answerSheet({ ...base, intent: 'article', concept: 'ta:translate/translate-unknown' })
-      const follow = sheet.ref ? [{ label: TT(ui).all.replace('{ref}', refLabelOf(ui, sheet.ref)), sheet: { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes'], phrase: null } as Sheet }] : []
+      const ta = await answerSheet({ ...base, intent: 'article', concept: taId })
+      // the article alone, the Academy article, the passage asked about, the verses with the term, the articles it links to
+      const follow: Follow[] = []
+      const tw = id ? await twStep(base, id) : null
+      if (tw) follow.push(tw)
+      const taB = await taStep(base, taId, ui)
+      if (taB) follow.push(taB)
+      if (sheet.ref) follow.push({ label: TT(ui).all.replace('{ref}', refLabelOf(ui, sheet.ref)), sheet: { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes'], phrase: null } as Sheet })
+      // (the verses with the term only when no passage is asked about: then that passage is the place)
+      if (id) follow.push(...(sheet.ref ? [] : await verseSteps(base, id, ui)), ...(await packSteps(articleSheet(base, id, sheet.lang), null, ui).catch(() => [])))
+      // online AI gets both articles as its sources (named under its answer)
+      const sources = [id, taId].filter((v): v is string => !!v).map((v) => ({ id: v, title: titleOfStep(follow, v) }))
       return {
-        answered: 'translate-unknown', ref: sheet.ref, concept: id ?? 'ta:translate/translate-unknown', found: (art?.cites.length ?? 0) + ta.cites.length,
-        reply: { intro: TT(ui).unknown, info: art ? `${art.answer}\n\n${ta.answer}` : ta.answer, ui, lang: sheet.lang, follow,
-          meta: `${env.details} · ${secs(x)} s\n${x.meta}\ntranslate unknowns: ${id ?? '(no article)'}` },
+        answered: 'translate-unknown', ref: sheet.ref, concept: id ?? taId, found: (art?.cites.length ?? 0) + ta.cites.length,
+        reply: { intro: isName ? TT(ui).name : TT(ui).unknown, info: art ? `${art.answer}\n\n${ta.answer}` : ta.answer, ui, lang: sheet.lang, follow, sources,
+          meta: `${env.details} · ${secs(x)} s\n${x.meta}\ntranslate ${isName ? 'names' : 'unknowns'}: ${id ?? '(no article)'}` },
       }
     },
   },
@@ -983,10 +1228,15 @@ ${x.meta}` },
       const where = await linkedVerses(sheet.ref!, id, sheet.lang ?? 'en')
       const label = refLabelOf(ui, sheet.ref!)
       const passage = { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes', 'questions', 'terms'], phrase: null } as Sheet
+      const links = await packSteps(articleSheet(sheet, id, sheet.lang), null, ui).catch(() => [])
       return {
         answered: 'meaning', ref: sheet.ref, concept: id, found: art.cites.length,
         reply: { info: art.answer + (where.length ? `\n\n${TT(ui).inRef.replace('{ref}', label).replace('{list}', where.join(', '))}` : ''),
-          ui, lang: sheet.lang, follow: [{ label: TT(ui).all.replace('{ref}', label), sheet: passage }],
+          ui, lang: sheet.lang, follow: [{ label: TT(ui).all.replace('{ref}', label), sheet: passage },
+            // the verses of the passage where it stands, the article alone, the articles its text links to
+            ...where.slice(0, 3).map((v) => ({ label: `${bookLabel(ui, sheet.ref!.slice(0, 3))} ${v}`, sheet: passageSheet(sheet, `${sheet.ref!.slice(0, 3)} ${v}`, ['text', 'notes']) })),
+            ...[await twStep(sheet, id)].filter((f): f is Follow => !!f), ...links],
+          sources: [{ id }, ...links.filter((f) => f.sheet?.concept?.startsWith('ta:')).slice(0, 1).map((f) => ({ id: f.sheet!.concept!, title: titleOfStep([f], f.sheet!.concept!) }))],
           meta: `${env.details} · ${secs(x)} s\n${x.meta}\nmeaning: ${id} in ${sheet.ref}` },
       }
     },
@@ -1004,7 +1254,7 @@ ${x.meta}` },
       const article = { ...sheet, id: `f${Date.now()}`, intent: 'article', concept: ids[0]!, candidates: null, term: null } as Sheet
       return {
         answered: 'books', ref: null, concept: ids[0]!, found: r.cites.length,
-        reply: { info: r.answer, ui, lang: sheet.lang, follow: [{ label: keywords(q!).join(' '), sheet: article }],
+        reply: { info: r.answer, ui, lang: sheet.lang, follow: [{ label: (await nameIn(sheet.lang, ids[0]!).catch(() => null)) ?? keywords(q!).join(' '), sheet: article }, ...(await bookFirsts(sheet, ids[0]!, ui))],
           meta: `${env.details} · ${secs(x)} s\n${x.meta}\nbooks with ${ids[0]}` },
       }
     },
@@ -1102,9 +1352,21 @@ ${x.meta}` },
         const t = noFit(ui, res.keywords, st?.rarest ?? null, `${bookLabel(ui, named ?? 'jon')} ${named ? '1:1' : '1:17'}`)
         return {
           answered: 'search', ref: null, concept: null, found: 0,
-          reply: { ui, intro: t.intro, info: t.info, limits: true, meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nfindall: nothing fits` },
+          reply: { ui, intro: t.intro, info: t.info, limits: true, follow: await wayForward(x.sheet, ui, named ?? null),
+            meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nfindall: nothing fits` },
         }
       }
+      // no verse shown: the verses of the notes and questions found, each its notes or questions
+      if (!hits.length) {
+        for (const h of helps.slice(0, 4)) follow.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, [h.kind === 'note' ? 'notes' : 'questions'], ui) })
+      }
+      // the article the words name exactly, when one does ("Jonah fish": Jonah)
+      for (const id of [...(await articlesNamed(res.keywords).catch(() => new Set<string>()))].filter((i) => i.startsWith('tw:')).slice(0, 2)) {
+        const f = await twStep(x.sheet, id).catch(() => null)
+        if (f) follow.push(f)
+      }
+      // nothing to tap yet (the language asked in is not on the phone): the ways forward
+      if (!follow.length) follow.push(...(await wayForward(x.sheet, ui)))
       const first = hits[0]
       const partial = !good && hits.length > 0
       return {
@@ -1164,10 +1426,22 @@ ${x.meta}` },
       const study = await studyOf(sheet).catch(() => null)
       const steps = await packSteps(sheet, study, ui).catch(() => [])
       const bounds = sheet.intent === 'passage' && sheet.ref ? await boundsOf(sheet.ref.slice(0, 3)).catch(() => null) : null
-      const follow = sheet.intent === 'passage' ? followups(sheet, found, ui, steps, bounds) : [...followups(sheet, found, ui), ...steps]
+      // about to translate a book ("voy a empezar a traducir Jonás"): under its introduction, how to start (Translation Academy)
+      const start = sheet.intent === 'passage' && /:intro$/.test(sheet.ref ?? '') && x.q !== undefined && startsBook(x.q)
+        ? (await Promise.all(START_TA.map((id) => taStep(sheet, id, ui).catch(() => null)))).filter((f): f is Follow => !!f) : []
+      // a passage's buttons in a pack that has its book; a book no pack has ("Pengantar Obaja" with only Indonesian): its
+      // buttons would fail the same way, so only the ways forward
+      const pack = sheet.intent === 'passage' && sheet.ref ? await packWithBook(sheet.ref.slice(0, 3), sheet.lang).catch(() => null) : null
+      const follow: Follow[] = sheet.intent !== 'passage' ? await otherSteps(x, steps)
+        : pack && r!.cites.length ? followups({ ...sheet, lang: pack }, found, ui, [...steps, ...start], bounds) : []
+      // a passage with nothing to go on from (the version asked for is not here): the ways forward, its book first
+      if (sheet.intent === 'passage' && !follow.length) follow.push(...(await wayForward(sheet, ui, pack ? sheet.ref!.slice(0, 3) : null)))
+      // online AI is given the article and the Translation Academy article its text links to ("How to Translate Names")
+      const ta = sheet.concept?.startsWith('tw:') ? follow.find((f) => f.sheet?.concept?.startsWith('ta:'))?.sheet?.concept : undefined
       // a free search answered by an article or an introduction says so first
       const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: [...x.others, ...follow].slice(0, MAX_FOLLOW), ui,
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
+        sources: sheet.intent === 'article' && ta ? [{ id: sheet.concept! }, { id: ta, title: titleOfStep(follow, ta) }] : undefined,
         meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\n${JSON.stringify(sheet, null, 1)}` }
       if (sheet.ref && sheet.intent === 'passage') x.c.last = sheet
       return {
@@ -1189,7 +1463,18 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
   for (const route of ROUTES) {
     if (!route.when(x)) continue
     const done = await route.run(x)
-    if (done) return { ...done, route: route.name, sheet: x.r ? x.sheet : null }
+    if (!done) continue
+    // every answer offers next steps: each once, Browse where the book is; and when an answer has none, ways forward
+    const reply = done.reply
+    reply.follow = await tidy(reply.follow ?? [], x.sheet.lang).catch(() => reply.follow ?? [])
+    // (a language that is not on the phone: "Add languages" first, then these)
+    if (!reply.follow.length) {
+      const named = /^([0-9a-z]{3})/.exec(x.sheet.ref ?? '')?.[1] ?? null
+      reply.follow = await wayForward(x.sheet, x.ui, named).catch(() => [browseStep(x.ui)])
+      // a route that made none: the tests list where that is allowed (answers.test.ts NO_OWN_STEPS)
+      reply.fallback = true
+    }
+    return { ...done, route: route.name, sheet: x.r ? x.sheet : null }
   }
   throw new Error('no route answered') // `reply` always answers
 }
