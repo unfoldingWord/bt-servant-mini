@@ -12,6 +12,7 @@ const picks: [string, number, string[]][] = [
   ['show me the third', 2, ['text', 'notes']], ['notes on the second', 1, ['notes']], ['muéstrame el primero', 0, ['text', 'notes']],
   ['y las notas del segundo resultado', 1, ['notes']], ['le deuxième', 1, ['text', 'notes']], ['yang kedua', 1, ['text', 'notes']],
   ['दूसरा', 1, ['text', 'notes']], ['الثاني', 1, ['text', 'notes']], ['questions for the fourth', 3, ['questions']],
+  ['what is the first one?', 0, ['text', 'notes']], ['Can I see the second?', 1, ['text', 'notes']], ['¿Cuál es el tercero?', 2, ['text', 'notes']],
 ]
 for (const [q, i, what] of picks)
   test(`pick: ${q}`, () => {
@@ -21,7 +22,8 @@ for (const [q, i, what] of picks)
   })
 
 for (const q of ['What book of the Bible should I translate first?', 'Who was the first king of Israel?', '¿Qué libro debo traducir primero?',
-  'Which book should a new translation team start with first?', 'पहले कौन सी पुस्तक का अनुवाद करें?'])
+  'Which book should a new translation team start with first?', 'पहले कौन सी पुस्तक का अनुवाद करें?', 'the first verse', 'el segundo versículo',
+  'What is the first book?'])
   test(`not a pick: ${q}`, () => {
     expect(pickFound(q, slots, conv())).toBeNull()
   })

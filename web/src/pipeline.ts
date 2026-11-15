@@ -1,7 +1,7 @@
 // The decisions between the question and the answer, without the page: what a question asks for once its slots are known,
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
 import { answerSheet, booksWith, facts, linkedVerses, type Result, setUiLang, type Sheet, type Study, studyOf } from './answer'
-import { bookCode, buildSheet, fold, type Slots } from './sheet'
+import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, asksAbout, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { bookLabel, followups, intro, searchIntro } from './converse'
@@ -28,8 +28,8 @@ const ORDINALS: [RegExp, number][] = [
 ]
 // The words a pick of a result may have besides its ordinal and what to show ("show me the third one", "y las notas del segundo")
 const PICK_FILLER = new Set((
-  'the a an one ones show me see open give let please and what about on for of in to with result results now then ok okay ' +
-  'el la lo los las un uno una muestrame ver quiero dame abre abrir y que sobre de del en para con resultado resultados por favor ahora ' +
+  'the a an one ones show me see open give let please and what about on for of in to with result results now then ok okay is can could i ' +
+  'el la lo los las un uno una muestrame ver quiero dame abre abrir y que sobre de del en para con resultado resultados por favor ahora cual es puedo ' +
   'le les l une montre moi voir ouvre et sur du des pour avec resultat resultats je veux ' +
   'yang itu ini tunjukkan lihat buka dan tentang untuk hasil ke saya mau tolong ' +
   'वाला वाली वाले दिखाओ दिखाइए दिखाएँ दिखाएं और का की के परिणाम मुझे देखें खोलें ' +
@@ -321,23 +321,29 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
 }
 
-/** What a question can ask besides a reference: these need a reader, even when the question names a verse. */
-const ASKS_MORE = ['howTranslate', 'noWord', 'meaning', 'whichBooks', 'where', 'help', 'again', 'translateBook', 'about', 'tell'] as const
-// "how many", "most frequent": a count or a rank, which only a reader tells from a passage
-const COUNTS = /\b(how many|cu[aá]nt[oa]s|combien|berapa|most|m[aá]s|plus|paling|sering)\b|कितन|सबसे|كم|أكثر/i
+// What may stand next to a reference that is only a reference ("muéstrame Rut 2:3", "montre-moi Ruth 2:3 s'il te plaît")
+const REF_FILLER = new Set((
+  'show me the of please ' + 'muestrame mostrar el la de por favor ' + 'montre moi le du s il te vous plait ' +
+  'tunjukkan tolong ' + 'दिखाओ दिखाइए दिखाएँ का की के ' + 'أرني اعرض'
+).split(' ').map(fold))
+const SHOW_KINDS = ['terms', 'notes', 'questions', 'text', 'intro', 'chapter'] as const
 /**
- * The question is only a reference, read by code alone ("Rut 2:3", "Jonás 1:3 notas", "1 Juan 3:2", "योना 1:3"): a book and a
- * chapter, and besides them only what to show and filler. Then the phone's model (about 4 s) and the online reader are skipped.
+ * The question is only a reference, read by code alone ("Rut 2:3", "Jonás 1:3 notas", "1 Juan 3:2", "योना 1:3"): every word
+ * is the book's name, a number, what to show ("notes", "key terms", "intro") or a few filler words. Then the phone's model
+ * (about 4 s) and the online reader are skipped. Any other word ("why", "who speaks", "translate", "and Ruth 2:4") keeps
+ * them: a wrong skip costs a wrong answer, a missed one only 4 s.
  */
 export function directRef(q: string): boolean {
-  if (ASKS_MORE.some((c) => has(c, q)) || COUNTS.test(q)) return false
   const lang = /[؀-ۿ]/.test(q) ? 'ar' : /[ऀ-ॿ]/.test(q) ? 'hi' : guessLang(q)
   const s = introAsked(q, lang) ?? refInText({ intent: 'unknown', lang }, q)
   const code = s.book && s.chapter ? bookCode(s.lang ?? lang, s.book) : null
   if (!code) return false
-  // the words of the book's name ("1 Juan": "Juan" is not John here), what to show, "intro", "chapter"
+  // the words of the book's name as the question wrote it ("1 Juan": "Juan" alone would be John)
   const name = new Set(fold(s.book!).split(/\s+/))
-  return keywords(q).every((w) => name.has(fold(w)) || bookCode(lang, w) === code || kindOf(w) || has('intro', w) || has('chapter', w))
+  let rest = q
+  for (const c of SHOW_KINDS) rest = rest.replace(new RegExp(pattern(c).source, 'giu'), ' ')
+  const words = rest.replace(/[¿?!¡.,;«»"“”'’()؟،-]/g, ' ').split(/\s+/).filter(Boolean)
+  return words.every((w) => /^[\d०-९٠-٩:.–-]+$/.test(w) || name.has(fold(w)) || bookExact(w) === code || REF_FILLER.has(fold(w)))
 }
 
 // -------------------------------------------------------------------------------------------------------------- the answer
