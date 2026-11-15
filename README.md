@@ -48,6 +48,11 @@ python -I -X utf8 web/build.py                # bundle + paquetes en app/src/mai
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 Pruebas de las respuestas (las 156 preguntas, seguimientos, reportes, quechua; puntaje por conjunto contra `web/tests/baseline.json`): `cd web && bun test` (todas, unos 4 min; `build.py` corre solo las rápidas, menos de 1 min, y todas con `--full`).
+Al publicar una versión (después de subir los dos APK al release de GitHub): `node site/make-latest.mjs v0.12.0-alpha`
+escribe `site/latest.json` (versión, `versionCode` de `app/build.gradle`, y url, sha256 y tamaño de cada APK), y
+`npx wrangler deploy -c site/wrangler.toml` lo publica. Con eso la app Android avisa que hay una versión nueva
+(`web/src/update.ts`): sola una vez al día solo si la persona permite internet (IA en línea o conteo de uso), si no desde
+el menú «Buscar versión nueva»; «Instalar» abre en el navegador el APK de su variante (completa o ligera).
 No están en git (pesados): `app/src/main/jniLibs/arm64-v8a/` (binarios de llama.cpp, renombrados `libllamaserver.so` y
 `lib*.so`, pasados por `llvm-strip`) y `app/src/main/assets/model/ms-all-q8.gguf`.
 
