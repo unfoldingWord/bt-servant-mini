@@ -316,29 +316,70 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
 const CHECKED = 'btsm.packs.checked'
 /**
  * Once a day with internet, each added language gets the shared units it lacks (a few articles collections, ~50–60 KB each),
- * silently and with the same verification as a download. A failure is left for the next day. The number of languages updated.
+ * silently and with the same verification as a download. It never makes the person wait: a download, an import or a removal
+ * stops it (what is complete stays), and it tries again on the next opening. "Checked today" is kept only once every language
+ * was tried; a language that failed waits for tomorrow. Not on a connection where the person asked to save data. The number of
+ * languages updated.
  */
 export async function updateLangs(): Promise<number> {
+  if ((globalThis as any).navigator?.connection?.saveData) return 0
   const today = new Date().toISOString().slice(0, 10)
   try {
     if (kv()?.getItem(CHECKED) === today) return 0
-    kv()?.setItem(CHECKED, today)
   } catch {}
   let n = 0
+  let stopped = false
   for (const lang of await addedLangs()) {
+    if (userWaiting) {
+      stopped = true
+      break
+    }
     try {
-      const got = await serial(async () => updateLang(await addedClient(), lang, SHARED_UNITS, timeout(120000)))
+      const got = await serial(async () => {
+        const c = new AbortController()
+        const t = setTimeout(() => c.abort(new Error('timeout')), 120000)
+        background = c
+        try {
+          return await updateLang(await addedClient(), lang, SHARED_UNITS, c.signal)
+        } finally {
+          clearTimeout(t)
+          background = null
+        }
+      }, true)
       if (got.length) n++
-    } catch { /* tried again tomorrow */ }
+    } catch {
+      if (userWaiting) {
+        stopped = true
+        break
+      }
+      /* this language fails: tried again tomorrow */
+    }
+  }
+  if (!stopped) {
+    try {
+      kv()?.setItem(CHECKED, today)
+    } catch {}
   }
   if (n) changed()
   return n
 }
 
 let queue: Promise<unknown> = Promise.resolve()
-/** Runs installs one after the other: a download, an import, a removal, an update. */
-function serial<T>(f: () => Promise<T>): Promise<T> {
-  const run = queue.then(f, f)
+/** User installs queued and not started yet (a background update gives way to them). */
+let userWaiting = 0
+/** The running background update, to stop it when the person starts something. */
+let background: AbortController | null = null
+/** Runs installs one after the other: a download, an import, a removal, an update. The person's own go before the update. */
+function serial<T>(f: () => Promise<T>, inBackground = false): Promise<T> {
+  if (!inBackground) {
+    userWaiting++
+    background?.abort(new Error('the person started something'))
+  }
+  const go = () => {
+    if (!inBackground) userWaiting--
+    return f()
+  }
+  const run = queue.then(go, go)
   queue = run.catch(() => {})
   return run
 }
@@ -346,10 +387,18 @@ function serial<T>(f: () => Promise<T>): Promise<T> {
 /** A .tcpack file (made by another phone, or by the team): its languages go into the phone. */
 export async function importPack(bytes: Uint8Array): Promise<{ langs: string[]; rejected: number }> {
   const report = await serial(async () => (await addedClient()).importTransfer(bytes))
-  changed()
   const langs = [...new Set(report.catalogs.map((c: any) => String(c.name ?? c.lang ?? '')).filter((l) => l && l !== 'common'))]
-  // a whole language from a file ends a download that had not
-  for (const l of langs) markPartial(l, false)
+  try {
+    // a file with every book the language lists ends a download that had not (a file with part of them leaves it to continue)
+    for (const l of partialLangs().filter((x) => langs.includes(x))) {
+      try {
+        const r = await (await addedClient()).open(l)
+        if (CANON.every((b) => !r.listed(`book:${b}`) || r.installed(`book:${b}`))) markPartial(l, false)
+      } catch { /* left marked: the picker offers to continue */ }
+    }
+  } finally {
+    changed()
+  }
   return { langs, rejected: report.rejected.length }
 }
 
@@ -365,15 +414,19 @@ export async function exportPack(lang: string): Promise<Uint8Array> {
 
 /** Removes an added language (the shipped ones stay). */
 export async function removeLang(lang: string): Promise<void> {
-  await serial(async () => {
-    const store = await added()
-    const st: any = await store.getState()
-    if (!st) return
-    for (const k of ['active', 'published']) if (st[k]) delete st[k][lang]
-    for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${lang}/`)) delete st.units[key]
-    await store.setState(st)
-    await (await addedClient()).prune()
-  })
-  markPartial(lang, false)
-  changed()
+  try {
+    await serial(async () => {
+      const store = await added()
+      const st: any = await store.getState()
+      if (!st) return
+      for (const k of ['active', 'published']) if (st[k]) delete st[k][lang]
+      for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${lang}/`)) delete st.units[key]
+      await store.setState(st)
+      await (await addedClient()).prune()
+    })
+  } finally {
+    // even when the prune fails, the language is gone from the state: no mark left, and every cache drops its readers
+    markPartial(lang, false)
+    changed()
+  }
 }
