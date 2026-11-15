@@ -76,7 +76,8 @@ export function clean(md: unknown, keepHeadings = false): string {
     // links stay: md() turns the ones the app can open ([[tw:kt/faith]], [1:2](ref:jon 1:2), ../kt/faith.md) into taps
     .replace(/\((?:ver|see):\s*rc:\/\/[^)\s]+\)/gi, '')
     .replace(/[ \t]+\./g, '.')
-    .replace(/(?<!\.)\.\.(?!\.)/g, '.')
+    // a doubled period ("word..") becomes one, but not the "../" of a link (../figs-simile/01.md must stay a tap)
+    .replace(/(?<!\.)\.\.(?![./])/g, '.')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
@@ -116,20 +117,26 @@ const inRange = (row: HelpRow, [from, to]: [number, number]): boolean => row.fro
 
 /** What is installed and cached per language, opened once. */
 type Lang = { lang: string; r: PackReader; maps: any; aligned: Map<string, AlignedText[]> }
-const langs = new Map<string, Lang | null>()
+// The promise is kept at once, not its result after the awaits: a lookup still running when the packs change
+// (resetLangs) would otherwise write its old answer into the new cache.
+const langs = new Map<string, Promise<Lang | null>>()
 /** After a language is added or removed. */
 export function resetLangs() {
   langs.clear()
 }
-async function getLang(lang: string): Promise<Lang | null> {
-  if (langs.has(lang)) return langs.get(lang)!
-  let out: Lang | null = null
-  if (await hasLang(lang)) {
-    const r = await openLang(lang)
-    out = { lang, r, maps: await r.maps(), aligned: new Map() }
+function getLang(lang: string): Promise<Lang | null> {
+  let p = langs.get(lang)
+  if (!p) {
+    p = (async () => {
+      if (!(await hasLang(lang))) return null
+      const r = await openLang(lang)
+      return { lang, r, maps: await r.maps(), aligned: new Map() }
+    })()
+    langs.set(lang, p)
+    // a failed read is not remembered: the next call tries again
+    p.catch(() => { if (langs.get(lang) === p) langs.delete(lang) })
   }
-  langs.set(lang, out)
-  return out
+  return p
 }
 /** `lang` first, then English, then every other installed pack: where an answer can come from when `lang` is not installed. */
 async function packsFor(lang: string): Promise<string[]> {

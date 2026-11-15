@@ -1,0 +1,296 @@
+{
+  "_": "The words that send a training question to a Translation Academy article (pipeline.ts, route `academy`). An entry is words that must all be in the question, in any order, within three words of each other (an entry starting with = only in that order, at most one word between two): `a|b` is either word, a word ending in * is a beginning (traduc* is traducir, traduzco, traducción). Words are compared without accents or capitals, and a final s does not count (idioms = idiom, modismos = modismo). The article whose longest entry matches wins; two articles tied leave the question to the other routes. `cues`: a question must have one of these words (or a \"how do I translate/say\" of commands.json) to be read as a training question at all: a word of translating, so \"Who was on the team of Paul?\" stays a Bible question. `stop`: words left out when the question's words are compared with the titles of the articles. Add words here, not rules in the code; web/tests/academy-route.test.ts checks them. Not `idioma` for idiom: in Spanish it is the language; not `perumpamaan` for simile: in Indonesian it is a parable. Another word of the question that names a Translation Words article (\"the team of horses\", \"first fruits\") cancels a match.",
+  "cues": {
+    "en": "translat*",
+    "es": "tradu*",
+    "fr": "tradu*",
+    "id": "terjemah* menerjemah* penerjemah*",
+    "hi": "अनुवाद*",
+    "ar": "ترجم* اترجم نترجم يترجم مترجم*"
+  },
+  "stop": "a an the to of in on at for and or but is are was be do does did can could should would will i we you it they my our your me us this that these those what which who how when where why with from by as about into there here translate translates translated translating translation translations translator translators bible book want need help please get make el la los las un una unos unas de del en y o que quien donde cuando como cual es son fue era se su sus mi mis tu tus lo le les al por para con sin sobre hay puedo puede debo debemos podemos quiero necesito ayuda tradu traducir traduzco traducimos traduccion traducciones traductor biblia libro le la les un une des de du et ou que qui quoi quand comment est sont dans sur pour par avec je nous vous mon ma mes notre traduire traduction livre yang dan di ke dari untuk dengan bagaimana apa ini itu saya kami kita cara menerjemahkan terjemahan penerjemahan alkitab kitab का की के में है हैं और से को कैसे क्या मैं हम अनुवाद करें करूँ في من الى على و عن ما كيف هل انا نحن ترجمة الترجمة اترجم نترجم",
+  "ids": {
+    "ta:translate/figs-idiom": {
+      "en": [
+        "idiom",
+        "modism",
+        "idiomatic",
+        "idiomatic expression*"
+      ],
+      "es": [
+        "modismo",
+        "idiomatismo",
+        "expresion|expresiones idiomatica*",
+        "frase* hecha*"
+      ],
+      "fr": [
+        "idiome",
+        "idiotisme",
+        "expression* idiomatique*"
+      ],
+      "id": [
+        "idiom",
+        "ungkapan"
+      ],
+      "hi": [
+        "मुहावरा",
+        "मुहावरे",
+        "मुहावरों"
+      ],
+      "ar": [
+        "اصطلاحي*",
+        "تعبير* اصطلاح*",
+        "تعابير اصطلاح*"
+      ]
+    },
+    "ta:translate/figs-metaphor": {
+      "en": [
+        "metaphor"
+      ],
+      "es": [
+        "metafora"
+      ],
+      "fr": [
+        "metaphore"
+      ],
+      "id": [
+        "metafora",
+        "kiasan"
+      ],
+      "hi": [
+        "रूपक"
+      ],
+      "ar": [
+        "استعار*"
+      ]
+    },
+    "ta:translate/figs-simile": {
+      "en": [
+        "simile"
+      ],
+      "es": [
+        "simil",
+        "comparacion*"
+      ],
+      "fr": [
+        "comparaison"
+      ],
+      "id": [
+        "pembandingan"
+      ],
+      "hi": [
+        "उपमा"
+      ],
+      "ar": [
+        "تشبيه*"
+      ]
+    },
+    "ta:translate/figs-intro": {
+      "en": [
+        "figure* speech",
+        "figurative language"
+      ],
+      "es": [
+        "figura* lenguaje",
+        "figura* retorica*",
+        "lenguaje figurado"
+      ],
+      "fr": [
+        "figure* style",
+        "langage figure"
+      ],
+      "id": [
+        "majas",
+        "gaya bahasa"
+      ],
+      "hi": [
+        "अलंकार"
+      ],
+      "ar": [
+        "مجاز*"
+      ]
+    },
+    "ta:translate/translation-difficulty": {
+      "en": [
+        "translat* first",
+        "which|what book* start*|begin*",
+        "book* first translat*|start*|begin*",
+        "easi*|easy book*",
+        "choos* what translat*"
+      ],
+      "es": [
+        "tradu* primer*|primero",
+        "cual|que libro* empez*|empiez*|comenz*|comienz*|inici*",
+        "libro* facil*"
+      ],
+      "fr": [
+        "tradu* premier*|premiere|abord",
+        "quel livre* commenc*"
+      ],
+      "id": [
+        "terjemah*|menerjemah* pertama|dulu|duluan|dahulu",
+        "kitab|buku mana|apa mulai|memulai"
+      ],
+      "hi": [
+        "पहले|पहली|पहला अनुवाद*"
+      ],
+      "ar": [
+        "ابدا|البدء|نبدا سفر|كتاب|اسفار",
+        "ترجم*|اترجم|نترجم اولا|اول"
+      ]
+    },
+    "ta:process/process-manual": {
+      "en": [
+        "start*|begin* translat*",
+        "new translator*",
+        "translat* project*",
+        "start*|begin* project*",
+        "first step*",
+        "step* translat*"
+      ],
+      "es": [
+        "empez*|empiez*|comenz*|comienz*|inici* tradu*",
+        "proyecto* tradu*",
+        "primer* paso*",
+        "paso* tradu*"
+      ],
+      "fr": [
+        "commenc*|debut* tradu*",
+        "projet* tradu*",
+        "premier* etape*"
+      ],
+      "id": [
+        "mulai|memulai terjemah*|menerjemah*|penerjemah*",
+        "proyek terjemah*|penerjemah*",
+        "langkah pertama"
+      ],
+      "hi": [
+        "शुरू|शुरुआत|आरंभ अनुवाद*",
+        "अनुवाद* परियोजना"
+      ],
+      "ar": [
+        "ابدا|بدء|البدء|بداية|ابدء ترجم*|اترجم|نترجم",
+        "مشروع ترجم*"
+      ]
+    },
+    "ta:process/setup-team": {
+      "en": [
+        "=translat* team",
+        "set*|build*|form*|organi*|start* team"
+      ],
+      "es": [
+        "=equipo tradu*|traductor*",
+        "form*|arm*|organiz*|cre*|establec*|mont* equipo"
+      ],
+      "fr": [
+        "=equipe tradu*|traducteur*",
+        "form*|constitu*|organis*|cre* equipe"
+      ],
+      "id": [
+        "=tim penerjemah*|terjemah*",
+        "bentuk|membentuk|menyusun|membangun tim"
+      ],
+      "hi": [
+        "=अनुवाद* दल|टीम",
+        "दल|टीम बना*|स्थापित"
+      ],
+      "ar": [
+        "=فريق ترجم*|الترجمه|مترجم*",
+        "تشكيل|تكوين|تاسيس|بناء فريق"
+      ]
+    },
+    "ta:translate/choose-team": {
+      "en": [
+        "choos*|select*|pick* team|translator*",
+        "choos*|select*|pick* translat* team",
+        "who should translat*"
+      ],
+      "es": [
+        "eleg*|elij*|escog*|selecc* equipo|traductor*",
+        "eleg*|elij*|escog*|selecc* equipo tradu*"
+      ],
+      "fr": [
+        "choisi*|selection* equipe|traducteur*",
+        "choisi*|selection* equipe tradu*"
+      ],
+      "id": [
+        "pilih|memilih tim|penerjemah",
+        "pilih|memilih tim penerjemah*|terjemah*"
+      ],
+      "hi": [
+        "दल|टीम चुन*",
+        "अनुवाद* दल|टीम चुन*"
+      ],
+      "ar": [
+        "اختيار|اختار|نختار فريق|مترجمين",
+        "اختيار|اختار|نختار فريق ترجم*"
+      ]
+    },
+    "ta:checking/intro-checking": {
+      "en": [
+        "check*|verif*|review* translat*",
+        "check* draft*"
+      ],
+      "es": [
+        "revis*|verific*|comprob*|chequ* tradu*|borrador*"
+      ],
+      "fr": [
+        "verifi*|control*|relir* tradu*"
+      ],
+      "id": [
+        "periksa|memeriksa|pemeriksaan terjemah*|menerjemah*|penerjemah*"
+      ],
+      "hi": [
+        "जाँच*|जांच* अनुवाद*"
+      ],
+      "ar": [
+        "تدقيق|مراجعة|فحص|افحص|ادقق|ندقق ترجم*"
+      ]
+    },
+    "ta:checking/vol2-backtranslation": {
+      "en": [
+        "back translat*",
+        "back-translat*"
+      ],
+      "es": [
+        "retrotraduc*",
+        "traduccion* inversa*",
+        "tradu* inversa*"
+      ],
+      "fr": [
+        "retrotraduction*",
+        "traduction* inverse*"
+      ],
+      "id": [
+        "terjemah* balik"
+      ],
+      "hi": [
+        "पश्च अनुवाद*",
+        "वापस अनुवाद*"
+      ],
+      "ar": [
+        "ترجم* عكسي*"
+      ]
+    },
+    "ta:translate/first-draft": {
+      "en": [
+        "first draft*"
+      ],
+      "es": [
+        "primer borrador"
+      ],
+      "fr": [
+        "premier brouillon"
+      ],
+      "id": [
+        "draf|konsep pertama"
+      ],
+      "hi": [
+        "प्रथम प्रालेख|मसौदा"
+      ],
+      "ar": [
+        "مسودة اولى|اول"
+      ]
+    }
+  }
+}

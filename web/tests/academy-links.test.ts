@@ -29,3 +29,17 @@ for (const [ui, pack, book, word] of cases) {
     expect(answer).toMatch(new RegExp(word.source + String.raw`[^\]]+\]\(ta:[a-z]+/[a-z0-9-]+\)`))
   })
 }
+
+// The links inside a Translation Academy article (../figs-simile/01.md) stay links the app can open: clean() once turned
+// "../" into "./", which linkTarget does not know.
+test('a link inside an Academy article opens an article', async () => {
+  await installPacks(['en'])
+  setUiLang('en')
+  const { sheet } = await buildSheet('t', { lang: 'en', intent: 'article', term: 'metaphor' } as any)
+  expect(sheet.concept).toBe('ta:translate/figs-metaphor')
+  const html = md((await answerSheet(sheet)).answer, sheet.concept!)
+  const hrefs = [...html.matchAll(/<a class="lk" data-href="([^"]+)"/g)].map((m) => m[1]!)
+  const arts = hrefs.map((h) => linkTarget(h, sheet.concept!)).filter((t) => t?.kind === 'article')
+  expect(arts.length).toBeGreaterThan(0)
+  expect(arts.map((t) => t && t.kind === 'article' && t.id)).toContain('ta:translate/figs-simile')
+})

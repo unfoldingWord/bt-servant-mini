@@ -102,7 +102,7 @@ for (const [id, byLang] of Object.entries(glossary as Record<string, Record<stri
     if (!GLOSS.get(k)?.includes(id)) GLOSS.set(k, [...(GLOSS.get(k) ?? []), id])
   }
 
-/** Article ids whose name is the term, in the pack of `lang` and then English (tW first, then tA). */
+/** Article ids whose name is the term, in the pack of `lang` and then English (tW first, then tA: all four manuals). */
 async function idsOf(term: string | null, packLangs: string[]): Promise<string[] | null> {
   if (!term) return null
   const f = fold(term).replace(/[«»"“”'?¿!¡.]/g, '').replace(/\s+/g, ' ').trim()
@@ -120,7 +120,7 @@ async function idsOf(term: string | null, packLangs: string[]): Promise<string[]
     const names: Record<string, string[]> = m.map?.core?.names ?? {}
     const exact: string[] = []
     for (const [id, ns] of Object.entries(names)) {
-      if (!(id.startsWith('tw:') || id.startsWith('ta:translate/'))) continue
+      if (!(id.startsWith('tw:') || id.startsWith('ta:'))) continue
       if (ns.some((n) => fold(String(n).replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim() === f)) exact.push(id)
     }
     if (exact.length) return exact.sort((a, b) => (a.startsWith('tw:') ? 0 : 1) - (b.startsWith('tw:') ? 0 : 1))

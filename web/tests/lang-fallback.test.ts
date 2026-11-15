@@ -33,7 +33,7 @@ for (const pack of ALL_PACKS) {
       const a = await ask(ui, { intent: 'article', term: TERM[ui] })
       expect(a.sheet.lang).toBe(pack)
       expect(a.r.answer).not.toMatch(bad)
-    })
+    }, 30_000) // the first read of a big pack (ar, 27 MB) took just over 5 s in a full run with the tA packs
   }
 }
 
