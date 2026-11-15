@@ -45,6 +45,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
+import { type ConvState, env, type Hit, passageOf, pickFound } from './pipeline'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
 type UiText = {
@@ -135,6 +136,8 @@ let nav = (() => {
   return UI[n] ? n : 'en'
 })()
 let T = UI[nav]!
+// the decisions (pipeline.ts) read the app's language and the helps language from here
+Object.defineProperties(env, { nav: { get: () => nav }, helpsLang: { get: () => helpsLang } })
 const LOGO = document.querySelector('.brand svg')!.outerHTML
 
 // ------------------------------------------------------------------------------------------------------------ conversations
@@ -153,12 +156,7 @@ type Msg = {
   /** no language on the phone, or not the one asked in: a button to the languages view */
   packs?: boolean
 }
-type Hit = { book: string; ch: number; v: number }
-type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[]
-  /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
-  state?: { s: Record<string, unknown>; at: number }
-  /** the last question asked (without its "reply in …"), to ask it again in another language ("repeat that in Indonesian") */
-  prevQ?: string }
+type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
 const MAX = 3
 let convs: Conv[] = []
@@ -959,30 +957,6 @@ function isOpen(q: string, sheet: Sheet): boolean {
   if (sheet.intent === 'unknown') return keywords(q).length >= 1
   return ['advice', 'passage'].includes(sheet.intent) && keywords(q).length >= 2
 }
-
-const ORDINALS: [RegExp, number][] = [
-  [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल|الأول/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर|الثاني/i, 1],
-  [/\b(third|tercer[oa]?|troisième|ketiga)\b|तीसर|الثالث/i, 2], [/\b(fourth|cuart[oa]|quatrième|keempat)\b|चौथ/i, 3],
-]
-/** "The whole chapter": the chapter of the last passage. */
-
-/** A follow-up with no book of its own: "the second one" (a search result), "that verse" or "and the questions?" (the last verse shown). */
-function pickFound(q: string, slots: Slots, c: Conv): { hit: Hit; what: string[] } | null {
-  const named = !has('that', q) && slots.book && fold(q).includes(fold(slots.book)) && bookCode(slots.lang ?? nav, slots.book)
-  if (named) return null
-  const ord = ORDINALS.find(([re]) => re.test(q))?.[1]
-  const kind = kindOf(q)
-  const lastM = /^([0-9a-z]{3}) (\d+)/.exec(c.last?.ref ?? '')
-  if (has('whole', q) && lastM) return { hit: { book: lastM[1]!, ch: +lastM[2]!, v: 0 }, what: kind ?? ['text'] }
-  if (ord !== undefined && c.found?.length) return { hit: c.found[Math.min(ord, c.found.length - 1)]!, what: kind ?? ['text', 'notes'] }
-  const m = /^([0-9a-z]{3}) (\d+):(\d+)/.exec(c.last?.ref ?? '')
-  if (!m) return null
-  if (has('that', q) || (kind && keywords(q).length === 0))
-    return { hit: { book: m[1]!, ch: +m[2]!, v: +m[3]! }, what: kind ?? ['text', 'notes'] }
-  return null
-}
-const passageOf = (h: Hit, what: string[], lang: string): Slots =>
-  ({ intent: 'passage', book: h.book, chapter: h.ch, verse_start: h.v, verse_end: null, what, lang })
 
 async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Sheet; ui: string; meta: string; q?: string }>) {
   busy = true
