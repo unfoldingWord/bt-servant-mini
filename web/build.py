@@ -6,6 +6,19 @@ ROOT = Path(__file__).resolve().parent.parent
 WWW = ROOT / 'app' / 'src' / 'main' / 'assets' / 'www'
 # the packs with all four Translation Academy manuals, else the older ones (the same choice as web/tests/fs-packs.ts)
 PACKS = next((p for p in (ROOT.parent / 'lp3-ta-packs', ROOT.parent / 'fase0-mini-servant' / 'packs') if p.is_dir()), ROOT.parent / 'fase0-mini-servant' / 'packs')
+# The language-pack client (web/tsconfig.json paths): bt-synergy at the commit in bt-synergy.ref, checked out in ../bts-client
+# (as Servos does). Built against another commit, the app would read the packs with a client it was not tested with.
+REF = (ROOT / 'bt-synergy.ref').read_text(encoding='utf-8').strip()
+BTS = ROOT.parent / 'bts-client'
+_head = subprocess.run(['git', '-C', str(BTS), 'rev-parse', 'HEAD'], capture_output=True, text=True)
+if _head.returncode or _head.stdout.strip() != REF:
+    raise SystemExit(f"""{BTS} is not at bt-synergy.ref ({REF[:12]}): {'no git checkout there' if _head.returncode else 'it is at ' + _head.stdout.strip()[:12]}.
+Fix it with one of:
+  git -C <your bt-synergy clone> worktree add --detach {BTS} {REF}
+  git -C {BTS} fetch && git -C {BTS} checkout --detach {REF}
+then: cd {BTS} && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3""")
+if not (BTS / 'packages' / 'language-pack-client' / 'node_modules').is_dir():
+    raise SystemExit(f'{BTS} has no node_modules: cd {BTS} && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3')
 shutil.rmtree(WWW, ignore_errors=True)
 WWW.mkdir(parents=True)
 # the app's version, for the installable web app's About (the Android app asks the APK)

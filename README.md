@@ -43,10 +43,19 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
 
 ## Construir e instalar
 ```
-python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun y ../lp3-mcp, ../fase0-mini-servant/packs); corre las pruebas rápidas (--full todas, --no-tests ninguna)
+python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun, ../bts-client y ../lp3-ta-packs o ../fase0-mini-servant/packs); corre las pruebas rápidas (--full todas, --no-tests ninguna)
 <gradle 8.14.3> assembleDebug                 # APK en app/build/outputs/apk/debug/app-debug.apk (~315 MB)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+El cliente de paquetes (`language-pack-client` y `language-pack-v3`) sale de bt-synergy (tc-study) en el commit de
+`bt-synergy.ref`, sacado en `../bts-client` (como Servos). `web/tsconfig.json` y `packs-server/tsconfig.json` apuntan ahí;
+`build.py` y `bun test` fallan si `../bts-client` está en otro commit. Prepararlo:
+```
+git -C <clon de bt-synergy> worktree add --detach ../wt/bts-client $(cat bt-synergy.ref)   # o: git -C ../bts-client checkout --detach <ref>
+cd ../bts-client && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3
+```
+Para pasar a un bt-synergy más nuevo: correr todas las pruebas contra él y escribir su commit en `bt-synergy.ref`.
+
 Pruebas de las respuestas (las 156 preguntas, seguimientos, reportes, quechua; puntaje por conjunto contra `web/tests/baseline.json`): `cd web && bun test` (todas, unos 4 min; `build.py` corre solo las rápidas, menos de 1 min, y todas con `--full`).
 No están en git (pesados): `app/src/main/jniLibs/arm64-v8a/` (binarios de llama.cpp, renombrados `libllamaserver.so` y
 `lib*.so`, pasados por `llvm-strip`) y `app/src/main/assets/model/ms-all-q8.gguf`.
