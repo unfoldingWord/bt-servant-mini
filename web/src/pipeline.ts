@@ -1,6 +1,6 @@
 // The decisions between the question and the answer, without the page: what a question asks for once its slots are known,
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
-import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setUiLang, type Sheet, type Study, studyOf } from './answer'
+import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQuestion, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, asksAbout, keywords, searchHelps, searchVerses, versesOf } from './search'
@@ -745,6 +745,8 @@ export const ROUTES: Route[] = [
 /** The answer to what a question asks for: the first route that gives one (the conversation keeps the last passage and search results). */
 export async function answer(c: ConvState, made: Made, t0: number): Promise<Answered> {
   setUiLang(made.ui)
+  // the words the question asks about put their notes first (focus.ts); none for a button press (no question)
+  setQuestion(made.q, made.sheet)
   const x: Ctx = { ...made, c, t0, others: [], searched: '' }
   for (const route of ROUTES) {
     if (!route.when(x)) continue

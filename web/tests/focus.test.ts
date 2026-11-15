@@ -181,7 +181,7 @@ describe('a question that names no word moves nothing', () => {
 
 describe('through pipeline.answer()', () => {
   // needs setQuestion in pipeline.answer(): enable at integration, once answer() calls setQuestion(made.q) next to setUiLang
-  test.skip('the Markdown answer to a question about a word starts with the notes about it', async () => {
+  test('the Markdown answer to a question about a word starts with the notes about it', async () => {
     setQuestion(null)
     const info = String(((await runCase(ask('p-redeemer', 'en', 'What do the notes say about redeemer in Ruth 4?'))).reply as any).info)
     const focusAt = info.indexOf('### Notes about «redeemer»')
