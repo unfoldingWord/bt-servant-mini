@@ -18,6 +18,7 @@ import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, tod
 import { answer, type ConvState, directRef, env, guessLang, type Made, NP, questionOf, readQuestion, type Reply, stateLine } from './pipeline'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 import { shareButton } from './share'
+import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -123,6 +124,8 @@ type Msg = Reply & {
   ai?: { text: string; model: string; sources?: OnlineAnswer['sources'] }
   /** the person's thumbs on this answer, and whether they sent a report about it */
   rating?: 'up' | 'down'; reported?: boolean
+  /** asked with no language on the phone: the question waits, and is asked again (once) when a language has downloaded */
+  waiting?: boolean
 }
 type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
@@ -279,10 +282,10 @@ function renderMsg(m: Msg): HTMLElement {
   // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
   const cv = convs.find((x) => x.msgs.includes(m))
   const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
-  const sh = shareButton(m, m.ui ?? nav, prev?.who === 'me' ? prev.text : undefined)
+  const sh = m.waiting ? null : shareButton(m, m.ui ?? nav, prev?.who === 'me' ? prev.text : undefined)
   if (sh) d.appendChild(sh)
   // thumbs up or down, and with a thumbs down a report (feedback.ts)
-  if (m.info || m.intro || m.ai || m.text || m.helps) {
+  if (!m.waiting && (m.info || m.intro || m.ai || m.text || m.helps)) {
     let bar = el('div', 'rate')
     let said = ''
     const draw = () => {
@@ -326,29 +329,89 @@ function renderMsg(m: Msg): HTMLElement {
 const reportMsg = (m: Msg): ReportMsg => m.who === 'me'
   ? { who: 'me', text: m.text }
   : { who: 'bot', text: m.text, intro: m.intro ?? undefined, info: m.info, ai: m.ai?.text, details: m.meta }
+// the languages on the phone: known once the first look at them is back (before that, the welcome shows neither picker nor examples)
+let INSTALLED: string[] = []
+let packsKnown = false
+/** The pack the welcome's examples come from: the chosen helps language, the app's, or the first one on the phone. */
+function examplesLang(): string | null {
+  if (helpsLang && INSTALLED.includes(helpsLang)) return helpsLang
+  const p = packFor(nav)
+  return p && INSTALLED.includes(p) ? p : INSTALLED[0] ?? null
+}
+/** The language picker (firstuse.ts), for a phone with no language; `prefer`: the waiting question's language first. */
+function pickerFor(prefer: string[]): HTMLElement {
+  const phone = [...(navigator.languages ?? []), navigator.language ?? '']
+  return languagePicker(nav, [...prefer, nav, ...phone], {
+    done: async () => {
+      await refreshInstalled()
+      if (!reaskWaiting()) renderConv()
+    },
+    file: () => {
+      panelView = 'packs'
+      panel.classList.add('show')
+      renderPanel()
+    },
+  })
+}
+/** The question that waited for a language: asked again once, in its conversation (the question and its note give way to the answer). */
+function reaskWaiting(): boolean {
+  for (const c of convs) {
+    const n = c.msgs.length
+    const bot = c.msgs[n - 1], me = c.msgs[n - 2]
+    if (!bot?.waiting || me?.who !== 'me' || !me.text) continue
+    c.msgs.splice(n - 2, 2)
+    current = c.id
+    save()
+    renderConv()
+    const typed = input.value
+    input.value = me.text
+    form.requestSubmit()
+    input.value = typed
+    return true
+  }
+  return false
+}
+/** The language of the question that waits in the conversation, if any. */
+function waitingLang(c: Conv): string[] {
+  let i = c.msgs.length - 1
+  while (i >= 0 && !c.msgs[i]!.waiting) i--
+  const q = i > 0 ? c.msgs[i - 1] : undefined
+  return q?.who === 'me' && q.text ? [guessLang(q.text)] : []
+}
+function fillExamples(ex: HTMLElement) {
+  const lang = examplesLang()
+  if (!lang) return
+  examplesFor(nav, lang).then((list) => {
+    if (!ex.isConnected) return
+    for (const e of list) {
+      const b = el('button', '', e.label) as HTMLButtonElement
+      b.type = 'button'
+      b.onclick = () => runSheet(e.label, { ...bare(e.lang), intent: e.intent, ref: e.ref ?? null, what: e.what ?? [], concept: e.concept ?? null }, nav)
+      ex.appendChild(b)
+    }
+  }).catch(() => {})
+}
 function renderConv() {
   log.innerHTML = ''
   const c = conv()
+  const noPacks = packsKnown && !INSTALLED.length
   if (!c.msgs.length) {
     const w = el('div', 'welcome')
     w.innerHTML = LOGO
     w.appendChild(el('h2', '', T.welcome))
-    w.appendChild(el('p', '', T.hello))
-    const ex = el('div', 'examples')
-    for (const e of T.ex) {
-      const b = el('button', '', e) as HTMLButtonElement
-      b.type = 'button'
-      b.onclick = () => {
-        input.value = e
-        form.requestSubmit()
-      }
-      ex.appendChild(b)
+    // no language yet: the first screen is the choice of one (the rest of the welcome comes with it)
+    if (noPacks) w.appendChild(pickerFor([]))
+    else {
+      w.appendChild(el('p', '', T.hello))
+      const ex = el('div', 'examples')
+      w.appendChild(ex)
+      fillExamples(ex)
     }
-    w.appendChild(ex)
     log.appendChild(w)
     return
   }
   for (const m of c.msgs) log.appendChild(renderMsg(m))
+  if (noPacks) log.appendChild(pickerFor(waitingLang(c)))
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
 type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs' | 'usage' | 'safety'
@@ -777,10 +840,11 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
   let onlineCtx = '' // the passage's context for online AI (surrounding verses, introductions)
   let m: Msg
   try {
-    // no language on this phone (the light build before its first download): nothing to search, say so before anything runs
+    // no language on this phone (the light build before its first download): nothing to search yet. The question waits; the
+    // picker comes under it, and the question is asked again when the download ends (reaskWaiting)
     if (!(await installedLangs()).length) {
       answered = 'nopacks'
-      throw { done: { who: 'bot', intro: NP(nav).none, ui: nav, packs: true, meta: `${T.details} · 0.0 s\nno language packs on this phone` } }
+      throw { done: { who: 'bot', intro: FU(nav).kept, ui: nav, waiting: true, meta: `${T.details} · 0.0 s\nno language packs on this phone: the question waits for one` } }
     }
     const made = await make()
     qLang = made.sheet.lang ?? made.ui
@@ -797,13 +861,17 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
   count(`kind.${answered}`)
   if (qLang) count(`lang.${qLang}`)
   if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
-  if (!m.packs && (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length))) m.limits = true
+  if (!m.packs && !m.waiting && (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length))) m.limits = true
   count('secs', Math.round((performance.now() - t0) / 1000))
   c.msgs.push(m)
   c.updated = Date.now()
   save()
   let node = renderMsg(m)
   wait.replaceWith(node)
+  if (m.waiting) {
+    log.querySelectorAll('.fu').forEach((x) => x.remove())
+    node.after(pickerFor(waitingLang(c)))
+  }
   log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   busy = false
   setReady()
@@ -896,11 +964,16 @@ lock(nav)
 watchAway(() => nav)
 load()
 renderConv()
-let INSTALLED: string[] = []
-const refreshInstalled = () => installedLangs().then((ls) => {
-  INSTALLED = ls
-  $('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · ')
-}).catch(() => {})
+function refreshInstalled() {
+  return installedLangs().then((ls) => {
+    const had = packsKnown ? INSTALLED.length > 0 : null
+    INSTALLED = ls
+    packsKnown = true
+    $('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · ')
+    // the welcome (picker or examples) and a picker under a waiting question follow what is installed
+    if (had !== ls.length > 0 && (!conv().msgs.length || !ls.length || had === false)) renderConv()
+  }).catch(() => {})
+}
 refreshInstalled()
 onPacksChanged(() => {
   resetLangs()
@@ -942,7 +1015,9 @@ function firstSafety() {
     setReady()
   }, { online: stored('btsm.online'), usage: stored('btsm.usage'), discreet: discreetOn() || stored('btsm.discreet') }, true)
 }
+// The first launch goes straight to the quick questions and then the chat (where a phone with no language picks one): About is
+// guidance, one tap away on the logo, the status and the menu.
 try {
-  if (!localStorage.getItem('btsm.onboarded')) showAbout(nav, () => { setReady(); firstSafety() })
-  else firstSafety()
+  if (!localStorage.getItem('btsm.onboarded')) localStorage.setItem('btsm.onboarded', '1')
 } catch {}
+firstSafety()
