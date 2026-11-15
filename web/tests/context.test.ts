@@ -17,8 +17,12 @@ describe('what the question asks', () => {
     for (const q of ['What is a metaphor?', '¿Qué es una metáfora?', "Qu'est-ce qu'une métaphore ?", 'Apa itu metafora?', 'रूपक क्या है?', 'ما هي الاستعارة؟', 'What does redeemer mean?'])
       expect(askOf(q)).toBe('what')
   })
-  test('anything else', () => {
+  test('anything else; the helps\' own names ("translation notes") do not ask how', () => {
     expect(askOf('Notes on Ruth 2:3')).toBe('other')
+    expect(askOf('Show me the translation notes for Ruth 2:3')).toBe('other')
+    expect(askOf('Muéstrame las notas de traducción de Rut 2:3')).toBe('other')
+    expect(askOf('What do the translation notes say about Ruth 2:3?')).toBe('other')
+    expect(askOf('How do I translate the translation notes of Ruth 2:3?')).toBe('how')
     expect(askOf('And the next verse?')).toBe('other')
   })
 })
@@ -77,6 +81,38 @@ describe('the sections a question needs, from the packs', () => {
     expect(t).toContain('### Description')
     expect(t).not.toContain('Translation Strategies')
   })
+  test('Hindi, Indonesian and Arabic headings: the sections found on articles that have them', async () => {
+    const want = async (lang: string, id: string, kind: string) =>
+      expect(pickSections((await read(id, lang))!, 'how').map((p) => p.kind)).toContain(kind)
+    await want('hi', 'tw:kt/amen', 'translation-suggestions') // अनुवाद के लिए सुझाव
+    await want('hi', 'ta:translate/figs-exmetaphor', 'strategies') // अनुवाद की युक्तियाँ
+    await want('hi', 'ta:translate/figs-litany', 'applied') // अनुवाद के कौशल का व्यावहारिक उपयोग (its only strategies)
+    await want('hi', 'ta:translate/figs-aside', 'strategies') // अनुवाद कौशल
+    await want('id', 'tw:kt/lamb', 'translation-suggestions') // Usulan Penerjemahan
+    await want('ar', 'tw:other/creation', 'translation-suggestions') // مقترحات للترجمة
+  })
+  test('how many articles find their strategies / suggestions, against English', async () => {
+    const found: Record<string, Record<string, boolean>> = {}
+    for (const lang of ALL_PACKS) {
+      found[lang] = {}
+      const r = await openLang(lang)
+      for (const g of ['ta:translate', 'tw:kt', 'tw:other']) for (const a of ((await r.articles(g)) ?? []) as any[]) {
+        if (!a?.sections?.length) continue
+        const want = a.id.startsWith('ta:') ? 'strategies' : 'translation-suggestions'
+        found[lang]![a.id] = pickSections({ id: a.id, title: a.title, sections: a.sections }, 'how').some((p) => p.kind === want)
+      }
+    }
+    const en = Object.keys(found.en!).filter((id) => found.en![id])
+    for (const lang of ALL_PACKS.filter((l) => l !== 'en')) {
+      const have = en.filter((id) => found[lang]![id] !== undefined)
+      const miss = have.filter((id) => !found[lang]![id])
+      const ta = have.filter((id) => id.startsWith('ta:'))
+      const missTa = miss.filter((i) => i.startsWith('ta:')).length
+      console.log(`${lang}: ${have.length - miss.length}/${have.length} (tA ${ta.length - missTa}/${ta.length}, TW ${have.length - ta.length - (miss.length - missTa)}/${have.length - ta.length})`)
+      // what is left are articles whose translation has no such section (Hindi "bride": definition and references only)
+      expect(miss.length).toBeLessThanOrEqual(Math.ceil(have.length * 0.05))
+    }
+  }, 120000)
   test('Translation Words: the translation suggestions for how, the definition for what', async () => {
     for (const lang of ALL_PACKS) {
       const a = (await read('tw:kt/grace', lang))!
@@ -153,6 +189,47 @@ describe('the context of an online answer', () => {
     const none = await buildContext({ question: 'And the next verse?', m: now, msgs, graph: g, node: g.cur, lang: 'en', read })
     expect(none.parts.backlinks).toEqual([])
     expect(none.helps).not.toContain('harvesters')
+  })
+
+  test("a question that asks neither how nor what: the phone's own text when it fits", async () => {
+    const m: CMsg = { who: 'bot', intro: 'I found the article «Metaphor».', info: '## Metaphor\n\nThe phone shows this.', ctx: 'ta:translate/figs-metaphor' }
+    const { g, msgs } = conv([['Metaphor', m, { kind: 'article', sheet: sh(null, 'ta:translate/figs-metaphor', 'article') }]])
+    const b = await buildContext({ question: 'Metaphor', m, msgs, graph: g, node: g.cur, lang: 'en', read })
+    expect(b.helps).toContain('The phone shows this.')
+  })
+
+  test("the room in order: the phone's answer (5000) first, then the path, the linked articles, the earlier points; each whole or cut at its end", async () => {
+    const words = (w: string, n: number) => `${w} `.repeat(n).trim()
+    const big = (id: string, t: string): Art => art(id, t, [['definition', 'Definition', `${t} ${words('defn', 600)}`], ['translation-suggestions', 'Translation Suggestions', `${t} ${words('sugg', 600)}`]])
+    const A: Record<string, Art> = { 'tw:other/glean': big('tw:other/glean', 'glean'), 'tw:other/harvest': big('tw:other/harvest', 'glean harvest') }
+    const turns: [string, CMsg, { kind: string; sheet: NodeSheet; links?: string[] }][] = [
+      ['What does glean mean?', { who: 'bot', intro: 'glean', info: `## glean\n\n${words('glean picked', 400)}` }, { kind: 'meaning', sheet: sh(null, 'tw:other/x1', 'meaning', 'glean') }],
+      ['Tell me about glean again', { who: 'bot', intro: 'glean', info: `## glean2\n\n${words('glean field', 400)}` }, { kind: 'meaning', sheet: sh(null, 'tw:other/x2', 'meaning', 'glean') }],
+      ...[0, 1, 2, 3].map((k): [string, CMsg, { kind: string; sheet: NodeSheet }] => [`Numbers 6:2${k}`, { who: 'bot', intro: 'n', info: '## N\n\nbless' }, { kind: 'passage', sheet: sh(`num 6:2${k}`, null, 'passage') }]),
+    ]
+    const q = 'How do I translate glean in Ruth 2:3?'
+    const run = (notes: number, links: string[], passage: string) => {
+      const now: CMsg = { who: 'bot', intro: 'Ruth 2:3', info: `## Ruth 2:3\n\n${words('note', notes)}` }
+      const { g, msgs } = conv([...turns, [q, now, { kind: 'passage', sheet: sh('rut 2:3', null, 'passage', 'glean'), links }]])
+      return buildContext({ question: q, m: now, msgs, graph: g, node: g.cur, lang: 'en', read: async (id) => A[id] ?? null, passage })
+    }
+    const full = await run(1500, ['tw:other/glean', 'tw:other/harvest'], words('ctx', 3000))
+    expect(full.helps.length).toBeLessThanOrEqual(MAX_CONTEXT)
+    // the phone's notes keep their 5000 characters
+    expect(full.helps.indexOf('# Context of the passage')).toBeGreaterThanOrEqual(4990)
+    // the path is there, whole and last; the linked articles come before the earlier points
+    expect(full.helps.endsWith('← this question')).toBe(true)
+    expect(full.parts.linked).toEqual(['tw:other/glean', 'tw:other/harvest'])
+    // no room was left for the earlier points (lowest priority)
+    expect(full.parts.backlinks).toEqual([])
+    // with fewer notes and one linked article, the earlier points get the room that is left, each whole or ending in "…"
+    const short = await run(600, ['tw:other/glean'], words('ctx', 100))
+    expect(short.parts.backlinks.length).toBeGreaterThan(0)
+    expect(short.helps.length).toBeLessThanOrEqual(MAX_CONTEXT)
+    expect(short.helps.endsWith('← this question')).toBe(true)
+    expect(short.helps.indexOf('linked from this answer')).toBeLessThan(short.helps.indexOf('earlier in this conversation'))
+    for (const block of short.helps.split(/\n\n(?=## )/).filter((b) => /earlier in this conversation|linked from this answer/.test(b)))
+      expect(block.split('\n\n# Where')[0]!.trim()).toMatch(/( …|[a-z])$/)
   })
 
   test('one link away: the key term the question names, ranked first; never past the limit', async () => {

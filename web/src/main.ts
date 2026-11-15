@@ -6,7 +6,7 @@ import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
-import { buildContext, packReader } from './context'
+import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
 import { has } from './commands'
 import { resetSearch } from './search'
@@ -1081,9 +1081,10 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // helps the phone found (of an article, the sections the question needs) with the passage's context; the articles one
     // link away and the earlier points that share a word with the question; the path to this point. The articles the phone
     // found go as sources, so the answer is grounded in them and names them.
+    // (on any error there, the phone's answer and the passage's context as before, so "writing…" never stays)
     const { helps, history, sources } = await buildContext({
       question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
-    })
+    }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
     if (res) {

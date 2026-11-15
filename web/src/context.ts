@@ -14,6 +14,10 @@ import { focusWords, hits, unfold } from './focus'
 
 /** The online service cuts the helps it is sent to this size (MAX_CONTEXT in worker/wrangler.toml). */
 export const MAX_CONTEXT = 9500
+/** The phone's answer as it was given before 2b (cut to 5000), a share kept for the passage's context, and the article's room. */
+const PHONE = 5000
+const CTX_SHARE = 1500
+const ARTICLE = 6400
 
 // ------------------------------------------------------------------------------------------------- what the question asks
 
@@ -34,7 +38,12 @@ const WHAT = new RegExp([
   'क्या है', 'क्या हैं', 'कौन था', 'कौन है', 'का अर्थ', 'का मतलब', 'परिभाषा',
   '^\\W*(?:ما|من) (?:هو|هي|هم)(?=\\s|$)', 'ما معنى', 'ماذا يعني', 'ماذا تعني', 'تعريف',
 ].join('|'), 'iu')
-export const askOf = (q: string): Ask => (HOW.test(q) ? 'how' : WHAT.test(q) ? 'what' : 'other')
+/** The helps' own names ("the translation notes", «notas de traducción»): they say where to look, not that the question asks how. */
+const RESOURCE = /translation (?:notes?|words?|questions?|academy|helps?)|(?:notas|palabras|preguntas|ayudas) de traducci[oó]n|traducci[oó]n acad[eé]mica|(?:notes|mots|questions) de traduction|(?:catatan|kata-kata|pertanyaan|bahan bantu) terjemahan|अनुवाद (?:नोट्स|शब्द|प्रश्न|अकादमी)|(?:ملاحظات|كلمات|أسئلة|أكاديمية) الترجمة/giu
+export const askOf = (q: string): Ask => {
+  const x = q.replace(RESOURCE, ' ')
+  return HOW.test(x) ? 'how' : WHAT.test(x) ? 'what' : 'other'
+}
 
 // ------------------------------------------------------------------------------------------------------- article sections
 
@@ -44,7 +53,7 @@ export type Art = { id: string; title: string; sections: Section[] }
 export type Kind = 'intro' | 'definition' | 'description' | 'facts' | 'translation-suggestions' | 'examples' | 'strategies' | 'applied'
   | 'reason' | 'bible-references' | 'word-data' | 'unknown'
 
-const fold = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/[ـ]/g, '').toLowerCase().trim()
+const fold = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/[ـ]/g, '').replace(/\s+/g, ' ').toLowerCase().trim()
 /**
  * Section headings in the six languages, folded (no accents; no Hindi vowel signs, Arabic short vowels or shadda), for the
  * packs whose sections say `unknown` (id, hi, ar today, and Academy's checking/process/intro manuals). Applied first: its
@@ -53,11 +62,13 @@ const fold = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').re
 const HEADINGS: [Kind, string[]][] = [
   ['applied', ['strategies applied', 'strategy applied', 'estrategias de traduccion aplicadas', 'estrategias aplicadas', 'strategies appliquees',
     'strategies de traduction appliquees', 'penerapan strategi', 'strategi penerjemahan yang diterapkan', 'लागू की गई', 'रणनीतियों के प्रयोग', 'रणनीतियों का प्रयोग',
+    'व्यावहारिक उपयोग', 'व्यावहार में लाने', 'युक्तियों की प्रासंगिकता', 'युक्तियों के उदाहरणों की प्रासंगिकता',
     'المطبقة', 'المطبّقة']],
   ['strategies', ['translation strategies', 'translation strategy', 'estrategias de traduccion', 'estrategia de traduccion', 'strategies de traduction',
-    'strategie de traduction', 'strategi penerjemahan', 'strategi terjemahan', 'अनुवाद की रणनीति', 'अनुवाद रणनीति', 'استراتيجيات الترجمة', 'استراتيجية الترجمة']],
+    'strategie de traduction', 'strategi penerjemahan', 'strategi terjemahan', 'अनुवाद की रणनीति', 'अनुवाद रणनीति', 'अनुवाद की युक्तियाँ', 'अनुवाद करने की युक्तियाँ', 'अनुवाद कौशल', 'अनुवाद के कौशल', 'استراتيجيات الترجمة', 'استراتيجية الترجمة']],
   ['translation-suggestions', ['translation suggestions', 'sugerencias de traduccion', 'suggestions de traduction', 'saran penerjemahan', 'saran terjemahan',
-    'अनुवाद के सुझाव', 'अनुवाद सुझाव', 'اقتراحات للترجمة', 'اقتراحات الترجمة']],
+    'usulan penerjemahan', 'usulan terjemahan', 'saran pernerjemahan', 'sara penerjemahan',
+    'अनुवाद के सुझाव', 'अनुवाद सुझाव', 'अनुवाद के लिए सुझाव', 'अनुवाद के लिये सुझाव', 'اقتراحات للترجمة', 'اقتراحات الترجمة', 'مقترحات للترجمة', 'مقترحات الترجمة']],
   ['definition', ['definition', 'definicion', 'definisi', 'परिभाषा', 'التعريف']],
   ['description', ['description', 'descripcion', 'deskripsi', 'विवरण', 'वर्णन', 'الوصف']],
   ['reason', ['reason this is a translation', 'reasons this is a translation', 'razon por la', 'razones por la', 'raison pour', 'raisons pour',
@@ -95,7 +106,10 @@ export function kindsOf(a: Art): Kind[] {
       k = s.role as Kind
       if (k === 'strategies' && strategies++ > 0) k = 'applied'
       if (k === 'examples' && byHead === 'applied') k = 'applied'
-    } else if (byHead) k = byHead
+    } else if (byHead) {
+      // an Academy article headed "Saran Penerjemahan" (suggestions): its strategies
+      k = byHead === 'translation-suggestions' && a.id.startsWith('ta:') ? 'strategies' : byHead
+    }
     else {
       // under a section (deeper level): its kind
       let p = i - 1
@@ -134,7 +148,8 @@ function withChildren(a: Art, kinds: Kind[], i: number): Section[] {
   return out
 }
 const bodyOf = (s: Section): string => String(s.md ?? '').replace(/^#{1,6} .*\n+/, '').trim()
-const clipTo = (t: string, n: number): string => (t.length <= n ? t : t.slice(0, Math.max(0, n)).replace(/\s+\S*$/, '') + ' …')
+/** A text cut at a word to at most `n` characters, " …" included. */
+const clipTo = (t: string, n: number): string => (t.length <= n ? t : n < 3 ? '' : t.slice(0, n - 2).replace(/\s+\S*$/, '') + ' …')
 
 /**
  * The sections a question needs, each [kind, its blocks] with a share of the room, best first:
@@ -150,7 +165,8 @@ export function pickSections(a: Art, ask: Ask): { kind: Kind; secs: Section[]; m
   const ta = a.id.startsWith('ta:')
   const lead = first('description') >= 0 ? first('description') : first('definition') >= 0 ? first('definition') : first('intro')
   let picks: ({ kind: Kind; secs: Section[]; max: number } | null)[]
-  if (ask === 'how' && ta && first('strategies') >= 0) picks = [block(lead, 600), block(first('strategies'), 2600), block(first('applied'), 3200)]
+  // (an Academy article may have only its strategies applied: Hindi "Litany")
+  if (ask === 'how' && ta && (first('strategies') >= 0 || first('applied') >= 0)) picks = [block(lead, 600), block(first('strategies'), 2600), block(first('applied'), 3200)]
   else if (ask === 'how' && !ta && first('translation-suggestions') >= 0) picks = [block(lead, 900), block(first('translation-suggestions'), 2400)]
   else if (ask === 'what' && lead >= 0) {
     // the description and the sections right after it that are no other kind ("The Parts of a Metaphor")
@@ -285,21 +301,20 @@ export async function buildContext(i: Input): Promise<Built> {
     if (score >= 3 || (samePlace && stems.length && hits(unfold(i.msgs[n.msg]?.info ?? ''), stems).length)) back.push({ n, score })
   }
   back.sort((a, b) => b.score - a.score || b.n.at - a.n.at)
-  const backs: string[] = []
+  const backs: { label: string; text: string }[] = []
   const backIds: string[] = []
   for (const { n } of back.slice(0, 2)) {
     const a = i.msgs[n.msg]
     if (a?.who !== 'bot') continue
     const said = a.ai?.text ? a.ai.text : excerpt(`${a.intro ?? ''}\n\n${a.info ?? ''}`, stems, 1300)
     if (!said.trim()) continue
-    backs.push(`## ${n.label} (earlier in this conversation)\n${clipTo(said, 1300)}`)
-    parts.backlinks.push(n.label)
+    backs.push({ label: n.label, text: `## ${n.label} (earlier in this conversation)\n${clipTo(said, 1300)}` })
     if (n.sheet.concept) backIds.push(n.sheet.concept)
   }
 
   // 3. one link away: the articles this point links to that share a word with the question, best first (not one an earlier
   // point brings already: what was said there stays)
-  const linked: string[] = []
+  const linked: { id: string; text: string }[] = []
   const cur = m.ctx ?? null
   if (read && node && stems.length) {
     const ids = [...new Set([...(m.sources ?? []).map((s) => s.id), ...(node.links ?? [])])].filter((id) => /^(ta|tw):/.test(id) && id !== cur && !backIds.includes(id)).slice(0, 12)
@@ -316,34 +331,74 @@ export async function buildContext(i: Input): Promise<Built> {
     cands.sort((x, y) => y.score - x.score)
     for (const { a } of cands.slice(0, 2)) {
       const kind = a.id.startsWith('ta:') ? 'Translation Academy' : 'Translation Words'
-      linked.push(`## ${a.title} (${kind}, linked from this answer)\n${sectionsText(a, ask, 1800)}`)
-      parts.linked.push(a.id)
+      linked.push({ id: a.id, text: `## ${a.title} (${kind}, linked from this answer)\n${sectionsText(a, ask, 1800)}` })
     }
   }
 
-  // 2. the current point's helps, with the room the others leave (the passage's context gives up its end first)
-  const extra = [linked.join('\n\n'), backs.join('\n\n'), pathText].filter(Boolean)
-  const room = Math.max(4000, max - extra.reduce((n, t) => n + t.length + 2, 0) - 40)
-  let current = ''
+  // The room, in order: the phone's answer first (as before 2b: up to 5000 characters, and a share for the passage's context),
+  // then the path, the linked articles and the earlier points, each whole or cut at its own end with "…"; what is left goes
+  // to the rest of the passage's context. Never more than `max`.
+  let left = max
+  const take = (t: string, room: number): string => {
+    const x = clipTo(t, Math.min(t.length, room))
+    // a cut that leaves almost nothing is left out
+    return x.length >= Math.min(t.length, 120) ? x : ''
+  }
   const art = cur && read ? await read(cur, i.lang).catch(() => null) : null
-  if (art) {
+  const found = `${m.intro ?? ''}\n\n${unfold(m.info ?? '')}`.trim()
+  const ctx = i.passage?.trim() ?? ''
+  const CTX_HEAD = '\n\n# Context of the passage\n\n'
+  let current = ''
+  let ctxShare = 0
+  if (art && !(ask === 'other' && found.length <= PHONE)) {
     // the article the phone found: its heading as the phone wrote it, then the sections the question needs
     const head = (m.info ?? '').match(/^#{1,3} .+$/m)?.[0] ?? `## ${art.title}`
     const top = [m.intro?.trim(), head].filter(Boolean).join('\n\n')
-    current = `${top}\n\n${sectionsText(art, ask, Math.max(1000, room - top.length - 4))}`
+    current = clipTo(`${top}\n\n${sectionsText(art, ask, Math.min(ARTICLE, left - top.length - 2 - 2 * 3))}`, Math.min(left, ARTICLE + top.length + 8))
   } else {
-    const found = `${m.intro ?? ''}\n\n${unfold(m.info ?? '')}`.trim()
-    const ctx = i.passage?.trim() ?? ''
-    if (ctx) {
-      const f = clipTo(found, Math.min(5000, room - Math.min(ctx.length, 1500)))
-      current = `${f}\n\n# Context of the passage\n\n${clipTo(ctx, room - f.length - 30)}`
-      parts.passage = Math.min(ctx.length, room - f.length - 30)
-    } else current = clipTo(found, room)
+    // anything else (and a question that asks neither how nor what, when the phone's text fits): the phone's answer, as before
+    current = clipTo(found, Math.min(PHONE, left - (ctx ? CTX_HEAD.length + Math.min(ctx.length, CTX_SHARE) : 0)))
+    if (ctx) ctxShare = Math.min(ctx.length, CTX_SHARE)
+  }
+  left -= current.length + (ctx && ctxShare ? CTX_HEAD.length + ctxShare : 0)
+  const extra: string[] = []
+  const add = (t: string): boolean => {
+    if (left < 2 + 120 || !t) return false
+    const x = take(t, left - 2)
+    if (!x) return false
+    extra.push(x)
+    left -= x.length + 2
+    return true
+  }
+  // 1. the path (shown last, where it does not stand for the article's heading), then 3. and 4.
+  const pathIn = add(pathText) ? extra.pop()! : ''
+  for (const l of linked) if (add(l.text)) parts.linked.push(l.id)
+  for (const b of backs) if (add(b.text)) parts.backlinks.push(b.label)
+  if (ctx && ctxShare) {
+    const c = clipTo(ctx, ctxShare + Math.max(0, left))
+    current += CTX_HEAD + c
+    left -= c.length - ctxShare
+    parts.passage = c.length
   }
   parts.current = current.length
-  parts.path = pathText.length
-  const helps = [current, ...extra].join('\n\n').slice(0, max)
+  parts.path = pathIn.length
+  const helps = [current, ...extra, ...(pathIn ? [pathIn] : [])].join('\n\n')
   return { helps, history, sources, parts }
+}
+
+/**
+ * The context without the graph or the packs (as before 2b): the phone's answer cut to 5000 and the passage's context, the
+ * last turns as history. What main.ts sends when buildContext fails, so the online answer still comes.
+ */
+export function plainContext(i: Pick<Input, 'm' | 'msgs' | 'passage' | 'max'>): Built {
+  const { m } = i
+  const found = `${m.intro ?? ''}\n\n${unfold(m.info ?? '')}`.trim()
+  const ctx = i.passage?.trim() ?? ''
+  const helps = (ctx ? `${clipTo(found, PHONE)}\n\n# Context of the passage\n\n${ctx}` : found).slice(0, i.max ?? MAX_CONTEXT)
+  let history: HTurn[] = []
+  try { history = historyOf(i.msgs, undefined, null).turns } catch { /* none */ }
+  const sources = (m.sources ?? (m.ctx ? [{ id: m.ctx }] : [])).filter((s) => /^(ta|tw):/.test(s.id))
+  return { helps, history, sources, parts: { current: helps.length, passage: 0, linked: [], backlinks: [], path: 0 } }
 }
 
 /** Reads an article from the packs: the answer's language, then English (as the answers fall back to it). */
