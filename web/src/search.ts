@@ -342,7 +342,8 @@ async function byText(words: string[], packLang: string): Promise<Found[]> {
     const english = pl === 'en' ? toEnglish(words, packLang) : []
     const tries = [...triesOf(words), ...(english.length ? triesOf([...words.filter((w) => !toEnglish([w], packLang).length), ...english]) : [])]
     for (const ws of tries) {
-      const hits = (await searchIndex(r, ws.join(' '), { kinds: ['text'], limit: 30 })).filter((h) => /\/(ult|glt|bsb)$/.test(h.res))
+      // the Bible texts a verse is shown from; in Arabic AVD and NAV, not ARST (its New Testament is the English UST)
+      const hits = (await searchIndex(r, ws.join(' '), { kinds: ['text'], limit: 30 })).filter((h) => /\/(ult|glt|bsb|avd|nav)$/.test(h.res))
       if (!hits.length) continue
       const seen = new Set<string>()
       const out: Found[] = []

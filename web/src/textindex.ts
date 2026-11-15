@@ -12,12 +12,16 @@ import booknames from './data/booknames.json'
 
 // Words: a letter or digit, then letters, digits and combining marks (the client's search cut a word at each mark, so an
 // Arabic word with its vowels was a row of single letters and Hindi words were fragments). Folded: Arabic vowel signs
-// (tashkeel, U+064B-U+065F, U+0670) and tatweel removed, so a word typed without them finds the vocalised text; then
+// (tashkeel, U+064B-U+065F, U+0670) and tatweel removed, so a word typed without them finds the vocalised text, alef wasla
+// read as alef and alef maqsura as yeh; then
 // decomposed, marks removed (accents: Jesús = Jesus; Hindi vowel signs too: keeping them found fewer verses in the answer
 // tests), lower case.
 const TOKEN = /[\p{L}\p{N}][\p{L}\p{N}\p{M}]*/gu
 const TASHKEEL = /[ً-ٰٟـ]/g
-const foldTok = (s: string): string => s.replace(TASHKEEL, '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+// alef wasla and alef maqsura as people type them (AVD writes ٱ about 8,900 times: الله, الخبز; موسى typed موسي)
+const ALEF = /[ٱى]/g
+const foldTok = (s: string): string =>
+  s.replace(TASHKEEL, '').replace(ALEF, (c) => (c === 'ٱ' ? 'ا' : 'ي')).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 const tokensOf = (s: string): string[] => [...s.matchAll(TOKEN)].map((m) => foldTok(m[0])).filter((t) => t !== '')
 /** What a UTF-16 unit is, asked of the regexes once per character: 1 a letter or digit, 3 a combining mark, 2 neither. */
 const CLASS = new Uint8Array(65536)

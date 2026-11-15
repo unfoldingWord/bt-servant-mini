@@ -4,6 +4,9 @@
 import { test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
 import { run } from './bench-search'
+import { openLang } from '../src/packs'
+import { searchVerses } from '../src/search'
+import { searchIndex } from '../src/textindex'
 
 const CASES: { pack: string; packs?: string[]; q: string; how: string; verses: string[]; helps: string[] }[] = [
   {
@@ -33,10 +36,10 @@ const CASES: { pack: string; packs?: string[]; q: string; how: string; verses: s
     helps: [],
   },
   {
-    // the text route in Arabic (no word names an article): the notes in Arabic, the verses through English ("bread"),
-    // recorded from the index once it matched the client's search query by query (index-equiv.ts)
+    // the text route in Arabic (no word names an article): verses from the Arabic texts (AVD, NAV) since they pass the
+    // text filter and their alef wasla (ٱلْخُبْزِ) reads as alef; before, the verses came through English ("bread")
     pack: 'ar', packs: ['ar', 'en'], q: 'أين يذكر الخبز؟', how: 'text',
-    verses: ['1sa 21:6 text:bread', 'exo 29:23 text:bread', 'lev 26:26 text:bread', 'jhn 6:51 text:bread', 'lev 8:26 text:bread', '1co 10:17 text:bread'],
+    verses: ['exo 29:23 text:الخبز', 'ezk 4:16 text:الخبز', 'jhn 6:32 text:الخبز', 'jhn 6:58 text:الخبز', 'jhn 6:51 text:الخبز', 'mrk 8:5 text:الخبز'],
     helps: ['note ar 2th 3:8 ruh3', 'note ar jud 1:12 aq79'],
   },
 ]
@@ -53,3 +56,18 @@ for (const c of CASES) {
     expect([warm.verses, warm.helps]).toEqual([c.verses, c.helps])
   }, 120000)
 }
+
+test('an Arabic question finds Arabic verses, written with or without vowels, alef wasla or alef maqsura', async () => {
+  if (!ALL_PACKS.includes('ar')) return
+  await installPacks(['ar'])
+  const v = await searchVerses('أين حصاد الشعير؟', null, 'ar')
+  expect(v.how).toBe('text')
+  expect(v.hits.map((h) => `${h.book} ${h.ch}:${h.v}`)).toContain('rut 2:23')
+  for (const h of v.hits) expect(h.text).toMatch(/[؀-ۿ]/)
+  const r = await openLang('ar')
+  const avd = async (w: string) => (await searchIndex(r, w, { kinds: ['text'], limit: 30 })).filter((h) => /\/avd$/.test(h.res)).length
+  // AVD writes ٱللهِ and مُوسَى: typed as most people type them
+  expect(await avd('الله')).toBeGreaterThan(0)
+  expect(await avd('موسي')).toBeGreaterThan(0)
+  expect(await avd('موسى')).toBe(await avd('موسي'))
+}, 120000)
