@@ -1,7 +1,8 @@
 // The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
-import { availableLangs, downloadLang, exportPack, importPack, installedLangs, openLang, origin, removeLang } from './packs'
+import { FU } from './firstuse'
+import { availableLangs, downloadLang, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
@@ -132,10 +133,8 @@ const STR: Record<string, S> = {
     noneNew: 'لا توجد لغات أخرى على الخادم بعد.', loadPack: 'تحميل ملف ‎.tcpack', working: 'جارٍ العمل…', failed: 'لم ينجح:',
   },
 }
-export const PACK_NAMES: Record<string, string> = {
-  en: 'English', 'es-419': 'Español (Latinoamérica)', id: 'Bahasa Indonesia', hi: 'हिन्दी', ar: 'العربية', fr: 'Français', bn: 'বাংলা',
-  gu: 'ગુજરાતી', kn: 'ಕನ್ನಡ', mr: 'मराठी', ne: 'नेपाली', or: 'ଓଡ଼ିଆ', te: 'తెలుగు', fa: 'فارسی', ru: 'Русский', 'pt-br': 'Português', sw: 'Kiswahili',
-}
+/** The packs' names (kept in packs.ts, so code without a page can use them). */
+export { PACK_NAMES }
 const str = (lang: string): S => STR[lang] ?? STR.en!
 
 function el(tag: string, cls = '', text?: string): HTMLElement {
@@ -151,6 +150,8 @@ function btn(text: string, on: () => void, cls = ''): HTMLButtonElement {
   return b
 }
 const mb = (n: number) => `${Math.max(1, Math.round(n / 1048576))} MB`
+/** A pack's size: "2.6 MB". */
+const mb1 = (n: number) => `${(n / 1048576).toFixed(1)} MB`
 
 /** The model's state in words. */
 export function modelLine(lang: string): string {
@@ -246,20 +247,22 @@ export async function languagesSection(lang: string, after: () => void): Promise
   const list = el('div', '')
   add.appendChild(btn(s.online, async () => {
     list.textContent = s.working
-    const avail = await availableLangs()
+    const avail = await offers()
     list.textContent = ''
     if (!avail.length) {
       list.appendChild(el('p', 'note', navigator.onLine ? s.noneNew : s.offline))
       return
     }
-    for (const l of avail) {
+    for (const offer of avail) {
+      const l = offer.lang
       const row = el('div', 'row')
-      const label = el('span', 'grow', PACK_NAMES[l] ?? l)
-      row.append(label, btn(s.download, async () => {
+      const label = el('span', 'grow', `${PACK_NAMES[l] ?? l} · ${mb1(offer.bytes)}`)
+      // a download that did not end goes on from where it stopped
+      row.append(label, btn(offer.partial ? FU(lang).resume : s.download, async () => {
         try {
           label.textContent = `${PACK_NAMES[l] ?? l} · ${s.working}`
-          const r = await downloadLang(l, (p) => (label.textContent = `${PACK_NAMES[l] ?? l} · ${p.done}/${p.total} · ${mb(p.bytes)}`))
-          label.textContent = `${PACK_NAMES[l] ?? l} · ${r.books} · ${mb(r.bytes)} ✓`
+          const r = await downloadLang(l, (p) => (label.textContent = `${PACK_NAMES[l] ?? l} · ${mb1(p.bytes)} / ${mb1(p.totalBytes)}`), { offer })
+          label.textContent = `${PACK_NAMES[l] ?? l} · ${r.books} · ${mb1(r.bytes)} ✓`
           after()
         } catch (e) {
           label.textContent = `${PACK_NAMES[l] ?? l} · ${s.failed} ${e instanceof Error ? e.message : e}`
@@ -327,4 +330,4 @@ export const modelNewer = (lang: string) => str(lang).newer
 export const packsTitle = (lang: string) => str(lang).langs
 
 // desktop testing only (no Android bridge): reach the pack functions from the console
-if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, openLang }
+if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, offers, openLang }
