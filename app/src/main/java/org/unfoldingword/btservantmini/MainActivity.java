@@ -488,6 +488,17 @@ public class MainActivity extends Activity {
             return out.toString();
         }
 
+        /** The system share sheet with plain text (WhatsApp is in it); the page has no navigator.share in this WebView. */
+        @JavascriptInterface
+        public void share(String text) {
+            runOnUiThread(() -> {
+                try {
+                    Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text);
+                    startActivity(Intent.createChooser(send, null));
+                } catch (Exception e) { Log.w(TAG, "share: " + e); }
+            });
+        }
+
         @JavascriptInterface
         public String version() {
             try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
