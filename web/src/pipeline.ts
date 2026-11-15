@@ -321,6 +321,25 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
 }
 
+/** What a question can ask besides a reference: these need a reader, even when the question names a verse. */
+const ASKS_MORE = ['howTranslate', 'noWord', 'meaning', 'whichBooks', 'where', 'help', 'again', 'translateBook', 'about', 'tell'] as const
+// "how many", "most frequent": a count or a rank, which only a reader tells from a passage
+const COUNTS = /\b(how many|cu[aá]nt[oa]s|combien|berapa|most|m[aá]s|plus|paling|sering)\b|कितन|सबसे|كم|أكثر/i
+/**
+ * The question is only a reference, read by code alone ("Rut 2:3", "Jonás 1:3 notas", "1 Juan 3:2", "योना 1:3"): a book and a
+ * chapter, and besides them only what to show and filler. Then the phone's model (about 4 s) and the online reader are skipped.
+ */
+export function directRef(q: string): boolean {
+  if (ASKS_MORE.some((c) => has(c, q)) || COUNTS.test(q)) return false
+  const lang = /[؀-ۿ]/.test(q) ? 'ar' : /[ऀ-ॿ]/.test(q) ? 'hi' : guessLang(q)
+  const s = introAsked(q, lang) ?? refInText({ intent: 'unknown', lang }, q)
+  const code = s.book && s.chapter ? bookCode(s.lang ?? lang, s.book) : null
+  if (!code) return false
+  // the words of the book's name ("1 Juan": "Juan" is not John here), what to show, "intro", "chapter"
+  const name = new Set(fold(s.book!).split(/\s+/))
+  return keywords(q).every((w) => name.has(fold(w)) || bookCode(lang, w) === code || kindOf(w) || has('intro', w) || has('chapter', w))
+}
+
 // -------------------------------------------------------------------------------------------------------------- the answer
 
 export type Follow = { label: string; sheet: Sheet }

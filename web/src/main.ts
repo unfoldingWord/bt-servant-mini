@@ -15,7 +15,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, type ConvState, env, guessLang, type Made, NP, questionOf, readQuestion, type Reply, stateLine } from './pipeline'
+import { answer, type ConvState, directRef, env, guessLang, type Made, NP, questionOf, readQuestion, type Reply, stateLine } from './pipeline'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
 type UiText = {
@@ -839,11 +839,14 @@ form.addEventListener('submit', (e) => {
   const { q, target } = questionOf(q0, conv())
   input.value = ''
   const c = conv()
+  // only a reference ("Rut 2:3", "Jonás 1:3 notas"): code reads it, so neither reader runs (saves about 4 s on a phone)
+  const direct = !has('help', q) && directRef(q)
   count('asked')
-  count(modelReady() && !modelOff() ? 'model.used' : 'model.none')
+  count(direct ? 'model.skipped' : modelReady() && !modelOff() ? 'model.used' : 'model.none')
   respond(c, q0, async () => {
     // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
+    if (direct) return readQuestion(q, { slots: null, raw: 'model skipped (reference)', ms: 0 }, c, target)
     // with the online helper on and a connection, the online model reads the question; otherwise (or if it fails) the phone's
     // a follow-up ("and the notes?", "and verse 5?") is read with the previous question's compact state; the phone model
     // gets it only when trained for it (followUps)
