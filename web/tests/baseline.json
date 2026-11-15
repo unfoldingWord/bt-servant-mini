@@ -15,9 +15,9 @@
    "empty": 13
   },
   "new18": {
-   "pass": 10,
+   "pass": 11,
    "total": 18,
-   "known": 8,
+   "known": 7,
    "empty": 1
   },
   "followup": {
@@ -27,10 +27,10 @@
    "empty": 7
   },
   "followup-code": {
-   "pass": 24,
+   "pass": 44,
    "total": 48,
-   "known": 24,
-   "empty": 8
+   "known": 4,
+   "empty": 2
   },
   "reports": {
    "pass": 12,
@@ -61,6 +61,12 @@
    "total": 40,
    "known": 0,
    "empty": 6
+  },
+  "followup-more": {
+   "pass": 60,
+   "total": 61,
+   "known": 1,
+   "empty": 2
   }
  }
 }
