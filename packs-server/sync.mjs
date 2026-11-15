@@ -16,10 +16,11 @@
 // written, and the catalog last, so a catalog never names a segment the target lacks. Running it again copies only what
 // changed, so a cut run is resumed by running it again.
 import { createHash } from 'node:crypto'
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, createReadStream, createWriteStream } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { verifyCatalogFile } from '@bt-synergy/language-pack-client'
+import { KNOWN, readSegment } from '@bt-synergy/language-pack-v3'
 import { MINI_SERVER, PREVIEW_SERVER, trustedKeys } from '../web/src/shared.ts'
 import { CANDIDATES } from '../web/src/packs.ts'
 import models from '../web/src/data/models.json'
@@ -72,13 +73,25 @@ async function fromSource(path, init = {}, tries = 6) {
   }
 }
 
-/** A segment's bytes, checked: its length against the catalog, the model's SHA-256 against its id. */
-async function fetchSegment(id, size, sha) {
+/**
+ * A segment's bytes, checked as the client checks them before anything is uploaded (a bad copy of an immutable segment would
+ * block its unit for good): its length against the catalog, then the segment read with its class's tables and its id (the
+ * SHA-256 of its inflated body); the model by the SHA-256 of the file.
+ */
+async function fetchSegment(id, size, cls, sha) {
   const res = await fromSource(`/v3/packs/seg/${id}`)
   if (!res.ok) throw new Error(`segment ${id}: HTTP ${res.status}`)
   const b = new Uint8Array(await res.arrayBuffer())
   if (b.length !== size) throw new Error(`segment ${id}: got ${b.length} bytes, the catalog says ${size}`)
-  if (sha && createHash('sha256').update(b).digest('hex') !== sha) throw new Error(`segment ${id}: SHA-256 differs`)
+  if (sha) {
+    if (createHash('sha256').update(b).digest('hex') !== sha) throw new Error(`segment ${id}: SHA-256 differs`)
+  } else {
+    const known = KNOWN[cls]
+    if (!known) throw new Error(`segment ${id}: unknown class ${cls}`)
+    await readSegment(b, { known, expectedId: id }).catch((e) => {
+      throw new Error(`segment ${id} (${cls}) does not read as its id: ${e instanceof Error ? e.message : e}`)
+    })
+  }
   return b
 }
 
@@ -158,11 +171,19 @@ async function openTarget() {
           writeFileSync(file, data)
         }
         const bin = existsSync(wrangler) ? wrangler : 'wrangler'
-        const r = spawnSync(bin, ['r2', 'object', 'put', `${BUCKET}/${key}`, '--file', file, '--content-type', 'application/octet-stream', '--remote'], {
-          cwd: HERE, encoding: 'utf8', shell: process.platform === 'win32',
+        // not awaited one by one: --concurrency uploads run side by side
+        const { code, out } = await new Promise((done, fail) => {
+          const p = spawn(bin, ['r2', 'object', 'put', `${BUCKET}/${key}`, '--file', file, '--content-type', 'application/octet-stream', '--remote'], {
+            cwd: HERE, shell: process.platform === 'win32',
+          })
+          let out = ''
+          p.stdout.on('data', (d) => (out += d))
+          p.stderr.on('data', (d) => (out += d))
+          p.on('error', fail)
+          p.on('close', (code) => done({ code, out }))
         })
-        if (r.status !== 0) throw new Error(`wrangler r2 object put ${key}: ${(r.stderr || r.stdout || '').trim().slice(-400)}`)
         if (!data.file) rmSync(file, { force: true })
+        if (code !== 0) throw new Error(`wrangler r2 object put ${key}: ${out.trim().slice(-400)}`)
       },
     }
   }
@@ -210,6 +231,27 @@ async function openTarget() {
 }
 
 // ------------------------------------------------------------------------------------------------------------ run
+
+/** The catalog names with the ones others require first (a depth-first order over `requires`). */
+export function catalogOrder(catalogs) {
+  const out = []
+  const seen = new Set()
+  const visit = (name) => {
+    if (seen.has(name) || !catalogs.has(name)) return
+    seen.add(name)
+    for (const [req] of catalogs.get(name).verified.catalog.requires ?? []) visit(req)
+    out.push(name)
+  }
+  for (const name of catalogs.keys()) visit(name)
+  return out
+}
+
+/** The catalogs `name` requires that are not in the target at the id it names (`inPlace`: the names the target has as copied). */
+export function missingRequires(name, catalogs, inPlace) {
+  return (catalogs.get(name).verified.catalog.requires ?? [])
+    .filter(([rname, , rid]) => !inPlace.has(rname) || catalogs.get(rname)?.verified.id !== hex(rid))
+    .map(([rname, rev]) => `${rname} revision ${rev}`)
+}
 
 async function pool(items, n, f) {
   let i = 0
@@ -262,7 +304,7 @@ async function main() {
   for (const [name, { verified }] of catalogs) {
     for (const s of verified.catalog.segments) {
       const id = hex(s.id)
-      if (!segs.has(id)) segs.set(id, { size: s.size, of: new Set() })
+      if (!segs.has(id)) segs.set(id, { size: s.size, cls: s.class, of: new Set() })
       segs.get(id).of.add(name)
     }
   }
@@ -318,7 +360,7 @@ async function main() {
   const big = lacking.filter((id) => segs.get(id).size >= BIG)
   const failed = await pool(small, CONCURRENCY, async (id) => {
     const s = segs.get(id)
-    await target.put(segKey(id), await fetchSegment(id, s.size, s.sha))
+    await target.put(segKey(id), await fetchSegment(id, s.size, s.cls, s.sha))
     if (++copied % 50 === 0) console.log(`  ${copied} / ${lacking.length} segments`)
   })
   for (const id of big) {
@@ -332,17 +374,26 @@ async function main() {
       failed.push(e instanceof Error ? e.message : String(e))
     }
   }
+  // the catalogs: the ones others require first (common before the languages), and each only when every segment it names is
+  // there and every catalog it requires is there at the id it names (else a phone would get a language whose common catalog
+  // the bucket lacks, with no reason to ask the next server)
   let catsWritten = 0
-  for (const { name } of catChanges) {
-    const mine = catalogs.get(name).verified.catalog.segments.map((s) => hex(s.id))
-    // a catalog goes in only when every segment it names is there
+  const inPlace = new Set([...catalogs.keys()].filter((n) => !catChanges.some((c) => c.name === n)))
+  for (const name of catalogOrder(catalogs).filter((n) => catChanges.some((c) => c.name === n))) {
+    const { verified, bytes } = catalogs.get(name)
+    const lacks = missingRequires(name, catalogs, inPlace)
+    if (lacks.length) {
+      failed.push(`catalog ${name} not written: it requires ${lacks.join(', ')}, which is not in the target`)
+      continue
+    }
     const still = []
-    for (const id of mine) if (!(await target.has(segKey(id), segs.get(id).size))) still.push(id)
+    for (const s of verified.catalog.segments) if (!(await target.has(segKey(hex(s.id)), s.size))) still.push(s)
     if (still.length) {
       failed.push(`catalog ${name} not written: ${still.length} of its segments are missing`)
       continue
     }
-    await target.put(catKey(name), catalogs.get(name).bytes)
+    await target.put(catKey(name), bytes)
+    inPlace.add(name)
     catsWritten++
   }
   console.log(`\ncopied ${copied} segments and ${catsWritten} catalogs, ${mb(copyBytes)} MB planned, in ${Math.round((Date.now() - t0) / 1000)} s`)
@@ -353,7 +404,9 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e instanceof Error ? e.stack : e)
-  process.exit(1)
-})
+if (import.meta.main) {
+  main().catch((e) => {
+    console.error(e instanceof Error ? e.stack : e)
+    process.exit(1)
+  })
+}

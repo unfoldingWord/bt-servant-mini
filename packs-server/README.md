@@ -41,9 +41,18 @@ bun sync.mjs --remote                                # 4. subir (unos 333 MB, un
 curl -I https://bt-servant-mini-packs.unfoldingword.workers.dev/v3/packs/en/catalog   # 5. comprobar: 200
 ```
 
-`--remote` sube cada archivo con `wrangler r2 object put --remote` y pregunta al worker desplegado qué ya está, así que el
-worker va antes que el sync. Cada vez que tc-study publique paquetes nuevos en el servidor viejo, hay que volver a correr el paso 4
-(sube solo lo nuevo).
+`--remote` sube cada archivo con `wrangler r2 object put --remote` (varios a la vez, `--concurrency`) y pregunta al worker
+desplegado qué ya está, así que el worker va antes que el sync.
+
+**Después de cada publicación hay que volver a correr el paso 4** (sube solo lo nuevo). tc-study publica en el servidor viejo, no
+aquí. Si este bucket se queda atrás, un teléfono que ya tiene una revisión más nueva de un idioma (bajada del servidor viejo)
+recibiría de aquí una más vieja, y el cliente la rechaza (`E_DOWNGRADE`). La app de esta versión en adelante lo evita: si el
+catálogo de un servidor es más viejo que el que tiene el teléfono, pregunta al siguiente. Aun así, mientras el bucket esté
+atrás, los teléfonos nuevos reciben la versión vieja.
+
+El script escribe los catálogos al final y en orden: primero `common` y después los idiomas que lo piden. No escribe un catálogo
+si falta alguno de sus segmentos o si el `common` que pide no quedó en el bucket. Cada segmento se comprueba antes de subirlo,
+como lo comprueba la app (su id es el SHA-256 de su contenido).
 
 ## La llave de producción (más adelante)
 
