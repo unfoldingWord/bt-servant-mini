@@ -20,6 +20,12 @@ export type Expect = {
   notRoute?: string
   /** next-step buttons the answer must offer: each regex matches a button's target ("jon 1", "ta:translate/translate-names", "browse") */
   follow?: string[]
+  /** true: out of scope ("what Mini helps with" and ways back). Any other case must not be: a case without it that gets it fails */
+  oos?: boolean
+  /** true: the answer offers a new conversation (drift). Any other case must not */
+  drift?: boolean
+  /** the light path's marker the answer must show (a regex), or null: none */
+  mark?: string | null
 }
 export type Turn = { q: string; slots?: Slots | null; sheet?: Sheet }
 export type Case = Turn & {
@@ -86,17 +92,23 @@ export function check(k: Case, o: Outcome): string[] {
   if (e.concept !== undefined && !fits(e.concept, o.concept)) bad.push(`concept ${o.concept} (want ${e.concept})`)
   for (const h of e.has ?? []) if (!new RegExp(h, 'iu').test(o.text)) bad.push(`missing /${h}/`)
   for (const h of e.not ?? []) if (new RegExp(h, 'iu').test(o.text)) bad.push(`has /${h}/`)
-  const targets = nextSteps(o).map(stepTarget)
+  // (the next steps under the answer, not the way back to the passage it left: that is its own row, graph.ts)
+  const targets = ((o.reply as { follow?: Step[] } | null)?.follow ?? []).map(stepTarget)
   for (const f of e.follow ?? []) if (!targets.some((t) => new RegExp(f, 'iu').test(t))) bad.push(`no button /${f}/ (has ${targets.join(', ') || 'none'})`)
-  if ((e.useful ?? true) && !o.useful) bad.push('nothing found (no source cited)')
+  if (!!e.oos !== (o.route === 'outofscope')) bad.push(e.oos ? `not out of scope (${o.route})` : 'out of scope')
+  const r = o.reply as { drift?: boolean; pathMark?: string } | null
+  if (!!e.drift !== !!r?.drift) bad.push(e.drift ? 'no new conversation offered' : 'a new conversation offered (drift)')
+  if (e.mark === null && r?.pathMark) bad.push(`path marker ${r.pathMark} (want none)`)
+  if (e.mark && !new RegExp(e.mark, 'iu').test(r?.pathMark ?? '')) bad.push(`path marker ${r?.pathMark ?? 'none'} (want /${e.mark}/)`)
+  if ((e.useful ?? !e.oos) && !o.useful) bad.push('nothing found (no source cited)')
   return bad
 }
 
 type Step = { label: string; sheet?: { ref: string | null; concept: string | null; what: string[] }; browse?: { book?: string; manual?: string }; again?: string }
 /** The next-step buttons under an answer, and the way back to the passage it left ("← Back to …", its own row) last. */
 export const nextSteps = (o: Outcome): Step[] => {
-  const r = o.reply as { follow?: Step[]; back?: Step } | null
-  return [...(r?.follow ?? []), ...(r?.back ? [r.back] : [])]
+  const r = o.reply as { follow?: Step[]; back?: Step; pathBack?: Step } | null
+  return [...(r?.follow ?? []), ...(r?.back ? [r.back] : []), ...(r?.pathBack ? [r.pathBack] : [])]
 }
 /** What a button leads to: "jon 1 text,notes", "ta:translate/translate-names", "browse jon", "again". */
 export const stepTarget = (f: Step): string =>

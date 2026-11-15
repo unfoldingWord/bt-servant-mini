@@ -12,7 +12,7 @@
    "pass": 83,
    "total": 102,
    "known": 19,
-   "empty": 11
+   "empty": 10
   },
   "new18": {
    "pass": 11,
@@ -67,6 +67,12 @@
    "total": 109,
    "known": 1,
    "empty": 14
+  },
+  "guide": {
+   "pass": 42,
+   "total": 42,
+   "known": 0,
+   "empty": 0
   }
  }
 }

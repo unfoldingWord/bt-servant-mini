@@ -103,6 +103,8 @@ def langs():
             e['route'] = ['resources']
         if i == 'unknown' or (i == 'article' and r['id'].endswith('-12')):  # the weather; a bicycle has no article
             e['useful'] = False
+        if i == 'unknown' and r['id'].endswith('-30'):  # the weather: out of scope (Nov 15, guiding without blocking)
+            e['oos'] = True
         if i == 'article' and r['id'].endswith('-12'):
             e['route'] = ['article', 'search', 'nopack']
         if i == 'resources' and g['other_language'] == 'French':  # no fr pack: "French is not on this device" is right
@@ -483,9 +485,73 @@ def findall():
             for i, lang, q, slots, e in FINDALL]
 
 
+# Guiding without blocking (Abel, Nov 15; handoff/mini-servant/diseno-grafo.md, Fase 2), code alone. Out of scope: a question
+# about nothing Mini helps with gets one line of what it helps with and ways back (a passage, a key term, an Academy topic);
+# one with an off-topic word and something about the Bible is answered as usual. Paths: a task announced on a book starts a
+# path at its introduction, with its marker and the first section as the first next step; anything else starts none.
+OOS_BACK = ['^jon 1 text,notes$', '^tw:', '^ta:']
+RUT23 = {'q': 'Show me Ruth 2:3', 'slots': {'intent': 'passage', 'book': 'rut', 'chapter': 2, 'verse_start': 3, 'what': ['text'], 'lang': 'en'}}
+GUIDE = [
+    # (id, lang, question, expectations, turns before)
+    ('oos-en-weather', 'en', 'What is the weather tomorrow?', {'oos': True, 'follow': OOS_BACK}, None),
+    ('oos-en-football', 'en', 'Who won the football match yesterday?', {'oos': True, 'follow': OOS_BACK}, None),
+    ('oos-en-price', 'en', 'How much is a dollar in pesos?', {'oos': True}, None),
+    ('oos-en-hello', 'en', 'Hello, how are you?', {'oos': True, 'not': ['hell']}, None),
+    ('oos-es-weather', 'es', '¿Qué tiempo hace mañana?', {'oos': True, 'has': ['traducción de la Biblia'], 'follow': OOS_BACK}, None),
+    ('oos-es-football', 'es', '¿Quién ganó el partido de fútbol?', {'oos': True}, None),
+    ('oos-es-price', 'es', '¿Cuánto cuesta el dólar hoy?', {'oos': True}, None),
+    ('oos-es-hello', 'es', 'Hola, ¿cómo estás?', {'oos': True}, None),
+    ('oos-fr-weather', 'fr', 'Quel temps fera-t-il demain ?', {'oos': True, 'has': ['traduire la Bible']}, None),
+    ('oos-fr-football', 'fr', 'Qui a gagné le match de foot ?', {'oos': True}, None),
+    ('oos-fr-hello', 'fr', 'Bonjour, comment ça va ?', {'oos': True}, None),
+    ('oos-id-weather', 'id', 'Bagaimana cuaca besok?', {'oos': True, 'has': ['penerjemahan Alkitab'], 'follow': OOS_BACK}, None),
+    ('oos-id-football', 'id', 'Siapa yang menang pertandingan sepak bola?', {'oos': True}, None),
+    ('oos-id-hello', 'id', 'Halo, apa kabar?', {'oos': True}, None),
+    ('oos-hi-weather', 'hi', 'कल मौसम कैसा रहेगा?', {'oos': True, 'has': ['बाइबल अनुवाद'], 'follow': OOS_BACK}, None),
+    ('oos-hi-cricket', 'hi', 'क्रिकेट मैच कौन जीता?', {'oos': True}, None),
+    ('oos-hi-hello', 'hi', 'नमस्ते, आप कैसे हैं?', {'oos': True}, None),
+    ('oos-ar-weather', 'ar', 'كيف الطقس غدا؟', {'oos': True, 'has': ['ترجمة الكتاب المقدس'], 'follow': OOS_BACK}, None),
+    ('oos-ar-football', 'ar', 'من فاز في مباراة كرة القدم؟', {'oos': True}, None),
+    ('oos-ar-hello', 'ar', 'مرحبا، كيف حالك؟', {'oos': True}, None),
+    # in a conversation: back to the passage it is on (that point), its key term and the Academy article its notes cite
+    ('oos-en-there', 'en', 'What is the weather there?', {'oos': True, 'follow': ['^rut 2:3 ', '^tw:', '^ta:']}, [RUT23]),
+    # an off-topic word with something about the Bible: answered as usual
+    ('in-en-hello-ref', 'en', 'Hello, show me Ruth 2:3', {'route': 'passage', 'ref': 'rut 2:3'}, None),
+    ('in-en-jerusalem', 'en', 'What is the weather like in Jerusalem?', {'useful': False}, None),
+    ('in-en-bible-price', 'en', 'How much is a denarius in the Bible?', {'useful': False}, None),
+    ('in-es-hola-ref', 'es', 'Hola, ¿qué dice Rut 1:16?', {'route': 'passage', 'ref': 'rut 1:16'}, None),
+    ('in-es-gracias-notes', 'es', 'Gracias. ¿Y las notas de Rut 2:4?', {'route': 'passage', 'ref': 'rut 2:4'}, None),
+    ('in-fr-bonjour-ref', 'fr', 'Bonjour, Ruth 1:1', {'ref': 'rut 1:1'}, None),
+    ('in-id-halo-ref', 'id', 'Halo, tunjukkan Rut 2:4', {'route': 'passage', 'ref': 'rut 2:4'}, None),
+    ('in-hi-namaste-ref', 'hi', 'नमस्ते, रूत 1:1 दिखाइए', {'route': 'passage', 'ref': 'rut 1:1'}, None),
+    ('in-ar-marhaba-ref', 'ar', 'مرحبا، أرني راعوث 1:1', {'route': 'passage', 'ref': 'rut 1:1'}, None),
+    # a task announced on a book: its introduction, and a path through it
+    ('path-en-titus', 'en', "I'm translating Titus 1", {'route': 'intro', 'ref': 'tit 1:intro', 'mark': '^Titus 1 · step 1 of 5: introduction$', 'follow': ['^tit 1:1-\\d+ text,notes$']}, None),
+    ('path-en-review', 'en', 'I am reviewing Jonah 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': '^Jonah 2 · step 1 of 5', 'follow': ['^jon 2:1-\\d+ text,notes$']}, None),
+    ('path-es-ruth', 'es', 'Voy a traducir Rut', {'route': 'intro', 'ref': 'rut front:intro', 'mark': '^Rut · paso 1 de 5: introducción$', 'follow': ['^rut 1:1-5 text,notes$']}, None),
+    ('path-es-review', 'es', 'Estoy revisando Jonás 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': '^Jonás 2 · paso 1 de 5', 'follow': ['^jon 2:1-\\d+ text,notes$']}, None),
+    ('path-fr-ruth', 'fr', 'Je vais traduire Ruth', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'étape 1 sur 5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
+    ('path-id-ruth', 'id', 'Saya sedang menerjemahkan Rut 1', {'route': 'intro', 'ref': 'rut 1:intro', 'mark': 'langkah 1 dari 5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
+    ('path-hi-ruth', 'hi', 'मैं रूत का अनुवाद कर रहा हूँ', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'चरण 1/5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
+    ('path-ar-ruth', 'ar', 'سأترجم راعوث', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'الخطوة 1 من 5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
+    ('path-ar-review', 'ar', 'أراجع يونان 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': 'الخطوة 1 من 5'}, None),
+    # not a task on a book: no path
+    ('nopath-en-prayer', 'en', "I want to translate Jonah's prayer", {'mark': None, 'useful': False}, None),
+    ('nopath-es-question', 'es', 'Estoy revisando Jonás 2:3, ¿qué significa calamidad?', {'mark': None, 'useful': False}, None),
+    ('nopath-en-ref', 'en', 'Show me Ruth 2:3', {'mark': None, 'ref': 'rut 2:3'}, None),
+]
+
+
+def guide():
+    return [{'id': i, 'set': 'guide', 'lang': lang, 'q': q, 'slots': None, 'expect': e, **({'before': b} if b else {}),
+             'from': 'guiding without blocking (Nov 15): out of scope, paths', 'fast': i.endswith(('-weather', '-ruth'))}
+            for i, lang, q, e, b in GUIDE]
+
+
 def main():
     OUT.mkdir(exist_ok=True)
-    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True) + followup_more(),'reports': reports(), 'quechua': quechua(), 'academy': academy(), 'findall': findall()}
+    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True) + followup_more(),'reports': reports(), 'quechua': quechua(), 'academy': academy(), 'findall': findall(),
+            'guide': guide()}
     for name, rows in sets.items():
         for r in rows:
             if r['id'] in KNOWN:

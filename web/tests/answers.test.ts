@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Case, check, loadCases, offersNext, type Outcome, runCase } from './harness'
 
-const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall']
+const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall', 'guide']
 // ANSWERS=fast (build.py's default): only the cases marked fast, a minute at most; the scores are compared on a full run
 const FAST = process.env.ANSWERS === 'fast'
 const BASELINE = join(import.meta.dir, 'baseline.json')
@@ -40,6 +40,8 @@ let checkedNext = 0
  * many of its answers are empty, and it must not rise (baseline `empty`).
  */
 const isEmpty = (o: Outcome): boolean => {
+  // (out of scope says what Mini helps with and offers ways back on purpose: the weather searched before and found junk)
+  if (o.route === 'outofscope') return false
   const m = o.reply as { info?: string; helps?: unknown[]; study?: unknown; text?: string } | null
   return o.found === 0 || !m || (!m.info?.trim() && !m.helps?.length && !m.study && !m.text?.trim())
 }
