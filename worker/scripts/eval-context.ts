@@ -17,10 +17,16 @@ import { unfold } from '../../web/src/focus'
 import { openLang } from '../../web/src/packs'
 import { buildContext, type CMsg, MAX_CONTEXT, packReader } from '../../web/src/context'
 
+//   --only <set or case id>,…   only those
+//   --reuse <earlier out.json>   the old request's answer again (the old builder does not change), and the new one's when the
+//                                new request is the same (its hash; for a file without hashes, its size)
 const args = process.argv.slice(2)
-const out = args.find((a) => !a.startsWith('--') && !/^[a-z,]+$/.test(a)) ?? 'eval-context.json'
+const flag = (f: string) => (args.includes(f) ? args[args.indexOf(f) + 1]! : null)
+const out = args.find((a, k) => !a.startsWith('--') && !['--only', '--reuse'].includes(args[k - 1] ?? '')) ?? 'eval-context.json'
 const DRY = args.includes('--dry')
-const only = args.includes('--only') ? args[args.indexOf('--only') + 1]!.split(',') : null
+const only = flag('--only')?.split(',') ?? null
+const prev = new Map<string, any>((flag('--reuse') ? JSON.parse(readFileSync(flag('--reuse')!, 'utf8')) : []).map((r: any) => [r.id, r]))
+const hash = (s: string) => Bun.hash(s).toString(36)
 
 type Case = { id: string; set: string; lang: string; turns: CaseTurn[]; ids?: string[]; check?: (text: string, helps: string) => boolean; note?: string }
 const cases: Case[] = []
@@ -65,6 +71,14 @@ cases.push({ id: 'new-metaphor-what-es', set: 'new', lang: 'es', note: 'the desc
 cases.push({ id: 'new-glean-how', set: 'new', lang: 'en', note: 'a key term one link away from the passage',
   turns: [{ q: 'Notes on Ruth 2:3' }, sl('How do I translate glean in Ruth 2:3?', { intent: 'passage', book: 'rut', chapter: 2, verse_start: 3, what: ['notes'], term: 'glean' })],
   check: has(/glean/i) })
+// how to translate, in the packs whose sections say `unknown` (read from their headings); check: the section is in the context
+const LANGS: [string, string, string, RegExp][] = [
+  ['रूपक का अनुवाद कैसे करें?', 'hi', 'ta:translate/figs-metaphor', /रणनीति/], ['विस्तृत रूपक का अनुवाद कैसे करें?', 'hi', 'ta:translate/figs-exmetaphor', /युक्तियाँ/],
+  ['आमीन शब्द का अनुवाद कैसे करें?', 'hi', 'tw:kt/amen', /सुझाव/], ['كيف أترجم الاستعارة؟', 'ar', 'ta:translate/figs-metaphor', /استراتيج/],
+  ['Bagaimana menerjemahkan anak domba?', 'id', 'tw:kt/lamb', /Usulan/i],
+]
+for (const [q, lang, id, re] of LANGS)
+  cases.push({ id: `lang-${lang}-${id.split('/').pop()}`, set: 'langs', lang, turns: [art(q, lang, id)], ids: [id], check: (_t, h) => re.test(h) })
 
 /** The request the app sent before phase 2b (main.ts, history and helps), kept here to measure against. */
 function oldRequest(msgs: CMsg[], c: ConvState, pt: string | null, m: CMsg, onlineCtx: string) {
@@ -132,8 +146,9 @@ await fullPhone()
 const read = packReader(openLang as any)
 const rows: any[] = []
 let same = 0
+let reused = 0
 for (const k of cases) {
-  if (only && !only.includes(k.set)) continue
+  if (only && !only.includes(k.set) && !only.includes(k.id)) continue
   const c: ConvState = { last: null }
   const msgs: CMsg[] = []
   let last: any = null
@@ -157,8 +172,11 @@ for (const k of cases) {
   const row: any = { id: k.id, set: k.set, lang: k.lang, q, route: r.answered, note: k.note, oldChars: old.helps.length, newChars: neu.helps.length, parts: neu.parts, same: sameReq }
   if (DRY) { row.oldHelps = old.helps; row.newHelps = neu.helps; rows.push(row); console.log(k.id, r.answered, old.helps.length, '->', neu.helps.length, JSON.stringify(neu.parts)); continue }
   const body = (x: typeof old) => ({ question: q, lang: k.lang, helps: x.helps, history: x.history, sources: x.sources.map((s) => ({ id: s.id })) })
-  const a0 = await ask(body(old))
-  const a1 = sameReq ? a0 : await ask(body(neu))
+  row.oldHash = hash(old.helps + JSON.stringify(old.history))
+  row.newHash = hash(neu.helps + JSON.stringify(neu.history))
+  const p = prev.get(k.id)
+  const a0 = p?.old && (p.oldHash ? p.oldHash === row.oldHash : p.oldChars === row.oldChars) ? (reused++, p.old.text as string) : await ask(body(old))
+  const a1 = sameReq ? a0 : p?.new && (p.newHash ? p.newHash === row.newHash : p.newChars === row.newChars) ? (reused++, p.new.text as string) : await ask(body(neu))
   if (sameReq) same++
   const score = (text: string, helps: string) => ({
     words: text.split(/\s+/).filter(Boolean).length, langOk: langOk(k.lang, text), grounded: grounded(text, helps, q), academy: ACADEMY.test(text),
@@ -173,7 +191,7 @@ for (const k of cases) {
 writeFileSync(out, JSON.stringify(rows, null, 1))
 const done = rows.filter((r) => r.old || r.oldHelps !== undefined)
 const mean = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) / (xs.length || 1))
-for (const set of ['article', 'passage', 'followup', 'new']) {
+for (const set of ['article', 'passage', 'followup', 'new', 'langs']) {
   const rs = done.filter((r) => r.set === set)
   if (!rs.length) continue
   const chars = `chars ${mean(rs.map((r) => r.oldChars))} -> ${mean(rs.map((r) => r.newChars))}`
@@ -182,4 +200,4 @@ for (const set of ['article', 'passage', 'followup', 'new']) {
   const line = (w: 'old' | 'new') => `lang ${n(w, 'langOk')} grounded ${n(w, 'grounded')} academy ${n(w, 'academy')} titled ${n(w, 'titled')} check ${n(w, 'check')} words ${mean(rs.map((r) => r[w].words))}`
   console.log(`${set} ${rs.length} (${chars}; same request ${rs.filter((r) => r.same).length})\n  old: ${line('old')}\n  new: ${line('new')}`)
 }
-console.log(`skipped (nothing found): ${rows.filter((r) => r.skipped).map((r) => r.id).join(', ') || 'none'}; model calls ${calls}`)
+console.log(`skipped (nothing found): ${rows.filter((r) => r.skipped).map((r) => r.id).join(', ') || 'none'}; model calls ${calls}, answers reused ${reused}`)
