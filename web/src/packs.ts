@@ -102,6 +102,11 @@ function changed() {
   open.clear()
   for (const f of listeners) f()
 }
+/** Tests: read the shipped list again and drop the open readers (web/tests/fs-packs.ts). */
+export function reloadPacks() {
+  index = null
+  changed()
+}
 
 // ------------------------------------------------------------------------------------------------------------ adding
 
