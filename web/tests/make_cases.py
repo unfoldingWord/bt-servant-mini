@@ -66,6 +66,11 @@ KNOWN = {
 }
 
 
+# The fast part (build.py's default, ANSWERS=fast): the reports, and cases that need no free search (each a few ms), so
+# every route but the slow searches runs on every build. The full run (bun test, build.py --full) has all.
+FAST = set('''tw-sheol count-jonah-metaphor text-ruth-1-16-ult ta-metonymy notes-john-3-16 resources-indonesian tw-covenant index-ruth1-issues ta-abstract-nouns words-ruth-1-1 text-isaiah-ult-missing intro-jonah tw-pacto-es questions-jonah-1 tw-son-of-god count-jonah-1-3 tw-call-senses text-jonah-1-17-ust resources-tw-languages advice-jon-2-3-heart-of-seas advice-rut-2-12-under-wings advice-jon-1-4-ship-thinking advice-rut-1-21-why-call-naomi advice-rut-1-20-bitter-nonote advice-jon-1-3-face-of-yahweh advice-tit-2-11-gracia-manifestada quechua-01 quechua-02 quechua-03 quechua-04 quechua-06 quechua-07 quechua-09 quechua-10 quechua-11 quechua-12 quechua-13 quechua-14 quechua-15 quechua-17 quechua-18 quechua-19 quechua-20 fu-en-what fu-en-verse fu-en-next fu-en-term_here fu-en-count_ch fu-en-new_topic fu-en-new_ref fu-es-what fu-es-verse fu-es-next fu-es-term_here fu-es-count_ch fu-es-new_topic fu-es-new_ref'''.split())
+
+
 def q36():
     gold = {g['id']: g for g in jl(DATA / 'gold-sheets.jsonl')}
     out = []
@@ -172,7 +177,7 @@ def reports():
     S = lambda **k: {**k, 'lang': k.get('lang', 'en')}  # noqa: E731
     search_dan = {'q': 'Daniel lion', 'slots': None}
     rows = [
-        ('report-first-not-a-pick', 'What book of the Bible should I translate first?', None, [search_dan], {'notRef': 'dan 6:16', 'useful': False}),
+        ('report-first-not-a-pick', 'What book of the Bible should I translate first?', None, [search_dan], {'notRef': 'dan 6:24', 'useful': False}),
         ('report-first-ta', 'What book of the Bible should I translate first?', None, [search_dan], {'concept': '/^ta:/'}),
         ('report-starting', 'I am starting in translation, how should I start?', None, [], {'concept': '/^ta:/'}),
         ('report-metaphors', 'How to translate metaphors?', None, [], {'concept': 'ta:translate/figs-metaphor'}),
@@ -233,6 +238,8 @@ def main():
         for r in rows:
             if r['id'] in KNOWN:
                 r['known'] = KNOWN[r['id']]
+            if r['id'] in FAST or r['set'] == 'reports':
+                r['fast'] = True
         (OUT / f'{name}.jsonl').write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows), encoding='utf-8')
         print(name, len(rows))
 

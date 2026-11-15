@@ -43,11 +43,11 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
 
 ## Construir e instalar
 ```
-python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun y ../lp3-mcp, ../fase0-mini-servant/packs); corre las pruebas (--no-tests las salta)
+python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun y ../lp3-mcp, ../fase0-mini-servant/packs); corre las pruebas rápidas (--full todas, --no-tests ninguna)
 <gradle 8.14.3> assembleDebug                 # APK en app/build/outputs/apk/debug/app-debug.apk (~315 MB)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-Pruebas de las respuestas (las 156 preguntas, seguimientos, reportes, quechua; puntaje por conjunto contra `web/tests/baseline.json`): `cd web && bun test`.
+Pruebas de las respuestas (las 156 preguntas, seguimientos, reportes, quechua; puntaje por conjunto contra `web/tests/baseline.json`): `cd web && bun test` (todas, unos 4 min; `build.py` corre solo las rápidas, menos de 1 min, y todas con `--full`).
 No están en git (pesados): `app/src/main/jniLibs/arm64-v8a/` (binarios de llama.cpp, renombrados `libllamaserver.so` y
 `lib*.so`, pasados por `llvm-strip`) y `app/src/main/assets/model/ms-all-q8.gguf`.
 
