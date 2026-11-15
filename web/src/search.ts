@@ -2,14 +2,14 @@
 // 1) Words that name a Translation Words article (names and key terms, in any of the five languages) become concepts; the verses
 //    whose word links hold all of them are found through the common map (books) and each book's links (verses). Works whatever
 //    language the question is in. 2) Otherwise, full-text search of the installed texts, dropping common words before names.
-import type { BookModel, HelpRow } from '@bt-synergy/language-pack-v3'
-import { textOfRange } from '@lpc/query/passage'
+import { mapView, verseId, type BookModel, type HelpRow } from '@bt-synergy/language-pack-v3'
 import glossary from './data/kt-glossary.json'
 import booknames from './data/booknames.json'
 import books from './data/books.json'
 import { installedLangs, openLang } from './packs'
 import { fold } from './sheet'
 import storyWords from './data/story-words.json'
+import { resetIndexes, searchIndex } from './textindex'
 
 /** Common story words of a question in English ("mar" -> "sea"), to match the English text when the language's pack lacks the book. */
 const LEX = storyWords as unknown as Record<string, Record<string, string>>
@@ -70,22 +70,49 @@ export function keywords(q: string): string[] {
   return out.slice(0, 6)
 }
 
-type Lang = { r: Awaited<ReturnType<typeof openLang>>; maps: any }
-const opened = new Map<string, Promise<Lang>>()
-const lang = (l: string) => {
-  if (!opened.has(l)) opened.set(l, openLang(l).then(async (r) => ({ r, maps: await r.maps() })))
+type Reader = Awaited<ReturnType<typeof openLang>>
+const opened = new Map<string, Promise<Reader>>()
+/** A pack's reader; its maps only when asked (they take most of a second per pack to read). */
+const reader = (l: string): Promise<Reader> => {
+  if (!opened.has(l)) opened.set(l, openLang(l))
   return opened.get(l)!
+}
+const lang = async (l: string): Promise<{ r: Reader; maps: any }> => {
+  const r = await reader(l)
+  return { r, maps: await r.maps() }
+}
+/**
+ * The article names of a pack: the core of its `map` unit alone, not all its maps (the word links of every book, read again
+ * by every pack). Same names as `(await r.maps()).map.core.names`, which is still asked when the core does not read.
+ */
+async function namesOf(r: Reader): Promise<Record<string, string[]>> {
+  try {
+    for (const seg of (await r.segments('map')) ?? []) {
+      if ((seg as any).h?.part !== 'core') continue
+      return ((mapView(seg as any) as any).names ?? {}) as Record<string, string[]>
+    }
+  } catch {}
+  return (await r.maps()).map?.core?.names ?? {}
 }
 
 /** name -> Translation Words ids, from the pack's article names (en, es) and the key-term glossary (fr, id, hi). */
-let NAMES: Map<string, string[]> | null = null
+/** The promise, set before the first await: a call still running when the packs change cannot write its names over the new ones. */
+let NAMES: Promise<Map<string, string[]>> | null = null
 /** After a language is added or removed. */
 export function resetSearch() {
   opened.clear()
+  resetIndexes()
   NAMES = null
 }
-async function names(): Promise<Map<string, string[]>> {
-  if (NAMES) return NAMES
+function names(): Promise<Map<string, string[]>> {
+  if (!NAMES) {
+    const p = (NAMES = readNames())
+    // a read that failed is tried again next time
+    p.catch(() => { if (NAMES === p) NAMES = null })
+  }
+  return NAMES
+}
+async function readNames(): Promise<Map<string, string[]>> {
   const m = new Map<string, string[]>()
   const put = (k: string, id: string) => {
     if (k.length >= 3 && !m.get(k)?.includes(id)) m.set(k, [...(m.get(k) ?? []), id])
@@ -95,13 +122,11 @@ async function names(): Promise<Map<string, string[]>> {
     put(fold(n.replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim(), id)
     if (/\(/.test(n)) put(fold(n.replace(/[()]/g, ' ')).replace(/[,;]/g, ' ').replace(/\s+/g, ' ').trim(), id)
   }
-  for (const pl of await installedLangs()) {
-    try {
-      const { maps } = await lang(pl)
-      for (const [id, ns] of Object.entries<string[]>(maps.map?.core?.names ?? {}))
-        if (id.startsWith('tw:')) for (const n of ns) for (const part of String(n).split(/,\s*/)) add(part, id)
-    } catch {}
-  }
+  // read side by side, added in the order of the packs
+  const all = await Promise.all((await installedLangs()).map((pl) => reader(pl).then(namesOf).catch(() => ({}))))
+  for (const ns0 of all)
+    for (const [id, ns] of Object.entries<string[]>(ns0))
+      if (id.startsWith('tw:')) for (const n of ns) for (const part of String(n).split(/,\s*/)) add(part, id)
   for (const [id, byLang] of Object.entries(glossary as Record<string, Record<string, string[]>>))
     for (const ns of Object.values(byLang)) for (const n of ns) add(n, id)
   // People named like books, in every language of the book table: Jonas, Yunus, योना -> Jonah (tw:names/jonah)
@@ -111,7 +136,7 @@ async function names(): Promise<Map<string, string[]>> {
       const ids = m.get(fold(en[code] ?? ''))?.filter((id) => id.startsWith('tw:names/'))
       if (ids?.length && !/\d/.test(name)) for (const id of ids) add(name, id)
     }
-  return (NAMES = m)
+  return m
 }
 /** A word's concept: exact name, or the name without a plural or verb ending (sacrifica -> sacrificio is too far; sacrifices -> sacrifice works). */
 function conceptOf(word: string, m: Map<string, string[]>): string[] | null {
@@ -138,10 +163,56 @@ export type Found = { book: string; ch: number; v: number; text: string; why: st
 export type SearchResult = { keywords: string[]; concepts: string[]; hits: Found[]; how: 'concepts' | 'text' | 'none' }
 
 const BOOKS: string[] = Object.keys((booknames as any).BOOK_EN).filter((c) => c !== 'obs')
-const verseText = (model: BookModel, from: number, to: number): string => {
-  const t = model.texts.find((x) => /\/(ult|glt)$/.test(x.res)) ?? model.texts.find((x) => /\/bsb$/.test(x.res)) ?? model.texts[0]
-  return t ? textOfRange(model.book, t.pieces as any, t.events as any, from, to).replace(/[{}]/g, '') : ''
+type Text = BookModel['texts'][number]
+const mainText = (model: BookModel): Text | undefined =>
+  model.texts.find((x) => /\/(ult|glt)$/.test(x.res)) ?? model.texts.find((x) => /\/bsb$/.test(x.res)) ?? model.texts[0]
+const NUMBER = /^(\d+)(?:-(\d+))?/
+/**
+ * Verse id -> its text, for every verse of a text in one pass: what `textOfRange(book, …, id, id)` gives for each id, which
+ * walks the whole book every time it is called (once per verse and per text made a story search take seconds per book).
+ */
+function verseTexts(book: string, t: Text): Map<number, string> {
+  const parts = new Map<number, string[]>()
+  const pieces = t.pieces as any[]
+  let chapter = 0
+  let first = 0
+  let last = 0
+  let start = 0
+  const flush = (end: number) => {
+    const lo = verseId(book, chapter, first)
+    const hi = verseId(book, chapter, last)
+    if (end <= start) return
+    const s = pieces.slice(start, end).map((p) => p[0]).join('').trim()
+    for (let id = lo; id <= hi; id++) {
+      const l = parts.get(id)
+      if (l) l.push(s)
+      else parts.set(id, [s])
+    }
+  }
+  for (const [position, kind, arg] of t.events as any[]) {
+    if (kind !== 'chapter' && kind !== 'verse') continue
+    flush(position)
+    start = position
+    const m = NUMBER.exec(arg)
+    if (m === null) {
+      first = last = 0
+      continue
+    }
+    if (kind === 'chapter') {
+      chapter = Number(m[1])
+      first = last = 0
+    } else {
+      first = Number(m[1])
+      last = m[2] === undefined ? first : Number(m[2])
+    }
+  }
+  flush(pieces.length)
+  const out = new Map<number, string>()
+  for (const [id, l] of parts) out.set(id, l.filter((p) => p !== '').join(' '))
+  return out
 }
+/** Each text read into verses once, when a verse of it is first needed; kept while the reader keeps the book. */
+const SPLIT = new WeakMap<Text, Map<number, string>>()
 /** A text in another script than the language's is not that language (BSOJ's ar ARST New Testament is the English UST). */
 const wrongScript = (l: string, t: string): boolean =>
   l === 'ar' ? !/[؀-ۿ]/.test(t) : l === 'hi' ? !/[ऀ-ॿ]/.test(t) : false
@@ -195,7 +266,7 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
     let local: BookModel | undefined
     if (packLang !== 'en') {
       try {
-        const lr = (await lang(packLang)).r
+        const lr = await reader(packLang)
         if (lr.installed(`book:${b}`)) local = await lr.book(b)
       } catch {}
     }
@@ -206,6 +277,12 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
       e.ids.push(row.concept)
       byVerse.set(row.from, e)
     }
+    const textOf = (t: Text | undefined, from: number): string => {
+      if (!t) return ''
+      if (!SPLIT.has(t)) SPLIT.set(t, verseTexts(model.book, t))
+      return SPLIT.get(t)!.get(from) ?? ''
+    }
+    const verseText = (m: BookModel, from: number) => textOf(mainText(m), from).replace(/[{}]/g, '')
     const groupOf = (id: string) => groups.findIndex((g) => g.includes(id))
     const scored: (Found & { n: number; dense: number; own: number })[] = []
     for (const [from, e] of byVerse) {
@@ -221,10 +298,9 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
       const own = new Set(e.ids.map(groupOf).filter((g) => g >= 0)).size
       if (covered.size < Math.min(2, groups.length) || own === 0) continue
       const [ch, v] = parseRef(e.ref)
-      const localText = local ? verseText(local, from, from) : ''
-      const text = localText && !wrongScript(packLang, localText) ? localText : verseText(model, from, from)
-      const texts = [...model.texts, ...(local?.texts ?? [])]
-      const read = (ts: typeof texts) => ts.map((t) => textOfRange(model.book, t.pieces as any, t.events as any, from, from)).join(' ')
+      const localText = local ? verseText(local, from) : ''
+      const text = localText && !wrongScript(packLang, localText) ? localText : verseText(model, from)
+      const read = (ts: Text[]) => ts.map((t) => textOf(t, from)).join(' ')
       // without the book in the question's language, only its English words (or none) can be compared
       const tx = Math.max(hitsOf(english, read(model.texts)), local ? hitsOf(ownRoots, read(local.texts)) : 0)
       if (groups.length === 1 && roots.length && tx === 0) continue
@@ -261,13 +337,13 @@ const triesOf = (words: string[]): string[][] => {
 
 async function byText(words: string[], packLang: string): Promise<Found[]> {
   for (const pl of await packsFor(words, packLang)) {
-    const { r } = await lang(pl)
+    const r = await reader(pl)
     // in English, the words as written and their English for the story words ("pez" -> "fish")
     const english = pl === 'en' ? toEnglish(words, packLang) : []
     const tries = [...triesOf(words), ...(english.length ? triesOf([...words.filter((w) => !toEnglish([w], packLang).length), ...english]) : [])]
     for (const ws of tries) {
-      const ans = await r.search(ws.join(' '), { kinds: ['text'], limit: 30 })
-      const hits = (ans.data ?? []).filter((h) => /\/(ult|glt|bsb)$/.test(h.res))
+      // the Bible texts a verse is shown from; in Arabic AVD and NAV, not ARST (its New Testament is the English UST)
+      const hits = (await searchIndex(r, ws.join(' '), { kinds: ['text'], limit: 30 })).filter((h) => /\/(ult|glt|bsb|avd|nav)$/.test(h.res))
       if (!hits.length) continue
       const seen = new Set<string>()
       const out: Found[] = []
@@ -276,7 +352,7 @@ async function byText(words: string[], packLang: string): Promise<Found[]> {
         if (seen.has(key)) continue
         seen.add(key)
         const [ch, v] = parseRef(h.ref)
-        out.push({ book: h.book, ch, v, text: h.snippet, why: `text:${ws.join(' ')}` })
+        out.push({ book: h.book, ch, v, text: (await h.more()).snippet, why: `text:${ws.join(' ')}` })
         if (out.length >= 6) break
       }
       return out
@@ -291,21 +367,21 @@ export async function searchHelps(question: string, packLang: string, limit = 4)
   const words = keywords(question)
   if (!words.length) return []
   for (const pl of await packsFor(words, packLang)) {
-    const { r } = await lang(pl)
+    const r = await reader(pl)
     const english = pl === 'en' ? toEnglish(words, packLang) : []
     const tries = [...triesOf(words), ...(english.length ? triesOf([...words.filter((w) => !toEnglish([w], packLang).length), ...english]) : [])]
     for (const ws of tries) {
-      const ans = await r.search(ws.join(' '), { kinds: ['note', 'question'], limit: 20 })
-      const hits = (ans.data ?? []).filter((h) => /^\d+:\d+/.test(h.ref))
+      const hits = (await searchIndex(r, ws.join(' '), { kinds: ['note', 'question'], limit: 20 })).filter((h) => /^\d+:\d+/.test(h.ref))
       if (!hits.length) continue
-      const out: HelpHit[] = []
+      const out: (HelpHit & { more: (typeof hits)[number]['more'] })[] = []
       for (const h of hits) {
         const [ch, v] = parseRef(h.ref)
         if (out.some((o) => o.book === h.book && o.ch === ch && o.v === v && o.kind === h.kind)) continue
-        out.push({ kind: h.kind === 'question' ? 'question' : 'note', book: h.book, ch, v, snippet: h.snippet, id: h.id ?? '', lang: pl })
+        out.push({ kind: h.kind === 'question' ? 'question' : 'note', book: h.book, ch, v, snippet: '', id: '', lang: pl, more: h.more })
       }
-      // notes first, then questions
-      return out.sort((x, y) => (x.kind === y.kind ? 0 : x.kind === 'note' ? -1 : 1)).slice(0, limit)
+      // notes first, then questions; the snippets of those kept only (each reads its book)
+      const kept = out.sort((x, y) => (x.kind === y.kind ? 0 : x.kind === 'note' ? -1 : 1)).slice(0, limit)
+      return Promise.all(kept.map(async ({ more, ...h }) => { const m = await more(); return { ...h, snippet: m.snippet, id: m.id ?? '' } }))
     }
   }
   return []
