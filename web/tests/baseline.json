@@ -28,9 +28,9 @@
    "known": 24
   },
   "reports": {
-   "pass": 7,
+   "pass": 12,
    "total": 12,
-   "known": 5
+   "known": 0
   },
   "quechua": {
    "pass": 18,
@@ -41,6 +41,11 @@
    "pass": 14,
    "total": 20,
    "known": 6
+  },
+  "academy": {
+   "pass": 25,
+   "total": 25,
+   "known": 0
   }
  }
 }
