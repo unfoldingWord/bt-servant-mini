@@ -5,47 +5,62 @@
    "pass": 28,
    "total": 36,
    "known": 8,
-   "must": 27
+   "must": 27,
+   "empty": 3
   },
   "langs": {
-   "pass": 79,
+   "pass": 80,
    "total": 102,
-   "known": 23
+   "known": 22,
+   "empty": 14
   },
   "new18": {
-   "pass": 9,
+   "pass": 10,
    "total": 18,
-   "known": 9
+   "known": 8,
+   "empty": 1
   },
   "followup": {
    "pass": 39,
    "total": 48,
-   "known": 9
+   "known": 9,
+   "empty": 7
   },
   "followup-code": {
    "pass": 24,
    "total": 48,
-   "known": 24
+   "known": 24,
+   "empty": 8
   },
   "reports": {
    "pass": 12,
    "total": 12,
-   "known": 0
+   "known": 0,
+   "empty": 0
   },
   "quechua": {
    "pass": 18,
    "total": 20,
-   "known": 2
+   "known": 2,
+   "empty": 0
   },
   "quechua-code": {
    "pass": 14,
    "total": 20,
-   "known": 6
+   "known": 6,
+   "empty": 0
   },
   "academy": {
    "pass": 31,
    "total": 31,
-   "known": 0
+   "known": 0,
+   "empty": 0
+  },
+  "findall": {
+   "pass": 29,
+   "total": 29,
+   "known": 0,
+   "empty": 2
   }
  }
 }
