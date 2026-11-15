@@ -1,4 +1,5 @@
-export const SHARED_UNITS = ['art:tw:kt', 'art:tw:names', 'art:tw:other', 'art:ta:translate']
+/** The article units every language pack shares: Translation Words, and the four Translation Academy manuals. */
+export const SHARED_UNITS = ['art:tw:kt', 'art:tw:names', 'art:tw:other', 'art:ta:translate', 'art:ta:checking', 'art:ta:intro', 'art:ta:process']
 /** The staging publisher key (language-pack-v3/keys/78d2e6299a2de4d0.pub). */
 export const STAGING_KEYS = '78d2e6299a2de4d0:c2057cec32b948452849e7fcba6af323961a091ea82645eb297bb368e1c8d911'
 export const STAGING_SERVER = 'https://translation-helps-mcp-v2-preview.unfoldingword.workers.dev'
