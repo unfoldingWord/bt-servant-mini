@@ -3,7 +3,7 @@
 import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQuestion, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
-import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
+import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { hasLang, installedLangs, openLang } from './packs'
@@ -21,7 +21,9 @@ export type Hit = { book: string; ch: number; v: number }
 /** What a conversation keeps for the next question (main.ts adds its messages and title). */
 export type ConvState = { last: Sheet | null; found?: Hit[]
   /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
-  state?: { s: Record<string, unknown>; at: number }
+  state?: { s: Record<string, unknown>; at: number
+    /** the verse after the state's passage, as its answer found it ("rut 2:23" -> "3:1"), for "and the next verse?" */
+    next?: { ref: string; next: string | null } }
   /** the last question asked (without its "reply in …"), to ask it again in another language ("repeat that in Indonesian") */
   prevQ?: string }
 
@@ -118,7 +120,8 @@ export const refLabelOf = (ui: string, ref: string): string => { const [code, re
 // the person's own situation ("en mi pueblo solo hay llamas"): never the term they ask about
 const SITUATION = new Set('pueblo pueblos idioma lengua cultura comunidad tierra zona region solo village language culture community country area only langue village communaute region seulement desa bahasa budaya daerah hanya conocen conocemos conoce tenemos tienen hay existe existen usan usamos visto saben sabemos know knows have has exist exists see seen connaissons connaissent existe punya mengenal tahu ada'.split(' '))
 export async function termArticle(q: string, ui: string): Promise<string | null> {
-  let kw = keywords(q).filter((k) => !bookCode(ui, k) && !bookCode('en', k) && !SITUATION.has(fold(k)))
+  // not the words of "what does … mean" nor "here / there" ("Apa arti anak domba di situ?": "arti anak" named Anak)
+  let kw = keywords(strip(q, ['here'])).filter((k) => !bookCode(ui, k) && !bookCode('en', k) && !SITUATION.has(fold(k)) && !MEAN_WORDS.has(fold(k)))
   // the words right after "how do I translate" are the thing asked about ("…we don't have sheep, how do I translate lamb?")
   const asked = pattern('howTranslate').exec(q)
   if (asked) {
@@ -188,6 +191,13 @@ export function keepState(c: ConvState, s: Slots) {
   c.state = { s: out, at: Date.now() }
 }
 
+/** A call sheet as the slots it could have come from (a button's sheet, to keep as the state). */
+export function slotsOfSheet(s: Sheet): Slots {
+  const m = /^([0-9a-z]{3})(?: (\d+)(?::(\d+)(?:-(\d+))?)?)?/.exec(s.ref ?? '')
+  return { intent: s.intent, lang: s.lang, book: m?.[1] ?? null, chapter: m?.[2] ? +m[2] : null, verse_start: m?.[3] ? +m[3] : null,
+    verse_end: m?.[4] ? +m[4] : null, what: s.what, term: s.term }
+}
+
 /** A follow-up ("and verse 4?") names no book: take the book (and chapter) of the last passage of this conversation. */
 export function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
   const m = /^([0-9a-z]{3}) (\d+)/.exec(last?.ref ?? '')
@@ -212,6 +222,125 @@ export function withContext(slots: Slots, last: Sheet | null, q: string): Slots 
     return { ...slots, book: code, chapter: slots.chapter ?? Number(ch) }
   return slots
 }
+// ------------------------------------------------------------------------------------------- follow-ups read by code
+// Offline, the phone's model reads the short question alone ("¿Y las notas?" -> unknown, "¿Qué significa cordero ahí?" -> an
+// article): code completes it from the conversation's state (book, chapter, verse, which help, the term) when the question
+// has no reference of its own and says one of these things, in words of data/commands.json:
+//   "and the notes / questions / key words / text?"   the same passage, another help (a count: the same chapter, another help)
+//   "the next / previous (verse | chapter)"            the passage after or before
+//   "and verse 5? / chapter 3? / 3:5"                  the same book (a count stays a count)
+//   "what does X mean here / there / in this verse?"   the term X in the state's passage (the meaning route)
+//   "how many times / notes … in this chapter?"        a count in the state's chapter (the state's term, or X)
+//   "how do I translate this? / translate this"        the state's passage with its helps (advice on it)
+// Anything else is left to the reader: a new reference, a book's name or other words of its own are a new topic.
+type StateS = { intent?: string; book?: string; chapter?: number; verse_start?: number; verse_end?: number; what?: string[]; term?: string }
+// (the longer phrases first: "combien de fois" before the "de" of `also`, which goes last)
+const FU_WORDS: Command[] = ['next', 'previous', 'thisChapter', 'whole', 'here', 'that', 'verse', 'chapter', 'notes', 'questions', 'text', 'terms', 'also']
+const strip = (q: string, cs: Command[]) => cs.reduce((t, c) => t.replace(new RegExp(pattern(c).source, 'giu'), ' '), q)
+const latinDigits = (q: string) => q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+// the words of "what does X mean" around the term
+const MEAN_WORDS = new Set('mean means meaning significa significan quiere decir veut dire signifie signifient arti maksud अर्थ मतलब معنى يعني تعني'.split(' ').map(fold))
+/** "العدد" is both a verse and the book of Numbers: in a follow-up, "والعدد 5" is verse 5. */
+const isVerseWord = (w: string) => new RegExp(`^\\s*(?:${pattern('verse').source})\\s*$`, 'iu').test(w)
+/** The question names a passage or a book of its own: a new topic, never completed from the state. */
+function ownRef(q: string, s0: Slots, lang: string): boolean {
+  if (introAsked(q, lang)) return true
+  const r = refInText({ intent: 'unknown', lang }, q)
+  if (r.book && !isVerseWord(r.book)) return true
+  if (s0.book && fold(q).includes(fold(s0.book)) && !isVerseWord(s0.book) && bookCode(lang, s0.book)) return true
+  // a book named alone ("and Jonah?"), besides the follow-up's own words ("Dan" is "and" in Indonesian, not Daniel)
+  return strip(q, FU_WORDS).split(/[^\p{L}\p{M}\d]+/u).some((w) => w.length > 2 && !!bookExact(w) && !isVerseWord(w))
+}
+/** The state, when it is fresh (30 minutes). */
+const freshState = (c: ConvState): StateS | null => (c.state && Date.now() - c.state.at <= STATE_MS ? (c.state.s as StateS) : null)
+
+/** A follow-up completed from the state: its slots, what kind it was (for the details line), and words that may name a term to count. */
+export type FollowUp = { slots: Slots; how: string; termWords?: string[] }
+export function followUp(q: string, s0: Slots, c: ConvState): FollowUp | null {
+  const st = freshState(c)
+  const code = st?.book && bookCode('en', st.book) ? st.book : null
+  if (!st || !code) return null
+  const lang = s0.lang ?? env.nav
+  if (ownRef(q, s0, lang)) return null
+  const t = latinDigits(q)
+  const rest = keywords(strip(t, FU_WORDS))
+  const kind = kindOf(t)
+  const counting = st.intent === 'count' || st.intent === 'rank'
+  const ch = st.chapter ?? null
+  const v1 = st.verse_start ?? null
+  const v2 = st.verse_end ?? null
+  const base: Slots = { lang, book: code, chapter: ch, verse_start: v1, verse_end: v2 }
+  // what a passage keeps showing: what was asked last, unless that was the terms for one word ("what does lamb mean")
+  const shown = kind ?? (st.intent === 'passage' && !st.term ? st.what ?? [] : [])
+  const keep = (s: Slots, how: string): FollowUp =>
+    ({ slots: counting ? { ...s, intent: st.intent, what: kind ?? st.what ?? ['notes'], term: st.term ?? null } : { intent: 'passage', what: shown, ...s }, how })
+
+  // "what does lamb mean there?": the term in the state's passage
+  if (has('meaning', t) && (has('here', t) || has('that', t)) && ch) {
+    const term = keywords(strip(t, ['here', 'that', 'also'])).filter((w) => !MEAN_WORDS.has(fold(w)))
+    if (term.length >= 1 && term.length <= 3)
+      return { slots: { ...base, verse_start: counting ? null : v1, verse_end: counting ? null : v2, intent: 'passage', what: ['terms'], term: term.join(' ') }, how: 'meaning here' }
+    return null
+  }
+  // "how many times in this chapter?": a count in the state's chapter, of the state's term or of the word named
+  if (has('howMany', t) && ch) {
+    const words = keywords(strip(t, ['howMany', ...FU_WORDS]))
+    const scoped = has('thisChapter', t) || has('here', t) || has('that', t)
+    if (!scoped && words.length) return null
+    const verse = has('that', t) && v1 ? { verse_start: v1, verse_end: v2 } : { verse_start: null, verse_end: null }
+    // the state's term ("redeemer"), unless a word of the question names another article (readQuestion looks)
+    const term = st.term ?? null
+    return {
+      slots: { ...base, ...verse, intent: 'count', what: kind ?? (term ? ['terms'] : counting ? st.what ?? ['notes'] : ['notes']), term },
+      how: 'count here', termWords: words.length && words.length <= 3 ? words : undefined,
+    }
+  }
+  // "how do I translate this?": the state's passage with all its helps
+  if ((has('howTranslate', t) || has('translateThis', t)) && !keywords(strip(t, ['howTranslate', 'translateThis', 'this', ...FU_WORDS])).length)
+    return { slots: { ...base, intent: 'advice', what: [] }, how: 'translate this' }
+  if (rest.length) return null // other words of its own: a new topic
+  const nums = /(\d+)\s*[:.]\s*(\d+)|(\d+)/.exec(t)
+  // "and the next verse?", "the previous chapter"
+  if ((has('next', t) || has('previous', t)) && !nums && ch) {
+    const fwd = has('next', t)
+    const byChapter = (has('chapter', t) && !has('verse', t)) || !v1
+    if (byChapter) {
+      const to = ch + (fwd ? 1 : -1)
+      return to >= 1 ? keep({ ...base, chapter: to, verse_start: null, verse_end: null }, fwd ? 'next chapter' : 'previous chapter') : null
+    }
+    if (fwd) {
+      // the verse after, as the last answer found it (the first of the next chapter at a chapter's end)
+      const known = c.state!.next
+      const at = `${code} ${ch}:${v1}${v2 ? `-${v2}` : ''}`
+      const m = known && known.ref === at && known.next ? /^(\d+):(\d+)$/.exec(known.next) : null
+      return keep({ ...base, chapter: m ? +m[1]! : ch, verse_start: m ? +m[2]! : (v2 ?? v1!) + 1, verse_end: null }, 'next verse')
+    }
+    // before the first verse: the chapter before, whole
+    return v1! > 1 ? keep({ ...base, verse_start: v1! - 1, verse_end: null }, 'previous verse')
+      : ch > 1 ? keep({ ...base, chapter: ch - 1, verse_start: null, verse_end: null }, 'previous chapter') : null
+  }
+  // "and verse 5?", "¿y el capítulo 3?", "3:5"
+  if (nums && t.trim().split(/\s+/).length <= 8) {
+    if (nums[1]) return keep({ ...base, chapter: +nums[1], verse_start: +nums[2]!, verse_end: null }, 'chapter and verse')
+    const n = +nums[3]!
+    const asChapter = (has('chapter', t) && !has('verse', t)) || (!has('verse', t) && !v1)
+    return asChapter ? keep({ ...base, chapter: n, verse_start: null, verse_end: null }, 'chapter')
+      : ch ? keep({ ...base, verse_start: n, verse_end: null }, 'verse') : null
+  }
+  // "the whole chapter"
+  if (has('whole', t) && ch) return keep({ ...base, verse_start: null, verse_end: null, ...(counting ? {} : { what: kind ?? ['text'] }) }, 'whole chapter')
+  // "and the notes?": the same passage, another help
+  if (kind) return keep(base, 'other help')
+  return null
+}
+
+/**
+ * Whether code alone reads the question as a follow-up of this conversation ("¿Y las notas?", "and the next verse?"): then
+ * the phone's model (about 4 s) can be skipped, as for a reference alone (directRef).
+ */
+export const followUpByCode = (q: string, c: ConvState): boolean =>
+  ordinalPick(q) === undefined && !!followUp(q, { intent: 'unknown', lang: /[؀-ۿ]/.test(q) ? 'ar' : /[ऀ-ॿ]/.test(q) ? 'hi' : guessLang(q) }, c)
+
 /** The language of a question when the model did not say: by script, then by common words; else the app's language. */
 const COMMON: Record<string, RegExp> = {
   en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says)\b/gi,
@@ -314,9 +443,22 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   // a command word next to a reference ("Jonás 1:3 notas") says what to show, with or without a model
   const shown = kindOf(q)
   if (shown && s0.book && s0.chapter && !(s0.what ?? []).includes(shown[0]!)) Object.assign(s0, { intent: 'passage', what: shown })
+  // a follow-up with no reference of its own, completed from the state by code (not when it picks a search result)
+  const fu = ordinalPick(q) === undefined ? followUp(q, s0, c) : null
+  if (fu) {
+    const s = target ? { ...fu.slots, lang: target } : fu.slots
+    keepState(c, s)
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : env.helpsLang)
+    // "how many times does lamb appear in this chapter?": the article a word names exactly (not "appear")
+    const named = fu.termWords ? [...(await articlesNamed(fu.termWords))].filter((id) => id.startsWith('tw:')) : []
+    if (named.length === 1) Object.assign(sheet, { concept: named[0]!, candidates: null, what: ['terms'] })
+    return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up by code: ${fu.how})`, q }
+  }
   const picked = pickFound(q, s0, c)
   if (picked) {
-    const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? env.nav), env.helpsLang)
+    const p = passageOf(picked.hit, picked.what, s0.lang ?? env.nav)
+    keepState(c, p)
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, p, env.helpsLang)
     return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
   }
   const asked = introAsked(q, s0.lang ?? env.nav)
@@ -835,6 +977,7 @@ export const ROUTES: Route[] = [
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
         meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\n${JSON.stringify(sheet, null, 1)}` }
       if (sheet.ref && sheet.intent === 'passage') x.c.last = sheet
+      if (x.c.state && facts.kind === 'passage' && sheet.ref) x.c.state.next = { ref: sheet.ref, next: facts.next ?? null }
       return {
         answered: sheet.intent === 'passage' ? (/intro/.test(sheet.ref ?? '') ? 'intro' : 'passage') : sheet.intent,
         ref: sheet.ref, concept: sheet.concept, found: r!.cites.length + (r!.options?.length ?? 0), reply,
@@ -848,6 +991,8 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
   setUiLang(made.ui)
   // the words the question asks about put their notes first (focus.ts); none for a button press (no question)
   setQuestion(made.q, made.sheet)
+  // a button (no question: a ready sheet, no reading step) moves the conversation too: "and the notes?" after it is about it
+  if (made.q === undefined) keepState(c, slotsOfSheet(made.sheet))
   const x: Ctx = { ...made, c, t0, others: [], searched: '' }
   for (const route of ROUTES) {
     if (!route.when(x)) continue

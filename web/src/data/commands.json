@@ -166,8 +166,8 @@
       "notes de traduction"
     ],
     "id": [
-      "catatan",
-      "catatan terjemahan"
+      "catatan(?:nya)?",
+      "catatan terjemahan(?:nya)?"
     ],
     "hi": [
       "नोट्स",
@@ -177,9 +177,9 @@
       "टिप्पणियां"
     ],
     "ar": [
-      "ملاحظات",
-      "الملاحظات",
-      "ملاحظة"
+      "و?ملاحظات",
+      "و?الملاحظات",
+      "و?ملاحظة"
     ]
   },
   "questions": {
@@ -193,16 +193,16 @@
       "questions?"
     ],
     "id": [
-      "pertanyaan"
+      "pertanyaan(?:nya)?"
     ],
     "hi": [
       "प्रश्न",
       "सवाल"
     ],
     "ar": [
-      "أسئلة",
-      "الأسئلة",
-      "سؤال"
+      "و?أسئلة",
+      "و?الأسئلة",
+      "و?سؤال"
     ]
   },
   "text": {
@@ -217,15 +217,15 @@
       "texte"
     ],
     "id": [
-      "teks",
+      "teks(?:nya)?",
       "nas"
     ],
     "hi": [
       "पाठ"
     ],
     "ar": [
-      "النص",
-      "نص"
+      "و?النص",
+      "و?نص"
     ]
   },
   "where": {
@@ -320,9 +320,9 @@
       "mots importants"
     ],
     "id": [
-      "istilah(?:-istilah)? kunci",
-      "kata(?:-kata)? kunci",
-      "istilah(?:-istilah)? penting"
+      "istilah(?:-istilah)? kunci(?:nya)?",
+      "kata(?:-kata)? kunci(?:nya)?",
+      "istilah(?:-istilah)? penting(?:nya)?"
     ],
     "hi": [
       "मुख्य शब्द",
@@ -331,9 +331,9 @@
       "प्रमुख शब्दों"
     ],
     "ar": [
-      "المصطلحات (?:الرئيسية|المهمة)",
-      "الكلمات (?:الرئيسية|المفتاحية)",
-      "مصطلحات (?:رئيسية|مهمة)"
+      "و?المصطلحات (?:الرئيسية|المهمة)",
+      "و?الكلمات (?:الرئيسية|المفتاحية)",
+      "و?مصطلحات (?:رئيسية|مهمة)"
     ]
   },
   "again": {
@@ -633,12 +633,322 @@
     "hi": [
       "का (?:अर्थ|मतलब) क्या",
       "क्या (?:है|हैं|था|थे)",
-      "कौन (?:है|हैं|था|थे)"
+      "कौन (?:है|हैं|था|थे)",
+      "का क्या (?:अर्थ|मतलब)",
+      "क्या (?:अर्थ|मतलब) है"
     ],
     "ar": [
       "ما (?:معنى|هو|هي|هم)",
       "ماذا (?:يعني|تعني)",
       "من (?:هو|هي|هم|كان|كانوا)"
+    ]
+  },
+  "next": {
+    "en": [
+      "next",
+      "following"
+    ],
+    "es": [
+      "siguiente",
+      "pr[oó]xim[oa]"
+    ],
+    "fr": [
+      "suivante?",
+      "prochaine?"
+    ],
+    "id": [
+      "berikutnya",
+      "selanjutnya"
+    ],
+    "hi": [
+      "अगला",
+      "अगले",
+      "अगली"
+    ],
+    "ar": [
+      "التالي",
+      "التالية",
+      "القادم",
+      "القادمة"
+    ]
+  },
+  "previous": {
+    "en": [
+      "previous",
+      "preceding",
+      "prior"
+    ],
+    "es": [
+      "anterior"
+    ],
+    "fr": [
+      "pr[ée]c[ée]dente?"
+    ],
+    "id": [
+      "sebelumnya"
+    ],
+    "hi": [
+      "पिछला",
+      "पिछले",
+      "पिछली"
+    ],
+    "ar": [
+      "السابق",
+      "السابقة"
+    ]
+  },
+  "verse": {
+    "en": [
+      "verses?"
+    ],
+    "es": [
+      "vers[ií]culos?",
+      "vers"
+    ],
+    "fr": [
+      "versets?"
+    ],
+    "id": [
+      "ayat"
+    ],
+    "hi": [
+      "पद",
+      "आयत"
+    ],
+    "ar": [
+      "و?الآية",
+      "و?آية",
+      "و?العدد",
+      "و?عدد"
+    ]
+  },
+  "here": {
+    "en": [
+      "here",
+      "there",
+      "in (?:this|that|the same) (?:verse|passage)"
+    ],
+    "es": [
+      "aqu[ií]",
+      "ah[ií]",
+      "all[ií]",
+      "ac[aá]",
+      "en (?:este|ese|el mismo) (?:vers[ií]culo|pasaje)"
+    ],
+    "fr": [
+      "ici",
+      "là",
+      "dans ce (?:verset|passage)"
+    ],
+    "id": [
+      "di situ",
+      "di sini",
+      "di sana",
+      "(?:di |dalam )?ayat (?:ini|itu|tersebut)"
+    ],
+    "hi": [
+      "वहाँ",
+      "वहां",
+      "यहाँ",
+      "यहां",
+      "(?:इस|उस|इसी) पद में"
+    ],
+    "ar": [
+      "هنا",
+      "هناك",
+      "في (?:هذه|تلك) الآية"
+    ]
+  },
+  "thisChapter": {
+    "en": [
+      "(?:this|that|the same) chapter"
+    ],
+    "es": [
+      "(?:este|ese|el mismo) cap[ií]tulo"
+    ],
+    "fr": [
+      "(?:ce|le même) chapitre"
+    ],
+    "id": [
+      "pasal (?:ini|itu|yang sama|tersebut)"
+    ],
+    "hi": [
+      "(?:इस|उस|इसी) अध्याय"
+    ],
+    "ar": [
+      "(?:هذا|ذلك) (?:الأصحاح|الإصحاح|الفصل)",
+      "(?:الأصحاح|الإصحاح) (?:نفسه|ذاته)"
+    ]
+  },
+  "howMany": {
+    "en": [
+      "how many(?: times)?",
+      "how often",
+      "number of times"
+    ],
+    "es": [
+      "cu[aá]nt[oa]s(?: veces)?"
+    ],
+    "fr": [
+      "combien(?: de fois)?"
+    ],
+    "id": [
+      "(?:ada )?berapa(?: kali| banyak)?"
+    ],
+    "hi": [
+      "कितनी बार",
+      "कितने",
+      "कितनी"
+    ],
+    "ar": [
+      "كم(?: مرة| عدد)?"
+    ]
+  },
+  "translateThis": {
+    "en": [
+      "(?:help me )?translate (?:this|that|it)(?: (?:verse|passage|one))?"
+    ],
+    "es": [
+      "(?:ay[uú]dame a )?traduc(?:e|ir) (?:esto|eso|este (?:vers[ií]culo|pasaje))"
+    ],
+    "fr": [
+      "tradui(?:s|re) (?:ceci|cela|ce (?:verset|passage))"
+    ],
+    "id": [
+      "terjemahkan (?:ini|itu|ayat ini)"
+    ],
+    "hi": [
+      "इसका अनुवाद (?:करो|कीजिए|करें|करूँ|करूं)",
+      "इसका अनुवाद कैसे(?: (?:करूँ|करूं|करें|करना है|होगा))?"
+    ],
+    "ar": [
+      "ترجم (?:هذه الآية|هذا|هذه)"
+    ]
+  },
+  "this": {
+    "en": [
+      "this",
+      "that",
+      "it"
+    ],
+    "es": [
+      "esto",
+      "eso",
+      "lo"
+    ],
+    "fr": [
+      "ceci",
+      "cela",
+      "ça",
+      "le"
+    ],
+    "id": [
+      "ini",
+      "itu"
+    ],
+    "hi": [
+      "इसका",
+      "इसे",
+      "यह",
+      "इस"
+    ],
+    "ar": [
+      "هذا",
+      "هذه",
+      "ذلك"
+    ]
+  },
+  "also": {
+    "en": [
+      "and",
+      "what about",
+      "how about",
+      "now",
+      "also",
+      "then",
+      "show(?: me)?",
+      "give me",
+      "open",
+      "see",
+      "the",
+      "in",
+      "of",
+      "please"
+    ],
+    "es": [
+      "y",
+      "e",
+      "qu[eé] (?:tal|hay de|me dices de)",
+      "tambi[eé]n",
+      "ahora",
+      "mu[eé]strame",
+      "dame",
+      "ver",
+      "abre",
+      "el",
+      "la",
+      "los",
+      "las",
+      "en",
+      "de",
+      "del",
+      "por favor"
+    ],
+    "fr": [
+      "et",
+      "quoi de",
+      "et pour",
+      "aussi",
+      "maintenant",
+      "montre(?:-moi)?",
+      "donne(?:-moi)?",
+      "voir",
+      "le",
+      "la",
+      "les",
+      "dans",
+      "de",
+      "du",
+      "pour",
+      "s['’]il (?:te|vous) pla[iî]t"
+    ],
+    "id": [
+      "dan",
+      "bagaimana dengan",
+      "juga",
+      "lalu",
+      "sekarang",
+      "tunjukkan",
+      "lihat",
+      "buka",
+      "di",
+      "dari",
+      "tolong"
+    ],
+    "hi": [
+      "और",
+      "तो",
+      "भी",
+      "अब",
+      "दिखाइए",
+      "दिखाओ",
+      "दिखाएँ",
+      "दिखाएं",
+      "में",
+      "का",
+      "की",
+      "के"
+    ],
+    "ar": [
+      "وماذا عن",
+      "ماذا عن",
+      "وفي",
+      "في",
+      "و",
+      "أيضا",
+      "الآن",
+      "اعرض",
+      "أرني"
     ]
   }
 }
