@@ -96,15 +96,23 @@ async function namesOf(r: Reader): Promise<Record<string, string[]>> {
 }
 
 /** name -> Translation Words ids, from the pack's article names (en, es) and the key-term glossary (fr, id, hi). */
-let NAMES: Map<string, string[]> | null = null
+/** The promise, set before the first await: a call still running when the packs change cannot write its names over the new ones. */
+let NAMES: Promise<Map<string, string[]>> | null = null
 /** After a language is added or removed. */
 export function resetSearch() {
   opened.clear()
   resetIndexes()
   NAMES = null
 }
-async function names(): Promise<Map<string, string[]>> {
-  if (NAMES) return NAMES
+function names(): Promise<Map<string, string[]>> {
+  if (!NAMES) {
+    const p = (NAMES = readNames())
+    // a read that failed is tried again next time
+    p.catch(() => { if (NAMES === p) NAMES = null })
+  }
+  return NAMES
+}
+async function readNames(): Promise<Map<string, string[]>> {
   const m = new Map<string, string[]>()
   const put = (k: string, id: string) => {
     if (k.length >= 3 && !m.get(k)?.includes(id)) m.set(k, [...(m.get(k) ?? []), id])
@@ -128,7 +136,7 @@ async function names(): Promise<Map<string, string[]>> {
       const ids = m.get(fold(en[code] ?? ''))?.filter((id) => id.startsWith('tw:names/'))
       if (ids?.length && !/\d/.test(name)) for (const id of ids) add(name, id)
     }
-  return (NAMES = m)
+  return m
 }
 /** A word's concept: exact name, or the name without a plural or verb ending (sacrifica -> sacrificio is too far; sacrifices -> sacrifice works). */
 function conceptOf(word: string, m: Map<string, string[]>): string[] | null {
