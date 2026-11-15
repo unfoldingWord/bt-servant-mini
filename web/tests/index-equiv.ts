@@ -1,5 +1,7 @@
 // Checks the word index (src/textindex.ts) against the client's own search in memory, query by query: same hits, in the same
 // order, with the same snippets and scores. Slow (the client reads every row of a pack on each search), so a script, not a test.
+// Since the index keeps marks inside words and leaves Arabic vowel signs out, ar and hi differ on purpose; en, es-419 and id
+// must still be identical.
 //   bun tests/index-equiv.ts            # every pack on disk
 //   bun tests/index-equiv.ts ar hi
 import { installPacks, ALL_PACKS } from './fs-packs'

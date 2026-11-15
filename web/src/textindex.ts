@@ -1,36 +1,48 @@
 // A word index of a pack's books (word -> rows), built once per open pack, in place of the client's search in memory: that
 // one keeps every word of every row as an object and reads all of them on every search (35-80 s for an Arabic question on a
-// laptop), and keeps every book of the pack decoded (about 450 MB for English). Same matches, scores, order and snippets as
+// laptop), and keeps every book of the pack decoded (about 450 MB for English). Same scores, order and snippets as
 // `memoryIndex` (language-pack-client/src/search/memory.ts): a row matches when it holds every word of the query, a word
 // being the run of tokens it splits into; the score is the number of matches over the square root of the row's length.
+// Words differ on purpose (see TOKEN): marks stay inside a word and Arabic vowel signs are left out, so Arabic and Hindi
+// words match whole; in languages written without combining marks (en, es, id) the hits are the client's.
 import type { PackReader } from '@bt-synergy/language-pack-client'
 import { bookView, type BookModel } from '@bt-synergy/language-pack-v3'
 import { queryWords, rowsOf, type Hit, type PieceRow, type SearchKind } from '@lpc/search/types'
 import booknames from './data/booknames.json'
 
-// the client's tokens: runs of letters and digits (a mark splits a word, as there), folded
-const TOKEN = /[\p{L}\p{N}]+/gu
-const foldTok = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-const tokensOf = (s: string): string[] => [...s.matchAll(TOKEN)].map((m) => foldTok(m[0]))
-/** Whether a UTF-16 unit is a letter or digit, asked of the regex once per character: 1 yes, 2 no. */
+// Words: a letter or digit, then letters, digits and combining marks (the client's search cut a word at each mark, so an
+// Arabic word with its vowels was a row of single letters and Hindi words were fragments). Folded: Arabic vowel signs
+// (tashkeel, U+064B-U+065F, U+0670) and tatweel removed, so a word typed without them finds the vocalised text; then
+// decomposed, marks removed (accents: Jesús = Jesus; Hindi vowel signs too: keeping them found fewer verses in the answer
+// tests), lower case.
+const TOKEN = /[\p{L}\p{N}][\p{L}\p{N}\p{M}]*/gu
+const TASHKEEL = /[ً-ٰٟـ]/g
+const foldTok = (s: string): string => s.replace(TASHKEEL, '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+const tokensOf = (s: string): string[] => [...s.matchAll(TOKEN)].map((m) => foldTok(m[0])).filter((t) => t !== '')
+/** What a UTF-16 unit is, asked of the regexes once per character: 1 a letter or digit, 3 a combining mark, 2 neither. */
 const CLASS = new Uint8Array(65536)
 const WORD = /^[\p{L}\p{N}]$/u
-const classify = (c: number): number => (CLASS[c] = WORD.test(String.fromCharCode(c)) ? 1 : 2)
+const MARK = /^\p{M}$/u
+const classify = (c: number): number => {
+  const ch = String.fromCharCode(c)
+  return (CLASS[c] = WORD.test(ch) ? 1 : MARK.test(ch) ? 3 : 2)
+}
 /** Whether a character is left as it is by the fold (NFD and lower case): 1 yes, 2 no. A word of such characters is its own fold. */
 const SAME = new Uint8Array(65536)
 const foldsToItself = (w: string): boolean => {
   for (let i = 0; i < w.length; i++) {
     const c = w.charCodeAt(i)
-    if (!SAME[c]) { const ch = String.fromCharCode(c); SAME[c] = c < 0xd800 || c > 0xdfff ? (foldTok(ch) === ch ? 1 : 2) : 2 }
+    // a mark never counts: NFD may reorder a run of them even when each alone is left as it is
+    if (!SAME[c]) { const ch = String.fromCharCode(c); SAME[c] = (c < 0xd800 || c > 0xdfff) && !MARK.test(ch) && foldTok(ch) === ch ? 1 : 2 }
     if (SAME[c] !== 1) return false
   }
   return true
 }
-const astral = new Map<number, boolean>()
-const isWordAstral = (cp: number): boolean => {
-  let w = astral.get(cp)
-  if (w === undefined) astral.set(cp, (w = WORD.test(String.fromCodePoint(cp))))
-  return w
+const astral = new Map<number, number>()
+const classAstral = (cp: number): number => {
+  let k = astral.get(cp)
+  if (k === undefined) { const ch = String.fromCodePoint(cp); astral.set(cp, (k = WORD.test(ch) ? 1 : MARK.test(ch) ? 3 : 2)) }
+  return k
 }
 
 /**
@@ -93,6 +105,47 @@ const nextTask = (): Promise<void> => {
 function breather(ms = 25): () => Promise<void> | undefined {
   let since = performance.now()
   return () => (performance.now() - since < ms ? undefined : nextTask().then(() => { since = performance.now() }))
+}
+
+/**
+ * The words of `s` as TOKEN finds them, by a loop over its characters (a regex match per word was most of the build): for each,
+ * where it starts and ends and a hash of its characters.
+ */
+function scanWords(s: string, word: (s: string, at: number, end: number, h: number) => void) {
+  const n = s.length
+  let at = -1
+  let h = 0
+  for (let j = 0; j < n; j++) {
+    const c = s.charCodeAt(j)
+    let w: boolean
+    let wide = false
+    if (c < 0xd800 || c > 0xdbff) {
+      const k = CLASS[c] || classify(c)
+      // a mark goes on the word it follows, and starts none
+      w = k === 1 || (k === 3 && at >= 0)
+    } else {
+      const d = j + 1 < n ? s.charCodeAt(j + 1) : 0
+      wide = d >= 0xdc00 && d <= 0xdfff
+      const k = wide ? classAstral(((c - 0xd800) << 10) + (d - 0xdc00) + 0x10000) : 2
+      w = k === 1 || (k === 3 && at >= 0)
+    }
+    if (w) {
+      if (at < 0) { at = j; h = 0x811c9dc5 }
+      h = Math.imul(h ^ c, 0x01000193)
+      if (wide) h = Math.imul(h ^ s.charCodeAt(j + 1), 0x01000193)
+    } else if (at >= 0) {
+      word(s, at, j, h >>> 0)
+      at = -1
+    }
+    if (wide) j++
+  }
+  if (at >= 0) word(s, at, n, h >>> 0)
+}
+/** Tests: the words the index reads in `s`, as written. */
+export function scannedWords(s: string): string[] {
+  const out: string[] = []
+  scanWords(s, (b, at, end) => out.push(b.slice(at, end)))
+  return out
 }
 
 /**
@@ -202,32 +255,7 @@ async function build(r: PackReader): Promise<Index> {
       ref.push(str(row.ref))
       res.push(str(row.res))
       start.push(toks.n)
-      // the runs of letters and digits, as the client's regex finds them
-      const s = row.body
-      const n = s.length
-      let at = -1
-      let h = 0
-      for (let j = 0; j < n; j++) {
-        const c = s.charCodeAt(j)
-        let w: boolean
-        let wide = false
-        if (c < 0xd800 || c > 0xdbff) w = (CLASS[c] || classify(c)) === 1
-        else {
-          const d = j + 1 < n ? s.charCodeAt(j + 1) : 0
-          wide = d >= 0xdc00 && d <= 0xdfff
-          w = wide && isWordAstral(((c - 0xd800) << 10) + (d - 0xdc00) + 0x10000)
-        }
-        if (w) {
-          if (at < 0) { at = j; h = 0x811c9dc5 }
-          h = Math.imul(h ^ c, 0x01000193)
-          if (wide) h = Math.imul(h ^ s.charCodeAt(j + 1), 0x01000193)
-        } else if (at >= 0) {
-          toks.push(spellings.id(s, at, j, h >>> 0))
-          at = -1
-        }
-        if (wide) j++
-      }
-      if (at >= 0) toks.push(spellings.id(s, at, n, h >>> 0))
+      scanWords(row.body, (body, at, end, h) => toks.push(spellings.id(body, at, end, h)))
     }
   }
   start.push(toks.n)

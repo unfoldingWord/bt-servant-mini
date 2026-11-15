@@ -1,5 +1,6 @@
 // A free search finds the same verses, notes and questions, in the same order, as before the word index (src/textindex.ts):
-// the hits below are what the client's own search in memory gave (bench-search.ts --impl before, Nov 2026), one pack installed.
+// the hits below are what the client's own search in memory gave (bench-search.ts --impl before, Nov 2026), one pack installed,
+// except where the index matches whole Arabic and Hindi words on purpose (said at the case).
 import { test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
 import { run } from './bench-search'
@@ -23,7 +24,8 @@ const CASES: { pack: string; packs?: string[]; q: string; how: string; verses: s
   {
     pack: 'hi', q: 'योना को मछली ने कहाँ निगला?', how: 'concepts',
     verses: ['jon 1:17 concepts', 'jon 2:1 concepts', 'jon 2:10 concepts', 'mat 12:40 concepts'],
-    helps: ['note hi act 18:17 mj77'],
+    // the client's search found a note on Acts 18:17 (Sosthenes beaten) through pieces of words; whole words find none
+    helps: [],
   },
   {
     pack: 'ar', q: 'أين ابتلع الحوت يونان؟', how: 'concepts',
