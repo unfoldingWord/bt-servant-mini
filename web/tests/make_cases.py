@@ -48,7 +48,7 @@ KNOWN = {
     'new-en-unknown': 'the howTranslate vocabulary has no "render"',
     'new-fr-unknown': '"olivier" names no article, and there is no fr pack: "no pack" answer',
     **{i: R_BOOKS for i in ['new-es-books', 'new-id-books']},
-    **{i: R_MEANING for i in ['new-hi-meaning', 'new-ar-meaning', 'quechua-05']},
+    **{i: R_MEANING for i in ['new-ar-meaning', 'quechua-05']},
     **{i: R_ISA for i in ['fu-en-term_book', 'fu-es-term_book', 'fu-fr-term_book', 'fu-id-term_book', 'fu-hi-term_book']},
     'quechua-16': 'a question in Quechua: should answer in the app language and suggest asking in Spanish',
     'quechua-16-code': 'a question in Quechua: should answer in the app language and suggest asking in Spanish',
@@ -189,6 +189,12 @@ FU_MORE = {
                              'ar': 'يونان 1:3 ملاحظات'}, {'route': ['passage'], 'ref': 'jon 1:3'}),
     'new_word': ('what', {'en': 'What does lamb mean?', 'es': '¿Qué significa cordero?', 'fr': 'Que veut dire agneau ?', 'id': 'Apa arti anak domba?',
                           'hi': 'मेम्ना का क्या अर्थ है?', 'ar': 'ما معنى الحمل؟'}, {'route': ['article', 'choose', 'search', 'translate-unknown'], 'notRef': 'rut 2:3', 'useful': False}),
+    # "who is speaking here?" names no article: the passage with its notes, not a meaning nor its key terms alone (in English;
+    # the other languages' "who is" words are not those of `meaning`, so the question stays a free search, as before)
+    'who_here': ('what', {'en': 'Who is speaking here?', 'es': '¿Quién habla aquí?', 'fr': 'Qui parle ici ?', 'id': 'Siapa yang berbicara di sini?',
+                          'hi': 'यहाँ कौन बोल रहा है?', 'ar': 'من يتكلم هنا؟'}, {'route': ['passage', 'search', 'nopack'], 'notConcept': '^tw:', 'useful': False}),
+    # Numbers named as a book in Arabic ("سفر العدد"): a new passage, not verse 5 of Ruth
+    'new_numbers': ('what', {'ar': 'سفر العدد 5'}, {'route': ['passage'], 'ref': 'num 5', 'useful': False}),
     'new_count': ('term_book', {'en': 'How many times does grace appear in the Bible?', 'es': '¿Cuántas veces aparece gracia en la Biblia?',
                                 'fr': 'Combien de fois grâce apparaît-elle dans la Bible ?', 'id': 'Berapa kali kasih karunia muncul di Alkitab?',
                                 'hi': 'बाइबल में अनुग्रह कितनी बार आता है?', 'ar': 'كم مرة ترد النعمة في الكتاب المقدس؟'}, {'notRef': 'rut 3', 'useful': False}),

@@ -246,7 +246,8 @@ const isVerseWord = (w: string) => new RegExp(`^\\s*(?:${pattern('verse').source
 function ownRef(q: string, s0: Slots, lang: string): boolean {
   if (introAsked(q, lang)) return true
   const r = refInText({ intent: 'unknown', lang }, q)
-  if (r.book && !isVerseWord(r.book)) return true
+  // "والعدد 5" in a follow-up is verse 5; "سفر العدد 5" and "العدد 5:3" are the book of Numbers
+  if (r.book && (!isVerseWord(r.book) || r.verse_start || /سفر\s+و?العدد/.test(q))) return true
   if (s0.book && fold(q).includes(fold(s0.book)) && !isVerseWord(s0.book) && bookCode(lang, s0.book)) return true
   // a book named alone ("and Jonah?"), besides the follow-up's own words ("Dan" is "and" in Indonesian, not Daniel)
   return strip(q, FU_WORDS).split(/[^\p{L}\p{M}\d]+/u).some((w) => w.length > 2 && !!bookExact(w) && !isVerseWord(w))
@@ -446,7 +447,12 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   // a follow-up with no reference of its own, completed from the state by code (not when it picks a search result)
   const fu = ordinalPick(q) === undefined ? followUp(q, s0, c) : null
   if (fu) {
-    const s = target ? { ...fu.slots, lang: target } : fu.slots
+    let s = target ? { ...fu.slots, lang: target } : fu.slots
+    // "who is speaking here?" names no article: the passage with its notes, not its key terms
+    if (fu.how === 'meaning here' && !(await termArticle(q, s.lang ?? env.nav))) {
+      s = { ...s, what: ['text', 'notes'], term: null }
+      fu.how += ' (no article: the passage)'
+    }
     keepState(c, s)
     const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : env.helpsLang)
     // "how many times does lamb appear in this chapter?": the article a word names exactly (not "appear")
