@@ -16,7 +16,8 @@ import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, 
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { answer, type ConvState, directRef, env, guessLang, type Made, NP, questionOf, readQuestion, type Reply, stateLine } from './pipeline'
-import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
+import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
+import { shareButton } from './share'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -118,7 +119,8 @@ const LOGO = document.querySelector('.brand svg')!.outerHTML
 /** A message: the person's question, or an answer (pipeline.ts) with what the page adds to it. */
 type Msg = Reply & {
   who: 'me' | 'bot'
-  ai?: { text: string; model: string }
+  /** the online answer, with the articles it was grounded in (older saved answers have no sources) */
+  ai?: { text: string; model: string; sources?: OnlineAnswer['sources'] }
   /** the person's thumbs on this answer, and whether they sent a report about it */
   rating?: 'up' | 'down'; reported?: boolean
 }
@@ -211,8 +213,20 @@ function renderMsg(m: Msg): HTMLElement {
     const ai = el('div', 'ai')
     ai.appendChild(el('span', 'ai-badge', `${OT().label} · ${modelLabel(m.ai.model)}`))
     const body = el('div', 'ai-text')
+    body.dir = 'auto' // an Arabic answer reads right to left
     body.innerHTML = md(m.ai.text)
     ai.appendChild(body)
+    // the article the answer was written from, always shown, whatever the model wrote: a tap opens it
+    if (m.ai.sources?.length) {
+      const f = el('div', 'follow ai-sources')
+      for (const s of m.ai.sources) {
+        const b = el('button', '', s.label) as HTMLButtonElement
+        b.type = 'button'
+        b.onclick = () => runSheet(s.title, { ...bare(m.lang ?? 'en'), intent: 'article', concept: s.id }, m.ui ?? nav)
+        f.appendChild(b)
+      }
+      ai.appendChild(f)
+    }
     d.appendChild(ai)
     const src = document.createElement('details')
     src.className = 'sources'
@@ -258,6 +272,11 @@ function renderMsg(m: Msg): HTMLElement {
     a.onclick = () => showAbout(nav, () => setReady())
     d.appendChild(a)
   }
+  // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
+  const cv = convs.find((x) => x.msgs.includes(m))
+  const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
+  const sh = shareButton(m, m.ui ?? nav, prev?.who === 'me' ? prev.text : undefined)
+  if (sh) d.appendChild(sh)
   // thumbs up or down, and with a thumbs down a report (feedback.ts)
   if (m.info || m.intro || m.ai || m.text || m.helps) {
     let bar = el('div', 'rate')
@@ -797,7 +816,9 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
     // the answer found on the phone first (cut to leave room), then the passage's context
     const found = `${m.intro ?? ''}\n\n${m.info ?? ''}`
     const helps = onlineCtx ? `${found.length > 5000 ? found.slice(0, 5000) + ' …' : found}\n\n# Context of the passage\n\n${onlineCtx}` : found
-    const res = await onlineAnswer(label, m.ui ?? nav, helps, history)
+    // the article the phone found goes with the helps, so the answer is grounded in it and names it
+    const sources = m.ctx && /^(ta|tw):/.test(m.ctx) ? [{ id: m.ctx }] : []
+    const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
     if (res) {
       m.ai = res
