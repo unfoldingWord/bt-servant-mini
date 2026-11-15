@@ -2,8 +2,9 @@
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
 import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
+import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
-import { articleForQuestion, asksAbout, keywords, searchHelps, searchVerses, versesOf } from './search'
+import { articleForQuestion, asksAbout, GOOD_COVERAGE, introFor, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { bookLabel, followups, intro, searchIntro } from './converse'
 import { hasLang, installedLangs, openLang } from './packs'
 import type { HelpItem } from './view'
@@ -275,6 +276,10 @@ export function refInText(slots: Slots, q: string): Slots {
 /** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
 export function isOpen(q: string, sheet: Sheet): boolean {
   if (sheet.intent === 'search') return true
+  // "¿Dónde fue tragado Jonás por un pez?" read as the book of Jonah (a report of Nov 14: the answer told the story, not
+  // the verse): where in the book, when the question names more than the book
+  if (sheet.ref && /^[1-3]?[a-z]{2,3}$/.test(sheet.ref) && sheet.intent === 'passage' && has('where', q))
+    return keywords(q).filter((w) => !bookExact(w)).length >= 1
   if (sheet.ref) return false
   if (has('where', q)) return keywords(q).length >= 1
   if (kindOf(q) && keywords(q).length >= 2) return true // "notes about Abraham sacrificing Isaac"
@@ -420,9 +425,10 @@ export type TaMatch = { id: string; score: number; how: string }
  * number of words, when every one of them is in the question and at most one other word is. Either way, another word of the
  * question that names a Translation Words article cancels the match: "the team of horses", "first fruits", "the name Yahweh".
  */
-export async function academyFor(q: string, packs: string[], ui = 'en'): Promise<TaMatch | null> {
+export async function academyFor(q: string, packs: string[], ui = 'en', needCue = true): Promise<TaMatch | null> {
   const toks = taTokens(q)
-  if (!toks.some((t) => slotHas(CUES, t)) && !has('howTranslate', q)) return null
+  // `needCue` false: a free search that found no verse with its words ("metaphors in Jonah") may still name an article
+  if (needCue && !toks.some((t) => slotHas(CUES, t)) && !has('howTranslate', q)) return null
   // a book named in the question's language or English ("How do I start translating Ruth?"): the passage and book routes
   // know better (not any language's: "nombres" is Numbers in French)
   const tables = bookTables as Record<string, Record<string, string>>
@@ -520,6 +526,45 @@ type Route = { name: string; when: (x: Ctx) => boolean; run: (x: Ctx) => Promise
 const secs = (x: Ctx) => ((performance.now() - x.t0) / 1000).toFixed(1)
 const hitLabel = (ui: string, h: Hit) => `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`
 const hitSheet = async (h: Hit, what: string[], ui: string) => (await buildSheet(`h${Date.now()}`, passageOf(h, what, ui), env.helpsLang)).sheet
+
+/** A free search's best verse holds this much of the rarity of its words (or all of them): the verses are the answer. */
+const GOOD = GOOD_COVERAGE
+/** Below this, verses with some of the words are not shown: they would be unrelated (search.ts, Strength.coverage). */
+const RELAX = 0.4
+/**
+ * No verse holds the words of a free search well: an article all of them name (Translation Words, "kinsman redeemer"), a
+ * Translation Academy article (its title or listed words, without asking for a word of training: "metaphors in Jonah"), a
+ * book or chapter introduction that holds every word ("What marriage custom is in Ruth?"). The sheet becomes that one (the next
+ * steps answer it); false when none.
+ */
+async function findBeyondVerses(x: Ctx, words: string[]): Promise<boolean> {
+  if (!words.length) return false
+  const base = { ...x.sheet, candidates: null, term: null, phrase: null } as Sheet
+  const ids = (await articleForQuestion(words.join(' ')))?.filter((id) => id.startsWith('tw:'))
+  if (ids?.length === 1) {
+    x.sheet = { ...base, intent: 'article', concept: ids[0]!, ref: null, what: [] } as Sheet
+    x.searched += `\nfindall: article ${ids[0]}`
+    return true
+  }
+  const packs: string[] = []
+  for (const l of new Set([x.sheet.lang, 'en'])) if (await hasLang(l)) packs.push(l)
+  const ta = await academyFor(x.q!, packs, x.ui, false)
+  if (ta) {
+    for (const l of [x.sheet.lang, 'en', ...(await installedLangs())]) {
+      if (!(await hasTa(l, ta.id))) continue
+      x.sheet = { ...base, intent: 'article', concept: ta.id, lang: l, ref: null, what: [] } as Sheet
+      x.searched += `\nfindall: academy ${ta.id} (${ta.how})`
+      return true
+    }
+  }
+  const intro = await introFor(x.q!, x.sheet.lang)
+  if (intro) {
+    x.sheet = { ...base, intent: 'passage', concept: null, ref: intro.ref, what: ['intro'], lang: intro.lang } as Sheet
+    x.searched += `\nfindall: introduction ${intro.ref}`
+    return true
+  }
+  return false
+}
 
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
@@ -634,39 +679,62 @@ export const ROUTES: Route[] = [
     },
   },
   {
-    // An open question: the verses with its words, and the notes and questions that have them. With what to show ("notes
-    // about Jonah swallowed by the fish"), the best verse's notes instead; with no verse, the article a word names.
+    // An open question: the verses with its words, ranked by their rarity (search.ts), and the notes and questions that have
+    // them. "Where does X happen?": the best verse first, whole. With what to show ("notes about Jonah swallowed by the fish"),
+    // the best verse's notes instead. When no verse holds the words well (findBeyondVerses): an article all the words name
+    // (Translation Words, Translation Academy), a book or chapter introduction that holds them all, the notes and questions that
+    // do, the verses with the rarest of them, an article one word names; and when nothing fits, what was searched and other ways
+    // to ask, never something unrelated just to fill the space.
     name: 'search',
     when: ({ q, sheet }) => q !== undefined && isOpen(q, sheet),
     run: async (x) => {
       const { c, ui } = x
       const q = x.q!
       const res = await searchVerses(q, x.sheet.term, x.sheet.lang)
-      c.found = res.hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v }))
-      x.searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}`
+      // a where-question read as a book ("¿Dónde fue tragado Jonás…?" -> Jonah): that book's verses first
+      const scope = x.sheet.ref && /^[1-3]?[a-z]{2,3}$/.test(x.sheet.ref) ? x.sheet.ref : null
+      if (scope && res.hits.some((h) => h.book === scope)) res.hits = [...res.hits.filter((h) => h.book === scope), ...res.hits.filter((h) => h.book !== scope)]
+      const st = res.strength
+      const cover = st ? st.coverage : 1
+      const good = res.hits.length > 0 && (!st || st.full || cover >= GOOD)
+      x.searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}` +
+        (st ? `\nfindall: ${good ? 'verses' : 'weak'}, coverage ${cover.toFixed(2)}, found ${JSON.stringify(st.matched)}, not ${JSON.stringify(st.missing)}` : '')
       const kind = kindOf(q)
-      if (res.hits.length) c.last = await hitSheet(res.hits[0]!, ['text'], ui)
-      // nothing has all the words ("cebada" with "pueblo" and "traduzco"): the article one of them names, with its verses
-      if (!res.hits.length) {
+      if (!good && (await findBeyondVerses(x, res.keywords))) return null
+      const usable = good || (res.hits.length > 0 && cover >= RELAX)
+      // the notes and questions that contain the same words, each a button to its verse's notes or questions
+      const helps0 = usable && kind ? [] : await searchHelps(q, x.sheet.lang).catch(() => [])
+      // no verse fits: the notes and questions that hold every word, before verses with only some of them
+      const helpsFirst = !good && helps0.some((h) => h.all)
+      // nothing has the words well ("cebada" with "pueblo" and "traduzco"): the article one of them names, with its verses
+      if (!usable && !helpsFirst) {
         const id = await termArticle(q, ui)
         if (id) {
           x.sheet = { ...x.sheet, intent: 'article', concept: id, candidates: null, term: null, ref: null, phrase: null } as Sheet
           x.searched += `\nrescued: ${id}`
+          c.found = []
           return null
         }
       }
+      const helps = helpsFirst ? helps0.filter((h) => h.all) : helps0
+      const hits = helpsFirst ? [] : usable ? res.hits : []
+      c.found = hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v }))
+      if (hits.length) c.last = await hitSheet(hits[0]!, ['text'], ui)
       // "notes about Jonah swallowed by the fish": straight to the notes of the best verse; the other verses as buttons
-      if (kind && res.hits.length) {
-        x.sheet = await hitSheet(res.hits[0]!, kind, ui)
-        for (const h of res.hits.slice(1, 4)) x.others.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, kind, ui) })
+      if (kind && hits.length) {
+        x.sheet = await hitSheet(hits[0]!, kind, ui)
+        for (const h of hits.slice(1, 4)) x.others.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, kind, ui) })
         return null
       }
-      const used = res.how === 'concepts' ? res.concepts : res.how === 'text' ? (res.hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
+      const used = res.how === 'concepts' ? (st?.matched.length ? st.matched : res.concepts) : res.how === 'text' ? (hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
       const follow: Follow[] = []
-      for (const h of res.hits.slice(0, 4)) follow.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
-      // the notes and questions that contain the same words, each a button to its verse's notes or questions
-      const helps = await searchHelps(q, x.sheet.lang).catch(() => [])
-      const info = res.hits.map((h) => `**${hitLabel(ui, h)}** — ${h.text.replace(/\s+/g, ' ').trim()}`).join('\n\n')
+      for (const h of hits.slice(0, 4)) follow.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
+      const line = (h: (typeof hits)[number], whole = false) => `**${hitLabel(ui, h)}** — ${(whole ? h.full ?? h.text : h.text).replace(/\s+/g, ' ').trim()}`
+      // "where does it happen?": the verse it happens in first, whole, then the others
+      const where = good && hits.length > 0 && (has('where', q) || asksWhere(q))
+      const info = where
+        ? [line(hits[0]!, true), ...(hits.length > 1 ? [`### ${FT(ui).others}`, ...hits.slice(1).map((h) => line(h))] : [])].join('\n\n')
+        : hits.map((h) => line(h)).join('\n\n')
       const words = res.keywords.join(' ')
       // each note or question is a row: its snippet as plain text, and a tap opens it whole in the panel
       const groups = (['note', 'question'] as const).map((k) => ({
@@ -676,13 +744,25 @@ export const ROUTES: Route[] = [
       // nothing found, and the question's language is not on the phone: that is why, more likely than the words
       const want = packCode(ui) // the question's language (the sheet's is the pack it fell back to)
       const have = await installedLangs()
-      const absent = !res.hits.length && !helps.length && !have.includes(want)
-      const first = res.hits[0]
+      const absent = !hits.length && !helps.length && !have.includes(want)
+      // nothing fits well: what was searched, and ways to ask again
+      if (!absent && !hits.length && !helps.length) {
+        const named = res.keywords.map((w) => bookExact(w)).find((b): b is string => !!b)
+        const t = noFit(ui, res.keywords, st?.rarest ?? null, `${bookLabel(ui, named ?? 'jon')} ${named ? '1:1' : '1:17'}`)
+        return {
+          answered: 'search', ref: null, concept: null, found: 0,
+          reply: { ui, intro: t.intro, info: t.info, limits: true, meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nfindall: nothing fits` },
+        }
+      }
+      const first = hits[0]
+      const partial = !good && hits.length > 0
       return {
-        answered: absent ? 'nopack' : 'search', ref: first ? `${first.book} ${first.ch}:${first.v}` : null, concept: null, found: res.hits.length + helps.length,
+        answered: absent ? 'nopack' : 'search', ref: first ? `${first.book} ${first.ch}:${first.v}` : null, concept: null, found: hits.length + helps.length,
         reply: { ui, follow, packs: absent || undefined,
           intro: absent ? NP(ui).missing.replaceAll('{lang}', env.packName(want)).replace('{have}', have.map((l) => env.packName(l)).join(', '))
-            : res.hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words),
+            : where ? FT(ui).where.replace('{ref}', hitLabel(ui, first!))
+            : partial ? FT(ui).partial.replace('{all}', words).replace('{some}', (st?.matched ?? []).join(' '))
+            : hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words),
           info: info || undefined, helps: groups.length ? groups : undefined,
           meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}${helps.length ? `\nhelps: ${helps.length}` : ''}` },
       }
