@@ -42,7 +42,6 @@ KNOWN = {
                          'advice-rut-1-14-alzaron-voces', 'advice-tit-1-12-malas-bestias', 'evl-id-04', 'evl-hi-04', 'evl-hi-27',
                          'evl-hi-28', 'evl-fr-04', 'evl-fr-10', 'evl-fr-27', 'evl-fr-28', 'evl-ar-04']},
     **{i: R_HI for i in ['evl-hi-05', 'evl-hi-07', 'evl-hi-14', 'evl-hi-15', 'evl-hi-17', 'evl-hi-22', 'fu-hi-what', 'fu-hi-count_ch']},
-    'evl-hi-25': 'answer.ts rank crashes on the hi pack (model.notes.res is undefined)',
     **{i: R_OPEN for i in ['evl-hi-26', 'evl-ar-26']},
     **{i: R_TERM for i in ['evl-hi-21', 'evl-ar-19', 'evl-ar-20', 'evl-ar-21', 'new-id-unknown', 'new-ar-unknown', 'fu-hi-new_topic',
                            'fu-ar-new_topic', 'fu-hi-new_topic-code', 'fu-ar-new_topic-code']},

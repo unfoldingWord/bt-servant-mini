@@ -1,0 +1,15 @@
+{
+  "name": "bt-servant-mini-packs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "test": "bun test",
+    "sync:dry": "bun sync.mjs --dry-run",
+    "sync:local": "bun sync.mjs --local"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20251014.0",
+    "wrangler": "4.62.0"
+  }
+}
