@@ -46,6 +46,22 @@ export async function webInit(): Promise<void> {
  * copy is dropped). Loading happens once, after that: a load that fails (memory, WebAssembly) is the error, not a reason to
  * download 291 MB again from another server.
  */
+const VERIFIED = 'btsm.model.verified'
+/** Whether the model in the cache was checked (it holds the SHA-256 it was checked against). */
+function verified(): boolean {
+  try {
+    return localStorage.getItem(VERIFIED) === EXPECTED.sha256
+  } catch {
+    return false
+  }
+}
+function markVerified(on: boolean) {
+  try {
+    if (on) localStorage.setItem(VERIFIED, EXPECTED.sha256)
+    else localStorage.removeItem(VERIFIED)
+  } catch {}
+}
+
 export function webLoad(): Promise<void> {
   if (busy) return busy
   busy = (async () => {
@@ -57,19 +73,32 @@ export function webLoad(): Promise<void> {
     try {
       const models = make().modelManager
       let model: Awaited<ReturnType<typeof models.getModelOrDownload>> | null = null
+      // the whole model as it should be: the right size and SHA-256 (the damaged copy is dropped)
+      const whole = async (url: string, got: NonNullable<typeof model>) => {
+        st = { state: 'starting', detail: 'checking' }
+        const blobs = await got.open()
+        if (blobs.length === 1 && blobs[0]!.size === EXPECTED.bytes && (await sha256Blob(blobs[0]!)) === EXPECTED.sha256) {
+          markVerified(true)
+          return true
+        }
+        await make().cacheManager.delete(url).catch(() => {})
+        markVerified(false)
+        return false
+      }
       if (from) {
         model = await models.getModelOrDownload({ url: from }, { progressCallback })
-      } else {
+        // a copy from before the check existed (0.9.9 or older) is checked once, not at every start
+        if (!verified() && !(await whole(from, model))) {
+          model = null
+          from = null
+        }
+      }
+      if (!model) {
         let failure: unknown = null
         for (const url of packsServers().map(modelUrl)) {
           try {
             const got = await models.getModelOrDownload({ url }, { progressCallback })
-            st = { state: 'starting', detail: 'checking' }
-            const blobs = await got.open()
-            if (blobs.length !== 1 || blobs[0]!.size !== EXPECTED.bytes || (await sha256Blob(blobs[0]!)) !== EXPECTED.sha256) {
-              await make().cacheManager.delete(url).catch(() => {})
-              throw new Error('the downloaded model is damaged (SHA-256)')
-            }
+            if (!(await whole(url, got))) throw new Error('the downloaded model is damaged (SHA-256)')
             from = url
             model = got
             break
@@ -183,5 +212,6 @@ export async function webForget(): Promise<void> {
     } catch {}
   }
   from = null
+  markVerified(false)
   st = { state: 'missing', detail: '' }
 }

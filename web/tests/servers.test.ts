@@ -146,9 +146,52 @@ describe('a server that fell behind', () => {
     expect(await serverSource([A, B], { fetch: f, accept: async () => false }).catalog('en', { etag: '"e"' })).toBe('not-modified')
     expect(calls.length).toBe(1)
   })
-  test('a segment request that stalls: the next server after its own time', async () => {
+  test('a segment request with no answer: the next server after the header time', async () => {
     const { f } = fakeFetch((server) => (server === A ? 'hang' : ok('seg')))
-    expect(text(await serverSource([A, B], { fetch: f, segmentMs: 50 }).segment(SEG))).toBe('seg')
+    expect(text(await serverSource([A, B], { fetch: f, headerMs: 50 }).segment(SEG))).toBe('seg')
+  })
+})
+
+/** A body that sends `chunks` pieces of `size` bytes, one every `every` ms, then stops for good after `stopAfter` pieces. */
+function trickle(chunks: number, size: number, every: number, stopAfter = chunks) {
+  let sent = 0
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(ctrl) {
+      if (sent >= stopAfter) return new Promise<void>(() => {}) // never another byte
+      await new Promise((r) => setTimeout(r, every))
+      ctrl.enqueue(new Uint8Array(size).fill(65 + (sent % 26)))
+      if (++sent === chunks) ctrl.close()
+    },
+  })
+  return new Response(stream, { headers: { 'Content-Length': String(chunks * size) } })
+}
+
+describe('a slow link is waited for; a stopped server is left', () => {
+  test('headers at once, then a body that trickles for far longer than the stall time: it arrives whole from the first server', async () => {
+    const { f, calls } = fakeFetch((server) => (server === A ? trickle(20, 1000, 30) : ok('b')))
+    const t0 = Date.now()
+    const got = await serverSource([A, B], { fetch: f, headerMs: 100, stallMs: 100 }).segment(SEG)
+    expect(got.length).toBe(20000)
+    expect(Date.now() - t0).toBeGreaterThan(500) // 6x the stall time in total: only the silence counts
+    expect(calls).toEqual([`GET ${A}/v3/packs/seg/${SEG}`])
+  })
+  test('a body that stops in the middle: after the stall time, the segment comes from the next server', async () => {
+    const { f, calls } = fakeFetch((server) => (server === A ? trickle(20, 1000, 10, 3) : ok('from b')))
+    const got = await serverSource([A, B], { fetch: f, headerMs: 100, stallMs: 80 }).segment(SEG)
+    expect(text(got)).toBe('from b')
+    expect(calls).toEqual([`GET ${A}/v3/packs/seg/${SEG}`, `GET ${B}/v3/packs/seg/${SEG}`])
+  })
+  test('the stall is a network error (E_NETWORK) when no server is left', async () => {
+    const { f } = fakeFetch(() => trickle(20, 1000, 10, 2))
+    await expect(serverSource([A], { fetch: f, stallMs: 50 }).segment(SEG)).rejects.toMatchObject({ code: 'E_NETWORK' })
+  })
+  test('a cancel while the body trickles stops at once', async () => {
+    const { f, calls } = fakeFetch(() => trickle(100, 1000, 20))
+    const c = new AbortController()
+    const p = serverSource([A, B], { fetch: f }).segment(SEG, c.signal)
+    setTimeout(() => c.abort(new Error('cancelled')), 60)
+    await expect(p).rejects.toThrow()
+    expect(calls).toEqual([`GET ${A}/v3/packs/seg/${SEG}`])
   })
 })
 

@@ -6,7 +6,7 @@ const hadWindow = 'window' in globalThis
 if (!hadWindow) (globalThis as any).window = {}
 // the browser's model runner (not installed for the tests): a fake whose downloads and loads the tests decide
 const fake = {
-  downloads: [] as string[], deleted: [] as string[], loads: 0,
+  downloads: [] as string[], deleted: [] as string[], loads: 0, opens: 0, cached: '' as string,
   answer: (_url: string): Uint8Array | Error => new Uint8Array(0), loadFails: false,
 }
 class FakeWllama {
@@ -15,10 +15,10 @@ class FakeWllama {
       fake.downloads.push(url)
       const a = fake.answer(url)
       if (a instanceof Error) throw a
-      return { open: async () => [new Blob([a])] }
+      return { open: async () => (fake.opens++, [new Blob([a])]) }
     },
   }
-  cacheManager = { delete: async (u: string) => void fake.deleted.push(u), open: async () => null }
+  cacheManager = { delete: async (u: string) => void fake.deleted.push(u), open: async (u: string) => (u === fake.cached ? new Blob([]) : null) }
   async loadModel() {
     fake.loads++
     if (fake.loadFails) throw new Error('out of memory')
@@ -81,7 +81,7 @@ describe('the model in the browser (web app)', () => {
   web.EXPECTED.bytes = good.length
   web.EXPECTED.sha256 = createHash('sha256').update(good).digest('hex')
   const fresh = (answer: typeof fake.answer, loadFails = false) => {
-    Object.assign(fake, { downloads: [], deleted: [], loads: 0, answer, loadFails })
+    Object.assign(fake, { downloads: [], deleted: [], loads: 0, opens: 0, cached: '', answer, loadFails })
   }
   test('sha256Blob matches the platform digest for every length and chunking', async () => {
     for (const n of [0, 1, 55, 56, 63, 64, 65, 119, 120, 128, 1000, 70001]) {
@@ -132,5 +132,32 @@ describe('the model in the browser (web app)', () => {
     expect(web.webState().state).toBe('error')
     expect(fake.loads).toBe(0)
     setPacksServers()
+  })
+  test('a copy already in the browser (from 0.9.9) is checked once at start, not at every start', async () => {
+    const store = new Map<string, string>()
+    ;(globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) }
+    try {
+      setPacksServers([A, B])
+      fresh(() => good)
+      fake.cached = web.modelUrl(B) // downloaded from the old server
+      await web.webInit()
+      expect(web.webState().state).toBe('ready')
+      expect(fake.opens).toBe(1) // hashed
+      expect(fake.downloads).toEqual([web.modelUrl(B)]) // taken from the cache under its old address
+      await web.webInit()
+      expect(fake.opens).toBe(1) // not hashed again
+      // a damaged cached copy is dropped and downloaded again
+      store.clear()
+      fresh((url) => (url.startsWith(B) ? good.map((x) => x ^ 1) : good))
+      fake.cached = web.modelUrl(B)
+      await web.webInit()
+      expect(web.webState().state).toBe('ready')
+      expect(fake.deleted).toEqual([web.modelUrl(B)])
+      expect(fake.downloads).toEqual([web.modelUrl(B), web.modelUrl(A)])
+      await web.webForget()
+    } finally {
+      delete (globalThis as any).localStorage
+      setPacksServers()
+    }
   })
 })

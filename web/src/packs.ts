@@ -32,14 +32,97 @@ export function setPacksServers(list?: readonly string[]) {
   commonCats.clear()
 }
 
-/** A signal for one try at one server: it ends after `ms`, or when the caller's own signal ends. */
-function attemptSignal(outer: AbortSignal | undefined, ms: number): { signal: AbortSignal; done: () => void } {
-  const c = new AbortController()
-  const t = setTimeout(() => c.abort(new Error('timeout')), ms)
-  const stop = () => c.abort(outer?.reason)
-  if (outer?.aborted) stop()
-  else outer?.addEventListener('abort', stop, { once: true })
-  return { signal: c.signal, done: () => (clearTimeout(t), outer?.removeEventListener('abort', stop)) }
+/**
+ * A fetch that gives up on a server that stops answering, never on one that is only slow: no response headers within
+ * `headerMs`, or no new bytes of the body for `stallMs`. A healthy transfer may take as long as it needs (a 1.3 MB segment on a
+ * slow rural link takes minutes). Either way the request ends with a network error, so the next server is asked. The caller's
+ * own signal still cancels at once.
+ */
+export function watchedFetch(base: typeof fetch, headerMs: number, stallMs: number): typeof fetch {
+  return (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const c = new AbortController()
+    const outer = init.signal ?? undefined
+    let stopBody: ((e: unknown) => void) | null = null
+    const cancel = () => {
+      c.abort(outer?.reason)
+      stopBody?.(outer?.reason) // the body as well, whatever the runtime does with the signal once the headers are in
+    }
+    if (outer?.aborted) cancel()
+    else outer?.addEventListener('abort', cancel, { once: true })
+    const release = () => outer?.removeEventListener('abort', cancel)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const gaveUp = (why: string) => new ClientError('E_NETWORK', why)
+    let res: Response
+    try {
+      res = await new Promise<Response>((resolve, reject) => {
+        timer = setTimeout(() => {
+          const e = gaveUp(`no answer in ${Math.round(headerMs / 1000)} s`)
+          c.abort(e)
+          reject(e)
+        }, headerMs)
+        base(input, { ...init, signal: c.signal }).then(resolve, reject)
+      })
+    } catch (e) {
+      release()
+      throw e
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.body) {
+      release()
+      return res
+    }
+    const reader = res.body.getReader()
+    let out!: ReadableStreamDefaultController<Uint8Array>
+    let ended = false
+    const end = () => {
+      ended = true
+      clearTimeout(timer)
+      release()
+    }
+    const stop = (e: unknown) => {
+      if (ended) return
+      end()
+      c.abort(e)
+      reader.cancel(e).catch(() => {})
+      try {
+        out.error(e)
+      } catch {}
+    }
+    stopBody = stop
+    const watch = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => stop(gaveUp(`no data for ${Math.round(stallMs / 1000)} s`)), stallMs)
+    }
+    const body = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        out = ctrl
+        watch()
+      },
+      async pull(ctrl) {
+        try {
+          const { done, value } = await reader.read()
+          if (ended) return
+          if (done) {
+            end()
+            ctrl.close()
+          } else {
+            watch()
+            ctrl.enqueue(value)
+          }
+        } catch (e) {
+          if (ended) return
+          end()
+          ctrl.error(e)
+        }
+      },
+      cancel(reason) {
+        end()
+        return reader.cancel(reason)
+      },
+    })
+    return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers })
+  }) as typeof fetch
 }
 /** The server answered that it does not have it (a 404): the next one may, but this one is not down. */
 const notThere = (e: unknown) => e instanceof ClientError && (e.code === 'E_NO_PACK' || e.status === 404)
@@ -52,27 +135,29 @@ export type Accept = (name: string, bytes: Uint8Array) => Promise<boolean>
  * (down, or not reachable from this network) goes last for the rest of this source's requests, so a download does not wait
  * for it again on every segment. The servers hold the same files: a catalog from one and its segments from another install
  * the same pack (every segment is checked against its id, every catalog against the trusted keys). Only the caller's own
- * signal (a cancel) stops at once. Each try has its own time (`catalogMs`, `segmentMs`), so a server that stops answering
- * does not use up the time of the others. When every server's catalog is turned down, the first one is given, and the client
- * reports why (an older revision: E_DOWNGRADE).
+ * signal (a cancel) stops at once. A server that stops answering is left (watchedFetch: no headers in `catalogMs` for a
+ * catalog or `headerMs` for a segment, or no bytes for `stallMs`); a slow one is waited for. When every server's catalog is
+ * turned down, the first one is given, and the client reports why (an older revision: E_DOWNGRADE).
  */
 export function serverSource(
   list: readonly string[] = servers,
-  o: { fetch?: typeof fetch; catalogMs?: number; segmentMs?: number; accept?: Accept } = {},
+  o: { fetch?: typeof fetch; catalogMs?: number; headerMs?: number; stallMs?: number; accept?: Accept } = {},
 ): PackSource {
-  const sources = list.map((base) => httpSource({ base, ...(o.fetch ? { fetch: o.fetch } : {}) }))
-  let order = sources.map((_, i) => i)
+  const f: typeof fetch = o.fetch ?? ((i, init) => fetch(i, init))
+  const stall = o.stallMs ?? STALL_MS
+  const catalogs = list.map((base) => httpSource({ base, fetch: watchedFetch(f, o.catalogMs ?? CATALOG_MS, stall) }))
+  const segments = list.map((base) => httpSource({ base, fetch: watchedFetch(f, o.headerMs ?? HEADER_MS, stall) }))
+  let order = list.map((_, i) => i)
   async function attempt<T>(
-    run: (s: PackSource, signal?: AbortSignal) => Promise<T>, outer: AbortSignal | undefined, ms: number, missingWins: boolean,
+    sources: PackSource[], run: (s: PackSource, signal?: AbortSignal) => Promise<T>, outer: AbortSignal | undefined, missingWins: boolean,
     ok: (v: T) => Promise<boolean> = async () => true,
   ): Promise<T> {
     let failure: unknown
     let missing: unknown
     let refused: { v: T } | undefined
     for (const i of [...order]) {
-      const one = attemptSignal(outer, ms)
       try {
-        const v = await run(sources[i]!, one.signal)
+        const v = await run(sources[i]!, outer)
         if (await ok(v)) return v
         refused ??= { v } // this server is behind: the next one may have it
       } catch (e) {
@@ -82,8 +167,6 @@ export function serverSource(
           failure ??= e
           order = [...order.filter((x) => x !== i), i] // down: asked last from now on
         }
-      } finally {
-        one.done()
       }
     }
     if (refused) return refused.v
@@ -94,11 +177,11 @@ export function serverSource(
   return {
     catalog: (name, opts = {}) =>
       attempt(
-        (s, signal) => s.catalog(name, { ...(opts.etag !== undefined ? { etag: opts.etag } : {}), ...(signal ? { signal } : {}) }),
-        opts.signal, o.catalogMs ?? CATALOG_MS, true,
+        catalogs, (s, signal) => s.catalog(name, { ...(opts.etag !== undefined ? { etag: opts.etag } : {}), ...(signal ? { signal } : {}) }),
+        opts.signal, true,
         async (v) => !accept || v === 'not-modified' || (await accept(name, v.bytes)),
       ),
-    segment: (id, signal) => attempt((s, sig) => s.segment(id, sig), signal, o.segmentMs ?? SEGMENT_MS, false),
+    segment: (id, signal) => attempt(segments, (s, sig) => s.segment(id, sig), signal, false),
   }
 }
 
@@ -282,8 +365,10 @@ function timeout(ms: number): AbortSignal {
 }
 /** How long a catalog request may take before it counts as no answer. */
 export const CATALOG_MS = 15000
-/** How long one segment request may take on one server before the next server is asked (a pack segment is small). */
-export const SEGMENT_MS = 90000
+/** How long a server may take to start answering a segment request before the next server is asked. */
+export const HEADER_MS = 30000
+/** How long a download may go without a single new byte before the next server is asked (slow is fine; stopped is not). */
+export const STALL_MS = 60000
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
 /**
