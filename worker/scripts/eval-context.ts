@@ -101,7 +101,8 @@ async function ask(body: { question: string; lang: string; helps: string; histor
   const { messages } = answerRequest(body, MAX_CONTEXT)
   for (let i = 0; i < 4; i++) {
     calls++
-    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/${MODEL}`, {
+    // (Bun.fetch: the harness replaces fetch with the packs on disk, as on a phone with no internet)
+    const r = await Bun.fetch(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/${MODEL}`, {
       method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages, max_tokens: 550, temperature: 0.3 }) })
     const j = await r.json().catch(() => null) as any
