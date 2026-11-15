@@ -7,7 +7,7 @@ import { type BookModel, type HelpRow, verseId } from '@bt-synergy/language-pack
 import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
-import { FOLD, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
+import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import tEn from './data/tpl-en.json'
 import tEs from './data/tpl-es.json'
 import tFr from './data/tpl-fr.json'
@@ -180,6 +180,15 @@ const topSource = (cites: string[]): string => {
   // the notes first, then the texts, then the rest
   const rank = (x: string) => (x.startsWith(HELPS.tn!) ? 0 : Object.values(HELPS).some((h) => x.startsWith(h + ' ')) ? 2 : 1)
   return [...seen].sort((a, b) => rank(a) - rank(b)).join(' · ')
+}
+/**
+ * Puts the source line ("Translation Notes v91 — Ruth 4") in the answer's heading block, so it is first and never inside a
+ * fold; with no heading, it becomes the first block.
+ */
+function withTop(out: string[], line: string) {
+  const i = out.findIndex((b) => /^#{1,3}\s/.test(b) && !b.startsWith(FOLD))
+  if (i === 0) out[0] += `\n*${line}*`
+  else out.unshift(`*${line}*`)
 }
 /** The key terms and the Academy article a note is about: the terms tied to the same words of the text, and its own article. */
 const aboutOf = (n: HelpRow, links: HelpRow[]): string[] =>
@@ -405,7 +414,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   }
   // where it comes from, at the top: resource, release and passage (the full source line still ends the answer)
   const top = topSource(cites)
-  if (top) out[0] += `\n*${`${top} — ${book} ${lab}`.trim()}*`
+  if (top) withTop(out, `${top} — ${book} ${lab}`.trim())
   return { answer: out.join('\n\n'), cites }
 }
 
@@ -726,7 +735,7 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
     }
   } else if (!matched) out.push(say(lang, 'advice_none'))
   const top = topSource(cites)
-  if (top) out[0] += `\n*${top}*`
+  if (top) withTop(out, top)
   return { answer: out.join('\n\n'), cites }
 }
 
@@ -752,6 +761,8 @@ export async function answerSheet(s: Sheet): Promise<Result> {
     default: r = { answer: say(lang, s.intent === 'unknown' ? 'unknown' : 'no_intent'), cites: [] }
   }
   const src = r.cites.length ? sourceLine(lang, r.cites) : ''
+  // the last fold ends here: the source line and whatever a route adds after this answer stay in sight
+  if (r.answer.split('\n\n').some((b) => b.startsWith(FOLD))) r.answer += '\n\n' + FOLD_END
   // *…*, not _…_: resource ids have underscores (es-419_gl), which break an underscore italic
   if (src) r.answer += '\n\n*' + src + '*'
   return r

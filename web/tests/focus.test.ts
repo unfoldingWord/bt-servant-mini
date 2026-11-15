@@ -4,7 +4,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { focusOrder, focusWords, FOLD, hits } from '../src/focus'
+import { focusOrder, focusWords, FOLD, FOLD_END, hits } from '../src/focus'
+import { plainText } from '../src/share'
 import { md } from '../src/md'
 import { setQuestion, type Study } from '../src/answer'
 import { type Case, runCase } from './harness'
@@ -28,6 +29,20 @@ describe('the words a question is about', () => {
     expect(focusWords('Show me Ruth 1:16 in the ULT.')).toEqual([])
     expect(focusWords('Rut 3:9 que quiere decir extiende tu manto sobre tu sierva')).toContain('manto')
   })
+  test('how a question asks is never what it is about (six languages)', () => {
+    for (const q of ['What is happening in Ruth 1?', 'Explícame Rut 2 por favor', 'I need to understand Ruth 1', 'Summarize Ruth 1 please',
+      'Explain Ruth 3', 'Show me Ruth 2', 'Tell me about Ruth 1', 'Necesito entender Rut 1, ¿qué pasa?', '¿Qué sucede en Rut 3?', 'Resume Rut 1',
+      'Muéstrame Rut 2', 'Dime qué pasó en Rut 1', "Montre-moi Ruth 2 s'il vous plaît", 'Dis-moi ce qui se passe dans Ruth 1', 'Explique Ruth 3',
+      'Tolong jelaskan Rut 2', 'Tunjukkan Rut 2', 'Beritahu saya Rut 1', 'कृपया रूत 2 समझाइए', 'रूत 2 दिखाओ', 'बताओ रूत 1', 'اشرح راعوث 2 من فضلك',
+      'أرني راعوث 2', 'أخبرني عن راعوث 1'])
+      expect(focusWords(q), q).toEqual([])
+    // "favor" said by itself is a word of the passage
+    expect(focusWords('Ruth 2: why did Boaz show favor to Ruth?')).toContain('favor')
+  })
+  test('Arabic words match with or without their vowel signs, alef wasla and alef maqsura', () => {
+    expect(hits('ٱلرَّبُّ إِلَٰهُ إِسْرَائِيلَ', focusWords('الرب'))).toEqual(focusWords('الرب'))
+    expect(hits('مُوسَى', focusWords('موسي'))).toEqual(focusWords('موسي'))
+  })
   test('a word that most notes have does not choose among them', () => {
     const notes = ['God said', 'God saw', 'God made', 'the fish of God', 'a great fish'].map((quote) => ({ quote, titles: '' }))
     const o = focusOrder(notes, focusWords('God and the fish'))
@@ -42,12 +57,53 @@ describe('the words a question is about', () => {
 })
 
 describe('folds in a Markdown answer', () => {
-  test('a fold runs to the next fold or the source line', () => {
-    const html = md(`## Ruth 4\n*TN v91 — Ruth 4*\n\nfirst\n\n${FOLD}More notes (2)\n\n1. a\n\n2. b\n\n${FOLD}4:2 · notes: 1\n\n3. c\n\n*Source: x v1.*\n\nafter`)
+  test('a fold runs to the next fold or to its end marker, whatever is inside', () => {
+    const html = md(`## Ruth 4
+*TN v91 — Ruth 4*
+
+first
+
+${FOLD}More notes (2)
+
+1. a
+
+*an italic line*
+
+## a heading
+
+2. b
+
+${FOLD}4:2 · notes: 1
+
+3. c
+
+${FOLD_END}
+
+*Source: x v1.*
+
+after`)
     expect(html).toContain('<details class="fold"><summary>More notes (2)</summary><ol start="1">')
-    expect(html).toContain('</details><details class="fold"><summary>4:2 · notes: 1</summary>')
+    // an italic line and a heading inside a fold stay inside it
+    expect(html).toMatch(/<summary>More notes \(2\)<\/summary>.*<em>an italic line<\/em>.*a heading.*<ol start="2">.*<\/details><details class="fold"><summary>4:2/)
     expect(html).toMatch(/<\/ol><\/details><p><em>Source: x v1\.<\/em><\/p><p>after<\/p>$/)
+    expect(html).not.toContain(FOLD_END)
     expect(html.indexOf('first')).toBeLessThan(html.indexOf('<details'))
+  })
+  test('a shared answer has no fold buttons or markers', () => {
+    const text = plainText(`## Ruth 4
+
+first
+
+${FOLD}More notes (2)
+
+1. a
+
+${FOLD_END}
+
+*Source: x v1.*`)
+    expect(text).not.toContain('▸')
+    expect(text).not.toContain(FOLD_END)
+    expect(text).toContain('1. a')
   })
   test('every new phrase is said in the six languages', () => {
     const keys = ['chapter_summary', 'chapter_verses', 'focus_head', 'more_notes', 'verse_fold', 'terms_fold', 'questions_fold', 'article_more', 'article_suggestions']
@@ -86,6 +142,27 @@ describe('the passage view shows the notes about the question first', () => {
       expect(`${first[0]!.quotes} ${first[0]!.about}`).toMatch(about)
       expect(first.length).toBeLessThan(s!.notes.length)
     }, 120_000)
+})
+
+describe('a question that names no word moves nothing', () => {
+  for (const q of ['What is happening in Ruth 1?', 'Explícame Rut 2 por favor'])
+    test(q, async () => {
+      setQuestion(null)
+      const k = ask(`n-${q.length}`, /Rut /.test(q) ? 'es' : 'en', q)
+      const s = ((await runCase(k)).reply as { study?: Study }).study
+      if (s) expect(studyFirst(s, q)).toEqual([])
+    }, 120_000)
+})
+
+describe('through pipeline.answer()', () => {
+  // needs setQuestion in pipeline.answer(): enable at integration, once answer() calls setQuestion(made.q) next to setUiLang
+  test.skip('the Markdown answer to a question about a word starts with the notes about it', async () => {
+    setQuestion(null)
+    const info = String(((await runCase(ask('p-redeemer', 'en', 'What do the notes say about redeemer in Ruth 4?'))).reply as any).info)
+    const focusAt = info.indexOf('### Notes about «redeemer»')
+    expect(focusAt).toBeGreaterThan(0)
+    expect(focusAt).toBeLessThan(info.indexOf(FOLD))
+  }, 120_000)
 })
 
 describe('the Markdown answer', () => {
