@@ -1,0 +1,15 @@
+# BT Servant Mini's packs server (option C, 15 nov 2026): read-only, serves the format 3 language packs and the phone model
+# from the R2 bucket `bt-servant-mini-packs`, filled by sync.mjs. Not deployed yet: the bucket and the deploy need Abel's OK
+# (commands in README.md). Will answer at https://bt-servant-mini-packs.unfoldingword.workers.dev
+name = "bt-servant-mini-packs"
+account_id = "5a3ffd86280d3ed086be76d955829242" # unfoldingWord
+workers_dev = true
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[[r2_buckets]]
+binding = "PACKS"
+bucket_name = "bt-servant-mini-packs"
+
+[observability]
+enabled = true
