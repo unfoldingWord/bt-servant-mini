@@ -502,14 +502,14 @@ export function guessLang(q: string): string {
 
 // "Voy a empezar a traducir Jonás", "I want to translate Ruth", "Je vais traduire Jonas": about to translate a book (a report
 // of Nov 15: the introduction came with no next step). The book's introduction, then how to start (Translation Academy).
-const START_BOOK = new RegExp('(?<![\p{L}\p{M}])(?:' + [
+const START_BOOK = new RegExp('(?<![\\p{L}\\p{M}])(?:' + [
   "(?:voy|vamos|van|va) a (?:empezar a |comenzar a |iniciar (?:la )?|)tradu(?:cir|ccion)", "(?:empezar|comenzar|empiezo|comienzo|empezamos|comenzamos) (?:a |con )?(?:tradu(?:cir|ccion)|la traducci[oó]n)",
   "quiero (?:empezar a )?traducir", "queremos (?:empezar a )?traducir",
-  "(?:i|we) (?:want|am going|are going|'m going|'re going|plan|need) to (?:start |begin )?translat(?:e|ing)", "(?:start|begin|starting|beginning) (?:to )?translat(?:e|ing)",
+  "(?:i|we) (?:want|plan|need) to (?:start |begin )?translat(?:e|ing)", "(?:i am|we are|i'm|we're) (?:going|about) to (?:start |begin )?translat(?:e|ing)","(?:start|begin|starting|beginning) (?:to )?translat(?:e|ing)",
   "(?:je vais|nous allons|on va) (?:commencer à )?traduire", "(?:commencer|commence) à traduire", "je veux traduire",
   "(?:saya|kami|kita) (?:akan |mau |ingin )?(?:mulai )?menerjemahkan", "mulai menerjemahkan",
   "अनुवाद (?:शुरू|करना चाहता|करना चाहती|करने वाला|करने वाली)", "(?:سأبدأ|سنبدأ|أريد|نريد|سوف) (?:أن )?(?:ب)?(?:ترجمة|أترجم|نترجم)", "سأترجم", "سنترجم",
-].join('|') + ')(?![\p{L}\p{M}])', 'iu')
+].join('|') + ')(?![\\p{L}\\p{M}])', 'iu')
 /** "how do I translate the name …", "el nombre de …": a question about a name */
 const NAME_RE = /(?<![\p{L}\p{M}])(?:names?|nombres?|nom|noms|nama|नाम|اسم|الاسم|أسماء)(?![\p{L}\p{M}])/iu
 /** Whether the question is about starting to translate a book ("voy a empezar a traducir Jonás", "how do I translate the book of Ruth?"). */
