@@ -70,6 +70,8 @@ public class MainActivity extends Activity {
     private static final int PORT = 8080;
     private static final int PICK_PAGE_FILE = 1;
     private static final int PICK_MODEL = 2;
+    /** The landing site, which lists the newest release (latest.json); openUrl opens only it and github.com. */
+    private static final String SITE_HOST = "bt-servant-mini.unfoldingword.workers.dev";
 
     private WebView web;
     private static Process server;
@@ -523,6 +525,29 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String version() {
             try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
+        }
+
+        /** The build number, to compare with the newest release listed on the landing site (web/src/update.ts). */
+        @JavascriptInterface
+        public int versionCode() { return BuildConfig.VERSION_CODE; }
+
+        /**
+         * Opens a link in the browser: only https on github.com or the landing site (a new version's APK, which the browser
+         * downloads and the person taps to install; the app itself installs nothing). False when the link is not allowed.
+         */
+        @JavascriptInterface
+        public boolean openUrl(String url) {
+            final Uri u;
+            try { u = Uri.parse(url); } catch (Exception e) { return false; }
+            String host = u.getHost();
+            if (!"https".equalsIgnoreCase(u.getScheme()) || host == null || u.getUserInfo() != null || u.getPort() != -1
+                    || !(host.equalsIgnoreCase("github.com") || host.equalsIgnoreCase(SITE_HOST))) return false;
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, u).addCategory(Intent.CATEGORY_BROWSABLE));
+                } catch (Exception e) { Log.w(TAG, "openUrl: " + e); }
+            });
+            return true;
         }
 
         @JavascriptInterface
