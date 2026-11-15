@@ -1,5 +1,8 @@
 // A small Markdown renderer for answers: headings (#, ##, ###), paragraphs, line breaks, lists (-, *, •, 1.), **bold**,
 // *italic* and _italic_. Everything is escaped first, so text from the packs can never become HTML.
+// A paragraph that starts with "▸ " is a fold (focus.ts): a button, with what follows inside it, up to the next fold, a top
+// heading (# or ##) or the answer's source line (a paragraph that is one *italic* line).
+import { FOLD } from './focus'
 import { linkTarget, slugLabel } from './links'
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -25,9 +28,20 @@ function inline(s: string): string {
 export function md(src: string, ctx = ''): string {
   CTX = ctx
   const out: string[] = []
+  let folded = false
+  const close = () => {
+    if (folded) out.push('</details>')
+    folded = false
+  }
   for (const block of src.replace(/\r/g, '').split(/\n{2,}/)) {
     const lines = block.split('\n').filter((l) => l.trim() !== '')
     if (!lines.length) continue
+    if (lines[0]!.startsWith(FOLD)) {
+      close()
+      out.push(`<details class="fold"><summary>${inline(lines.shift()!.slice(FOLD.length).trim())}</summary>`)
+      folded = true
+      if (!lines.length) continue
+    } else if (folded && ((lines.length === 1 && /^\*[^*\s].*\*$/.test(lines[0]!.trim())) || /^#{1,2}\s/.test(lines[0]!))) close()
     const h = /^(#{1,3})\s+(.*)$/.exec(lines[0]!)
     if (h) {
       const level = h[1]!.length + 2 // # -> h3, ## -> h4, ### -> h5
@@ -81,6 +95,7 @@ export function md(src: string, ctx = ''): string {
       flush()
     }
   }
+  close()
   // one list, not one list per item, when the items were separated by blank lines
   return out.join('').replace(/<\/ul><ul>/g, '').replace(/<\/ol><ol start="\d+">/g, '')
 }

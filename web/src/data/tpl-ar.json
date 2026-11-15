@@ -56,5 +56,14 @@
   "books_head": "المصطلح الرئيسي «{title}» موجود في {v} آية في {b} سفرًا. حسب السفر:",
   "books_none": "لم أجد آيات مرتبطة بـ«{title}».",
   "word_notes": "ملاحظات",
-  "word_links": "روابط المصطلحات الرئيسية"
+  "word_links": "روابط المصطلحات الرئيسية",
+  "chapter_summary": "{book} {ref}: {v} آية، ملاحظات الترجمة: {n}.",
+  "chapter_verses": "{book} {ref}: {v} آية.",
+  "focus_head": "ملاحظات عن {words} في {book} {ref} ({n} من {all}):",
+  "more_notes": "ملاحظات أخرى ({n})",
+  "verse_fold": "{ref} · ملاحظات: {n}",
+  "terms_fold": "الكلمات الرئيسية ({n})",
+  "questions_fold": "أسئلة الفهم ({n})",
+  "article_more": "المزيد عن «{title}»",
+  "article_suggestions": "اقتراحات الترجمة"
 }

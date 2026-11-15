@@ -56,5 +56,14 @@
   "books_head": "Le terme clé « {title} » se trouve dans {v} versets de {b} livres. Par livre :",
   "books_none": "Je n'ai trouvé aucun verset lié à « {title} ».",
   "word_notes": "notes",
-  "word_links": "liens vers des termes clés"
+  "word_links": "liens vers des termes clés",
+  "chapter_summary": "{book} {ref} : {v} versets, notes de traduction : {n}.",
+  "chapter_verses": "{book} {ref} : {v} versets.",
+  "focus_head": "Notes sur {words} dans {book} {ref} ({n} sur {all}) :",
+  "more_notes": "Autres notes ({n})",
+  "verse_fold": "{ref} · notes : {n}",
+  "terms_fold": "Termes clés ({n})",
+  "questions_fold": "Questions de compréhension ({n})",
+  "article_more": "Plus sur « {title} »",
+  "article_suggestions": "Suggestions de traduction"
 }

@@ -56,5 +56,14 @@
   "books_head": "The key term «{title}» is in {v} verses of {b} books. By book:",
   "books_none": "I found no verses linked to «{title}».",
   "word_notes": "notes",
-  "word_links": "key term links"
+  "word_links": "key term links",
+  "chapter_summary": "{book} {ref}: {v} verses, translation notes: {n}.",
+  "chapter_verses": "{book} {ref}: {v} verses.",
+  "focus_head": "Notes about {words} in {book} {ref} ({n} of {all}):",
+  "more_notes": "More notes ({n})",
+  "verse_fold": "{ref} · notes: {n}",
+  "terms_fold": "Key terms ({n})",
+  "questions_fold": "Comprehension questions ({n})",
+  "article_more": "More about «{title}»",
+  "article_suggestions": "Translation suggestions"
 }

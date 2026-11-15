@@ -56,5 +56,14 @@
   "books_head": "मुख्य शब्द «{title}» {b} पुस्तकों के {v} पदों में है। पुस्तक के अनुसार:",
   "books_none": "मुझे «{title}» से जुड़े कोई पद नहीं मिले।",
   "word_notes": "नोट्स",
-  "word_links": "मुख्य शब्दों के लिंक"
+  "word_links": "मुख्य शब्दों के लिंक",
+  "chapter_summary": "{book} {ref}: {v} पद, अनुवाद नोट्स: {n}।",
+  "chapter_verses": "{book} {ref}: {v} पद।",
+  "focus_head": "{book} {ref} में {words} के बारे में नोट्स ({all} में से {n}):",
+  "more_notes": "और नोट्स ({n})",
+  "verse_fold": "{ref} · नोट्स: {n}",
+  "terms_fold": "मुख्य शब्द ({n})",
+  "questions_fold": "समझ के प्रश्न ({n})",
+  "article_more": "«{title}» के बारे में और",
+  "article_suggestions": "अनुवाद के सुझाव"
 }
