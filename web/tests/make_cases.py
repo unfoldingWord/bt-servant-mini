@@ -35,7 +35,6 @@ R_BOOKS = 'the whichBooks vocabulary misses this wording'
 R_MEANING = 'the meaning route is not taken for this wording or language'
 R_ISA = 'Isaiah is not in the packs on disk'
 R_CODE = 'follow-up read by code alone: withContext does not cover this kind (needs a reader with the state)'
-R_TA = 'no way to a Translation Academy article for this question (report, known-open)'
 # Expected to fail today, by case id: why. Reported apart, never fail the build; flagged when they start passing.
 KNOWN = {
     'obs-3-5-text': R_OBS, 'obs-notes-3-4': R_OBS, 'ta-rhetorical-question': R_OPEN,
@@ -55,8 +54,6 @@ KNOWN = {
     **{f'fu-{l}-{k}-code': R_CODE for l in ['en', 'es', 'fr', 'id', 'hi', 'ar'] for k in ['next', 'term_here', 'count_ch']},
     **{f'fu-{l}-what-code': R_CODE for l in ['id', 'hi', 'ar']},
     'fu-ar-verse-code': 'refInText reads العدد ("the verse") as the book of Numbers',
-    **{i: R_TA for i in ['report-first-ta', 'report-starting', 'report-modisms', 'report-team']},
-    'report-metaphors': '"metaphors" names no article (only "metaphor" does): a free search instead of figs-metaphor',
     'quechua-16': 'a question in Quechua: should answer in the app language and suggest asking in Spanish',
     'quechua-16-code': 'a question in Quechua: should answer in the app language and suggest asking in Spanish',
     'quechua-05-code': R_MEANING,
@@ -194,6 +191,53 @@ def reports():
             for i, q, s, b, e in rows]
 
 
+# Training questions -> Translation Academy (pipeline.ts, route `academy`): the reports of Nov 13-14 in the six languages, and
+# questions the route must leave to the other routes. Code alone reads them (no reader), as the reports were.
+TA_DIFF, TA_START, TA_TEAM = 'ta:translate/translation-difficulty', 'ta:process/process-manual', 'ta:process/setup-team'
+TA_IDIOM, TA_METAPHOR, TA_CHECK = 'ta:translate/figs-idiom', 'ta:translate/figs-metaphor', 'ta:checking/intro-checking'
+ACADEMY = [
+    ('en', 'What book of the Bible should I translate first?', TA_DIFF),
+    ('en', 'I am starting in translation, how should I start?', TA_START),
+    ('en', 'How do I set up a translation team?', TA_TEAM),
+    ('en', 'How do I translate modisms?', TA_IDIOM),
+    ('en', 'How do I translate idioms?', TA_IDIOM),
+    ('en', 'How to translate metaphors?', TA_METAPHOR),
+    ('en', 'How do I check a translation?', TA_CHECK),
+    ('es', '¿Qué libro de la Biblia debo traducir primero?', TA_DIFF),
+    ('es', 'Estoy empezando en la traducción, ¿cómo debo empezar?', TA_START),
+    ('es', '¿Cómo formo un equipo de traducción?', TA_TEAM),
+    ('es', '¿Cómo traduzco los modismos?', TA_IDIOM),
+    ('es', '¿Cómo traducir metáforas?', TA_METAPHOR),
+    ('es', '¿Cómo reviso una traducción?', TA_CHECK),
+    ('fr', 'Comment traduire les métaphores ?', TA_METAPHOR),
+    ('fr', 'Comment former une équipe de traduction ?', TA_TEAM),
+    ('id', 'Bagaimana menerjemahkan ungkapan?', TA_IDIOM),
+    ('id', 'Kitab apa yang harus kami terjemahkan dulu?', TA_DIFF),
+    ('hi', 'मुहावरों का अनुवाद कैसे करें?', TA_IDIOM),
+    ('hi', 'अनुवाद दल कैसे बनाएँ?', TA_TEAM),
+    ('ar', 'كيف أترجم الاستعارة؟', TA_METAPHOR),
+    ('ar', 'كيف نشكل فريق ترجمة؟', TA_TEAM),
+]
+# (lang, question, expectations): not training questions, or not about one Translation Academy article
+ACADEMY_NOT = [
+    ('en', 'What is the first book of the Bible?', {'notConcept': '^ta:', 'useful': False}),
+    ('en', 'How do I translate the name Yahweh?', {'notConcept': '^ta:'}),
+    ('es', '¿Cómo traduzco cordero si en mi idioma no hay ovejas?', {'notConcept': '^ta:translate/figs-idiom$', 'useful': False}),
+    ('en', 'Who was on the team of Paul?', {'notConcept': '^ta:', 'useful': False}),
+]
+
+
+def academy():
+    out = []
+    for n, (lang, q, id_) in enumerate(ACADEMY):
+        out.append({'id': f'academy-{lang}-{n + 1:02d}', 'set': 'academy', 'lang': lang, 'q': q, 'slots': None, 'expect': {'route': 'article', 'concept': id_},
+                    'from': 'user reports Nov 13-14 (training questions)', 'fast': True})
+    for n, (lang, q, e) in enumerate(ACADEMY_NOT):
+        out.append({'id': f'academy-not-{lang}-{n + 1:02d}', 'set': 'academy', 'lang': lang, 'q': q, 'slots': None, 'expect': e,
+                    'from': 'questions the academy route must leave to the other routes', 'fast': True})
+    return out
+
+
 # handoff/mini-servant/investigacion/experimento-traductor-quechua.md: Mateo, a Quechua translator (Spanish is his second
 # language), 20 questions. Slots: what a right reader gives. Expectations: the "good" answer of the experiment's proposals.
 def quechua():
@@ -233,7 +277,7 @@ def quechua():
 
 def main():
     OUT.mkdir(exist_ok=True)
-    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True), 'reports': reports(), 'quechua': quechua()}
+    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True), 'reports': reports(), 'quechua': quechua(), 'academy': academy()}
     for name, rows in sets.items():
         for r in rows:
             if r['id'] in KNOWN:
