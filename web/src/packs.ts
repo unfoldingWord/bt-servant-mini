@@ -2,15 +2,16 @@
 // build), and the ones the person adds — downloaded from the packs server or imported from a .tcpack file (SD card, phone
 // memory, another phone) — kept in the page's IndexedDB. A language lives in one layer: an added one wins.
 import {
-  createClient, emptyState, httpSource, indexedDbStore, planInstall, verifyCatalogFile,
+  ClientError, createClient, emptyState, httpSource, indexedDbStore, planInstall, verifyCatalogFile,
   type BlobStore, type PackReader, type PackSource, type VerifiedCatalog,
 } from '@bt-synergy/language-pack-client'
-import { SHARED_UNITS, STAGING_SERVER, trustedKeys } from './shared'
+import { PACKS_SERVERS, SHARED_UNITS, trustedKeys } from './shared'
 
 const BASE = './packs'
 /** The pack lists change when the app is rebuilt: never take them from the browser cache. */
 const NOCACHE: RequestInit = { cache: 'no-store' }
-export const PACKS_SERVER = STAGING_SERVER
+/** The first packs server (the others are tried after it: packsServers, serverSource). */
+export const PACKS_SERVER = PACKS_SERVERS[0]!
 /** Languages Door43 marks tc-ready (Nov 2026): the ones the server may have packs for. */
 export const CANDIDATES = ['en', 'es-419', 'id', 'hi', 'ar', 'fr', 'bn', 'gu', 'kn', 'mr', 'ne', 'or', 'te', 'fa', 'ru', 'pt-br', 'sw']
 /** The packs' names, as their speakers write them. */
@@ -19,6 +20,68 @@ export const PACK_NAMES: Record<string, string> = {
   gu: 'ગુજરાતી', kn: 'ಕನ್ನಡ', mr: 'मराठी', ne: 'नेपाली', or: 'ଓଡ଼ିଆ', te: 'తెలుగు', fa: 'فارسی', ru: 'Русский', 'pt-br': 'Português', sw: 'Kiswahili',
 }
 export const CANON = 'gen exo lev num deu jos jdg rut 1sa 2sa 1ki 2ki 1ch 2ch ezr neh est job psa pro ecc sng isa jer lam ezk dan hos jol amo oba jon mic nam hab zep hag zec mal mat mrk luk jhn act rom 1co 2co gal eph php col 1th 2th 1ti 2ti tit phm heb jas 1pe 2pe 1jn 2jn 3jn jud rev'.split(' ')
+
+// ------------------------------------------------------------------------------------------------------------ servers
+
+let servers: readonly string[] = PACKS_SERVERS
+/** The packs servers, in the order they are tried. */
+export const packsServers = (): readonly string[] => servers
+/** Tests and local runs (a `wrangler dev` of packs-server): download from these servers instead; no argument puts the app's back. */
+export function setPacksServers(list?: readonly string[]) {
+  servers = list?.length ? [...list] : PACKS_SERVERS
+  commonCats.clear()
+}
+
+/** A signal for one try at one server: it ends after `ms`, or when the caller's own signal ends. */
+function attemptSignal(outer: AbortSignal | undefined, ms: number): { signal: AbortSignal; done: () => void } {
+  const c = new AbortController()
+  const t = setTimeout(() => c.abort(new Error('timeout')), ms)
+  const stop = () => c.abort(outer?.reason)
+  if (outer?.aborted) stop()
+  else outer?.addEventListener('abort', stop, { once: true })
+  return { signal: c.signal, done: () => (clearTimeout(t), outer?.removeEventListener('abort', stop)) }
+}
+/** The server answered that it does not have it (a 404): the next one may, but this one is not down. */
+const notThere = (e: unknown) => e instanceof ClientError && (e.code === 'E_NO_PACK' || e.status === 404)
+
+/**
+ * The packs servers as one source: each request goes to the first server, and to the next one when that fails (no answer, a
+ * server error, a 404). A server that fails without answering (down, or not reachable from this network) goes last for the
+ * rest of this source's requests, so a download does not wait for it again on every segment. The servers hold the same files:
+ * a catalog from one and its segments from another install the same pack (every segment is checked against its id, every
+ * catalog against the trusted keys). Only the caller's own signal (a cancel) stops at once. A catalog request gets `catalogMs`
+ * per server, so a server that never answers does not use up the time of the others.
+ */
+export function serverSource(list: readonly string[] = servers, o: { fetch?: typeof fetch; catalogMs?: number } = {}): PackSource {
+  const sources = list.map((base) => httpSource({ base, ...(o.fetch ? { fetch: o.fetch } : {}) }))
+  let order = sources.map((_, i) => i)
+  async function attempt<T>(run: (s: PackSource, signal?: AbortSignal) => Promise<T>, outer: AbortSignal | undefined, ms: number | undefined, missingWins: boolean): Promise<T> {
+    let failure: unknown
+    let missing: unknown
+    for (const i of [...order]) {
+      const one = ms ? attemptSignal(outer, ms) : { signal: outer, done: () => {} }
+      try {
+        return await run(sources[i]!, one.signal)
+      } catch (e) {
+        if (outer?.aborted) throw e
+        if (notThere(e)) missing ??= e
+        else {
+          failure ??= e
+          order = [...order.filter((x) => x !== i), i] // down: asked last from now on
+        }
+      } finally {
+        one.done()
+      }
+    }
+    // every server failed: for a catalog, a server that answered "no pack" is the answer; for a segment, the failure
+    throw (missingWins ? missing ?? failure : failure ?? missing) ?? new ClientError('E_NETWORK', 'no packs server')
+  }
+  return {
+    catalog: (name, opts = {}) =>
+      attempt((s, signal) => s.catalog(name, { ...(opts.etag !== undefined ? { etag: opts.etag } : {}), ...(signal ? { signal } : {}) }), opts.signal, o.catalogMs ?? CATALOG_MS, true),
+    segment: (id, signal) => attempt((s, sig) => s.segment(id, sig), signal, undefined, false),
+  }
+}
 
 // ------------------------------------------------------------------------------------------------- shipped (assets)
 
@@ -76,7 +139,7 @@ function assetStore(lang: string): BlobStore {
 let idb: Promise<BlobStore> | null = null
 const added = () => (idb ??= indexedDbStore({ name: 'btsm-packs' }))
 const trust = { trustedKeys: trustedKeys() }
-const addedClient = async () => createClient({ store: await added(), source: httpSource({ base: PACKS_SERVER }), trust })
+const addedClient = async () => createClient({ store: await added(), source: serverSource(), trust })
 
 /** The languages with units in the phone's store, complete or not. */
 async function storedLangs(): Promise<string[]> {
@@ -188,9 +251,11 @@ const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
  * Reads the language's catalog (a few KB) and the common catalog it names, and plans the same install `downloadLang` runs, so the
  * size shown before the download is the size downloaded. Null when the server has no pack for it (or no internet).
  */
-export async function offerOf(lang: string, source: PackSource = httpSource({ base: PACKS_SERVER })): Promise<Offer | null> {
+export async function offerOf(lang: string, source: PackSource = serverSource()): Promise<Offer | null> {
+  // each server gets CATALOG_MS (serverSource); this is the time for all of them
+  const wait = () => timeout(CATALOG_MS * Math.max(1, servers.length))
   try {
-    const got = await source.catalog(lang, { signal: timeout(CATALOG_MS) })
+    const got = await source.catalog(lang, { signal: wait() })
     if (got === 'not-modified') return null
     const cat = await verifyCatalogFile(got.bytes, trust, { from: 'network' })
     const catalogs = [cat]
@@ -198,7 +263,7 @@ export async function offerOf(lang: string, source: PackSource = httpSource({ ba
       const id = hex(rid)
       if (!commonCats.has(id)) {
         commonCats.set(id, (async () => {
-          const c = await source.catalog(rname, { signal: timeout(CATALOG_MS) })
+          const c = await source.catalog(rname, { signal: wait() })
           if (c === 'not-modified') return null
           const v = await verifyCatalogFile(c.bytes, trust, { from: 'network' })
           return v.id === id ? v : null
@@ -269,7 +334,7 @@ export async function downloadLang(
   onProgress?: (p: Progress) => void,
   o: { offer?: Offer | null; signal?: AbortSignal; ahead?: number } = {},
 ): Promise<{ books: number; bytes: number }> {
-  const http = httpSource({ base: PACKS_SERVER })
+  const http = serverSource()
   const offer = o.offer ?? (await offerOf(lang, http))
   if (!offer) throw new Error(`no pack for ${lang} on the server`)
   const store = await added()
