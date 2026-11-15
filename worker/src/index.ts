@@ -1,6 +1,6 @@
 // BT Servant Mini — online helper (level 3).
 //   POST /v1/session { idToken }  -> { token, name, exp }   a Google sign-in becomes a session of 30 days
-//   POST /v1/answer  { question, lang, helps, history? } -> { text, model }   with the session, when sign-in is required
+//   POST /v1/answer  { question, lang, helps, sources?, history? } -> { text, model, sources }   with the session, when sign-in is required
 //   POST /v1/slots   { question } -> { slots, model }   the question read into the app's call sheet (the phone model's job,
 //                    done online when the person turned the online helper on); same key, sign-in and caps (its own counters)
 //   POST /v1/usage   { days: [{ d, c }], app, flavor, ui, packs, model, online, mem } -> { ok }   usage counts (opt-in)
@@ -13,6 +13,7 @@
 // the key is dug out of an APK.
 
 import SLOTS from './slots-prompt.json'
+import { cleanSources, system, userMessage } from './prompt'
 
 export interface Env {
   AI: { run(model: string, input: unknown): Promise<any> }
@@ -35,7 +36,6 @@ export interface Env {
   SESSION_SECRET?: string
 }
 
-const LANGS: Record<string, string> = { en: 'English', es: 'Spanish', fr: 'French', id: 'Indonesian', hi: 'Hindi', ar: 'Arabic' }
 const CORS = {
   'Access-Control-Allow-Origin': '*', // the app's pages come from https://appassets.androidplatform.net
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -44,23 +44,6 @@ const CORS = {
 }
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } })
-
-function system(lang: string): string {
-  const name = LANGS[lang] ?? 'the language of the question'
-  return [
-    'You are BT Servant, a warm and careful assistant for Bible translators, answering inside the BT Servant Mini app.',
-    `Answer in ${name}.`,
-    'Use ONLY the translation helps given below (Bible texts, translation notes, comprehension questions, key terms, articles).',
-    'When the helps include "Context of the passage" (surrounding verses, chapter and book introductions) and the question is about translating or understanding a passage:',
-    'start with one or two sentences saying what is happening in the verse and why, in the flow of the story or argument (what came before, what it leads to);',
-    'then say how to translate it, going through the phrases the notes point out and their alternate translations.',
-    'Explain and paraphrase them simply so a translator can act on them; when you give a suggestion, base it on a note or an article.',
-    'Name the resource you use (for example: the ULT, a translation note, the Translation Words article "grace").',
-    'If the helps do not answer the question, say so in one sentence and suggest how to ask (a reference, a word, a phrase in quotes).',
-    'Never invent verses, notes, numbers or facts that are not in the helps. Do not preach.',
-    'Be brief: at most about 230 words. Use short paragraphs or a short list; you may use **bold** for key words.',
-  ].join(' ')
-}
 
 // ------------------------------------------------------------------------------------------------------------- limits
 
@@ -311,7 +294,7 @@ export default {
     }
     if (url.pathname === '/v1/slots' ? slotsLimited(ip) : limited(ip)) return json({ error: 'too many requests, wait a minute' }, 429)
 
-    let body: { question?: unknown; lang?: unknown; helps?: unknown; history?: unknown; idToken?: unknown }
+    let body: { question?: unknown; lang?: unknown; helps?: unknown; sources?: unknown; history?: unknown; idToken?: unknown }
     try {
       body = await req.json()
     } catch {
@@ -357,6 +340,7 @@ export default {
     const max = Number(env.MAX_CONTEXT) || 9500
     const helps = typeof body.helps === 'string' ? body.helps.slice(0, max) : ''
     if (!question) return json({ error: 'no question' }, 400)
+    const sources = cleanSources(body.sources, helps)
 
     const history = Array.isArray(body.history)
       ? (body.history as { role?: string; text?: string }[])
@@ -374,7 +358,7 @@ export default {
       const answer = String(out?.response ?? '').trim()
       if (!answer) return json({ error: 'empty answer' }, 502)
       await Promise.all([bump(env, 'all'), person !== 'anyone' ? bump(env, `p:${person}`) : Promise.resolve()])
-      return json({ text: answer, model: env.MODEL })
+      return json({ text: answer, model: env.MODEL, sources })
     } catch (e) {
       return json({ error: e instanceof Error ? e.message : String(e) }, 502)
     }
