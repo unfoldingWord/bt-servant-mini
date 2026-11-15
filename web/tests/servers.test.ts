@@ -1,7 +1,10 @@
 // The packs servers in order (Mini's own first, the old preview after it): a request goes to the next server when one fails,
 // for the language packs (serverSource), the phone's model (modelServer) and the trusted keys. Fake servers, no network.
 import { describe, expect, test } from 'bun:test'
-import { serverSource, packsServers, setPacksServers } from '../src/packs'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { newerOnly, serverSource, packsServers, setPacksServers } from '../src/packs'
+import { PACKS_DIR } from './fs-packs'
 import { MINI_SERVER, PACKS_SERVERS, PREVIEW_SERVER, STAGING_KEYS, TRUSTED_KEYS, trustedKeys } from '../src/shared'
 
 const A = 'https://a.test'
@@ -120,6 +123,48 @@ describe('serverSource', () => {
     })
     expect(await serverSource([A, B], { fetch: f }).catalog('en', { etag: '"e1"' })).toBe('not-modified')
     expect(seen).toEqual(['"e1"', '"e1"'])
+  })
+})
+
+describe('a server that fell behind', () => {
+  test('a catalog turned down (older than the phone has) goes to the next server; the first stays first', async () => {
+    const { f, calls } = fakeFetch((server) => ok(server === A ? 'old' : 'new'))
+    const s = serverSource([A, B], { fetch: f, accept: async (_n, b) => text(b) !== 'old' })
+    const got = await s.catalog('en')
+    expect(got !== 'not-modified' && text(got.bytes)).toBe('new')
+    expect(calls).toEqual([`GET ${A}/v3/packs/en/catalog`, `GET ${B}/v3/packs/en/catalog`])
+    await s.catalog('en')
+    expect(calls[2]).toBe(`GET ${A}/v3/packs/en/catalog`)
+  })
+  test('every server turned down: the first answer, so the client says why (E_DOWNGRADE)', async () => {
+    const { f } = fakeFetch((server) => ok(server))
+    const got = await serverSource([A, B], { fetch: f, accept: async () => false }).catalog('en')
+    expect(got !== 'not-modified' && text(got.bytes)).toBe(A)
+  })
+  test('"not modified" is never turned down', async () => {
+    const { f, calls } = fakeFetch(() => new Response(null, { status: 304 }))
+    expect(await serverSource([A, B], { fetch: f, accept: async () => false }).catalog('en', { etag: '"e"' })).toBe('not-modified')
+    expect(calls.length).toBe(1)
+  })
+  test('a segment request that stalls: the next server after its own time', async () => {
+    const { f } = fakeFetch((server) => (server === A ? 'hang' : ok('seg')))
+    expect(text(await serverSource([A, B], { fetch: f, segmentMs: 50 }).segment(SEG))).toBe('seg')
+  })
+})
+
+describe('newerOnly', () => {
+  // the English catalog the tests' packs carry (signed with the staging key, revision 3)
+  const st = JSON.parse(readFileSync(join(PACKS_DIR, 'en', 'state.json'), 'utf8'))
+  const en = st.published.en
+  const file = join(PACKS_DIR, 'en', 'seg', en.id.slice(0, 2), en.id)
+  const store = (published: Record<string, unknown>) => async () => ({ getState: async () => ({ published }) }) as any
+  test.skipIf(!existsSync(file))('a catalog older than the one on the phone is turned down; the same or newer is taken', async () => {
+    const bytes = new Uint8Array(readFileSync(file))
+    expect(await newerOnly(store({}))('en', bytes)).toBe(true)
+    expect(await newerOnly(store({ en: { ...en } }))('en', bytes)).toBe(true)
+    expect(await newerOnly(store({ en: { ...en, revision: en.revision - 1 } }))('en', bytes)).toBe(true)
+    expect(await newerOnly(store({ en: { ...en, revision: en.revision + 1 } }))('en', bytes)).toBe(false)
+    expect(await newerOnly(store({ en: { ...en, revision: en.revision + 1 } }))('en', new Uint8Array([1, 2, 3]))).toBe(true) // the client rejects it
   })
 })
 

@@ -44,24 +44,37 @@ function attemptSignal(outer: AbortSignal | undefined, ms: number): { signal: Ab
 /** The server answered that it does not have it (a 404): the next one may, but this one is not down. */
 const notThere = (e: unknown) => e instanceof ClientError && (e.code === 'E_NO_PACK' || e.status === 404)
 
+/** Whether a catalog a server sent may be used: false sends the request to the next server (see `newerOnly`). */
+export type Accept = (name: string, bytes: Uint8Array) => Promise<boolean>
 /**
  * The packs servers as one source: each request goes to the first server, and to the next one when that fails (no answer, a
- * server error, a 404). A server that fails without answering (down, or not reachable from this network) goes last for the
- * rest of this source's requests, so a download does not wait for it again on every segment. The servers hold the same files:
- * a catalog from one and its segments from another install the same pack (every segment is checked against its id, every
- * catalog against the trusted keys). Only the caller's own signal (a cancel) stops at once. A catalog request gets `catalogMs`
- * per server, so a server that never answers does not use up the time of the others.
+ * server error, a 404, no answer in time) or, for a catalog, when `accept` turns it down. A server that fails without answering
+ * (down, or not reachable from this network) goes last for the rest of this source's requests, so a download does not wait
+ * for it again on every segment. The servers hold the same files: a catalog from one and its segments from another install
+ * the same pack (every segment is checked against its id, every catalog against the trusted keys). Only the caller's own
+ * signal (a cancel) stops at once. Each try has its own time (`catalogMs`, `segmentMs`), so a server that stops answering
+ * does not use up the time of the others. When every server's catalog is turned down, the first one is given, and the client
+ * reports why (an older revision: E_DOWNGRADE).
  */
-export function serverSource(list: readonly string[] = servers, o: { fetch?: typeof fetch; catalogMs?: number } = {}): PackSource {
+export function serverSource(
+  list: readonly string[] = servers,
+  o: { fetch?: typeof fetch; catalogMs?: number; segmentMs?: number; accept?: Accept } = {},
+): PackSource {
   const sources = list.map((base) => httpSource({ base, ...(o.fetch ? { fetch: o.fetch } : {}) }))
   let order = sources.map((_, i) => i)
-  async function attempt<T>(run: (s: PackSource, signal?: AbortSignal) => Promise<T>, outer: AbortSignal | undefined, ms: number | undefined, missingWins: boolean): Promise<T> {
+  async function attempt<T>(
+    run: (s: PackSource, signal?: AbortSignal) => Promise<T>, outer: AbortSignal | undefined, ms: number, missingWins: boolean,
+    ok: (v: T) => Promise<boolean> = async () => true,
+  ): Promise<T> {
     let failure: unknown
     let missing: unknown
+    let refused: { v: T } | undefined
     for (const i of [...order]) {
-      const one = ms ? attemptSignal(outer, ms) : { signal: outer, done: () => {} }
+      const one = attemptSignal(outer, ms)
       try {
-        return await run(sources[i]!, one.signal)
+        const v = await run(sources[i]!, one.signal)
+        if (await ok(v)) return v
+        refused ??= { v } // this server is behind: the next one may have it
       } catch (e) {
         if (outer?.aborted) throw e
         if (notThere(e)) missing ??= e
@@ -73,13 +86,36 @@ export function serverSource(list: readonly string[] = servers, o: { fetch?: typ
         one.done()
       }
     }
+    if (refused) return refused.v
     // every server failed: for a catalog, a server that answered "no pack" is the answer; for a segment, the failure
     throw (missingWins ? missing ?? failure : failure ?? missing) ?? new ClientError('E_NETWORK', 'no packs server')
   }
+  const accept = o.accept
   return {
     catalog: (name, opts = {}) =>
-      attempt((s, signal) => s.catalog(name, { ...(opts.etag !== undefined ? { etag: opts.etag } : {}), ...(signal ? { signal } : {}) }), opts.signal, o.catalogMs ?? CATALOG_MS, true),
-    segment: (id, signal) => attempt((s, sig) => s.segment(id, sig), signal, undefined, false),
+      attempt(
+        (s, signal) => s.catalog(name, { ...(opts.etag !== undefined ? { etag: opts.etag } : {}), ...(signal ? { signal } : {}) }),
+        opts.signal, o.catalogMs ?? CATALOG_MS, true,
+        async (v) => !accept || v === 'not-modified' || (await accept(name, v.bytes)),
+      ),
+    segment: (id, signal) => attempt((s, sig) => s.segment(id, sig), signal, o.segmentMs ?? SEGMENT_MS, false),
+  }
+}
+
+/**
+ * Turns down a catalog older than the one this phone already has (a server whose copy fell behind): the client would refuse
+ * it (E_DOWNGRADE) and never ask the next server. A catalog that does not verify is left to the client to reject.
+ */
+export function newerOnly(store: () => Promise<BlobStore>): Accept {
+  return async (_name, bytes) => {
+    try {
+      const v = await verifyCatalogFile(bytes, trust, { from: 'network' })
+      const st: any = await (await store()).getState()
+      const have = st?.published?.[v.name]
+      return !have || have.publisher !== v.publisher || v.revision >= have.revision
+    } catch {
+      return true
+    }
   }
 }
 
@@ -139,7 +175,8 @@ function assetStore(lang: string): BlobStore {
 let idb: Promise<BlobStore> | null = null
 const added = () => (idb ??= indexedDbStore({ name: 'btsm-packs' }))
 const trust = { trustedKeys: trustedKeys() }
-const addedClient = async () => createClient({ store: await added(), source: serverSource(), trust })
+const addedSource = () => serverSource(servers, { accept: newerOnly(added) })
+const addedClient = async () => createClient({ store: await added(), source: addedSource(), trust })
 
 /** The languages with units in the phone's store, complete or not. */
 async function storedLangs(): Promise<string[]> {
@@ -245,6 +282,8 @@ function timeout(ms: number): AbortSignal {
 }
 /** How long a catalog request may take before it counts as no answer. */
 export const CATALOG_MS = 15000
+/** How long one segment request may take on one server before the next server is asked (a pack segment is small). */
+export const SEGMENT_MS = 90000
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
 /**
@@ -334,7 +373,7 @@ export async function downloadLang(
   onProgress?: (p: Progress) => void,
   o: { offer?: Offer | null; signal?: AbortSignal; ahead?: number } = {},
 ): Promise<{ books: number; bytes: number }> {
-  const http = serverSource()
+  const http = addedSource()
   const offer = o.offer ?? (await offerOf(lang, http))
   if (!offer) throw new Error(`no pack for ${lang} on the server`)
   const store = await added()
