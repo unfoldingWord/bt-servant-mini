@@ -543,6 +543,10 @@ GUIDE = [
     # never over a reading of the question: the reader read a term ("weather" as an article to look up)
     ('in-en-reader-term', 'en', 'What does the Bible say about the weather?', {'useful': False}, None, {'intent': 'article', 'term': 'weather', 'lang': 'en'}),
     ('in-en-reader-term2', 'en', 'Weather?', {'useful': False}, None, {'intent': 'article', 'term': 'weather', 'lang': 'en'}),
+    # the app in English, the question in another language: the reply in the question's (a report of Nov 15)
+    ('oos-es-ui-en', 'en', '¿Qué tiempo hará mañana?', {'oos': True, 'has': ['traducción de la Biblia'], 'not': ['I help with']}, None),
+    ('oos-fr-ui-en', 'en', 'Quel temps fera-t-il demain ?', {'oos': True, 'has': ['traduire la Bible'], 'not': ['I help with']}, None),
+    ('oos-id-ui-en', 'en', 'Bagaimana cuaca besok?', {'oos': True, 'has': ['penerjemahan Alkitab'], 'not': ['I help with']}, None),
     # an off-topic word with something about the Bible: answered as usual
     ('in-en-hello-ref', 'en', 'Hello, show me Ruth 2:3', {'route': 'passage', 'ref': 'rut 2:3'}, None),
     ('in-en-jerusalem', 'en', 'What is the weather like in Jerusalem?', {'useful': False}, None),
