@@ -76,7 +76,8 @@ export function clean(md: unknown, keepHeadings = false): string {
     // links stay: md() turns the ones the app can open ([[tw:kt/faith]], [1:2](ref:jon 1:2), ../kt/faith.md) into taps
     .replace(/\((?:ver|see):\s*rc:\/\/[^)\s]+\)/gi, '')
     .replace(/[ \t]+\./g, '.')
-    .replace(/(?<!\.)\.\.(?!\.)/g, '.')
+    // a doubled period ("word..") becomes one, but not the "../" of a link (../figs-simile/01.md must stay a tap)
+    .replace(/(?<!\.)\.\.(?![./])/g, '.')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }

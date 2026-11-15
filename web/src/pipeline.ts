@@ -521,9 +521,7 @@ export const ROUTES: Route[] = [
         const parts = r.answer.split('\n\n')
         const src = parts.length > 1 && parts.at(-1)!.startsWith('*') ? parts.at(-1)! : ''
         const shown = a.sections.filter((s) => s.role !== 'word-data' && String(s.md ?? '').trim())
-        // clean() keeps links but turns "../" into "./": the links to other articles (../setup-team/01.md) must stay taps
-        const keepLinks = (md: unknown) => clean(String(md ?? '').replace(/\.\.\//g, '\u0001/')).replace(/\u0001/g, '..')
-        const body = shown.map((s) => (s.title && shown.length > 1 ? `**${s.title}**\n\n` : '') + keepLinks(s.md)).join('\n\n')
+        const body = shown.map((s) => (s.title && shown.length > 1 ? `**${s.title}**\n\n` : '') + clean(s.md)).join('\n\n')
         // "Choosing What to Translate" ends with its advice (start with Open Bible Stories): about 4,700 characters
         info = [parts[0], clipTo(body, 5000), src].filter(Boolean).join('\n\n')
       }
