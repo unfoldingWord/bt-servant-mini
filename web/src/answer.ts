@@ -7,6 +7,7 @@ import { type BookModel, type HelpRow, verseId } from '@bt-synergy/language-pack
 import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
+import { FOLD, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import tEn from './data/tpl-en.json'
 import tEs from './data/tpl-es.json'
 import tFr from './data/tpl-fr.json'
@@ -57,6 +58,12 @@ const templates: Record<string, Record<string, string>> = { en: tEn, es: tEs, fr
 /** The language the person wrote in: the answer's fixed words follow it, whatever pack the content comes from. */
 let UI: string | null = null
 export function setUiLang(l: string | null) { UI = l && templates[l] ? l : null }
+/**
+ * The question being answered, when the caller knows it: a passage answer puts the notes about the words it names first
+ * (focus.ts). Without it, only the sheet's own term or phrase can say what the question is about.
+ */
+let QUESTION: string | null = null
+export function setQuestion(q: string | null | undefined) { QUESTION = q?.trim() || null }
 function tpl(lang: string): Record<string, string> {
   return templates[UI ?? (lang.startsWith('es') ? 'es' : 'en')]!
 }
@@ -161,6 +168,22 @@ const sourceLine = (lang: string, cites: string[]): string => {
   }
   return seen.size ? say(lang, 'source', { list: [...seen.values()].join(', ') }) : ''
 }
+/** The helps by their names (product names, the same in every language, as the app says "Translation Academy"). */
+const HELPS: Record<string, string> = { tn: 'Translation Notes', tq: 'Translation Questions', twl: 'Translation Words Links', tw: 'Translation Words', ta: 'Translation Academy' }
+/** "Translation Notes v91 · ULT v91": the resources and releases an answer shows, short, for the line at its top. */
+const topSource = (cites: string[]): string => {
+  const seen = new Set<string>()
+  for (const c of cites) {
+    const m = /^(\S+) (v?[\d.]+)\b/.exec(c)
+    if (m) seen.add(`${HELPS[resShort(m[1]!)] ?? upper(m[1]!)} ${m[2]}`)
+  }
+  // the notes first, then the texts, then the rest
+  const rank = (x: string) => (x.startsWith(HELPS.tn!) ? 0 : Object.values(HELPS).some((h) => x.startsWith(h + ' ')) ? 2 : 1)
+  return [...seen].sort((a, b) => rank(a) - rank(b)).join(' · ')
+}
+/** The key terms and the Academy article a note is about: the terms tied to the same words of the text, and its own article. */
+const aboutOf = (n: HelpRow, links: HelpRow[]): string[] =>
+  [...new Set([...links.filter((x) => x.quote?.some((p) => n.quote?.includes(p))).map((x) => x.concept!), ...(n.concept ? [n.concept] : [])])]
 /** The text resource of a version in this language: ult -> ult or glt, ust -> ust or gst. */
 const textKey = (model: BookModel, version: 'ult' | 'ust'): string | undefined =>
   model.texts.map((t) => t.res).find((k) => (version === 'ult' ? /\/(ult|glt)$/ : /\/(ust|gst)$/).test(k))
@@ -247,60 +270,142 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} intro, note ${row.id}`))
     } else out.push(say(lang, 'intro_none', { what: what_ }))
   }
-  if (wantText && ref.kind !== 'bookintro' && ref.kind !== 'chapintro') {
-    let any = false
-    for (const t of model.texts) {
-      const key = resShort(t.res)
-      // ULT/UST (GLT/GST in Spanish); a language whose texts have other names shows them all
-      const wanted = s.version ? '/' + verKey(s.version as 'ult' | 'ust') : ''
-      if (wanted && model.texts.some((x) => x.res.endsWith(wanted)) && !t.res.endsWith(wanted)) continue
-      const text = plain(textOfRange(ref.book, t.pieces as any, t.events as any, range[0], range[1]))
-      if (!text || wrongScript(lang, text)) continue
-      any = true
-      facts.texts++
-      out.push(say(lang, 'text_line', { label: `**${key.toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }))
-      cites.push(cite(t.res, releaseOf(model, t.res), `${ref.book} ${refLabel(ref)}`))
-    }
-    if (!any) out.push(say(lang, 'text_none', { label: (s.version ?? '').toUpperCase(), ref: `${book} ${refLabel(ref)}`.trim() }))
-  }
   const rowsIn = (t: { rows: HelpRow[] } | undefined, noIntro = true): HelpRow[] => (t?.rows ?? []).filter((x) => inRange(x, range) && !(noIntro && isIntroRow(x)))
-  if (what.includes('terms')) {
-    const links = rowsIn(model.links).filter((x) => x.concept)
-    const seen = new Map<string, HelpRow>()
-    for (const x of links) if (!seen.has(x.concept!)) seen.set(x.concept!, x)
-    out.push('### ' + say(lang, 'terms_head', { book, ref: refLabel(ref) }))
+  const lab = refLabel(ref)
+  const intros = ref.kind === 'bookintro' || ref.kind === 'chapintro'
+  // the texts asked for: ULT/UST (GLT/GST in Spanish); a language whose texts have other names shows them all
+  const wanted = s.version ? '/' + verKey(s.version as 'ult' | 'ust') : ''
+  const texts = wantText && !intros ? model.texts.filter((t) => !(wanted && model.texts.some((x) => x.res.endsWith(wanted)) && !t.res.endsWith(wanted))) : []
+  const cited = new Set<string>()
+  /** The texts of verses `from`..`to`, one line each; each text is cited once. */
+  const textLines = (from: number, to: number): string[] => {
+    const lines: string[] = []
+    for (const t of texts) {
+      const text = plain(textOfRange(ref.book, t.pieces as any, t.events as any, from, to))
+      if (!text || wrongScript(lang, text)) continue
+      lines.push(say(lang, 'text_line', { label: `**${resShort(t.res).toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }))
+      if (!cited.has(t.res)) {
+        cited.add(t.res)
+        facts.texts++
+        cites.push(cite(t.res, releaseOf(model, t.res), `${ref.book} ${lab}`))
+      }
+    }
+    return lines
+  }
+  const wantNotes = what.includes('notes'), wantTerms = what.includes('terms'), wantQs = what.includes('questions')
+  // a chapter (or a book, or more than a few verses) is long: a summary line, and the rest folded per verse (per chapter for a book)
+  const long = !intros && (ref.kind === 'chapter' || ref.kind === 'book' || (ref.kind === 'verses' && ((ref.ch2 ?? ref.ch) !== ref.ch || ref.v2! - ref.v1! >= 3)))
+  const byChapter = ref.kind === 'book'
+  const t0 = model.texts[0]
+  const slices = !long || !t0 ? [] : verseSlices(ref.book, t0.events as any, (t0.pieces as unknown[]).length, range[0], range[1])
+  const verseIds = [...new Set(slices.map((x) => (byChapter ? verseId(ref.book, x.ch, 0) : verseId(ref.book, x.ch, x.first))))]
+  const nVerses = new Set(slices.map((x) => verseId(ref.book, x.ch, x.first))).size
+  const groupOf = (from: number): number => (byChapter ? from - (from % 1000) : from)
+  const groupLabel = (id: number): string => (byChapter ? `${book} ${Math.floor(id / 1000) % 1000}` : `${Math.floor(id / 1000) % 1000}:${id % 1000}`)
+
+  // key terms: each once, with the words of the text they are tied to (a note about those words is about the term too)
+  const links = wantTerms || wantNotes ? rowsIn(model.links).filter((x) => x.concept) : []
+  const seen = new Map<string, HelpRow>()
+  for (const x of links) if (!seen.has(x.concept!)) seen.set(x.concept!, x)
+  const titles = new Map<string, string>()
+  const title = async (id: string): Promise<string> => {
+    if (!titles.has(id)) titles.set(id, await titleOf(l, id))
+    return titles.get(id)!
+  }
+  const termLines: string[] = []
+  if (wantTerms) {
     for (const [id, x] of seen) {
       const said = quoteIn(al, x.quote)[0]?.text ?? String(x.cols.origWords ?? '')
-      out.push(say(lang, 'term_line', { said: `**${said}**`, title: await titleOf(l, id) }))
+      termLines.push(say(lang, 'term_line', { said: `**${said}**`, title: await title(id) }))
       cites.push(cite(model.links!.res, releaseOf(model, model.links!.res), `${ref.book} ${x.ref}, ${id}`))
     }
     facts.terms = seen.size
-    if (seen.size === 0) out.push('-')
   }
-  if (what.includes('notes')) {
-    const notes = rowsIn(model.notes).filter((x) => clean(x.cols.note))
-    facts.notes = notes.length
-    if (notes.length === 0) out.push(say(lang, 'notes_none', { book, ref: refLabel(ref) }))
-    else out.push('### ' + say(lang, 'notes_head', { book, ref: refLabel(ref) }))
-    for (const [i, n] of notes.entries()) {
-      const said = quoteIn(al, n.quote).map((q) => `«${q.text}»`).join(' / ')
-      const orig = n.cols.quote && !clean(n.cols.note).startsWith(String(n.cols.quote)) ? String(n.cols.quote) : ''
-      const headTxt = [said, orig ? `(${orig})` : ''].filter(Boolean).join(' ')
-      // "[Academy: title]" is a tap when the article can be opened: "[text](id)" is the link md() and linkTarget() know
-      const academy = n.concept ? say(lang, 'note_academy', { title: await titleOf(l, n.concept) }) + (!clean(n.cols.note).includes(n.concept) && (await hasArticle(l, n.concept)) ? `(${n.concept})` : '') : ''
-      out.push(say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy }))
-      cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${n.ref}, note ${n.id}`))
+
+  // the notes, and which of them are about the words of the question
+  const notes = wantNotes ? rowsIn(model.notes).filter((x) => clean(x.cols.note)) : []
+  facts.notes = notes.length
+  const stems = focusWords(s.term, s.phrase, QUESTION)
+  const focus = stems.length && notes.length > 1
+    ? focusOrder(await Promise.all(notes.map(async (n) => ({
+      quote: quoteIn(al, n.quote).map((q) => q.text).join(' '),
+      titles: (await Promise.all(aboutOf(n, links).map(title))).join(' '),
+    }))), stems)
+    : { first: [] as number[], rest: notes.map((_, i) => i), used: [] as string[] }
+  const noteLine = async (i: number, withRef: boolean): Promise<string> => {
+    const n = notes[i]!
+    const said = quoteIn(al, n.quote).map((q) => `«${q.text}»`).join(' / ')
+    const orig = n.cols.quote && !clean(n.cols.note).startsWith(String(n.cols.quote)) ? String(n.cols.quote) : ''
+    const headTxt = [withRef ? n.ref : '', said, orig ? `(${orig})` : ''].filter(Boolean).join(' ')
+    // "[Academy: title]" is a tap when the article can be opened: "[text](id)" is the link md() and linkTarget() know
+    const academy = n.concept ? say(lang, 'note_academy', { title: await title(n.concept) }) + (!clean(n.cols.note).includes(n.concept) && (await hasArticle(l, n.concept)) ? `(${n.concept})` : '') : ''
+    cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${n.ref}, note ${n.id}`))
+    return say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy })
+  }
+  const qs = wantQs ? rowsIn(model.questions) : []
+  facts.questions = qs.length
+  const qLines = qs.map((q) => {
+    cites.push(cite(model.questions!.res, releaseOf(model, model.questions!.res), `${ref.book} ${q.ref}`))
+    return say(lang, 'question_line', { q: `**${String(q.cols.question ?? '')}**`, a: String(q.cols.response ?? '') })
+  })
+  // one thing asked (only notes, only the text…): that thing, as it is
+  const only = what.filter((w) => w !== 'intro').length === 1
+
+  if (long && (wantNotes || wantText)) out.push(say(lang, wantNotes ? 'chapter_summary' : 'chapter_verses', { book, ref: lab, v: nVerses, n: notes.length }))
+  const rest = focus.rest
+  if (focus.first.length) {
+    // the question names a word: its notes, then the verses they are in; the other notes behind a button
+    const words = wordsOf(focus.used, s.term, s.phrase, QUESTION).map((w) => `«${w}»`).join(', ')
+    out.push('### ' + say(lang, 'focus_head', { words, book, ref: lab, n: focus.first.length, all: notes.length }))
+    for (const i of focus.first) out.push(await noteLine(i, long))
+    if (long) {
+      for (const id of [...new Set(focus.first.map((i) => notes[i]!.from))].slice(0, 3))
+        out.push(...textLines(id, id).map((x) => `${groupLabel(id)} ${x}`))
+    } else out.push(...textLines(range[0], range[1]))
+  } else if (!long || (only && wantText)) {
+    out.push(...textLines(range[0], range[1]))
+    if (wantText && !intros && !cited.size) out.push(say(lang, 'text_none', { label: (s.version ?? '').toUpperCase(), ref: `${book} ${lab}`.trim() }))
+  }
+  if (wantNotes && !notes.length) out.push(say(lang, 'notes_none', { book, ref: lab }))
+  if (!long) {
+    if (notes.length && !focus.first.length) {
+      // a verse's notes: all of them when they are few, else the first ones and a button for the others
+      out.push('### ' + say(lang, 'notes_head', { book, ref: lab }))
+      const shown = rest.length > SHOWN + 2 ? SHOWN : rest.length
+      for (const i of rest.slice(0, shown)) out.push(await noteLine(i, false))
+      if (rest.length > shown) {
+        out.push(FOLD + say(lang, 'more_notes', { n: rest.length - shown }))
+        for (const i of rest.slice(shown)) out.push(await noteLine(i, false))
+      }
+    } else if (rest.length && focus.first.length) {
+      out.push(FOLD + say(lang, 'more_notes', { n: rest.length }))
+      for (const i of rest) out.push(await noteLine(i, false))
+    }
+  } else if (wantNotes || (wantText && !only)) {
+    // a long passage: one button per verse (per chapter for a book) with its text and its notes
+    const folded = new Set(rest)
+    const ids = [...new Set([...verseIds, ...notes.map((n) => groupOf(n.from))])].sort((a, b) => a - b)
+    for (const id of ids) {
+      const mine = notes.map((_, i) => i).filter((i) => folded.has(i) && groupOf(notes[i]!.from) === id)
+      const lines = byChapter || (only && wantNotes) || (wantText && only) ? [] : textLines(id, id)
+      if (!mine.length && !lines.length) continue
+      out.push(FOLD + (mine.length ? say(lang, 'verse_fold', { ref: groupLabel(id), n: mine.length }) : groupLabel(id)))
+      out.push(...lines)
+      for (const i of mine) out.push(await noteLine(i, byChapter))
     }
   }
-  if (what.includes('questions')) {
-    const qs = rowsIn(model.questions)
-    facts.questions = qs.length
-    out.push(qs.length ? '### ' + say(lang, 'questions_head', { book, ref: refLabel(ref) }) : say(lang, 'questions_none', { book, ref: refLabel(ref) }))
-    for (const q of qs) {
-      out.push(say(lang, 'question_line', { q: `**${String(q.cols.question ?? '')}**`, a: String(q.cols.response ?? '') }))
-      cites.push(cite(model.questions!.res, releaseOf(model, model.questions!.res), `${ref.book} ${q.ref}`))
-    }
+  if (wantTerms) {
+    if (only) out.push('### ' + say(lang, 'terms_head', { book, ref: lab }), ...(termLines.length ? termLines : ['-']))
+    else if (termLines.length) out.push(FOLD + say(lang, 'terms_fold', { n: termLines.length }), ...termLines)
   }
+  if (wantQs) {
+    if (!qs.length) out.push(say(lang, 'questions_none', { book, ref: lab }))
+    else if (only) out.push('### ' + say(lang, 'questions_head', { book, ref: lab }), ...qLines)
+    else out.push(FOLD + say(lang, 'questions_fold', { n: qs.length }), ...qLines)
+  }
+  // where it comes from, at the top: resource, release and passage (the full source line still ends the answer)
+  const top = topSource(cites)
+  if (top) out[0] += `\n*${`${top} — ${book} ${lab}`.trim()}*`
   return { answer: out.join('\n\n'), cites }
 }
 
@@ -322,17 +427,40 @@ async function article(s: Sheet, l: Lang): Promise<Result> {
   const by = (...roles: string[]) => a.sections.filter((x) => roles.includes(x.role))
   const main = s.concept.startsWith('tw:') ? (by('definition').length ? by('definition').slice(0, 1) : by('intro').slice(0, 1)) : by('description')
   facts = { kind: 'article', title: a.title }
-  const out: string[] = ['## ' + say(lang, 'article_head', { title: a.title })]
-  for (const x of main.length ? main : a.sections.slice(0, 1)) {
-    out.push(clean(x.md))
-    if (x.lang !== lang && x.lang) out.push(say(lang, 'article_other_lang', { lang: x.lang }))
-  }
+  for (const c of ans.cites) cites.push(cite(c.res, c.release, `${c.id}, ${c.section}`))
+  const top = topSource(cites)
+  const out: string[] = ['## ' + say(lang, 'article_head', { title: a.title }) + (top ? `\n*${top}*` : '')]
+  // the definition first; a long one shows its first paragraphs, and the rest is behind a button
+  const shown = main.length ? main : a.sections.slice(0, 1)
+  const [lead, more] = splitLead(shown.map((x) => clean(x.md)).join('\n\n'), 600)
+  out.push(lead)
+  const other = shown.find((x) => x.lang && x.lang !== lang)?.lang
+  if (other) out.push(say(lang, 'article_other_lang', { lang: other }))
   if (s.concept.startsWith('ta:')) {
     const st = by('strategies')[0]
     if (st) out.push('### ' + say(lang, 'article_strategies', {}) + '\n' + clip(clean(st.md), 1500))
   }
-  for (const c of ans.cites) cites.push(cite(c.res, c.release, `${c.id}, ${c.section}`))
+  // Translation Words: how to translate the word, one tap away; in sight when the question asks how to translate it
+  const sug = s.concept.startsWith('tw:') ? by('translation-suggestions')[0] : undefined
+  const sugTitle = String(sug?.title ?? '').replace(/[:：\s]+$/, '') || say(lang, 'article_suggestions')
+  const howTo = !!QUESTION && HOW_TO.test(QUESTION)
+  if (sug && clean(sug.md) && howTo) out.push('### ' + sugTitle, clip(clean(sug.md), 1500))
+  if (more) out.push(FOLD + say(lang, 'article_more', { title: a.title }), more)
+  if (sug && clean(sug.md) && !howTo) out.push(FOLD + sugTitle, clip(clean(sug.md), 1500))
   return { answer: out.join('\n\n'), cites }
+}
+
+/** A question that asks how to translate something: the article's translation suggestions come first. */
+const HOW_TO = /translat|tradu[cz]|menerjemah|अनुवाद|ترجم/i
+/** A text cut after its first paragraphs (at least one, up to about `max` characters), and the rest ('' when nothing is left). */
+function splitLead(t: string, max: number): [string, string] {
+  const parts = t.split(/\n{2,}/)
+  let n = 1
+  let len = parts[0]!.length
+  while (n < parts.length && len + parts[n]!.length <= max) len += parts[n++]!.length
+  // a heading never ends what is shown: it belongs to what it heads
+  while (n > 1 && /^#/.test(parts[n - 1]!)) n--
+  return [parts.slice(0, n).join('\n\n'), parts.slice(n).join('\n\n')]
 }
 
 /** The first sentence of a text (up to 220 characters). */
@@ -453,16 +581,25 @@ function mapCount(l: Lang, concept: string | null, what: string): { books: Map<s
   return { books: m, res: res?.[0] ?? '', release: res?.[1] ?? '' }
 }
 
-async function rank(s: Sheet, l: Lang): Promise<Result> {
+async function rank(s: Sheet, l0: Lang): Promise<Result> {
+  let l = l0
   const lang = l.lang
   const cites: string[] = []
   const ref = s.ref ? parseRef(s.ref) : null
   if (!ref) return { answer: say(lang, 'count_nothing', { need: 'a reference' }), cites }
   const book = bookName(lang, ref.book)
   const lab = refLabel(ref) ? ' ' + refLabel(ref) : ''
-  const model = await bookOf(l, ref.book)
-  if (!model) return { answer: say(lang, 'count_nothing', { need: `book:${ref.book}` }), cites }
-  const rows = (model.notes?.rows ?? []).filter((x) => inRange(x, rangeOf(ref)) && !isIntroRow(x) && x.concept)
+  let model = await bookOf(l, ref.book)
+  // a pack can have the book without its notes (Hindi James): the notes of the next pack that has them, as passages do
+  if (model && !model.notes) {
+    for (const pl of await packsFor(lang)) {
+      const x = await getLang(pl)
+      const m = x ? await bookOf(x, ref.book) : undefined
+      if (m?.notes) { model = m; l = x!; break }
+    }
+  }
+  if (!model?.notes) return { answer: say(lang, 'count_nothing', { need: `book:${ref.book}` }), cites }
+  const rows = model.notes.rows.filter((x) => inRange(x, rangeOf(ref)) && !isIntroRow(x) && x.concept)
   const by = new Map<string, number>()
   for (const x of rows) by.set(x.concept!, (by.get(x.concept!) ?? 0) + 1)
   const sorted = [...by].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -506,7 +643,9 @@ const toks = (s: string): string[] => fold(s).replace(/[^a-z0-9\s]/g, ' ').split
 const altOf = (note: string): string | null => {
   const m = /(?:Alternate translations?|Traducci[oó]n(?:es)? alternativas?)\s*:\s*(.+)$/is.exec(note)
   if (!m) return null
-  return [...m[1]!.matchAll(/\[([^\]]+)\]/g)].map((x) => x[1]).join(' / ') || m[1]!.trim()
+  // the "(See: [[ta:…]])" after it is a link, not a translation («[ta:translate/figs-idiom» was shown as one)
+  const rest = m[1]!.replace(/\[\[[^\]]*\]\]/g, '').replace(/\((?:ver|see)\b[^)]*\)/gi, '').trim()
+  return [...rest.matchAll(/\[([^\]]+)\]/g)].map((x) => x[1]).join(' / ') || rest.replace(/[\s.]+$/, '') || null
 }
 
 async function advice(s: Sheet, l: Lang): Promise<Result> {
@@ -524,11 +663,12 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
     const al = await alignedOf(l, ref.book, model)
     const range = rangeOf(ref)
     const want = new Set(toks(phrase))
-    const scored: { row: HelpRow; score: number; said: string }[] = []
+    const scored: { row: HelpRow; score: number; cover: number; said: string }[] = []
     for (const row of model.notes?.rows ?? []) {
       if (!inRange(row, range) || isIntroRow(row) || !clean(row.cols.note)) continue
       const quotes = quoteIn(al, row.quote)
       let best = 0
+      let cover = 0
       let said = ''
       for (const q of quotes) {
         const have = new Set(toks(q.text))
@@ -536,10 +676,12 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
         const inter = [...have].filter((t) => want.has(t)).length
         const score = inter / Math.min(have.size, want.size)
         if (score > best) { best = score; said = q.text }
+        cover = Math.max(cover, inter / want.size)
       }
-      scored.push({ row, score: best, said: quotes[0]?.text ?? said })
+      scored.push({ row, score: best, cover, said: quotes[0]?.text ?? said })
     }
-    const hits = scored.filter((x) => x.score >= 0.6).sort((a, b) => b.score - a.score).slice(0, 2)
+    // of the notes that quote the phrase, first the one that has more of it («extiende tu manto…» before «tu sierva»)
+    const hits = scored.filter((x) => x.score >= 0.6).sort((a, b) => b.cover - a.cover || b.score - a.score).slice(0, 2)
     if (hits.length) {
       matched = true
       for (const h of hits) {
@@ -583,6 +725,8 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
       for (const c of ans.cites.slice(0, 1)) cites.push(cite(c.res, c.release, articleId))
     }
   } else if (!matched) out.push(say(lang, 'advice_none'))
+  const top = topSource(cites)
+  if (top) out[0] += `\n*${top}*`
   return { answer: out.join('\n\n'), cites }
 }
 
@@ -618,19 +762,30 @@ export async function answerSheet(s: Sheet): Promise<Result> {
 
 /** One piece of a verse: its text, and for a word the helps it is part of (`n3` the fourth note, `t0` the first term). */
 export type StudyPiece = [text: string, keys?: string]
-export type StudyNote = { said: string; orig: string; note: string; concept?: string; ref: string }
+/** quotes: what the note quotes in every text; about: the titles of its key terms and article (what focus.ts matches) */
+export type StudyNote = { said: string; orig: string; note: string; concept?: string; ref: string; quotes?: string; about?: string }
 export type StudyTerm = { id: string; title: string; said: string; orig: string }
 /** A passage as the bubble shows it: each text with its words tied to the notes and key terms that quote them. */
 export type Study = {
   lang: string; head: string; book: string; ch: number; v1: number; v2: number
   texts: { label: string; verses: { v: string; p: StudyPiece[] }[] }[]
   notes: StudyNote[]; terms: StudyTerm[]; questions: { q: string; a: string }[]
-  heads: { notes: string; terms: string; questions: string }
+  heads: { notes: string; terms: string; questions: string
+    /** templates the view fills: {words} {n} {all}, {n}, {ref} {n} (older studies kept in a conversation have none) */
+    focus?: string; more?: string; verse?: string; termsN?: string; questionsN?: string }
+  /** "TN v91 · ULT v91 — Ruth 4": what it comes from, shown at the top */
+  source?: string
+  /** a chapter or more: the summary line, and the notes folded per verse */
+  summary?: string; long?: boolean
+  /** the one thing asked for (notes, terms, text), shown first */
+  first?: string
+  /** the words the question names (focus.ts), when the sheet or the question says them */
+  focus?: string[]
 }
 
 /** The pieces of a text between two verse ids, cut at each verse, with each piece's index. */
 function verseSlices(book: string, events: [number, string, string][], total: number, from: number, to: number) {
-  const out: { v: string; start: number; end: number }[] = []
+  const out: { v: string; start: number; end: number; ch: number; first: number }[] = []
   let chapter = 0
   let label = ''
   let first = 0
@@ -640,7 +795,7 @@ function verseSlices(book: string, events: [number, string, string][], total: nu
     if (!first) return
     const lo = verseId(book, chapter, first)
     const hi = verseId(book, chapter, last)
-    if (lo <= to && hi >= from && end > start) out.push({ v: label, start, end })
+    if (lo <= to && hi >= from && end > start) out.push({ v: label, start, end, ch: chapter, first })
   }
   for (const [position, kind, arg] of events) {
     if (kind !== 'chapter' && kind !== 'verse') continue
@@ -714,21 +869,39 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
     texts.push({ label: resShort(t.res).toUpperCase(), verses })
   }
   if (!texts.length) return null
-  const notes: StudyNote[] = noteRows.map((n) => ({
-    said: ultFirst(quoteIn(al, n.quote)),
-    orig: String(n.cols.quote ?? ''),
-    note: clean(n.cols.note),
-    concept: n.concept,
-    ref: n.ref,
-  }))
+  const titles = new Map<string, string>()
+  const title = async (id: string): Promise<string> => {
+    if (!titles.has(id)) titles.set(id, await titleOf(l, id))
+    return titles.get(id)!
+  }
   const terms: StudyTerm[] = []
   for (const id of termIds) {
     const x = linkRows.find((r) => r.concept === id)!
-    terms.push({ id, title: await titleOf(l, id), said: ultFirst(quoteIn(al, x.quote)), orig: String(x.cols.origWords ?? '') })
+    terms.push({ id, title: await title(id), said: ultFirst(quoteIn(al, x.quote)), orig: String(x.cols.origWords ?? '') })
+  }
+  const notes: StudyNote[] = []
+  for (const n of noteRows) {
+    const qs = quoteIn(al, n.quote)
+    notes.push({
+      said: ultFirst(qs),
+      orig: String(n.cols.quote ?? ''),
+      note: clean(n.cols.note),
+      concept: n.concept,
+      ref: n.ref,
+      quotes: qs.map((q) => q.text).join(' / '),
+      about: (await Promise.all(aboutOf(n, linkRows).map(title))).join(' / '),
+    })
   }
   const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? '') }))
   const book = bookName(lang, ref.book)
   const lab = refLabel(ref)
+  const releases = [...(model.notes ? [model.notes.res] : []), ...model.texts.map((t) => t.res)]
+    .filter((res) => res === model.notes?.res ? noteRows.length : texts.some((t) => t.label === resShort(res).toUpperCase()))
+    .map((res) => `${HELPS[resShort(res)] ?? upper(res)} ${releaseOf(model, res)}`.trim())
+  const long = ref.kind === 'chapter' || (ref.ch2 ?? ref.ch) !== ref.ch || (ref.v2 ?? 0) - (ref.v1 ?? 0) >= 3
+  const nVerses = new Set(texts[0]!.verses.map((x) => x.v)).size
+  const asked = s.what.filter((w) => w !== 'intro')
+  const raw = (key: string, keep: string[]) => say(lang, key, Object.fromEntries(keep.map((k) => [k, `{${k}}`])))
   return {
     lang, book: ref.book, ch: ref.ch ?? 0, v1: ref.v1 ?? 0, v2: ref.v2 ?? 0,
     head: say(lang, 'passage_head', { book, ref: lab, lang }).replace(/\s+\(/, ' (').replace(/\s{2,}/g, ' '),
@@ -737,7 +910,13 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
       notes: say(lang, 'notes_head', { book, ref: lab }),
       terms: say(lang, 'terms_head', { book, ref: lab }),
       questions: say(lang, 'questions_head', { book, ref: lab }),
+      focus: say(lang, 'focus_head', { book, ref: lab, words: '{words}', n: '{n}', all: '{all}' }),
+      more: raw('more_notes', ['n']), verse: raw('verse_fold', ['ref', 'n']), termsN: raw('terms_fold', ['n']), questionsN: raw('questions_fold', ['n']),
     },
+    source: `${[...new Set(releases)].join(' · ')} — ${book} ${lab}`.trim(),
+    long, summary: long ? say(lang, 'chapter_summary', { book, ref: lab, v: nVerses, n: notes.length }) : undefined,
+    first: asked.length === 1 ? asked[0] : undefined,
+    focus: wordsOf(focusWords(s.term, s.phrase, QUESTION), s.term, s.phrase, QUESTION),
   }
 }
 
