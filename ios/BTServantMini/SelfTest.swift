@@ -56,14 +56,13 @@ enum SelfTest {
         english.click()
         await sleep(500)
         const t1 = Date.now()
-        const n = document.querySelectorAll('.msg.bot:not(.pending)').length
         const go = await until(() => button(/^Download · English/), 10000, 'the download button')
         log('download', go.textContent.trim())
         go.click()
         await until(() => /English/.test(document.querySelector('#packs')?.textContent || ''), 10 * 60000, 'the English pack')
         log('pack', 'English added after ' + Math.round((Date.now() - t1) / 1000) + ' s')
-        // the kept question is answered by itself
-        await until(() => [...document.querySelectorAll('.msg.bot:not(.pending)')].slice(n).some((d) => /1:16/.test(d.innerText)), 120000, 'the kept question answered')
+        // the kept question is answered by itself (the "kept" message is replaced by the answer, so look for it, not a count)
+        await until(() => [...document.querySelectorAll('.msg.bot:not(.pending)')].some((d) => /Ruth|1:16/.test(d.innerText)), 120000, 'the kept question answered')
         log('kept-answered', [...document.querySelectorAll('.msg.bot:not(.pending)')].at(-1).innerText.slice(0, 600))
         // the reading model, from the line offered after the first language
         const t0 = Date.now()
