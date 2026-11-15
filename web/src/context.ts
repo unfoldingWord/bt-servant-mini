@@ -99,28 +99,38 @@ export function kindsOf(a: Art): Kind[] {
   const out: Kind[] = []
   const top = Math.min(...a.sections.filter((s) => s.role !== 'intro').map((s) => s.level), 99)
   let strategies = 0
+  let stLevel = -1
+  // the sections that only carry their parent's role (packs since bt-synergy c68e3622 pass a role down to the sections under a
+  // heading): part of the parent, not a second section of that role ("strategies" twice is otherwise read as the applied ones)
+  const sub = new Set<number>()
   for (const [i, s] of a.sections.entries()) {
     const byHead = headingKind(s.title)
+    let p = i - 1
+    while (p >= 0 && a.sections[p]!.level >= s.level) p--
     let k: Kind
-    if (s.role && s.role !== 'unknown') {
+    if (s.role && s.role !== 'unknown' && s.role !== 'intro' && p >= 0 && a.sections[p]!.role === s.role) {
+      k = out[p]!
+      sub.add(i)
+    } else if (s.role && s.role !== 'unknown') {
       k = s.role as Kind
-      if (k === 'strategies' && strategies++ > 0) k = 'applied'
-      if (k === 'examples' && byHead === 'applied') k = 'applied'
+      if (k === 'strategies' && strategies++ === 0) stLevel = s.level
+      else if (k === 'strategies') k = 'applied'
+      // the examples after an Academy article's strategies, at their level, are the strategies applied (the packs since
+      // c68e3622 say `examples` for them, also where the heading is not one the table above knows)
+      if (k === 'examples' && (byHead === 'applied' || (a.id.startsWith('ta:') && s.level === stLevel && byHead !== 'examples'))) k = 'applied'
     } else if (byHead) {
       // an Academy article headed "Saran Penerjemahan" (suggestions): its strategies
       k = byHead === 'translation-suggestions' && a.id.startsWith('ta:') ? 'strategies' : byHead
     }
     else {
       // under a section (deeper level): its kind
-      let p = i - 1
-      while (p >= 0 && a.sections[p]!.level >= s.level) p--
       k = p >= 0 && s.level > top ? out[p]! : 'unknown'
     }
     out.push(k)
   }
   // a heading-read article can name strategies twice (Hindi metaphor: a sub-heading under the reason): the one right before
   // "applied" is the article's, or else the last one
-  const st = out.flatMap((k, i) => (k === 'strategies' ? [i] : []))
+  const st = out.flatMap((k, i) => (k === 'strategies' && !sub.has(i) ? [i] : []))
   if (st.length > 1) {
     const ap = out.indexOf('applied')
     const keep = ap > 0 && out[ap - 1] === 'strategies' ? ap - 1 : st.at(-1)!
