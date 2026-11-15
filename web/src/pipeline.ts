@@ -1,12 +1,14 @@
 // The decisions between the question and the answer, without the page: what a question asks for once its slots are known,
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
-import { answerSheet, booksWith, facts, linkedVerses, type Result, setUiLang, type Sheet, type Study, studyOf } from './answer'
+import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, asksAbout, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { bookLabel, followups, intro, searchIntro } from './converse'
-import { installedLangs } from './packs'
+import { hasLang, installedLangs, openLang } from './packs'
 import type { HelpItem } from './view'
+import taSynonyms from './data/ta-synonyms.json'
+import bookTables from './data/books.json'
 
 /**
  * What the page tells the decisions: the app's language (the fallback for a question's), the helps language chosen in the
@@ -346,6 +348,114 @@ export function directRef(q: string): boolean {
   return words.every((w) => /^[\d०-९٠-٩:.–-]+$/.test(w) || name.has(fold(w)) || bookExact(w) === code || REF_FILLER.has(fold(w)))
 }
 
+// ------------------------------------------------------------------------------------- training questions -> Translation Academy
+// "How do I translate idioms?", "What book should I translate first?", "How do I set up a translation team?": questions about
+// translating a kind of thing, or about starting, the team, checking. They get the Translation Academy article (all four manuals)
+// that their words name: a hand list of words per language (data/ta-synonyms.json), or every word of an article's title.
+// Only when the question has a training word (a cue) and one article clearly wins; otherwise the other routes answer as before.
+type SynData = { cues: Record<string, string>; stop: string; ids: Record<string, Record<string, string[]>> }
+const SYN = taSynonyms as unknown as SynData
+/** A word as this route compares it: folded, a final s dropped (idioms = idiom, modismos = modismo), Arabic without its article. */
+export function taStem(w: string): string {
+  let s = fold(w)
+  if (/^[a-z]{4,}$/.test(s) && s.endsWith('s') && !s.endsWith('ss')) s = s.slice(0, -1)
+  if (/^و?ال[ء-ي]{3,}$/.test(s)) s = s.replace(/^و?ال/, '')
+  return s
+}
+const taTokens = (t: string): string[] => fold(t).split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean).map(taStem)
+/** One word of an entry: `traduc*` is a beginning, `idioms|modisms` either word. */
+type Slot = { w: string; prefix: boolean }[]
+const slotOf = (spec: string): Slot =>
+  spec.split('|').map((a) => (a.endsWith('*') ? { w: fold(a.slice(0, -1)).replace(/^ال(?=[ء-ي]{3})/, ''), prefix: true } : { w: taStem(a), prefix: false }))
+const slotHas = (slot: Slot, t: string) => slot.some((a) => (a.prefix ? t.startsWith(a.w) : t === a.w))
+const CUES: Slot = Object.values(SYN.cues).flatMap((l) => l.split(/\s+/).filter(Boolean)).flatMap(slotOf)
+const ENTRIES: { id: string; slots: Slot[]; spec: string }[] = Object.entries(SYN.ids).flatMap(([id, byLang]) =>
+  Object.values(byLang).flat().map((spec) => ({ id, spec, slots: spec.split(/\s+/).filter(Boolean).map(slotOf) })))
+const TA_STOP = new Set(SYN.stop.split(/\s+/).filter(Boolean).map(taStem))
+/** The words of a title or question that count: no small words, no "how", "translate", "Bible"… */
+const taContent = (ws: string[]) => ws.filter((w) => !TA_STOP.has(w) && !/^\d+$/.test(w) && (w.length >= 3 || (/[^\x00-\x7f]/.test(w) && w.length >= 2)))
+/** The names of every Translation Academy article of a pack (titles and subtitles), as content words. */
+const taTitles = new WeakMap<object, Promise<{ id: string; words: string[] }[]>>()
+async function titlesOf(lang: string): Promise<{ id: string; words: string[] }[]> {
+  const r = await openLang(lang)
+  if (!taTitles.has(r))
+    taTitles.set(r, (async () => {
+      const core = ((await r.maps()) as any).map?.core ?? {}
+      const out: { id: string; words: string[] }[] = []
+      const add = (id: string, name: unknown) => {
+        const words = taContent(taTokens(String(name ?? '').replace(/\(.*?\)/g, ' ')))
+        if (id.startsWith('ta:') && words.length) out.push({ id, words })
+      }
+      for (const [id, ns] of Object.entries((core.names ?? {}) as Record<string, string[]>)) for (const n of ns) add(id, n)
+      for (const [id, sub] of Object.entries((core.subtitles ?? {}) as Record<string, string>)) add(id, sub)
+      return out
+    })())
+  return taTitles.get(r)!
+}
+/** Whether a pack has a Translation Academy article (by its names). */
+async function hasTa(lang: string, id: string): Promise<boolean> {
+  if (!(await hasLang(lang))) return false
+  return (await titlesOf(lang)).some((t) => t.id === id)
+}
+
+export type TaMatch = { id: string; score: number; how: string }
+/**
+ * The Translation Academy article a training question asks for, or null when it is not one or no article clearly wins.
+ * `packs`: the packs whose titles are compared (the question's first). A word-list entry scores its number of words (half
+ * more when they stand together in the question); a title scores its number of words, when every one of them is in the
+ * question and at most one other word is (and that word names no Translation Words article: "the name Yahweh").
+ */
+export async function academyFor(q: string, packs: string[], ui = 'en'): Promise<TaMatch | null> {
+  const toks = taTokens(q)
+  if (!toks.some((t) => slotHas(CUES, t)) && !has('howTranslate', q)) return null
+  // a book named in the question's language or English ("How do I start translating Ruth?"): the passage and book routes
+  // know better (not any language's: "nombres" is Numbers in French)
+  const tables = bookTables as Record<string, Record<string, string>>
+  if (q.split(/[^\p{L}\p{M}\d]+/u).some((w) => w.length > 2 && [ui, 'en'].some((l) => tables[l]?.[fold(w)]))) return null
+  const best = new Map<string, TaMatch>()
+  const offer = (m: TaMatch) => { if ((best.get(m.id)?.score ?? 0) < m.score) best.set(m.id, m) }
+  for (const e of ENTRIES) {
+    if (!e.slots.every((s) => toks.some((t) => slotHas(s, t)))) continue
+    const together = toks.some((_, i) => e.slots.every((s, k) => toks[i + k] !== undefined && slotHas(s, toks[i + k]!)))
+    offer({ id: e.id, score: e.slots.length + (together && e.slots.length > 1 ? 0.5 : 0), how: `words "${e.spec}"` })
+  }
+  const asked = new Set(taContent(toks))
+  for (const pl of packs) {
+    for (const t of await titlesOf(pl).catch(() => [])) {
+      if (!t.words.every((w) => asked.has(w))) continue
+      const extra = [...asked].filter((w) => !t.words.includes(w))
+      if (extra.length > 1 || (extra.length === 1 && (await articleForQuestion(extra[0]!))?.length)) continue
+      offer({ id: t.id, score: t.words.length, how: `title [${t.words.join(' ')}] in ${pl}` })
+    }
+  }
+  const ranked = [...best.values()].sort((a, b) => b.score - a.score)
+  if (!ranked.length || (ranked[1] && ranked[1].score === ranked[0]!.score)) return null
+  return ranked[0]!
+}
+
+/** The related articles to show as buttons: those the article's own text links to first, then the others, the same manual first. */
+async function relatedOf(lang: string, id: string, max = 3): Promise<{ id: string; title: string }[]> {
+  const r = await openLang(lang)
+  const group = id.slice(0, id.lastIndexOf('/'))
+  const art = ((await r.articles(group)) ?? []).find((a: any) => a.id === id) as any
+  const rel: string[] = art?.related ?? []
+  if (!rel.length) return []
+  const text = (art.sections ?? []).map((x: any) => String(x.md ?? '')).join('\n')
+  const manual = group.slice(3)
+  // [Choosing a Team](../choose-team/01.md), (../../process/setup-team/01.md): the ids the text links to, in order
+  const linked = [...text.matchAll(/\]\((?:\.\.\/)+(?:([a-z]+)\/)?([\w-]+)\/01\.md\)/g)].map((m) => `ta:${m[1] ?? manual}/${m[2]}`)
+  const rank = (x: string) => (linked.includes(x) ? linked.indexOf(x) : 100 + (x.startsWith(group + '/') ? 0 : 100))
+  const names = ((await r.maps()) as any).map?.core?.names ?? {}
+  return [...rel].sort((a, b) => rank(a) - rank(b)).filter((x) => names[x]?.length).slice(0, max).map((x) => ({ id: x, title: String(names[x][0]) }))
+}
+const clipTo = (s: string, n: number): string => (s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + ' …' : s)
+// the sentence before the article
+const TA_T: Record<string, string> = {
+  en: 'Translation Academy has an article about this:', es: 'Translation Academy tiene un artículo sobre esto:',
+  fr: 'Translation Academy a un article à ce sujet :', id: 'Translation Academy punya artikel tentang ini:',
+  hi: 'Translation Academy में इस पर एक लेख है:', ar: 'في Translation Academy مقالة عن هذا:',
+}
+
 // -------------------------------------------------------------------------------------------------------------- the answer
 
 export type Follow = { label: string; sheet: Sheet }
@@ -385,6 +495,47 @@ const hitSheet = async (h: Hit, what: string[], ui: string) => (await buildSheet
 
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
+  {
+    // "How do I translate idioms?", "What book should I translate first?", "How do I set up a translation team?": the Translation
+    // Academy article the question's words name (academyFor), with its related articles as buttons. Only with no passage and no
+    // article read yet, and only when one article clearly wins: otherwise the next steps answer as before.
+    name: 'academy',
+    when: ({ q, sheet }) => q !== undefined && !sheet.ref && !sheet.concept && !sheet.candidates?.length &&
+      ['unknown', 'search', 'article', 'advice'].includes(sheet.intent) && !has('translateBook', q) && !has('noWord', q) && !has('whichBooks', q),
+    run: async (x) => {
+      const { sheet, ui, q } = x
+      const packs: string[] = []
+      for (const l of new Set([sheet.lang, 'en'])) if (await hasLang(l)) packs.push(l)
+      const m = await academyFor(q!, packs, ui)
+      if (!m) return null
+      // the article from the question's pack, else the first pack that has it (the Indonesian pack has half the manual)
+      let lang: string | null = null
+      for (const l of [sheet.lang, 'en', ...(await installedLangs())]) if (await hasTa(l, m.id)) { lang = l; break }
+      if (!lang) return null
+      const asked = { ...sheet, id: `a${Date.now()}`, intent: 'article', concept: m.id, lang, ref: null, what: [], phrase: null, candidates: null, term: null } as Sheet
+      const r = await answerSheet(asked)
+      let info = r.answer
+      // the intro, process and checking articles have no "description": their whole text, not only its first part
+      const a = (await (await openLang(lang)).article(m.id, 'all')).data
+      if (a && !a.sections.some((s) => s.role === 'description')) {
+        const parts = r.answer.split('\n\n')
+        const src = parts.length > 1 && parts.at(-1)!.startsWith('*') ? parts.at(-1)! : ''
+        const shown = a.sections.filter((s) => s.role !== 'word-data' && String(s.md ?? '').trim())
+        // clean() keeps links but turns "../" into "./": the links to other articles (../setup-team/01.md) must stay taps
+        const keepLinks = (md: unknown) => clean(String(md ?? '').replace(/\.\.\//g, '\u0001/')).replace(/\u0001/g, '..')
+        const body = shown.map((s) => (s.title && shown.length > 1 ? `**${s.title}**\n\n` : '') + keepLinks(s.md)).join('\n\n')
+        // "Choosing What to Translate" ends with its advice (start with Open Bible Stories): about 4,700 characters
+        info = [parts[0], clipTo(body, 5000), src].filter(Boolean).join('\n\n')
+      }
+      const follow = (await relatedOf(lang, m.id).catch(() => [])).map((o) =>
+        ({ label: o.title, sheet: { ...asked, id: `f${Date.now()}`, concept: o.id } as Sheet }))
+      return {
+        answered: 'article', ref: null, concept: m.id, found: r.cites.length,
+        reply: { intro: TA_T[ui] ?? TA_T.en!, info, follow, ui, lang, ctx: m.id,
+          meta: `${env.details} · ${secs(x)} s\n${x.meta}\nacademy: ${m.id} (${m.how}, score ${m.score})` },
+      }
+    },
+  },
   {
     // "¿Cómo traduzco cordero si en mi pueblo solo hay llamas?": the article of the term, then "Translate Unknowns" (tA); the
     // passage's helps as a button when the question names one. Only when the question names an article: otherwise as usual.
