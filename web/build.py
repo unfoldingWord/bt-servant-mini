@@ -1,5 +1,5 @@
 """Builds the page into app/src/main/assets/www: the JS bundle, index.html and the language packs (with ids.json and index.json).
-   python -I -X utf8 web/build.py        (from the repo root; needs bun)"""
+   python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the tests in web/tests, --no-tests skips them)"""
 import json, re, shutil, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
@@ -15,6 +15,12 @@ r = subprocess.run(['bun', 'build', 'src/main.ts', '--outdir', str(WWW), '--targ
 print(r.stdout[-800:], r.stderr[-2000:])
 if r.returncode:
     raise SystemExit('bun build failed')
+# the answer tests (web/tests: the questions, follow-ups, reports) on every build; --no-tests skips them
+if '--no-tests' not in sys.argv:
+    t = subprocess.run(['bun', 'test'], cwd=ROOT / 'web', capture_output=True, text=True, encoding='utf-8', errors='replace', shell=sys.platform == 'win32')
+    print(t.stdout[-1500:], t.stderr[-3000:])
+    if t.returncode:
+        raise SystemExit('bun test failed (python -I -X utf8 web/build.py --no-tests to build anyway)')
 import hashlib
 v = hashlib.sha256((WWW / 'main.js').read_bytes()).hexdigest()[:10]
 (WWW / 'index.html').write_text((ROOT / 'web' / 'index.html').read_text(encoding='utf-8').replace('./main.js', f'./main.js?v={v}'), encoding='utf-8')
