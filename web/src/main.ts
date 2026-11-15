@@ -1,50 +1,21 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { answerSheet, booksWith, facts, linkedVerses, passageContext, resetLangs, setUiLang, type Sheet, type Study, studyOf } from './answer'
-import { backPanel, fillTitles, type HelpItem, renderHelps, renderStudy, setHooks, setViewLang } from './view'
-import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
+import { passageContext, resetLangs, type Sheet } from './answer'
+import { backPanel, fillTitles, renderHelps, renderStudy, setHooks, setViewLang } from './view'
+import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, followUps, isLite, LIMITED, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged } from './packs'
-import { bookLabel, followups, intro, searchIntro } from './converse'
-import { asksIntro, chapterNumber, has, kindOf, pattern, replyLang, withoutReply } from './commands'
-import { articleForQuestion, asksAbout, keywords, resetSearch, searchHelps, searchVerses, versesOf } from './search'
-
-// headings of the notes and questions a free search finds, in the app's language
-const HTS: Record<string, { notes: string; questions: string; note: string; question: string; onlyHelps: string }> = {
-  en: { notes: 'Translation notes that mention «{w}»', questions: 'Questions that mention «{w}»', note: 'Note', question: 'Question', onlyHelps: 'No verse has «{w}», but these helps do:' },
-  es: { notes: 'Notas de traducción que mencionan «{w}»', questions: 'Preguntas que mencionan «{w}»', note: 'Nota', question: 'Pregunta', onlyHelps: 'Ningún versículo tiene «{w}», pero estas ayudas sí:' },
-  fr: { notes: 'Notes de traduction qui mentionnent «{w}»', questions: 'Questions qui mentionnent «{w}»', note: 'Note', question: 'Question', onlyHelps: "Aucun verset n'a «{w}», mais ces aides oui :" },
-  id: { notes: 'Catatan terjemahan yang menyebut «{w}»', questions: 'Pertanyaan yang menyebut «{w}»', note: 'Catatan', question: 'Pertanyaan', onlyHelps: 'Tidak ada ayat dengan «{w}», tetapi alat bantu ini ada:' },
-  hi: { notes: '«{w}» का उल्लेख करने वाले अनुवाद नोट्स', questions: '«{w}» का उल्लेख करने वाले प्रश्न', note: 'नोट', question: 'प्रश्न', onlyHelps: 'किसी पद में «{w}» नहीं है, पर इन सहायक संसाधनों में है:' },
-  ar: { notes: 'ملاحظات الترجمة التي تذكر «{w}»', questions: 'الأسئلة التي تذكر «{w}»', note: 'ملاحظة', question: 'سؤال', onlyHelps: 'لا توجد آية فيها «{w}»، لكن هذه الأدوات المساعدة فيها:' },
-}
-const HT = () => HTS[nav] ?? HTS.en!
-/**
- * A search snippet of a note as plain text: it is a cut piece of the note's Markdown, so a heading, a link or a bold can be
- * half there. The marks go; the words stay (a link keeps its label, [[ta:translate/figs-metaphor]] becomes "figs metaphor").
- */
-function plainSnippet(s: string): string {
-  return s
-    .replace(/[«»]/g, '')
-    .replace(/\[\[([^\]]*)\]\]?/g, (_, x: string) => x.split('/').pop()!.replace(/[-_]/g, ' '))
-    .replace(/\[([^\]]*)\]\([^)]*\)?/g, '$1')
-    .replace(/\]\([^)\s]*\)?/g, '')
-    .replace(/(^|[\s…(])(?:tw|ta):[\w/-]+\]\]\)?/g, '$1') // the end of a [[tw:…]] link whose start was cut off
-    .replace(/\]\]\)?/g, '')
-    .replace(/\[[^\]]*$/, '')
-    .replace(/(^|\s)#{1,6}\s+/g, '$1')
-    .replace(/\*\*|__|`/g, '')
-    .replace(/(^|[\s(])[*_]([^*_\n]+)[*_](?=[\s).,;:!?]|$)/g, '$1$2')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+import { bookLabel } from './converse'
+import { has } from './commands'
+import { resetSearch } from './search'
 import { md } from './md'
 import { askSafety, closeSafety, safetyAsked } from './safety'
 import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
+import { answer, type ConvState, directRef, env, guessLang, type Made, NP, questionOf, readQuestion, type Reply, stateLine } from './pipeline'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 
 type UiText = {
@@ -135,30 +106,23 @@ let nav = (() => {
   return UI[n] ? n : 'en'
 })()
 let T = UI[nav]!
+// the decisions (pipeline.ts) read the app's language and the helps language from here
+Object.defineProperties(env, {
+  nav: { get: () => nav }, helpsLang: { get: () => helpsLang }, details: { get: () => T.details },
+  packName: { value: (l: string) => PACK_NAMES[l] ?? l },
+})
 const LOGO = document.querySelector('.brand svg')!.outerHTML
 
 // ------------------------------------------------------------------------------------------------------------ conversations
 
-type Msg = {
-  who: 'me' | 'bot'; text?: string; intro?: string | null; info?: string; follow?: { label: string; sheet: Sheet }[]; meta?: string; ui?: string
+/** A message: the person's question, or an answer (pipeline.ts) with what the page adds to it. */
+type Msg = Reply & {
+  who: 'me' | 'bot'
   ai?: { text: string; model: string }
-  /** the passage drawn with tappable words (kept for the last messages only); lang: the pack the answer came from; ctx: its article */
-  study?: Study; lang?: string; ctx?: string
-  /** the notes and questions a free search found, each opened whole in the panel */
-  helps?: { head: string; items: HelpItem[] }[]
   /** the person's thumbs on this answer, and whether they sent a report about it */
   rating?: 'up' | 'down'; reported?: boolean
-  /** nothing could be answered: a link to About, which says what the app can and cannot do */
-  limits?: boolean
-  /** no language on the phone, or not the one asked in: a button to the languages view */
-  packs?: boolean
 }
-type Hit = { book: string; ch: number; v: number }
-type Conv = { id: string; title: string; updated: number; msgs: Msg[]; last: Sheet | null; found?: Hit[]
-  /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
-  state?: { s: Record<string, unknown>; at: number }
-  /** the last question asked (without its "reply in …"), to ask it again in another language ("repeat that in Indonesian") */
-  prevQ?: string }
+type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
 const MAX = 3
 let convs: Conv[] = []
@@ -237,71 +201,6 @@ const LIMITS: Record<string, string> = {
   en: 'What this app can and cannot do ›', es: 'Lo que esta app puede y no puede hacer ›', fr: 'Ce que cette application peut et ne peut pas faire ›',
   id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
 }
-// "¿Cómo traduzco «cordero» si en mi pueblo solo hay llamas?" and "¿Qué significa «redentor» en Rut 4?": the questions of a
-// translator who works far from the Bible's world. The term's article first, then what helps with it (a report of Nov 13).
-const TERM_T: Record<string, { unknown: string; meaning: string; inRef: string; all: string }> = {
-  en: { unknown: 'When something does not exist where you translate, this is what the helps say:', meaning: 'This is what «{term}» means:', inRef: 'In {ref} it appears in {list}.', all: '{ref}: all the helps' },
-  es: { unknown: 'Cuando algo no existe donde traduces, esto dicen las ayudas:', meaning: 'Esto significa «{term}»:', inRef: 'En {ref} aparece en {list}.', all: '{ref}: todas las ayudas' },
-  fr: { unknown: "Quand une chose n'existe pas là où vous traduisez, voici ce que disent les aides :", meaning: 'Voici ce que signifie « {term} » :', inRef: 'Dans {ref}, il apparaît en {list}.', all: '{ref} : toutes les aides' },
-  id: { unknown: 'Jika sesuatu tidak ada di tempat Anda menerjemahkan, inilah kata bahan bantu:', meaning: 'Inilah arti «{term}»:', inRef: 'Di {ref} muncul pada {list}.', all: '{ref}: semua bahan bantu' },
-  hi: { unknown: 'जब कोई चीज़ वहाँ नहीं होती जहाँ आप अनुवाद करते हैं, तो सहायताएँ यह कहती हैं:', meaning: '«{term}» का अर्थ यह है:', inRef: '{ref} में यह {list} में आता है।', all: '{ref}: सभी सहायताएँ' },
-  ar: { unknown: 'عندما لا يوجد شيء حيث تترجم، هذا ما تقوله المساعدات:', meaning: 'هذا معنى «{term}»:', inRef: 'في {ref} يرد في {list}.', all: '{ref}: كل المساعدات' },
-}
-const TT = (ui: string) => TERM_T[ui] ?? TERM_T.en!
-/** "jon 1:17" as the person reads it: "Jonás 1:17". */
-const refLabelOf = (ui: string, ref: string): string => { const [code, rest] = ref.split(' '); return `${bookLabel(ui, code!)}${rest ? ' ' + rest.replace(/^front:intro$/, '') : ''}`.trim() }
-/**
- * The one Translation Words article the question's words name, leaving out book names: two words together first ("pez
- * grande"), then each word, exact names before a close spelling ("jueces" ~ "juez").
- */
-// the person's own situation ("en mi pueblo solo hay llamas"): never the term they ask about
-const SITUATION = new Set('pueblo pueblos idioma lengua cultura comunidad tierra zona region solo village language culture community country area only langue village communaute region seulement desa bahasa budaya daerah hanya conocen conocemos conoce tenemos tienen hay existe existen usan usamos visto saben sabemos know knows have has exist exists see seen connaissons connaissent existe punya mengenal tahu ada'.split(' '))
-async function termArticle(q: string, ui: string): Promise<string | null> {
-  let kw = keywords(q).filter((k) => !bookCode(ui, k) && !bookCode('en', k) && !SITUATION.has(fold(k)))
-  // the words right after "how do I translate" are the thing asked about ("…we don't have sheep, how do I translate lamb?")
-  const asked = pattern('howTranslate').exec(q)
-  if (asked) {
-    const after = asked.index + asked[0].length
-    kw = [...kw.filter((k) => q.indexOf(k, after) >= 0), ...kw.filter((k) => q.indexOf(k, after) < 0)]
-  }
-  const pairs = kw.slice(0, -1).map((k, i) => `${k} ${kw[i + 1]}`)
-  for (const t of [...pairs, ...kw]) {
-    const ids = await articleForQuestion(t)
-    if (ids?.length === 1) return ids[0]!
-  }
-  for (const t of kw) {
-    const ids = await articleForQuestion(`qué es ${t}`)
-    if (ids?.length === 1) return ids[0]!
-  }
-  return null
-}
-/** The phrase the model took from the question, without the question's own words ("que quiere decir eso", "como traduzco"). */
-function cleanPhrase(phrase: string, q: string): string | null {
-  let p = phrase.replace(/[¿?!¡]/g, ' ').replace(/\s+/g, ' ').trim()
-  // the question's words at the start ("que quiere decir eso"), never inside: "el que es fiel" is the verse's text
-  for (const c of ['meaning', 'howTranslate', 'noWord'] as const) p = p.replace(new RegExp('^(?:' + pattern(c).source + ')', 'iu'), ' ').trim()
-  // the person's own situation: "…, en mi pueblo no conocen el mar"
-  p = p.replace(/,?\s*(?:en|in|dans|di|dalam|donde|where) (?:mi|my|mis|nuestro|nuestra|our|mon|ma|notre|kami|saya) (?:pueblo|idioma|lengua|cultura|comunidad|village|language|culture|community|langue|desa|bahasa|budaya)\b.*$/iu, '')
-  p = p.replace(/^[,.;:\s]+|[,.;:\s]+$/g, '')
-  if (!keywords(p).length) return null // nothing left but question words ("eso")
-  // the whole question is not a phrase of the verse (unless the person quoted it)
-  if (!/[«"“]/.test(q) && p.length > 0.8 * q.replace(/\s+/g, ' ').trim().length) return null
-  return p
-}
-
-// Without the language: the light build starts with none, and a question in a language that is not here finds nothing.
-// Saying so (and where to add it) instead of "I didn't find…", which reads as a fault of the app.
-const NOPACK: Record<string, { none: string; missing: string; add: string }> = {
-  en: { none: 'There is no language on this phone yet, so I have nothing to search in. Add one below: from the internet, or from a file someone shared with you.', missing: '{lang} is not on this phone, and I found nothing in the languages that are ({have}). Add {lang} to search in it.', add: 'Add languages ›' },
-  es: { none: 'Todavía no hay ningún idioma en este teléfono, así que no tengo dónde buscar. Añade uno aquí abajo: desde internet o desde un archivo que alguien te compartió.', missing: '{lang} no está en este teléfono, y no encontré nada en los idiomas que sí están ({have}). Añade {lang} para buscar en él.', add: 'Añadir idiomas ›' },
-  fr: { none: "Il n'y a encore aucune langue sur ce téléphone, je n'ai donc rien où chercher. Ajoutez-en une ci-dessous : par internet, ou depuis un fichier qu'on vous a partagé.", missing: "{lang} n'est pas sur ce téléphone, et je n'ai rien trouvé dans les langues qui y sont ({have}). Ajoutez {lang} pour y chercher.", add: 'Ajouter des langues ›' },
-  id: { none: 'Belum ada bahasa di ponsel ini, jadi saya tidak punya tempat untuk mencari. Tambahkan satu di bawah: dari internet, atau dari file yang dibagikan seseorang kepada Anda.', missing: '{lang} tidak ada di ponsel ini, dan saya tidak menemukan apa pun dalam bahasa yang ada ({have}). Tambahkan {lang} untuk mencari di dalamnya.', add: 'Tambah bahasa ›' },
-  hi: { none: 'इस फ़ोन पर अभी कोई भाषा नहीं है, इसलिए मेरे पास खोजने के लिए कुछ नहीं है। नीचे से एक जोड़ें: इंटरनेट से, या किसी की आपके साथ साझा की गई फ़ाइल से।', missing: '{lang} इस फ़ोन पर नहीं है, और जो भाषाएँ हैं ({have}) उनमें मुझे कुछ नहीं मिला। उसमें खोजने के लिए {lang} जोड़ें।', add: 'भाषाएँ जोड़ें ›' },
-  ar: { none: 'لا توجد أي لغة على هذا الهاتف بعد، لذا ليس لدي ما أبحث فيه. أضف لغة من الأسفل: من الإنترنت، أو من ملف شاركه أحدهم معك.', missing: '{lang} ليست على هذا الهاتف، ولم أجد شيئًا في اللغات الموجودة ({have}). أضف {lang} للبحث فيها.', add: 'إضافة لغات ›' },
-}
-const NP = (ui: string) => NOPACK[ui] ?? NOPACK.en!
-/** The pack a question's language is answered from ("es" → "es-419"). */
-const packCode = (l: string) => (l.startsWith('es') ? 'es-419' : l.startsWith('pt') ? 'pt-br' : l)
 function renderMsg(m: Msg): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
@@ -800,79 +699,6 @@ function setReady() {
   }
 }
 
-/** A follow-up ("and verse 4?") names no book: take the book (and chapter) of the last passage of this conversation. */
-// ---------------------------------------------------------------------------------------------------- follow-up state
-// The conversation, compacted to what a follow-up needs: the last question's sheet, only its non-empty fields, with the book
-// as a code (about 30 tokens). Code keeps it, not the model; it is replaced at every question, dropped by a question about
-// nothing in particular, and forgotten after 30 minutes. The reader decides what to take from it (trained with new-topic rows).
-const STATE_KEYS = ['intent', 'book', 'chapter', 'verse_start', 'verse_end', 'what', 'term'] as const
-const STATE_MS = 30 * 60_000
-function stateLine(c: Conv): string {
-  if (!c.state || Date.now() - c.state.at > STATE_MS) return ''
-  return `STATE ${JSON.stringify(c.state.s)}`
-}
-function keepState(c: Conv, s: Slots) {
-  if (!['passage', 'count', 'article', 'advice', 'rank'].includes(s.intent ?? '')) {
-    delete c.state
-    return
-  }
-  const code = s.book ? bookCode(s.lang ?? nav, s.book) : null
-  const out: Record<string, unknown> = {}
-  for (const k of STATE_KEYS) {
-    const v = k === 'book' ? code : (s as Record<string, unknown>)[k]
-    if (v !== null && v !== undefined && !(Array.isArray(v) && !v.length)) out[k] = v
-  }
-  c.state = { s: out, at: Date.now() }
-}
-
-function withContext(slots: Slots, last: Sheet | null, q: string): Slots {
-  const m = /^([0-9a-z]{3}) (\d+)/.exec(last?.ref ?? '')
-  if (!m) return slots
-  const [, code, ch] = m
-  const named = bookCode(slots.lang ?? nav, slots.book ?? null)
-  if (named) return slots
-  // short question with a number and no book: verse (or chapter) of the same passage
-  const words = q.trim().split(/\s+/).length
-  const nums = /(\d+)\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?|(\d+)(?:\s*[-–]\s*(\d+))?/.exec(q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))
-  // only when the words around the number are not a name ("Mathew 3" names a book, "and verse 4?" does not)
-  if (words <= 8 && nums && keywords(q).filter((w) => !/^\d/.test(w)).length === 0) {
-    const isChap = /cap[ií]tulo|chapter|chapitre|pasal|अध्याय|أصحاح/i.test(q)
-    const asked = /not[ae]s?|catatan|टिप्पणि/i.test(q) ? ['notes'] : /question|pregunta|pertanyaan|प्रश्न|أسئلة/i.test(q) ? ['questions']
-      : /text|texto|teks|पाठ|dice|say|dit/i.test(q) ? ['text'] : null
-    const base = { ...slots, intent: 'passage', book: code, what: asked ?? last!.what }
-    if (nums[1]) return { ...base, chapter: +nums[1], verse_start: +nums[2]!, verse_end: nums[3] ? +nums[3] : null }
-    if (isChap) return { ...base, chapter: +nums[4]!, verse_start: null, verse_end: null }
-    return { ...base, chapter: Number(ch), verse_start: +nums[4]!, verse_end: nums[5] ? +nums[5] : null }
-  }
-  if (['passage', 'advice'].includes(slots.intent ?? '') && (slots.chapter || slots.verse_start))
-    return { ...slots, book: code, chapter: slots.chapter ?? Number(ch) }
-  return slots
-}
-
-/** The language of a question when the model did not say: by script, then by common words; else the app's language. */
-const COMMON: Record<string, RegExp> = {
-  en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says)\b/gi,
-  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice)\b/gi,
-  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|verset|notes?|dit)\b/gi,
-  id: /\b(apa|siapa|bagaimana|di mana|yang|adalah|tolong|ayat|catatan|kata|dalam|itu)\b/gi,
-}
-function guessLang(q: string): string {
-  if (/[؀-ۿ]/.test(q)) return 'ar'
-  if (/[ऀ-ॿ]/.test(q)) return 'hi'
-  let best = nav
-  let most = 0
-  for (const [l, re] of Object.entries(COMMON)) {
-    const n = q.match(re)?.length ?? 0
-    if (n > most) {
-      most = n
-      best = l
-    }
-  }
-  return best
-}
-
-/** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
-/** "Introduction to Jonah", "Introducción a Jonás 1", "¿De qué trata el libro de Jonás?": the book or chapter asked about. */
 /** The book a question names, by its code ("Titus", "Yunus", "योना"), or null. */
 function bookIn(q: string, lang: string): string | null {
   const words = q.replace(/[¿?!¡.,;:«»"“”؟]/g, ' ').split(/\s+/).filter(Boolean)
@@ -910,81 +736,7 @@ async function helpAnswer(q: string, ui: string): Promise<Msg> {
 (help: what you can ask)` }
 }
 
-function introAsked(q: string, lang: string): Slots | null {
-  if (!asksIntro(q)) return null
-  const t = q.replace(/[¿?!¡.,;:«»"“”؟]/g, ' ').replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-  const words = t.split(/\s+/).filter(Boolean)
-  const chFirst = chapterNumber(t)
-  for (let i = 0; i < words.length; i++)
-    for (let k = 3; k >= 1; k--) {
-      const code = bookCode(lang, words.slice(i, i + k).join(' '))
-      if (!code) continue
-      const ch = /^\d+$/.test(words[i + k] ?? '') ? Number(words[i + k]) : chFirst
-      return { intent: 'passage', book: code, chapter: ch, verse_start: null, verse_end: null, what: ['intro'], lang } as Slots
-    }
-  return null
-}
-
-function refInText(slots: Slots, q: string): Slots {
-  if (slots.book && bookCode(slots.lang ?? nav, slots.book) && slots.chapter)
-    return !slots.intent || slots.intent === 'unknown' ? { ...slots, intent: 'passage', what: kindOf(q) ?? slots.what ?? [] } : slots
-  const ch = pattern('chapter').source
-  const t = q
-    .replace(new RegExp(`${ch}\\s*(\\d+)\\s+(?:of|de|del|du|dari|का|من)\\s+((?:[123]\\s*)?[\\p{L}][\\p{L}\\p{M}]+)`, 'iu'), '$2 $1')
-    .replace(new RegExp(`\\s+${ch}\\s*(\\d+)`, 'iu'), ' $1')
-    .replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-  const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/u.exec(t)
-  if (!m) return slots
-  const words = m[1]!.trim().split(/\s+/)
-  let code: string | null = null
-  let name = ''
-  for (let k = Math.min(3, words.length); k >= 1 && !code; k--) {
-    name = words.slice(-k).join(' ')
-    code = bookCode(slots.lang ?? nav, name)
-  }
-  if (!code) return slots
-  const what = kindOf(q) ?? slots.what ?? []
-  return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
-}
-
-/** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
-function isOpen(q: string, sheet: Sheet): boolean {
-  if (sheet.intent === 'search') return true
-  if (sheet.ref) return false
-  if (has('where', q)) return keywords(q).length >= 1
-  if (kindOf(q) && keywords(q).length >= 2) return true // "notes about Abraham sacrificing Isaac"
-  // a keyword first: with no article for it ("pez", "Jonah fish", "Moisés mar") the words become a free search
-  if (sheet.intent === 'article' && !sheet.concept && !sheet.candidates?.length) return keywords(q).length >= 1
-  // nothing understood and no article: even one word is worth a search ("ballena") rather than "I could not tell"
-  if (sheet.intent === 'unknown') return keywords(q).length >= 1
-  return ['advice', 'passage'].includes(sheet.intent) && keywords(q).length >= 2
-}
-
-const ORDINALS: [RegExp, number][] = [
-  [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल|الأول/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर|الثاني/i, 1],
-  [/\b(third|tercer[oa]?|troisième|ketiga)\b|तीसर|الثالث/i, 2], [/\b(fourth|cuart[oa]|quatrième|keempat)\b|चौथ/i, 3],
-]
-/** "The whole chapter": the chapter of the last passage. */
-
-/** A follow-up with no book of its own: "the second one" (a search result), "that verse" or "and the questions?" (the last verse shown). */
-function pickFound(q: string, slots: Slots, c: Conv): { hit: Hit; what: string[] } | null {
-  const named = !has('that', q) && slots.book && fold(q).includes(fold(slots.book)) && bookCode(slots.lang ?? nav, slots.book)
-  if (named) return null
-  const ord = ORDINALS.find(([re]) => re.test(q))?.[1]
-  const kind = kindOf(q)
-  const lastM = /^([0-9a-z]{3}) (\d+)/.exec(c.last?.ref ?? '')
-  if (has('whole', q) && lastM) return { hit: { book: lastM[1]!, ch: +lastM[2]!, v: 0 }, what: kind ?? ['text'] }
-  if (ord !== undefined && c.found?.length) return { hit: c.found[Math.min(ord, c.found.length - 1)]!, what: kind ?? ['text', 'notes'] }
-  const m = /^([0-9a-z]{3}) (\d+):(\d+)/.exec(c.last?.ref ?? '')
-  if (!m) return null
-  if (has('that', q) || (kind && keywords(q).length === 0))
-    return { hit: { book: m[1]!, ch: +m[2]!, v: +m[3]! }, what: kind ?? ['text', 'notes'] }
-  return null
-}
-const passageOf = (h: Hit, what: string[], lang: string): Slots =>
-  ({ intent: 'passage', book: h.book, chapter: h.ch, verse_start: h.v, verse_end: null, what, lang })
-
-async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Sheet; ui: string; meta: string; q?: string }>) {
+async function respond(c: Conv, label: string, make: () => Promise<Made>) {
   busy = true
   btn.disabled = true
   const mine: Msg = { who: 'me', text: label }
@@ -1007,153 +759,13 @@ async function respond(c: Conv, label: string, make: () => Promise<{ sheet: Shee
       answered = 'nopacks'
       throw { done: { who: 'bot', intro: NP(nav).none, ui: nav, packs: true, meta: `${T.details} · 0.0 s\nno language packs on this phone` } }
     }
-    let { sheet, ui, meta, q } = await make()
-    qLang = sheet.lang ?? ui
-    setUiLang(ui)
-    let others: { label: string; sheet: Sheet }[] = []
-    let searched = ''
-    // "¿Cómo traduzco cordero si en mi pueblo solo hay llamas?": the article of the term, then "Translate Unknowns" (tA); the
-    // passage's helps as a button when the question names one. Only when the question names an article: otherwise as usual.
-    if (q !== undefined && (has('howTranslate', q) || has('noWord', q)) && !has('translateBook', q)) {
-      // the model's own term first ("…no sheep. How do I translate lamb?" -> lamb), then the question's words
-      const id = (sheet.concept?.startsWith('tw:') ? sheet.concept : null) ?? await termArticle(q, ui)
-      // with no article for the thing ("pez grande"), "there is no … where I live" still wants "Translate Unknowns"
-      if (id || (has('noWord', q) && sheet.ref)) {
-        const base = { ...sheet, id: `t${Date.now()}`, ref: null, what: [], phrase: null, candidates: null, term: null } as Sheet
-        const art = id ? await answerSheet({ ...base, intent: 'article', concept: id }) : null
-        const ta = await answerSheet({ ...base, intent: 'article', concept: 'ta:translate/translate-unknown' })
-        answered = 'translate-unknown'
-        const total = ((performance.now() - t0) / 1000).toFixed(1)
-        const follow = sheet.ref ? [{ label: TT(ui).all.replace('{ref}', refLabelOf(ui, sheet.ref)), sheet: { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes'], phrase: null } as Sheet }] : []
-        m = { who: 'bot', intro: TT(ui).unknown, info: art ? `${art.answer}
-
-${ta.answer}` : ta.answer, ui, lang: sheet.lang, follow,
-          meta: `${T.details} · ${total} s
-${meta}
-translate unknowns: ${id ?? '(no article)'}` }
-        throw { done: m }
-      }
-    }
-    // "¿Qué significa «redentor» en Rut 4?": the article of the term and where it is in the passage, not the whole passage
-    // (not when it quotes a phrase of the verse: "Rut 3:9 qué quiere decir «extiende tu manto…»" wants the notes on that phrase)
-    if (q !== undefined && sheet.ref && has('meaning', q) && ['passage', 'advice'].includes(sheet.intent) && !(sheet.intent === 'advice' && sheet.phrase)) {
-      const id = await termArticle(q, ui)
-      if (id) {
-        const art = await answerSheet({ ...sheet, id: `a${Date.now()}`, intent: 'article', concept: id, ref: null, what: [], phrase: null, candidates: null, term: null } as Sheet)
-        const where = await linkedVerses(sheet.ref, id, sheet.lang ?? 'en')
-        const label = refLabelOf(ui, sheet.ref)
-        answered = 'meaning'
-        const total = ((performance.now() - t0) / 1000).toFixed(1)
-        const passage = { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes', 'questions', 'terms'], phrase: null } as Sheet
-        m = { who: 'bot', info: art.answer + (where.length ? `
-
-${TT(ui).inRef.replace('{ref}', label).replace('{list}', where.join(', '))}` : ''),
-          ui, lang: sheet.lang, follow: [{ label: TT(ui).all.replace('{ref}', label), sheet: passage }],
-          meta: `${T.details} · ${total} s
-${meta}
-meaning: ${id} in ${sheet.ref}` }
-        throw { done: m }
-      }
-    }
-    // "What books of the Bible mention grace?": every book with the verses that use the term (not a search on "mention"),
-    // when what is left of the question names one article; otherwise the question goes on as usual
-    if (q !== undefined && has('whichBooks', q)) {
-      const ids = await articleForQuestion(keywords(q).join(' '))
-      if (ids?.length === 1) {
-        const r = await booksWith(ids[0]!, sheet.lang ?? 'en')
-        answered = 'books'
-        const total = ((performance.now() - t0) / 1000).toFixed(1)
-        const article = { ...sheet, id: `f${Date.now()}`, intent: 'article', concept: ids[0]!, candidates: null, term: null } as Sheet
-        m = { who: 'bot', info: r.answer, ui, lang: sheet.lang, follow: [{ label: keywords(q).join(' '), sheet: article }],
-          meta: `${T.details} · ${total} s
-${meta}
-books with ${ids[0]}` }
-        throw { done: m }
-      }
-    }
-    // "Who was John the Baptist?": the article, when the words after "who was" name one
-    if (q !== undefined && !sheet.ref && ['unknown', 'search', 'article', 'advice', 'passage'].includes(sheet.intent) && !sheet.concept) {
-      const ids = await articleForQuestion(q)
-      if (ids?.length) sheet = { ...sheet, intent: ids.length === 1 ? 'article' : 'choose', concept: ids.length === 1 ? ids[0]! : null, candidates: ids.length > 1 ? ids : null, term: null }
-    }
-    if (q !== undefined && isOpen(q, sheet)) {
-      const res = await searchVerses(q, sheet.term, sheet.lang)
-      const hitSheet = async (h: Hit, what: string[]) => (await buildSheet(`h${Date.now()}`, passageOf(h, what, ui), helpsLang)).sheet
-      c.found = res.hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v }))
-      searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}`
-      const kind = kindOf(q)
-      if (res.hits.length) c.last = await hitSheet(res.hits[0]!, ['text'])
-      // nothing has all the words ("cebada" with "pueblo" and "traduzco"): the article one of them names, with its verses
-      let rescued = false
-      if (!res.hits.length) {
-        const id = await termArticle(q, ui)
-        if (id) {
-          sheet = { ...sheet, intent: 'article', concept: id, candidates: null, term: null, ref: null, phrase: null } as Sheet
-          rescued = true
-          searched += `
-rescued: ${id}`
-        }
-      }
-      if (!rescued && (!kind || !res.hits.length)) {
-        const total = ((performance.now() - t0) / 1000).toFixed(1)
-        const used = res.how === 'concepts' ? res.concepts : res.how === 'text' ? (res.hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
-        const follow: { label: string; sheet: Sheet }[] = []
-        for (const h of res.hits.slice(0, 4)) follow.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, ['text', 'notes']) })
-        // the notes and questions that contain the same words, each a button to its verse's notes or questions
-        const helps = await searchHelps(q, sheet.lang).catch(() => [])
-        const NL2 = '\n\n'
-        const info = res.hits.map((h) => `**${bookLabel(ui, h.book)} ${h.ch}:${h.v}** — ${h.text.replace(/\s+/g, ' ').trim()}`).join(NL2)
-        const words = res.keywords.join(' ')
-        // each note or question is a row: its snippet as plain text, and a tap opens it whole in the panel
-        const groups = (['note', 'question'] as const).map((k) => ({
-          head: (k === 'note' ? HT().notes : HT().questions).replace('{w}', words),
-          items: helps.filter((h) => h.kind === k).map((h) => ({ ...h, snippet: plainSnippet(h.snippet), ref: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}` })),
-        })).filter((g) => g.items.length)
-        answered = 'search'
-        // nothing found, and the question's language is not on the phone: that is why, more likely than the words
-        const want = packCode(ui) // the question's language (the sheet's is the pack it fell back to)
-        const have = await installedLangs()
-        const absent = !res.hits.length && !helps.length && !have.includes(want)
-        if (absent) answered = 'nopack'
-        m = { who: 'bot', ui, follow, packs: absent || undefined,
-          intro: absent ? NP(ui).missing.replaceAll('{lang}', PACK_NAMES[want] ?? want).replace('{have}', have.map((l) => PACK_NAMES[l] ?? l).join(', '))
-            : res.hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words),
-          info: info || undefined, helps: groups.length ? groups : undefined,
-          meta: `${T.details} · ${total} s\n${meta}${searched}${helps.length ? `\nhelps: ${helps.length}` : ''}` }
-        throw { done: m }
-      }
-      // "notes about Jonah swallowed by the fish": straight to the notes of the best verse; the other verses as buttons
-      if (!rescued && kind) {
-        sheet = await hitSheet(res.hits[0]!, kind)
-        for (const h of res.hits.slice(1, 4)) others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: await hitSheet(h, kind) })
-      }
-    }
-    const r = await answerSheet(sheet)
-    if (onlineOn() && onlineAvailable()) onlineCtx = await passageContext(sheet).catch(() => '')
-    // Only a name ("John the Baptist"): the article, and also the verses that mention him (each opens its text and notes)
-    if (q !== undefined && sheet.intent === 'article' && sheet.concept && !asksAbout(q)) {
-      const hits = (await versesOf([sheet.concept], sheet.lang)).slice(0, 6)
-      if (hits.length) {
-        c.found = hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v }))
-        const title = /«([^»]+)»/.exec(intro(sheet, facts, ui) ?? '')?.[1] ?? q
-        const NL2 = '\n\n'
-        r.answer += NL2 + '### ' + searchIntro('concepts', [title], ui).replace(/[:：]\s*$/, '') + NL2 +
-          hits.map((h) => `**${bookLabel(ui, h.book)} ${h.ch}:${h.v}** — ${h.text.replace(/\s+/g, ' ').trim()}`).join(NL2)
-        for (const h of hits.slice(0, 4))
-          others.push({ label: `${bookLabel(ui, h.book)} ${h.ch}:${h.v}`, sheet: (await buildSheet(`h${Date.now()}`, passageOf(h, ['text', 'notes'], ui), helpsLang)).sheet })
-      }
-    }
-    // "Which John do you mean?": each article as a button
-    for (const o of r.options ?? [])
-      others.push({ label: o.title, sheet: { ...sheet, id: `f${Date.now()}`, intent: 'article', concept: o.id, candidates: null, term: null } })
-    answered = sheet.intent === 'passage' ? (/intro/.test(sheet.ref ?? '') ? 'intro' : 'passage') : sheet.intent
-    const said = intro(sheet, facts, ui)
-    const study = await studyOf(sheet).catch(() => null)
-    const total = ((performance.now() - t0) / 1000).toFixed(1)
-    m = { who: 'bot', intro: said, info: r.answer, follow: [...followups(sheet, facts, ui), ...others], ui,
-      study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
-      meta: `${T.details} · ${total} s\n${meta}${searched}\n${JSON.stringify(sheet, null, 1)}` }
-    if (sheet.ref && sheet.intent === 'passage') c.last = sheet
+    const made = await make()
+    qLang = made.sheet.lang ?? made.ui
+    // what the answer is: pipeline.ts decides (and keeps the conversation's last passage and search results)
+    const r = await answer(c, made, t0)
+    answered = r.answered
+    m = { who: 'bot', ...r.reply }
+    if (r.sheet && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(r.sheet).catch(() => '')
   } catch (err: any) {
     m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}` }
     if (!err?.done) answered = 'failed'
@@ -1223,20 +835,18 @@ form.addEventListener('submit', (e) => {
   e.preventDefault()
   const q0 = input.value.trim()
   if (!q0 || busy) return
-  // "… Reply in Indonesian": the answer in that language; the rest of the question is read as usual
-  const target = replyLang(q0)
-  let q = target ? withoutReply(q0) || q0 : q0
-  // "Repeat your last answer in Indonesian": the last question again, answered in that language
-  const prevC = conv()
-  if (target && prevC.prevQ && (has('again', q) || !keywords(q).length)) q = prevC.prevQ
-  else prevC.prevQ = q
+  // "Reply in Indonesian", "Repeat your last answer in Indonesian"
+  const { q, target } = questionOf(q0, conv())
   input.value = ''
   const c = conv()
+  // only a reference ("Rut 2:3", "Jonás 1:3 notas"): code reads it, so neither reader runs (saves about 4 s on a phone)
+  const direct = !has('help', q) && directRef(q)
   count('asked')
-  count(modelReady() && !modelOff() ? 'model.used' : 'model.none')
+  count(direct ? 'model.skipped' : modelReady() && !modelOff() ? 'model.used' : 'model.none')
   respond(c, q0, async () => {
     // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
+    if (direct) return readQuestion(q, { slots: null, raw: 'model skipped (reference)', ms: 0 }, c, target)
     // with the online helper on and a connection, the online model reads the question; otherwise (or if it fails) the phone's
     // a follow-up ("and the notes?", "and verse 5?") is read with the previous question's compact state; the phone model
     // gets it only when trained for it (followUps)
@@ -1246,26 +856,7 @@ form.addEventListener('submit', (e) => {
     const local = followUps() ? st : ''
     const { slots, raw, ms } = on ? { slots: on.slots, raw: `${st ? `${st}\n` : ''}(read online by ${modelLabel(on.model)})
 ${JSON.stringify(on.slots)}`, ms: on.ms } : await slotsOf(q, local).then((r) => ({ ...r, raw: local ? `${local}\n${r.raw}` : r.raw }))
-    const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
-    if (s0.phrase) s0.phrase = cleanPhrase(s0.phrase, q)
-    // the script says the language even when the model does not know it: Arabic letters, Devanagari
-    if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
-    else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
-    // a command word next to a reference ("Jonás 1:3 notas") says what to show, with or without a model
-    const shown = kindOf(q)
-    if (shown && s0.book && s0.chapter && !(s0.what ?? []).includes(shown[0]!)) Object.assign(s0, { intent: 'passage', what: shown })
-    const picked = pickFound(q, s0, c)
-    if (picked) {
-      const { sheet, ui } = await buildSheet(`q${Date.now()}`, passageOf(picked.hit, picked.what, s0.lang ?? nav), helpsLang)
-      return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
-    }
-    const asked = introAsked(q, s0.lang ?? nav)
-    let s = asked ? { ...asked, lang: s0.lang ?? nav } : withContext(s0, c.last, q)
-    // asked in one language, wanted in another: the book by its code, then the other language's pack and words
-    if (target) s = { ...s, book: s.book ? bookCode(s.lang ?? nav, s.book) ?? s.book : s.book, lang: target }
-    keepState(c, s)
-    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : helpsLang)
-    return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
+    return readQuestion(q, { slots, raw, ms }, c, target)
   })
 })
 input.addEventListener('keydown', (e) => {
