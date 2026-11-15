@@ -7,7 +7,7 @@
 // The "✓" sends the box's text as it is (hooks.send: the form's submit). main.ts answers a question that is only a reference
 // with readQuestion and no reader, which reads it with pipeline.ts directSheet: the very reading the "✓" shows. So the "✓" and
 // the send arrow ask the same thing, and nothing the "✓" promises goes through the model.
-import { booksOf, type Ctx, type Row, ST, type Strip, suggest, type Suggestion } from './suggest'
+import { booksOf, type Ctx, loadHelps, resetHelps, type Row, ST, type Strip, suggest, type Suggestion } from './suggest'
 import { buildSheet } from './sheet'
 import { type ConvState, env } from './pipeline'
 import type { Sheet } from './answer'
@@ -55,6 +55,8 @@ export class Composer {
   composing = false
   /** a text a tap wrote while the keyboard was composing: written when it ends */
   pending: string | null = null
+  /** the "✓" tapped while the keyboard was composing: sent when it ends */
+  sendLabel: string | null = null
   /** a book that is not on this phone, tapped: the row says so and offers Browse */
   missing: string | null = null
   books: Record<string, Set<string>> | null = null
@@ -84,6 +86,7 @@ export class Composer {
   }
   /** The packs changed: the books are read again, the row made again. */
   reset() {
+    resetHelps()
     this.books = null
     this.reading = null
     this.missing = null
@@ -101,6 +104,13 @@ export class Composer {
   }
   compositionEnd() {
     this.composing = false
+    // a "✓" tapped while the keyboard composed: sent now, if it still says the same for what the box now holds
+    if (this.sendLabel !== null) {
+      const label = this.sendLabel
+      this.sendLabel = null
+      this.pending = null
+      return this.sendIf(label)
+    }
     if (this.pending !== null) {
       const t = this.pending
       this.pending = null
@@ -122,8 +132,24 @@ export class Composer {
       if (!this.books) void this.readBooks()
       this.row = suggest(this.box.value, this.ctx())
       this.madeFor = this.box.value
+      // the books a "✓" or an introduction depends on, read once (as the answer would), then the row again for the same text
+      const needs = this.row.needs
+      if (needs?.length) {
+        const text = this.box.value
+        void Promise.all(needs.map(([p, c]) => loadHelps(p, c))).then(() => {
+          if (this.box.value === text && !this.composing) this.refresh()
+        })
+      }
     }
     this.draw(this)
+  }
+  /**
+   * Sends the box's text only if the row made again now, for what the box holds and where the conversation is, still offers
+   * this very "✓" (the state may have moved since it was made: an answer arrived, the packs changed, a word was committed).
+   */
+  sendIf(label: string) {
+    this.refresh()
+    if (this.row.items.some((x) => x.send && x.label === label)) this.hooks.send()
   }
   /** The "✓" shown is for the text in the box now (not one typed since). */
   get current(): boolean {
@@ -145,9 +171,14 @@ export class Composer {
   async tap(s: Suggestion) {
     if (!composerOn() || this.hooks.busy()) return
     if (s.send) {
-      // only the "✓" made for this very text; typed since, the row is made again first
-      if (!this.current || this.composing) return this.refresh()
-      return this.hooks.send()
+      // while the keyboard composes, the send waits for the composition to end (Gboard keeps a word open)
+      if (this.composing) {
+        this.sendLabel = s.label
+        return
+      }
+      // only the "✓" made for this very text, and only if read again now it says the same; otherwise the row is made again
+      if (!this.current) return this.refresh()
+      return this.sendIf(s.label)
     }
     if (s.kind === 'missing') {
       this.missing = s.book ?? ''
@@ -254,7 +285,7 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
   })
   box.addEventListener('compositionstart', () => c.compositionStart())
   box.addEventListener('compositionend', () => c.compositionEnd())
-  box.addEventListener('focus', () => { if (!c.books) void c.readBooks() })
+  box.addEventListener('focus', () => { if (!c.books && composerOn()) void c.readBooks() })
   return c
 }
 /** The composer on the page, if mounted. */

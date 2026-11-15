@@ -27,9 +27,10 @@ export type Kind = 'ok' | 'book' | 'help' | 'intro' | 'missing'
 export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true; slots?: Slots; book?: string }
 /** The chapter or verse strip: numbers 1…max; a tap writes `base + sep + n` in the box. */
 export type Strip = { unit: 'chapter' | 'verse'; max: number; base: string; sep: string; at?: number }
-export type Row = { items: Suggestion[]; strip?: Strip; understood?: Understood }
+/** `needs`: books to read before the row can say what they have (loadHelps); the composer reads them and makes the row again. */
+export type Row = { items: Suggestion[]; strip?: Strip; understood?: Understood; needs?: [string, string][] }
 /** What a "✓" stands for: the slots the answer is built from, the pack it is read from, and the words it shows. */
-export type Understood = { label: string; slots: Slots; code: string; pack: string; has: boolean; other: boolean }
+export type Understood = { label: string; slots: Slots; code: string; pack: string; has: boolean; other: boolean; needs?: [string, string][] }
 export type Ctx = {
   /** the app's language */
   ui: string
@@ -49,19 +50,19 @@ const VERSES = versification as Record<string, number[]>
 const TABLES = books as Record<string, Record<string, string>>
 const MAX = 6
 
-type W = { inLang: string; notHere: string; browse: string; row: string; chapter: string; verse: string; toggle: string; langs: Record<string, string> }
+type W = { none: string; inLang: string; notHere: string; browse: string; row: string; chapter: string; verse: string; toggle: string; langs: Record<string, string> }
 const STR: Record<string, W> = {
-  en: { inLang: 'in {lang}', notHere: 'not on this phone', browse: 'See the books there are', row: 'Suggestions', chapter: 'Chapter', verse: 'Verse', toggle: 'Typing suggestions',
+  en: { none: 'no {what} on this phone', inLang: 'in {lang}', notHere: 'not on this phone', browse: 'See the books there are', row: 'Suggestions', chapter: 'Chapter', verse: 'Verse', toggle: 'Typing suggestions',
     langs: { en: 'English', 'es-419': 'Spanish', fr: 'French', id: 'Indonesian', hi: 'Hindi', ar: 'Arabic' } },
-  es: { inLang: 'en {lang}', notHere: 'no está en este teléfono', browse: 'Ver los libros que sí hay', row: 'Sugerencias', chapter: 'Capítulo', verse: 'Versículo', toggle: 'Sugerencias al escribir',
+  es: { none: 'sin {what} en este teléfono', inLang: 'en {lang}', notHere: 'no está en este teléfono', browse: 'Ver los libros que sí hay', row: 'Sugerencias', chapter: 'Capítulo', verse: 'Versículo', toggle: 'Sugerencias al escribir',
     langs: { en: 'inglés', 'es-419': 'español', fr: 'francés', id: 'indonesio', hi: 'hindi', ar: 'árabe' } },
-  fr: { inLang: 'en {lang}', notHere: "n'est pas sur ce téléphone", browse: 'Voir les livres disponibles', row: 'Suggestions', chapter: 'Chapitre', verse: 'Verset', toggle: 'Suggestions pendant la saisie',
+  fr: { none: 'pas de {what} sur ce téléphone', inLang: 'en {lang}', notHere: "n'est pas sur ce téléphone", browse: 'Voir les livres disponibles', row: 'Suggestions', chapter: 'Chapitre', verse: 'Verset', toggle: 'Suggestions pendant la saisie',
     langs: { en: 'anglais', 'es-419': 'espagnol', fr: 'français', id: 'indonésien', hi: 'hindi', ar: 'arabe' } },
-  id: { inLang: 'dalam {lang}', notHere: 'tidak ada di ponsel ini', browse: 'Lihat kitab yang ada', row: 'Saran', chapter: 'Pasal', verse: 'Ayat', toggle: 'Saran saat mengetik',
+  id: { none: 'tidak ada {what} di ponsel ini', inLang: 'dalam {lang}', notHere: 'tidak ada di ponsel ini', browse: 'Lihat kitab yang ada', row: 'Saran', chapter: 'Pasal', verse: 'Ayat', toggle: 'Saran saat mengetik',
     langs: { en: 'bahasa Inggris', 'es-419': 'bahasa Spanyol', fr: 'bahasa Prancis', id: 'bahasa Indonesia', hi: 'bahasa Hindi', ar: 'bahasa Arab' } },
-  hi: { inLang: '{lang} में', notHere: 'इस फ़ोन पर नहीं है', browse: 'जो पुस्तकें हैं वे देखें', row: 'सुझाव', chapter: 'अध्याय', verse: 'पद', toggle: 'लिखते समय सुझाव',
+  hi: { none: 'इस फ़ोन पर {what} नहीं', inLang: '{lang} में', notHere: 'इस फ़ोन पर नहीं है', browse: 'जो पुस्तकें हैं वे देखें', row: 'सुझाव', chapter: 'अध्याय', verse: 'पद', toggle: 'लिखते समय सुझाव',
     langs: { en: 'अंग्रेज़ी', 'es-419': 'स्पेनिश', fr: 'फ़्रेंच', id: 'इंडोनेशियाई', hi: 'हिंदी', ar: 'अरबी' } },
-  ar: { inLang: 'بـ{lang}', notHere: 'ليس على هذا الهاتف', browse: 'عرض الأسفار الموجودة', row: 'اقتراحات', chapter: 'الأصحاح', verse: 'الآية', toggle: 'اقتراحات أثناء الكتابة',
+  ar: { none: 'لا {what} على هذا الهاتف', inLang: 'بـ{lang}', notHere: 'ليس على هذا الهاتف', browse: 'عرض الأسفار الموجودة', row: 'اقتراحات', chapter: 'الأصحاح', verse: 'الآية', toggle: 'اقتراحات أثناء الكتابة',
     langs: { en: 'الإنجليزية', 'es-419': 'الإسبانية', fr: 'الفرنسية', id: 'الإندونيسية', hi: 'الهندية', ar: 'العربية' } },
 }
 export const ST = (ui: string): W => STR[ui] ?? STR.en!
@@ -81,19 +82,88 @@ export async function booksOf(packs: string[]): Promise<Record<string, Set<strin
   return out
 }
 
+/** What one book of one pack has (read from the book once: the answer reads it anyway); null: the book does not read. */
+export type Helps = { text: boolean; notes: boolean; questions: boolean; terms: boolean; front: boolean; chapters: Set<number> }
+const HELPS = new Map<string, Helps | null>()
+const reading = new Map<string, Promise<Helps | null>>()
+/** What a book of a pack has, when it was read (undefined: not read yet). */
+export const helpsKnown = (pack: string, code: string): Helps | null | undefined => HELPS.get(`${pack}:${code}`)
+const isIntroRow = (x: any) => x?.cols?.isIntro === true || x?.cols?.isIntro === 'true'
 /**
- * The pack a passage of `code` is answered from, as sheet.ts buildSheet chooses it: the helps language, else the pack of the
- * question's language, else English, else the first installed; and for a book that pack lacks, English, then the others.
+ * Reads a book once to know what it has, as the answer finds it: its texts, its notes, questions and key-term links (not the
+ * introductions), and its introductions (the first intro row is the book's, one starting at a chapter's verse 1 is that
+ * chapter's). A book that does not read (listed, not downloaded) is null: as buildSheet, the answer goes to another pack.
  */
-export function packOf(slots: Slots, code: string, ctx: Ctx): { pack: string; has: boolean; other: boolean } {
+export function loadHelps(pack: string, code: string): Promise<Helps | null> {
+  const key = `${pack}:${code}`
+  if (HELPS.has(key)) return Promise.resolve(HELPS.get(key)!)
+  let p = reading.get(key)
+  if (!p) {
+    p = (async () => {
+      let h: Helps | null = null
+      try {
+        const r = await openLang(pack)
+        const m: any = r.installed(`book:${code}`) ? await r.book(code) : undefined
+        if (m) {
+          const rows = (t: any) => (t?.rows ?? []) as any[]
+          const intros = rows(m.notes).filter(isIntroRow)
+          const chapters = new Set<number>()
+          for (const x of intros.slice(1)) if (x.from % 1000 === 1) chapters.add(Math.floor(x.from / 1000) % 1000)
+          h = {
+            text: (m.texts ?? []).length > 0, notes: rows(m.notes).some((x) => !isIntroRow(x)), questions: rows(m.questions).length > 0,
+            terms: rows(m.links).some((x) => x.concept), front: intros.length > 0, chapters,
+          }
+        }
+      } catch {}
+      HELPS.set(key, h)
+      reading.delete(key)
+      return h
+    })()
+    reading.set(key, p)
+  }
+  return p
+}
+/** After the packs change: books are read again when needed. */
+export function resetHelps() {
+  HELPS.clear()
+  reading.clear()
+}
+
+/** The pack buildSheet starts from: the helps language, else the pack of the question's language, else English, else the first. */
+function firstPack(slots: Slots, ctx: Ctx): string {
   const ui = UI_LANGS.includes(slots.lang ?? '') ? slots.lang! : 'en'
   let lang = 'en'
   for (const c of [ctx.helpsLang, UI_PACK[ui], 'en']) if (c && ctx.packs.includes(c)) { lang = c; break }
-  if (!ctx.packs.includes(lang)) lang = ctx.packs[0] ?? 'en'
-  const hasIn = (l: string) => !!ctx.books?.[l]?.has(code)
-  if (hasIn(lang)) return { pack: lang, has: true, other: false }
-  for (const pl of [...new Set(['en', ...ctx.packs])]) if (pl !== lang && hasIn(pl)) return { pack: pl, has: true, other: true }
+  return ctx.packs.includes(lang) ? lang : ctx.packs[0] ?? 'en'
+}
+/**
+ * The pack a passage of `code` is answered from, as sheet.ts buildSheet chooses it: its first pack if that has the book, else
+ * English, then the others; "has" as buildSheet tests it (installed, and the book reads), so a book listed but not downloaded
+ * counts as missing. `needs`: a book to read first. Book buttons (state B) look at `installed` only (`quick`): nothing is read.
+ */
+export function packOf(slots: Slots, code: string, ctx: Ctx, quick = false): { pack: string; has: boolean; other: boolean; needs?: [string, string][] } {
+  const lang = firstPack(slots, ctx)
+  for (const pl of [lang, ...[...new Set(['en', ...ctx.packs])].filter((x) => x !== lang)]) {
+    if (!ctx.books?.[pl]?.has(code)) continue
+    if (quick) return { pack: pl, has: true, other: pl !== lang }
+    const h = helpsKnown(pl, code)
+    if (h === undefined) return { pack: pl, has: false, other: pl !== lang, needs: [[pl, code]] }
+    if (h) return { pack: pl, has: true, other: pl !== lang }
+  }
   return { pack: lang, has: false, other: false }
+}
+/**
+ * Whether the answer will have the introduction (a book's, or a chapter's), as pipeline.ts introsOf looks for it: in the
+ * sheet's pack, then English, then the others (an introduction from another pack is said so in the answer).
+ */
+function introIn(pack: string, code: string, ch: number | null, ctx: Ctx): { has: boolean; needs?: [string, string][] } {
+  for (const pl of new Set([pack, 'en', ...ctx.packs])) {
+    if (!ctx.books?.[pl]?.has(code)) continue
+    const h = helpsKnown(pl, code)
+    if (h === undefined) return { has: false, needs: [[pl, code]] }
+    if (h && h.front && (!ch || h.chapters.has(ch))) return { has: true }
+  }
+  return { has: false }
 }
 
 const fillCache = new Map<string, string>()
@@ -157,7 +227,7 @@ export function introText(ui: string, code: string, ch: number | null): string {
 }
 
 /** The help words a verse may get ("Rut 2:3 notas"), each one read back by code in every language (tests/shapes.test.ts). */
-const HELPS = ['notes', 'questions', 'terms', 'text'] as const
+const HELP_KINDS = ['notes', 'questions', 'terms', 'text'] as const
 
 /** A reference as the row shows it: the book in the app's language, Latin digits. */
 function refShown(ui: string, code: string, s: Slots): string {
@@ -178,6 +248,7 @@ export function understood(text: string, ctx: Ctx): Understood | null {
   const code = slots?.book ? bookCode(slots.lang ?? ctx.ui, slots.book) : null
   if (!slots || !code) return null
   const where = packOf(slots, code, ctx)
+  if (where.needs) return { label: '', slots, code, ...where }
   const what = slots.what ?? []
   const ref = refShown(ctx.ui, code, slots)
   let label = what.length === 1 && what[0] === 'intro' ? introLabel(ctx.ui, ref) : ref
@@ -198,7 +269,11 @@ export function suggest(text: string, ctx: Ctx): Row {
   const t = text.replace(/^\s+/, '')
   if (!t.trim() || t.length > 120 || !ctx.books || replyLang(t) || has('help', t)) return { items: [] }
   const ok = understood(t, ctx)
-  if (ok) return { ...rowOf(t, ok, ctx), understood: ok }
+  if (ok?.needs) return { items: [], needs: ok.needs }
+  if (ok) {
+    const row = rowOf(t, ok, ctx)
+    return row.needs ? { items: [], needs: row.needs } : { ...row, understood: ok }
+  }
   return bookRow(t, ctx)
 }
 
@@ -207,19 +282,35 @@ function rowOf(t: string, u: Understood, ctx: Ctx): Row {
   const ui = ctx.ui
   const s = ST(ui)
   if (!u.has) return { items: [{ kind: 'missing', label: `${refShown(ui, u.code, u.slots)} · ${s.notHere}`, book: u.code }] }
-  const items: Suggestion[] = [{ kind: 'ok', label: `✓ ${u.label}`, send: true }]
+  const h = helpsKnown(u.pack, u.code)!
   const what = u.slots.what ?? []
   const plain = !what.length
+  // the "✓" only for what the answer will have: a help this book lacks here ("योना 1:3 · टिप्पणियाँ": the Hindi pack has no
+  // notes for Jonah), or an introduction no installed pack has, says so and sends nothing
+  const lacks = (k: string): Row => {
+    const w = (k === 'intro' ? SHAPES.intro!.label[ui] : whatWord(ui, k)) ?? k
+    return { items: [{ kind: 'missing', label: `${refShown(ui, u.code, u.slots)} · ${fillT(s.none, { what: w.toLocaleLowerCase(ui) })}`, book: u.code }] }
+  }
+  if (what.length === 1 && what[0] === 'intro') {
+    const i = introIn(u.pack, u.code, u.slots.chapter ?? null, ctx)
+    if (i.needs) return { items: [], needs: i.needs }
+    if (!i.has) return lacks('intro')
+  } else if (what.length === 1 && (HELP_KINDS as readonly string[]).includes(what[0]!)) {
+    if (!h[what[0] as (typeof HELP_KINDS)[number]]) return lacks(what[0]!)
+  } else if (!(h.text || h.notes || h.questions || h.terms)) return lacks('text')
+  const items: Suggestion[] = [{ kind: 'ok', label: `✓ ${u.label}`, send: true }]
   let strip: Strip | undefined
   if (u.slots.chapter && !u.slots.verse_start && plain && endsWithNumber(t) && lastNumber(t) === u.slots.chapter) {
     const max = VERSES[u.code]?.[u.slots.chapter - 1] ?? 0
     if (max) strip = { unit: 'verse', max, base: t.replace(/\s*:?\s*$/, ''), sep: ':' }
-    items.push({ kind: 'help', label: SHAPES.intro!.label[ui] ?? SHAPES.intro!.label.en!, fill: introText(ui, u.code, u.slots.chapter) })
+    const i = introIn(u.pack, u.code, u.slots.chapter, ctx)
+    if (i.needs) return { items: [], needs: i.needs }
+    if (i.has) items.push({ kind: 'help', label: SHAPES.intro!.label[ui] ?? SHAPES.intro!.label.en!, fill: introText(ui, u.code, u.slots.chapter) })
   } else if (u.slots.verse_start && plain && endsWithNumber(t)) {
     const base = t.replace(/\s+$/, '')
-    for (const k of HELPS) {
+    for (const k of HELP_KINDS) {
       const w = whatWord(ui, k)
-      if (w) items.push({ kind: 'help', label: w, fill: `${base} ${w} ` })
+      if (w && h[k]) items.push({ kind: 'help', label: w, fill: `${base} ${w} ` })
     }
   }
   return { items: items.slice(0, MAX), strip }
@@ -243,17 +334,20 @@ function bookRow(t: string, ctx: Ctx): Row {
     const exact = cands[0]!.how === 'exact' ? cands[0]! : null
     const env1 = { ...ctx }
     if (exact && spaced) {
-      const where = packOf({ lang: ui }, exact.code, env1)
+      const where = packOf({ lang: ui }, exact.code, env1, true)
       if (!where.has) return { items: [{ kind: 'missing', label: `${bookShown(ui, exact.code)} · ${s.notHere}`, book: exact.code }] }
       const items: Suggestion[] = []
       const intro: Slots = { intent: 'passage', book: exact.code, chapter: null, verse_start: null, verse_end: null, what: ['intro'], lang: ui }
       const other = where.other ? ` · ${fillT(s.inLang, { lang: s.langs[where.pack] ?? where.pack })}` : ''
-      items.push({ kind: 'intro', label: introLabel(ui, bookShown(ui, exact.code)) + other, slots: intro })
+      // (the book's introduction only when a pack has it; its books are read once, as for the "✓")
+      const i = introIn(where.pack, exact.code, null, env1)
+      if (i.needs) return { items: [], needs: i.needs }
+      if (i.has) items.push({ kind: 'intro', label: introLabel(ui, bookShown(ui, exact.code)) + other, slots: intro })
       const max = VERSES[exact.code]?.length ?? 0
       return { items, strip: max ? { unit: 'chapter', max, base: `${lead}${fillName(ui, exact.code)}`, sep: ' ' } : undefined }
     }
     const items = cands.map((c): Suggestion => {
-      const where = packOf({ lang: ui }, c.code, env1)
+      const where = packOf({ lang: ui }, c.code, env1, true)
       const name = bookShown(ui, c.code)
       const label = !where.has ? `${name} · ${s.notHere}` : where.other ? `${name} · ${fillT(s.inLang, { lang: s.langs[where.pack] ?? where.pack })}` : name
       return where.has ? { kind: 'book', label, fill: `${lead}${fillName(ui, c.code)} `, book: c.code } : { kind: 'missing', label, book: c.code }
@@ -261,4 +355,14 @@ function bookRow(t: string, ctx: Ctx): Row {
     return { items }
   }
   return { items: [] }
+}
+
+/** The row once the books it needs are read (the composer does the same in steps; the tests wait for it). */
+export async function ready(text: string, ctx: Ctx): Promise<Row> {
+  for (let i = 0; i < 8; i++) {
+    const r = suggest(text, ctx)
+    if (!r.needs?.length) return r
+    await Promise.all(r.needs.map(([p, c]) => loadHelps(p, c)))
+  }
+  return suggest(text, ctx)
 }

@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { booksOf, type Ctx, suggest, understood } from '../src/suggest'
+import { booksOf, type Ctx, helpsKnown, loadHelps, ready, suggest, understood } from '../src/suggest'
 import { Composer, composerOn, setComposerOn } from '../src/composer'
 import { buildSheet } from '../src/sheet'
 import { type ConvState, directRef, directSheet, env, readQuestion } from '../src/pipeline'
@@ -25,10 +25,23 @@ beforeAll(async () => {
 })
 afterAll(() => store.clear())
 
-const kinds = (ui: string, t: string, c = ctx(ui)) => {
+/** The row once the books it depends on are read (the composer reads them and makes the row again). */
+const kinds = async (ui: string, t: string, c = ctx(ui)) => {
   env.nav = ui
-  const r = suggest(t, c)
+  const r = await ready(t, c)
   return [...r.items.map((i) => `${i.kind}:${i.label}`), ...(r.strip ? [`${r.strip.unit}:1-${r.strip.max}`] : [])]
+}
+/** A composer's row once its books are read. */
+async function settle(k: Composer) {
+  for (let i = 0; i < 8 && k.row.needs?.length; i++) {
+    await Promise.all(k.row.needs.map(([p, c]) => loadHelps(p, c)))
+    k.refresh()
+  }
+}
+/** understood() once its books are read. */
+const understoodNow = async (t: string, c: Ctx) => {
+  await ready(t, c)
+  return understood(t, c)
 }
 
 describe('suggest() by table', () => {
@@ -50,7 +63,15 @@ describe('suggest() by table', () => {
     ['es', 'Rut 2:3 notas', ['ok:✓ Rut 2:3 · notas']],
     ['en', 'Ruth 2:3 notes', ['ok:✓ Ruth 2:3 · notes']],
     ['en', 'Jonah 2 intro', ['ok:✓ Introduction to Jonah 2']],
-    ['hi', 'योना १:३', ['ok:✓ योना 1:3', 'help:टिप्पणियाँ', 'help:प्रश्न', 'help:मुख्य शब्द', 'help:पाठ']],
+    // the Hindi pack has Jonah's text and key terms, no notes and no questions: the row offers what it has, and says so
+    ['hi', 'योना १:३', ['ok:✓ योना 1:3', 'help:मुख्य शब्द', 'help:पाठ']],
+    ['hi', 'योना 1:3 टिप्पणियाँ', ['missing:योना 1:3 · इस फ़ोन पर टिप्पणियाँ नहीं']],
+    ['hi', 'योना 1:3 की टिप्पणियाँ', ['missing:योना 1:3 · इस फ़ोन पर टिप्पणियाँ नहीं']],
+    ['hi', 'Acts 2:1 टिप्पणियाँ', ['ok:✓ प्रेरितों के काम 2:1 · टिप्पणियाँ']], // (Acts: the one book with Hindi notes)
+    // (introductions come from another pack when this one has none, as the answer gives them)
+    ['hi', 'योना 1 का परिचय', ['ok:✓ योना 1 का परिचय']],
+    // numbered books after a shape's words read now (refInText)
+    ['es', 'Notas de 1 Juan 3:2', ['ok:✓ 1 Juan 3:2 · notas · en inglés']],
     ['ar', 'يونان ١:٣ ملاحظات', ['ok:✓ يونان 1:3 · الملاحظات']],
     ['id', 'Yunus 1:3 catatan', ['ok:✓ Yunus 1:3 · catatan · dalam bahasa Inggris']],
     ['fr', 'Notes sur Ruth 2:3', ['ok:✓ Ruth 2:3 · notes']],
@@ -61,19 +82,19 @@ describe('suggest() by table', () => {
     ['es', 'Rut 2:3 en indonesio', []],
     ['es', '', []],
   ]
-  for (const [ui, t, want] of table) test(`${ui} "${t}"`, () => expect(kinds(ui, t)).toEqual(want))
+  for (const [ui, t, want] of table) test(`${ui} "${t}"`, async () => expect(await kinds(ui, t)).toEqual(want))
 
-  test('a filled book reads: the button writes a name code reads back', () => {
+  test('a filled book reads: the button writes a name code reads back', async () => {
     env.nav = 'ar'
-    const r = suggest('صموئيل', ctx('ar'))
+    const r = await ready('صموئيل', ctx('ar'))
     for (const i of r.items.filter((x) => x.fill)) expect(directSheet(`${i.fill}1:1`), i.fill).not.toBeNull()
   })
-  test('numbers: the strip writes Latin digits, typing accepts all three', () => {
+  test('numbers: the strip writes Latin digits, typing accepts all three', async () => {
     env.nav = 'hi'
-    const r = suggest('योना ', ctx('hi'))
+    const r = await ready('योना ', ctx('hi'))
     expect(`${r.strip!.base}${r.strip!.sep}2`).toBe('योना 2')
-    expect(kinds('hi', 'योना २')[0]).toBe('ok:✓ योना 2')
-    expect(kinds('ar', 'يونان ٢')[0]).toBe('ok:✓ يونان 2')
+    expect((await kinds('hi', 'योना २'))[0]).toBe('ok:✓ योना 2')
+    expect((await kinds('ar', 'يونان ٢'))[0]).toBe('ok:✓ يونان 2')
   })
 })
 
@@ -93,9 +114,9 @@ describe('the "✓" asks what the answer reads', () => {
       const c: ConvState = { last: null }
       for (const b of k.before) await turn(c, { q: b, slots: null }, k.lang)
       env.nav = k.lang
-      const u = understood(k.q, ctx(k.lang, c))
+      const u = await understoodNow(k.q, ctx(k.lang, c))
       const direct = directRef(k.q)
-      if (!u) continue
+      if (!u || !u.has) continue
       shown++
       // the send goes the direct way (main.ts: directRef), so it is read as the "✓" read it
       expect(direct, k.q).toBe(true)
@@ -119,15 +140,16 @@ describe('a book that is not on this phone', () => {
     const b = await booksOf(['es-419'])
     const c = ctx('es', { last: null }, ['es-419'], b)
     env.nav = 'es'
-    expect(kinds('es', 'Isaías 53:3', c)).toEqual(['missing:Isaías 53:3 · no está en este teléfono'])
-    expect(kinds('es', 'Isaías ', c)).toEqual(['missing:Isaías · no está en este teléfono'])
-    expect(kinds('es', 'Rut 2:3', c)[0]).toBe('ok:✓ Rut 2:3')
+    expect(await kinds('es', 'Isaías 53:3', c)).toEqual(['missing:Isaías 53:3 · no está en este teléfono'])
+    expect(await kinds('es', 'Isaías ', c)).toEqual(['missing:Isaías · no está en este teléfono'])
+    expect((await kinds('es', 'Rut 2:3', c))[0]).toBe('ok:✓ Rut 2:3')
     // a tap on it sends nothing
     let sent = 0
     const box = { value: 'Isaías 53:3', focus() {} }
     const k = new Composer(box, { ui: () => 'es', conv: () => ({ last: null }), packs: () => ['es-419'], busy: () => false, send: () => { sent++ }, ask: () => { sent++ }, browse: () => {} })
     k.books = b
     k.refresh()
+    await settle(k)
     await k.tap(k.row.items[0]!)
     expect(sent).toBe(0)
     expect(k.missing).toBe('isa')
@@ -138,11 +160,11 @@ describe('a book that is not on this phone', () => {
     const b = await booksOf(packs)
     const c = ctx('es', { last: null }, packs, b)
     env.nav = 'es'
-    expect(kinds('es', 'Isaías 53:3', c)[0]).toBe('ok:✓ Isaías 53:3 · en inglés')
-    const u = understood('Isaías 53:3', c)!
+    expect((await kinds('es', 'Isaías 53:3', c))[0]).toBe('ok:✓ Isaías 53:3 · en inglés')
+    const u = (await understoodNow('Isaías 53:3', c))!
     const sent = (await readQuestion('Isaías 53:3', { slots: null, raw: '', ms: 0 }, { last: null }, null)).sheet
     expect([u.pack, sent.lang]).toEqual(['en', 'en'])
-    expect(understood('Rut 2:3', c)!.pack).toBe('es-419')
+    expect((await understoodNow('Rut 2:3', c))!.pack).toBe('es-419')
   })
   test("the row's book test agrees with the answer's (installed, and the book reads)", async () => {
     await installPacks(ALL_PACKS)
@@ -155,11 +177,11 @@ describe('a book that is not on this phone', () => {
 })
 
 describe('time per keystroke (budget: 8 ms on the A56; a desktop under load must keep the median under 3 ms, the slowest 5 % under 8)', () => {
-  test('suggest() over typed prefixes in six languages', () => {
+  test('suggest() over typed prefixes in six languages', async () => {
     const texts = ['R', 'Ro', 'Rom', 'Roma', 'Romanos', 'Romanos ', 'Romanos 3', 'Romanos 3:', 'Romanos 3:23', 'notas de rut 2 3', 'Mathew 5', 'por qué Noemí se cambió el nombre',
       'योना', 'योना 1:3', 'يونان ١:٣', 'صموئيل الأول', 'Yunus 1:3 catatan', 'Notes sur Ruth 2:3', 'Phillipians', 'Introducción a Rut 2']
     const uis = ['es', 'es', 'es', 'es', 'es', 'es', 'es', 'es', 'es', 'es', 'en', 'es', 'hi', 'hi', 'ar', 'ar', 'id', 'fr', 'en', 'es']
-    for (let i = 0; i < texts.length; i++) suggest(texts[i]!, ctx(uis[i]!)) // warm (regexes, name caches)
+    for (let i = 0; i < texts.length; i++) { env.nav = uis[i]!; await ready(texts[i]!, ctx(uis[i]!)) } // warm (regexes, names, the books a row reads once)
     const times: number[] = []
     for (let r = 0; r < 20; r++)
       for (let i = 0; i < texts.length; i++) {
@@ -187,6 +209,7 @@ describe('the box and the keyboard', () => {
     const k = new Composer(box, hooks(log))
     k.books = all
     k.refresh()
+    await settle(k)
     const book = k.row.items[0]!
     k.compositionStart()
     box.value = 'rom' // the keyboard writes
@@ -201,6 +224,7 @@ describe('the box and the keyboard', () => {
     const k = new Composer(box, hooks(log), () => {}, 0)
     k.books = all
     k.refresh()
+    await settle(k)
     const ok = k.row.items[0]!
     expect(ok.send).toBe(true)
     k.compositionStart()
@@ -212,6 +236,7 @@ describe('the box and the keyboard', () => {
     k.compositionEnd()
     box.value = 'Rut 2:3'
     k.refresh()
+    await settle(k)
     await k.tap(k.row.items[0]!)
     expect(log).toEqual(['send'])
   })
@@ -221,16 +246,55 @@ describe('the box and the keyboard', () => {
     const k = new Composer(box, hooks(log))
     k.books = all
     k.refresh()
+    await settle(k)
     k.tapNumber(k.row.strip!, 2)
+    await settle(k)
     expect(box.value).toBe('Rut 2')
     k.tapNumber(k.row.strip!, 3)
+    await settle(k)
     expect(box.value).toBe('Rut 2:3')
     expect(k.row.items[0]!.label).toBe('✓ Rut 2:3')
     box.value = 'Rut '
     k.refresh()
+    await settle(k)
     await k.tap(k.row.items.find((i) => i.kind === 'intro')!)
     expect(log).toEqual(['ask Introducción a Rut'])
     expect(box.value).toBe('')
+  })
+  test('a "✓" tapped while the keyboard composes is sent when the composition ends, if it still holds', async () => {
+    const log: string[] = []
+    const box = { value: 'Rut 2:3', focus() {} }
+    const k = new Composer(box, hooks(log))
+    k.books = all
+    k.refresh()
+    await settle(k)
+    k.compositionStart()
+    await k.tap(k.row.items[0]!)
+    expect(log).toEqual([])
+    k.compositionEnd()
+    expect(log).toEqual(['send'])
+    // the keyboard committed a word that changes the question: nothing is sent
+    k.refresh()
+    await settle(k)
+    k.compositionStart()
+    await k.tap(k.row.items[0]!)
+    box.value = 'Rut 2:3 por qué'
+    k.compositionEnd()
+    expect(log).toEqual(['send'])
+  })
+  test('a "✓" read again on the tap: if the packs changed since it was made, it is not sent', async () => {
+    const log: string[] = []
+    const box = { value: 'Rut 2:3', focus() {} }
+    const k = new Composer(box, hooks(log))
+    k.books = all
+    k.refresh()
+    await settle(k)
+    const ok = k.row.items[0]!
+    expect(ok.label).toBe('✓ Rut 2:3')
+    k.books = Object.fromEntries(Object.entries(all!).map(([l, b]) => [l, new Set([...b].filter((c) => c !== 'rut'))]))
+    await k.tap(ok)
+    expect(log).toEqual([])
+    expect(k.row.items[0]!.kind).toBe('missing')
   })
   test('switched off: no row, and a tap does nothing (the app as before)', async () => {
     const log: string[] = []
@@ -238,6 +302,7 @@ describe('the box and the keyboard', () => {
     const k = new Composer(box, hooks(log))
     k.books = all
     k.refresh()
+    await settle(k)
     const ok = k.row.items[0]!
     setComposerOn(false)
     expect(composerOn()).toBe(false)
