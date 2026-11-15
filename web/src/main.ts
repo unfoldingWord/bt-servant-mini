@@ -20,6 +20,7 @@ import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlinePr
 import { shareButton } from './share'
 import { unfold } from './focus'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
+import { backExplore, closeExplore, openExplore, resetExplore, setExploreHooks, XT } from './explore'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -173,12 +174,15 @@ const conv = (): Conv => convs.find((c) => c.id === current)!
 const $ = <E extends HTMLElement>(s: string) => document.querySelector(s) as E
 const log = $('#log'), form = $<HTMLFormElement>('#ask'), input = $<HTMLTextAreaElement>('#q'), btn = $<HTMLButtonElement>('#send')
 const status = $('#status'), notice = $<HTMLButtonElement>('#notice'), panel = $('#panel'), menu = $<HTMLButtonElement>('#menu')
+const browse = $<HTMLButtonElement>('#browse')
 function applyUi() {
   document.documentElement.lang = nav
   document.documentElement.dir = nav === 'ar' ? 'rtl' : 'ltr'
   input.placeholder = T.ph
   btn.setAttribute('aria-label', T.send)
   menu.setAttribute('aria-label', T.chats)
+  browse.setAttribute('aria-label', XT(nav).browseLong)
+  browse.title = XT(nav).browse
   applyBrand(nav)
 }
 function setUi(l: string) {
@@ -436,6 +440,11 @@ function renderConv() {
       const ex = el('div', 'examples')
       w.appendChild(ex)
       fillExamples(ex)
+      // without typing: the Bible book by book, and the Academy manual by manual (explore.ts)
+      const go = el('button', 'browse-go', `${XT(nav).browseLong} ›`) as HTMLButtonElement
+      go.type = 'button'
+      go.onclick = () => openExplore('welcome')
+      w.appendChild(go)
     }
     log.appendChild(w)
     placeModelOffer()
@@ -523,6 +532,10 @@ function renderPanel() {
     panelView = v
     renderPanel()
   }
+  row(XT(nav).browse, `${XT(nav).bible} · ${XT(nav).academy}`, () => {
+    closePanel()
+    openExplore('menu')
+  })
   const uiName = UI_LANGS.find(([c]) => c === nav)?.[1] ?? nav
   row(MT().language, `${uiName} · ${helpsLang ? PACK_NAMES[helpsLang] ?? helpsLang : T.auto}`, go('language'))
   if (onlineAvailable()) row(OT().label, onlineOn() && (!signInAvailable() || onlineSession()) ? MT().on : MT().off, go('online'))
@@ -757,13 +770,19 @@ const closePanel = () => panel.classList.remove('show')
   if (closeSafety()) return true
   if (closeReport()) return true
   if (backPanel()) return true
+  if (backExplore()) return true
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
   if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
   if (panel.classList.contains('show')) { closePanel(); return true }
   return false
 }
+browse.onclick = () => {
+  closePanel()
+  openExplore('bar')
+}
 menu.onclick = () => {
+  closeExplore()
   panelView = 'main'
   if (panel.classList.toggle('show')) renderPanel()
 }
@@ -957,6 +976,26 @@ setHooks({
   article: (id, title, lang) => runSheet(title, { ...bare(lang), intent: 'article', concept: id }, nav),
 })
 setViewLang(nav)
+// Browse (explore.ts): the packs to read, the helps language first, and what a tap asks the chat for
+setExploreHooks({
+  ui: () => nav,
+  packs: () => {
+    // the helps language (else the app's), then English (as the answers fall back to it), then the others
+    const first = examplesLang()
+    return [...new Set([first, 'en', ...INSTALLED].filter((l): l is string => !!l && INSTALLED.includes(l)))]
+  },
+  packName: (l) => PACK_NAMES[l] ?? l,
+  ask: (label, q) => {
+    if (busy || locked()) return false
+    runSheet(label, { ...bare(q.lang), intent: q.intent, ref: q.ref ?? null, what: q.what ?? [], concept: q.concept ?? null }, nav)
+    return true
+  },
+  addLang: () => {
+    panelView = 'packs'
+    panel.classList.add('show')
+    renderPanel()
+  },
+})
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
   if (busy) return
@@ -1020,6 +1059,7 @@ function refreshInstalled() {
 refreshInstalled()
 onPacksChanged(() => {
   resetLangs()
+  resetExplore()
   resetSearch()
   refreshInstalled()
 })
