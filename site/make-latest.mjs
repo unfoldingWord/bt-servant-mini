@@ -19,7 +19,7 @@ const gradle = readFileSync(join(here, '..', 'app', 'build.gradle'), 'utf8')
 const versionCode = Number(gradle.match(/versionCode\s+(\d+)/)?.[1])
 const versionName = gradle.match(/versionName\s+'([^']+)'/)?.[1] ?? ''
 if (!versionCode) throw new Error('no versionCode in app/build.gradle')
-if (!versionName.startsWith(version)) throw new Error(`app/build.gradle says ${versionName}, the tag says ${version}: build the release first`)
+if (versionName.split('-')[0] !== version) throw new Error(`app/build.gradle says ${versionName}, the tag says ${version}: build the release first`)
 
 const rel = JSON.parse(execFileSync('gh', ['release', 'view', tag, '--repo', REPO, '--json', 'assets,url'], { encoding: 'utf8' }))
 const apks = rel.assets.filter((a) => a.name.endsWith('.apk'))
