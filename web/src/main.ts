@@ -15,7 +15,8 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, type ConvState, directRef, env, guessLang, type Made, NP, questionOf, readQuestion, type Reply, resetBooks, stateLine } from './pipeline'
+import { answer, type ConvState, directRef, env, guessLang, type Made, NP, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, stateLine } from './pipeline'
+import { backLine, branchOf, GT, mapRows, nodeOf } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 import { shareButton } from './share'
 import { unfold } from './focus'
@@ -128,6 +129,8 @@ type Msg = Reply & {
   rating?: 'up' | 'down'; reported?: boolean
   /** asked with no language on the phone: the question waits, and is asked again (once) when a language has downloaded */
   waiting?: boolean
+  /** an answer: its point in the conversation's graph (graph.ts); the person's: `mark`, where they went back to a point */
+  node?: string; mark?: boolean
 }
 type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
@@ -212,6 +215,13 @@ const LIMITS: Record<string, string> = {
   id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
 }
 function renderMsg(m: Msg): HTMLElement {
+  // going back to an earlier point: a small divider ("Back to Ruth 2:3"), not a bubble
+  if (m.who === 'me' && m.mark) {
+    const d = el('div', 'msg mark')
+    d.setAttribute('role', 'separator')
+    d.appendChild(el('span', '', m.text))
+    return d
+  }
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
   d.dataset.lang = m.lang ?? 'en'
@@ -249,7 +259,7 @@ function renderMsg(m: Msg): HTMLElement {
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const cv = convs.find((x) => x.msgs.includes(m))
   const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
-  const asked = prev?.who === 'me' ? prev.text : undefined
+  const asked = prev?.who === 'me' && !prev.mark ? prev.text : undefined
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.study) host.appendChild(renderStudy(m.study, asked))
   else if (m.info) {
@@ -331,8 +341,10 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
   for (const x of follow) {
     const b = el('button', '', x.label) as HTMLButtonElement
     b.type = 'button'
+    if (x.back) b.className = 'back'
     b.onclick = () => {
-      if (x.browse) {
+      if (x.back) goTo(x.back, 'back')
+      else if (x.browse) {
         closePanel()
         openExploreAt(x.browse)
       } else if (x.again) {
@@ -450,6 +462,7 @@ function renderConv() {
   const c = conv()
   const noPacks = packsKnown && !INSTALLED.length
   if (!c.msgs.length) {
+    updateMapBtn()
     const w = el('div', 'welcome')
     w.innerHTML = LOGO
     w.appendChild(el('h2', '', T.welcome))
@@ -472,6 +485,7 @@ function renderConv() {
   }
   for (const m of c.msgs) log.appendChild(renderMsg(m))
   if (noPacks) log.appendChild(pickerFor(waitingLang(c)))
+  updateMapBtn()
   placeModelOffer()
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
@@ -556,6 +570,15 @@ function renderPanel() {
     closePanel()
     openExplore('menu')
   })
+  // the Map of the conversation open now: how many points, and where it is
+  if (points() >= MAP_MIN) {
+    const c = conv()
+    const at = nodeOf(c.graph, c.graph?.cur)
+    row(GT(nav).mapLong, [GT(nav).points.replace('{n}', String(points())), at?.label].filter(Boolean).join(' · '), () => {
+      closePanel()
+      openMap('menu')
+    })
+  }
   const uiName = UI_LANGS.find(([c]) => c === nav)?.[1] ?? nav
   row(MT().language, `${uiName} · ${helpsLang ? PACK_NAMES[helpsLang] ?? helpsLang : T.auto}`, go('language'))
   if (onlineAvailable()) row(OT().label, onlineOn() && (!signInAvailable() || onlineSession()) ? MT().on : MT().off, go('online'))
@@ -791,6 +814,7 @@ const closePanel = () => panel.classList.remove('show')
   if (closeReport()) return true
   if (backPanel()) return true
   if (backExplore()) return true
+  if (mapIsOpen()) { closeMap(); return true }
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
   if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
@@ -799,10 +823,12 @@ const closePanel = () => panel.classList.remove('show')
 }
 browse.onclick = () => {
   closePanel()
+  closeMap(false)
   openExplore('bar')
 }
 menu.onclick = () => {
   closeExplore()
+  closeMap(false)
   panelView = 'main'
   if (panel.classList.toggle('show')) renderPanel()
 }
@@ -895,10 +921,10 @@ async function helpAnswer(q: string, ui: string): Promise<Msg> {
 }
 
 /** `again`: what "Try again" asks again (the typed question, or a button's sheet); none, no "Try again" */
-async function respond(c: Conv, label: string, make: () => Promise<Made>, again?: Again) {
+async function respond(c: Conv, label: string, make: () => Promise<Made>, again?: Again, mark = false) {
   busy = true
   btn.disabled = true
-  const mine: Msg = { who: 'me', text: label }
+  const mine: Msg = { who: 'me', text: label, ...(mark ? { mark } : {}) }
   c.msgs.push(mine)
   if (!c.title) c.title = label.slice(0, 48)
   log.querySelector('.welcome')?.remove()
@@ -912,6 +938,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   let qLang = ''
   let onlineCtx = '' // the passage's context for online AI (surrounding verses, introductions)
   let m: Msg
+  let point: string | null = null
   try {
     // no language on this phone (the light build before its first download): nothing to search yet. The question waits; the
     // picker comes under it, and the question is asked again when the download ends (reaskWaiting)
@@ -925,6 +952,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     const r = await answer(c, made, t0)
     answered = r.answered
     m = { who: 'bot', ...r.reply }
+    point = r.node
     if (r.sheet && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(r.sheet).catch(() => '')
   } catch (err: any) {
     // an error: the same question again, or Browse (no dead end)
@@ -937,8 +965,15 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
   if (!m.packs && !m.waiting && (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length))) m.limits = true
   count('secs', Math.round((performance.now() - t0) / 1000))
-  retries.set(m, () => respond(conv(), label, make, again))
+  retries.set(m, () => respond(conv(), label, make, again, mark))
   c.msgs.push(m)
+  // its point in the graph shows its latest answer
+  const pt = nodeOf(c.graph, point)
+  if (pt) {
+    m.node = pt.id
+    pt.msg = c.msgs.length - 1
+  }
+  updateMapBtn()
   c.updated = Date.now()
   save()
   let node = renderMsg(m)
@@ -962,7 +997,17 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     const writing = el('p', 'ai pending', OT().writing)
     node.prepend(writing)
     const history: Turn[] = []
-    for (const x of c.msgs.slice(-7, -2)) {
+    // the branch this answer is on (its point and up to 3 above it), not the conversation's other branches; with no point, the
+    // last turns
+    const branch = c.graph && pt ? branchOf(c.graph, pt.id, 3).slice(0, -1) : null
+    if (branch) {
+      for (const n of branch) {
+        const a = c.msgs[n.msg], q = c.msgs[n.msg - 1]
+        if (a?.who !== 'bot') continue
+        history.push({ role: 'user', text: q?.who === 'me' && !q.mark && q.text ? q.text : n.label })
+        history.push({ role: 'assistant', text: a.ai?.text ?? a.intro ?? '' })
+      }
+    } else for (const x of c.msgs.slice(-7, -2)) {
       if (x.who === 'me' && x.text) history.push({ role: 'user', text: x.text })
       else if (x.who === 'bot') history.push({ role: 'assistant', text: x.ai?.text ?? x.intro ?? '' })
     }
@@ -1027,6 +1072,165 @@ setExploreHooks({
 function runSheet(label: string, sheet: Sheet, ui: string) {
   if (busy) return
   respond(conv(), label, async () => ({ sheet: { ...sheet, id: `f${Date.now()}` }, ui, meta: '(follow-up: no model call)' }), { sheet, label })
+}
+
+/**
+ * Back to a point of the conversation (the "← Back to …" button, a tap in the Map): a divider in the chat, the conversation's
+ * state from that point, and its answer again, attached to it (its sheet asked again by code, or its message shown again when
+ * it needed the typed question). What is asked next goes on from there; nothing is deleted.
+ */
+function goTo(id: string, from: 'back' | 'map') {
+  if (busy) return
+  const c = conv()
+  const n = nodeOf(c.graph, id)
+  if (!n) return
+  count(from === 'map' ? 'graph.return' : 'graph.back')
+  const label = backLine(nav, placeLabel(n, nav))
+  const made = returnTo(c, id, nav)
+  if (made) return respond(c, label, async () => made, { sheet: made.sheet, label }, true)
+  const was = c.msgs[n.msg]
+  if (was?.who !== 'bot') return
+  const mine: Msg = { who: 'me', text: label, mark: true }
+  const again: Msg = { ...was, node: id, rating: undefined, reported: undefined }
+  c.msgs.push(mine, again)
+  n.msg = c.msgs.length - 1
+  c.updated = Date.now()
+  save()
+  log.querySelector('.welcome')?.remove()
+  log.appendChild(renderMsg(mine))
+  log.appendChild(renderMsg(again))
+  log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  updateMapBtn()
+}
+
+// ------------------------------------------------------------------------------------------------------------ the map
+// The conversation's graph as a list, full screen like Browse (and under the PIN lock like it): each point its name and a small
+// mark for how it joined the one above (same passage, from it, new topic), indented when it went deeper or branched; the
+// current point marked. A tap goes back there. From the menu and from the bar (next to Browse), once there are 3 points.
+const MAP_MIN = 3
+const ICONS: Record<string, string> = {
+  start: '<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>',
+  line: '<path d="M12 3v18"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
+  deeper: '<path d="M6 4v8a4 4 0 0 0 4 4h9"/><path d="M15 12l4 4-4 4"/>',
+  branch: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10"/><path d="M18 9c0 5-12 3-12 8"/>',
+}
+const svg = (inner: string, size = 18) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`
+const mapBtn = el('button', '') as HTMLButtonElement
+mapBtn.id = 'mapbtn'
+mapBtn.type = 'button'
+mapBtn.hidden = true
+mapBtn.innerHTML = svg(ICONS.branch!, 21)
+browse.after(mapBtn)
+mapBtn.onclick = () => {
+  closePanel()
+  openMap('bar')
+}
+const points = () => conv().graph?.nodes.length ?? 0
+function updateMapBtn() {
+  mapBtn.hidden = points() < MAP_MIN
+  mapBtn.setAttribute('aria-label', GT(nav).mapLong)
+  mapBtn.title = GT(nav).map
+  if (mapIsOpen()) drawMap()
+}
+/** the long lines the person opened in the Map (by their first point) */
+const mapOpened = new Set<string>()
+let gmap: { root: HTMLElement; title: HTMLElement; body: HTMLElement; close: HTMLButtonElement } | null = null
+let mapOpener: HTMLElement | null = null
+const mapIsOpen = () => !!gmap?.root.classList.contains('open')
+function ensureMap() {
+  if (gmap) return gmap
+  const root = el('div', '')
+  root.id = 'gmap'
+  root.tabIndex = -1
+  root.setAttribute('role', 'dialog')
+  root.setAttribute('aria-modal', 'true')
+  root.setAttribute('aria-labelledby', 'gm-title')
+  const head = el('div', 'ex-head')
+  const title = el('h2', 'ex-title')
+  title.id = 'gm-title'
+  const close = el('button', 'ex-btn', '✕') as HTMLButtonElement
+  close.type = 'button'
+  close.onclick = () => closeMap()
+  head.append(title, close)
+  const body = el('div', 'ex-body')
+  root.append(head, body)
+  document.body.appendChild(root)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && mapIsOpen()) {
+      e.preventDefault()
+      closeMap()
+    }
+  })
+  // the PIN lock covers the Map: it closes under the lock, so nothing is shown behind it
+  new MutationObserver(() => { if (mapIsOpen() && document.querySelector('#lock')) closeMap(false) }).observe(document.body, { childList: true })
+  gmap = { root, title, body, close }
+  return gmap
+}
+function openMap(from: 'bar' | 'menu') {
+  if (locked() || document.querySelector('#lock') || points() < 1) return
+  count('graph.open')
+  closeExplore(false)
+  const b = ensureMap()
+  mapOpener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
+  b.root.classList.add('open')
+  b.root.focus({ preventScroll: true })
+  drawMap()
+}
+function closeMap(refocus = true) {
+  if (!mapIsOpen()) return
+  gmap!.root.classList.remove('open')
+  const to = mapOpener
+  mapOpener = null
+  if (refocus && to?.isConnected) to.focus({ preventScroll: true })
+}
+function drawMap() {
+  const b = ensureMap()
+  const t = GT(nav)
+  const g = conv().graph
+  b.title.textContent = t.mapLong
+  b.close.setAttribute('aria-label', t.close)
+  b.body.innerHTML = ''
+  b.body.appendChild(el('p', 'ex-note', t.hint))
+  const list = el('div', 'ex-rows gm-rows')
+  let here: HTMLElement | null = null
+  for (const r of g ? mapRows(g, mapOpened) : []) {
+    const row = el('button', r.k === 'node' && r.cur ? 'ex-row gm-row on' : 'ex-row gm-row') as HTMLButtonElement
+    row.type = 'button'
+    // indented by depth (at most 6 steps: a small phone keeps room for the name)
+    row.style.paddingInlineStart = `${6 + Math.min(r.depth, 6) * 18}px`
+    if (r.k === 'more') {
+      row.classList.add('gm-more')
+      row.appendChild(el('span', 'ex-row-t', t.more.replace('{n}', String(r.n))))
+      row.onclick = () => {
+        mapOpened.add(r.key)
+        drawMap()
+      }
+    } else {
+      const ic = el('span', `gm-ic gm-${r.node.edge}`)
+      ic.innerHTML = svg(ICONS[r.node.edge] ?? ICONS.start!)
+      const txt = el('span', 'gm-txt')
+      const name = el('span', 'ex-row-t', r.node.label)
+      name.dir = 'auto'
+      txt.appendChild(name)
+      txt.appendChild(el('span', 'ex-row-s', r.cur ? `${t.here} · ${t.edge[r.node.edge]}` : t.edge[r.node.edge]))
+      row.append(ic, txt)
+      if (r.cur) {
+        row.setAttribute('aria-current', 'true')
+        here = row
+      }
+      const id = r.node.id
+      row.onclick = () => {
+        if (busy) return
+        closeMap(false)
+        goTo(id, 'map')
+      }
+    }
+    list.appendChild(row)
+  }
+  b.body.appendChild(list)
+  b.body.scrollTop = 0
+  if (here) (here as HTMLElement).scrollIntoView({ block: 'center' })
 }
 
 form.addEventListener('submit', (e) => {
