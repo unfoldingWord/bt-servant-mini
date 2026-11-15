@@ -160,8 +160,9 @@ const textKey = (model: BookModel, version: 'ult' | 'ust'): string | undefined =
 const names = (l: Lang, id: string): string => (l.maps.map?.core.names?.[id] as string[] | undefined)?.[0] ?? id.split('/').pop()!
 /** Whether the pack of `l` (or the English one, where the panel looks next) has this article: packs carry only some Academy manuals. */
 async function hasArticle(l: Lang, id: string): Promise<boolean> {
-  for (const x of l.lang === 'en' ? [l] : [l, await getLang('en')]) {
+  for (const pl of await packsFor(l.lang)) {
     try {
+      const x = await getLang(pl)
       if (x && (await x.r.article(id)).data) return true
     } catch { /* the next pack */ }
   }
@@ -279,7 +280,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       const orig = n.cols.quote && !clean(n.cols.note).startsWith(String(n.cols.quote)) ? String(n.cols.quote) : ''
       const headTxt = [said, orig ? `(${orig})` : ''].filter(Boolean).join(' ')
       // "[Academy: title]" is a tap when the article can be opened: "[text](id)" is the link md() and linkTarget() know
-      const academy = n.concept ? say(lang, 'note_academy', { title: await titleOf(l, n.concept) }) + ((await hasArticle(l, n.concept)) ? `(${n.concept})` : '') : ''
+      const academy = n.concept ? say(lang, 'note_academy', { title: await titleOf(l, n.concept) }) + (!clean(n.cols.note).includes(n.concept) && (await hasArticle(l, n.concept)) ? `(${n.concept})` : '') : ''
       out.push(say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy }))
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${n.ref}, note ${n.id}`))
     }

@@ -215,7 +215,7 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
       sheet.term = term
   }
   // The Spanish pack holds few books: for a book it lacks, answer from the English pack (the answer's words stay in Spanish).
-  if (sheet.lang !== 'en' && sheet.ref && /^[0-9a-z]{3}( |$)/.test(sheet.ref) && !sheet.ref.startsWith('obs')) {
+  if (sheet.ref && /^[0-9a-z]{3}( |$)/.test(sheet.ref) && !sheet.ref.startsWith('obs')) {
     const code = sheet.ref.slice(0, 3)
     // installed() is optimistic (a listed unit counts): read the book to know.
     const has = async (l: string) => {
@@ -226,7 +226,9 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
         return false
       }
     }
-    if (!(await has(sheet.lang)) && (await has('en'))) sheet.lang = 'en'
+    if (!(await has(sheet.lang))) {
+      for (const pl of [...new Set(['en', ...(await installedLangs())])]) if (pl !== sheet.lang && (await has(pl))) { sheet.lang = pl; break }
+    }
   }
   return { sheet, ui }
 }

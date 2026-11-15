@@ -3,6 +3,7 @@ import { test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
 import { buildSheet } from '../src/sheet'
 import { answerSheet, setUiLang } from '../src/answer'
+import { articleForQuestion, searchVerses, versesOf } from '../src/search'
 import booknames from '../src/data/booknames.json'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
@@ -53,3 +54,17 @@ test('Ruth 2:3, Spanish only, app in English (the reported bug)', async () => {
   expect(r.r.answer).not.toMatch(bad)
   expect(r.r.answer).toContain('2:3')
 })
+
+// search.ts read the English catalog directly: a phone without English threw E_NOT_INSTALLED
+for (const pack of ALL_PACKS) {
+  test(`only ${pack}: a name alone and an open search do not throw`, async () => {
+    await installPacks([pack])
+    for (const [ui, name, word] of [['en', 'John the Baptist', 'grace'], ['es', 'Juan el Bautista', 'gracia']] as const) {
+      setUiLang(ui)
+      const ids = await articleForQuestion(name)
+      expect(Array.isArray(await versesOf(ids ?? ['tw:names/johnthebaptist'], pack))).toBe(true)
+      expect(Array.isArray((await searchVerses(word, null, pack)).hits)).toBe(true)
+      expect(Array.isArray((await searchVerses(name, null, pack)).hits)).toBe(true)
+    }
+  }, 30000)
+}
