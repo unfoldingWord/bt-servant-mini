@@ -332,6 +332,21 @@
   .gm-row .ex-row-t { overflow-wrap: anywhere; }
   .gm-row.on .ex-row-t { font-weight: 650; }
   .gm-more .ex-row-t { color: var(--accent); font-weight: 600; }
+  /* Guiding without blocking (pipeline.ts, main.ts): where a light path is, the line that proposes it, the drift offer, "Continue the path" in the Map */
+  .path-mark { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+    font: 600 12.5px/1.35 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; max-width: 100%; overflow-wrap: anywhere; }
+  .path-mark::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .follow button.path-next { min-height: 44px; border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .path-line { margin: 10px 0 -4px; color: var(--muted); font: 13.5px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  .drift { margin-top: 12px; padding: 10px 12px 2px; border: 1px dashed var(--line); border-inline-start: 3px solid var(--accent); border-radius: 10px; }
+  .drift p { margin: 0; color: var(--fg); font: 14px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  .drift .follow { margin: 8px 0 8px; }
+  .drift .follow button { min-height: 44px; }
+  .drift .follow button:first-child { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .gm-path { border: 1px solid var(--accent); border-radius: 10px; margin: 4px 0 10px; background: var(--accent-soft); }
+  .gm-path .gm-ic { color: var(--accent); }
+  .gm-path .ex-row-t { color: var(--accent); font-weight: 600; }
+  [dir="rtl"] .gm-path svg { transform: scaleX(-1); }
 </style>
 </head>
 <body>

@@ -15,8 +15,8 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, type ConvState, directRef, env, guessLang, type Made, NP, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, stateLine } from './pipeline'
-import { backLine, branchOf, GT, mapRows, nodeOf } from './graph'
+import { answer, type ConvState, directRef, env, guessLang, type Made, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, stateLine } from './pipeline'
+import { backLine, branchOf, GD, GT, mapRows, nodeOf } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 import { shareButton } from './share'
 import { unfold } from './focus'
@@ -225,6 +225,12 @@ function renderMsg(m: Msg): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
   d.dataset.lang = m.lang ?? 'en'
+  // on a light path: where it is ("Ruth 1:6–18 · step 4 of 5: notes"), first
+  if (m.pathMark) {
+    const pm = el('div', 'path-mark', m.pathMark)
+    pm.dir = 'auto'
+    d.appendChild(pm)
+  }
   // with an online answer, it comes first and the offline answer becomes its sources
   let host: HTMLElement = d
   if (m.ai) {
@@ -270,9 +276,18 @@ function renderMsg(m: Msg): HTMLElement {
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   if (m.text) d.appendChild(el('div', 'plain', m.text))
-  // the way back to the passage this answer left, on its own row, then the next steps
-  if (m.back) d.appendChild(followRow(m, [m.back], 'follow back-row'))
+  // the way back to the passage this answer left (and to the path it left), on its own row, then the next steps
+  const backs = [m.back, m.pathBack].filter((f): f is Followup => !!f)
+  if (backs.length) d.appendChild(followRow(m, backs, 'follow back-row'))
+  // a path starts: the line that proposes it, just above its first step
+  if (m.pathLine) {
+    const pl = el('p', 'path-line', m.pathLine)
+    pl.dir = 'auto'
+    d.appendChild(pl)
+  }
   if (m.follow?.length) d.appendChild(followRow(m, m.follow))
+  // far from where the conversation started: "Shall we start a new conversation for this?", while it is the last answer
+  if (m.drift && cv && cv.msgs[cv.msgs.length - 1] === m && nodeOf(cv.graph, m.node)?.drift === 'offered') d.appendChild(driftOffer(cv, m))
   // the language is missing: straight to where it is added
   if (m.packs) {
     const a = el('button', 'about-link', NP(m.ui ?? nav).add) as HTMLButtonElement
@@ -343,7 +358,8 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
   for (const x of follow) {
     const b = el('button', '', x.label) as HTMLButtonElement
     b.type = 'button'
-    if (x.back) b.className = 'back'
+    if (x.back || x.toPath) b.className = 'back'
+    else if (x.pathNext) b.className = 'path-next'
     b.onclick = () => {
       if (x.back) goTo(x.back, 'back')
       else if (x.browse) {
@@ -365,6 +381,87 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
     f.appendChild(b)
   }
   return f
+}
+/**
+ * The drift offer under an answer (pipeline.ts graphStep): [New conversation] moves this question and its answer to a new
+ * conversation (the old one stays, in the conversations menu); [Continue here] puts it away. Offered once: either answer, or
+ * a new question, and it is not asked again for this drift. With 3 conversations already, it says so and offers to continue.
+ */
+function driftOffer(c: Conv, m: Msg): HTMLElement {
+  const w = GD(m.ui ?? nav)
+  const box = el('div', 'drift')
+  box.setAttribute('role', 'group')
+  const say = el('p', '', w.drift)
+  say.dir = 'auto'
+  const row = el('div', 'follow')
+  const btn = (label: string, go: () => void) => {
+    const b = el('button', '', label) as HTMLButtonElement
+    b.type = 'button'
+    b.onclick = go
+    row.appendChild(b)
+    return b
+  }
+  const stay = () => {
+    const n = nodeOf(c.graph, m.node)
+    if (n) n.drift = 'stayed'
+    count('guide.drift.stay')
+    save()
+    box.remove()
+  }
+  btn(w.newConv, () => {
+    if (busy) return
+    if (convs.length >= MAX) {
+      // no room for a fourth: say so, and continue here
+      say.textContent = w.full
+      row.innerHTML = ''
+      btn(w.stay, stay).focus()
+      return
+    }
+    count('guide.drift.new')
+    moveToNew(c, m)
+  })
+  btn(w.stay, stay)
+  box.append(say, row)
+  return box
+}
+/**
+ * This question and its answer go on in a new conversation: out of `c` (its point too; `c` goes back to the point before),
+ * into a new one whose first point it is. The old conversation stays as it was before them.
+ */
+function moveToNew(c: Conv, m: Msg) {
+  const i = c.msgs.indexOf(m)
+  const n = nodeOf(c.graph, m.node)
+  if (i < 0 || !n || !c.graph) return
+  const from = c.msgs[i - 1]?.who === 'me' ? i - 1 : i
+  const moved = c.msgs.splice(from, i - from + 1)
+  c.graph.nodes = c.graph.nodes.filter((x) => x.id !== n.id)
+  // the old conversation goes on from the point before (its state from there), or from nothing
+  if (n.parent && nodeOf(c.graph, n.parent)) returnTo(c, n.parent, nav)
+  else {
+    c.graph.cur = null
+    c.last = null
+    c.found = []
+    delete c.state
+  }
+  c.updated = Date.now()
+  const nc = newConv()
+  if (!nc) return
+  const q = moved[0]?.who === 'me' ? moved[0] : null
+  nc.title = (q?.text ?? n.label).slice(0, 48)
+  // (its way back led to a point of the old conversation: none here)
+  nc.msgs = moved.map((x) => ({ ...x, drift: undefined, back: undefined, pathBack: undefined }))
+  nc.graph = { nodes: [{ ...n, parent: null, edge: 'start', drift: 'moved', msg: nc.msgs.length - 1 }], cur: n.id }
+  // a path that starts with this answer ("Voy a traducir Jonás" after a long talk about Ruth) goes with it
+  if (m.pathMark && c.graph.path) {
+    nc.graph.path = c.graph.path
+    delete c.graph.path
+  }
+  nc.msgs[nc.msgs.length - 1]!.node = n.id
+  // what is asked next goes on from this point (its passage, its search results)
+  returnTo(nc, n.id, nav)
+  save()
+  renderConv()
+  if (panel.classList.contains('show')) renderPanel()
 }
 /** One message as a report carries it: the words shown, the online answer, and the details (what the model understood). */
 const reportMsg = (m: Msg): ReportMsg => m.who === 'me'
@@ -1195,6 +1292,28 @@ function drawMap() {
   b.close.setAttribute('aria-label', t.close)
   b.body.innerHTML = ''
   b.body.appendChild(el('p', 'ex-note', t.hint))
+  // a light path in this conversation: where it was, one tap to go on with it
+  const path = g?.path
+  const ps = path ? pathSheet(path) : null
+  if (path && ps) {
+    const label = pathLabel(nav, path, 'resume')
+    const row = el('button', 'ex-row gm-row gm-path') as HTMLButtonElement
+    row.type = 'button'
+    const ic = el('span', 'gm-ic gm-line')
+    ic.innerHTML = svg('<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>')
+    const txt = el('span', 'gm-txt')
+    const name = el('span', 'ex-row-t', label)
+    name.dir = 'auto'
+    txt.appendChild(name)
+    row.append(ic, txt)
+    row.onclick = () => {
+      if (busy) return
+      closeMap(false)
+      count('guide.path.resume')
+      runSheet(label, ps, nav)
+    }
+    b.body.appendChild(row)
+  }
   const list = el('div', 'ex-rows gm-rows')
   let here: HTMLElement | null = null
   for (const r of g ? mapRows(g, mapOpened) : []) {
