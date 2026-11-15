@@ -1,0 +1,16 @@
+# The phone model's reply (FunctionGemma "ms-all-q8"), as a GBNF grammar (llama.cpp): llama-server and wllama sample only
+# tokens that keep the reply inside it, so the reply is always one call sheet that JSON.parse reads. It is the shape the model
+# was trained to write (fase0 data/train-ft.jsonl "output_json"): compact JSON, all eleven keys, always in this order.
+# Words are bounded (a phrase is a quote from the question; the rest are a few words) and numbers are whole, 1 to 999, or null.
+root ::= "{\"intent\":" intent ",\"book\":" text ",\"chapter\":" num ",\"verse_start\":" num ",\"verse_end\":" num ",\"what\":" what ",\"version\":" version ",\"term\":" text ",\"phrase\":" phrase ",\"lang\":" lang ",\"other_language\":" text "}"
+
+intent ::= "\"" ( "passage" | "article" | "count" | "rank" | "resources" | "advice" | "search" | "unknown" ) "\""
+what ::= "[" ( part ( "," part ){0,4} )? "]"
+part ::= "\"" ( "text" | "notes" | "questions" | "terms" | "intro" ) "\""
+version ::= "null" | "\"ult\"" | "\"ust\""
+lang ::= "\"" ( "en" | "es" | "fr" | "id" | "hi" | "ar" ) "\""
+
+num ::= "null" | [1-9] [0-9]{0,2}
+text ::= "null" | "\"" char{0,60} "\""
+phrase ::= "null" | "\"" char{0,160} "\""
+char ::= [^"\\\x00-\x1F\x7F] | "\\" ( ["\\/bfnrt] | "u" [0-9a-fA-F]{4} )
