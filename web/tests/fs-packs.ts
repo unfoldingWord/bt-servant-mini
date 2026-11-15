@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path'
 import { reloadPacks } from '../src/packs'
 import { resetLangs } from '../src/answer'
 import { resetSearch } from '../src/search'
+import { resetBooks } from '../src/pipeline'
 
 const DEFAULT_DIR = process.env.PACKS_DIR ? resolve(process.env.PACKS_DIR)
   : ['lp3-ta-packs', 'fase0-mini-servant/packs'].map((d) => resolve(import.meta.dir, '../../..', d)).find((d) => existsSync(d))!
@@ -69,4 +70,5 @@ export async function installPacks(l: string[]) {
   reloadPacks()
   resetLangs()
   resetSearch()
+  resetBooks()
 }
