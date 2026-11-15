@@ -1,5 +1,5 @@
 {
-  "_": "The words that send a training question to a Translation Academy article (pipeline.ts, route `academy`). An entry is words that must all be in the question, in any order: `a|b` is either word, a word ending in * is a beginning (traduc* is traducir, traduzco, traducción). Words are compared without accents or capitals, and a final s does not count (idioms = idiom, modismos = modismo). The article whose longest entry matches wins; two articles tied leave the question to the other routes. `cues`: a question must have one of these words (or a \"how do I translate/say\" of commands.json) to be read as a training question at all: a word of translating, so \"Who was on the team of Paul?\" stays a Bible question. `stop`: words left out when the question's words are compared with the titles of the articles. Add words here, not rules in the code; web/tests/academy-route.test.ts checks them. Not `idioma` for idiom: in Spanish it is the language.",
+  "_": "The words that send a training question to a Translation Academy article (pipeline.ts, route `academy`). An entry is words that must all be in the question, in any order, within three words of each other (an entry starting with = only in that order, at most one word between two): `a|b` is either word, a word ending in * is a beginning (traduc* is traducir, traduzco, traducción). Words are compared without accents or capitals, and a final s does not count (idioms = idiom, modismos = modismo). The article whose longest entry matches wins; two articles tied leave the question to the other routes. `cues`: a question must have one of these words (or a \"how do I translate/say\" of commands.json) to be read as a training question at all: a word of translating, so \"Who was on the team of Paul?\" stays a Bible question. `stop`: words left out when the question's words are compared with the titles of the articles. Add words here, not rules in the code; web/tests/academy-route.test.ts checks them. Not `idioma` for idiom: in Spanish it is the language; not `perumpamaan` for simile: in Indonesian it is a parable. Another word of the question that names a Translation Words article (\"the team of horses\", \"first fruits\") cancels a match.",
   "cues": {
     "en": "translat*",
     "es": "tradu*",
@@ -76,8 +76,7 @@
         "comparaison"
       ],
       "id": [
-        "pembandingan",
-        "perumpamaan"
+        "pembandingan"
       ],
       "hi": [
         "उपमा"
@@ -176,50 +175,55 @@
     },
     "ta:process/setup-team": {
       "en": [
-        "team",
+        "=translat* team",
         "set*|build*|form*|organi*|start* team"
       ],
       "es": [
-        "equipo",
+        "=equipo tradu*|traductor*",
         "form*|arm*|organiz*|cre*|establec*|mont* equipo"
       ],
       "fr": [
-        "equipe",
+        "=equipe tradu*|traducteur*",
         "form*|constitu*|organis*|cre* equipe"
       ],
       "id": [
-        "tim",
+        "=tim penerjemah*|terjemah*",
         "bentuk|membentuk|menyusun|membangun tim"
       ],
       "hi": [
-        "दल",
-        "टीम",
+        "=अनुवाद* दल|टीम",
         "दल|टीम बना*|स्थापित"
       ],
       "ar": [
-        "فريق",
+        "=فريق ترجم*|الترجمه|مترجم*",
         "تشكيل|تكوين|تاسيس|بناء فريق"
       ]
     },
     "ta:translate/choose-team": {
       "en": [
         "choos*|select*|pick* team|translator*",
+        "choos*|select*|pick* translat* team",
         "who should translat*"
       ],
       "es": [
-        "eleg*|elij*|escog*|selecc* equipo|traductor*"
+        "eleg*|elij*|escog*|selecc* equipo|traductor*",
+        "eleg*|elij*|escog*|selecc* equipo tradu*"
       ],
       "fr": [
-        "choisi*|selection* equipe|traducteur*"
+        "choisi*|selection* equipe|traducteur*",
+        "choisi*|selection* equipe tradu*"
       ],
       "id": [
-        "pilih|memilih tim|penerjemah"
+        "pilih|memilih tim|penerjemah",
+        "pilih|memilih tim penerjemah*|terjemah*"
       ],
       "hi": [
-        "दल|टीम चुन*"
+        "दल|टीम चुन*",
+        "अनुवाद* दल|टीम चुन*"
       ],
       "ar": [
-        "اختيار|اختار|نختار فريق|مترجمين"
+        "اختيار|اختار|نختار فريق|مترجمين",
+        "اختيار|اختار|نختار فريق ترجم*"
       ]
     },
     "ta:checking/intro-checking": {
@@ -270,26 +274,22 @@
     },
     "ta:translate/first-draft": {
       "en": [
-        "first draft*",
-        "draft*"
+        "first draft*"
       ],
       "es": [
-        "primer borrador",
-        "borrador*"
+        "primer borrador"
       ],
       "fr": [
-        "premier brouillon",
-        "brouillon*"
+        "premier brouillon"
       ],
       "id": [
         "draf|konsep pertama"
       ],
       "hi": [
-        "प्रालेख",
-        "मसौदा"
+        "प्रथम प्रालेख|मसौदा"
       ],
       "ar": [
-        "مسودة"
+        "مسودة اولى|اول"
       ]
     }
   }

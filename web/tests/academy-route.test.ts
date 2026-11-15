@@ -45,7 +45,7 @@ for (const [lang, q, id] of right)
     await installPacks(ALL_PACKS)
     const pack = lang === 'es' ? 'es-419' : lang
     expect((await academyFor(q, [...new Set([pack, 'en'])], lang))?.id).toBe(id)
-  })
+  }, 30_000) // the first question that looks up Translation Words names reads them from every pack
 
 // not training questions, or not about one article: the other routes answer them
 const none = [
@@ -55,9 +55,18 @@ const none = [
   'How should I start translating Ruth?',
   'What does grace mean?',
   'Who was on the team of Paul?',
+  // words of the list that mean something else here (review of Nov 15)
+  'How do I translate the team of horses?',
+  'How do I translate draft animals?',
+  'How do I translate first fruits?',
+  'How do I translate Passover in the first month?',
+  '¿Cómo traduzco equipo de guerra?',
+  'Bagaimana menerjemahkan perumpamaan tentang penabur?',
 ]
 for (const q of none)
   test(`${q} -> none`, async () => {
     await installPacks(ALL_PACKS)
-    expect((await academyFor(q, ['en']))?.id ?? null).toBe(null)
-  })
+    const lang = /[¿¡]/.test(q) ? 'es' : /bagaimana/i.test(q) ? 'id' : 'en'
+    const packs = lang === 'es' ? ['es-419', 'en'] : lang === 'id' ? ['id', 'en'] : ['en']
+    expect((await academyFor(q, packs, lang))?.id ?? null).toBe(null)
+  }, 30_000)

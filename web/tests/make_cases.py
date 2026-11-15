@@ -224,6 +224,13 @@ ACADEMY_NOT = [
     ('en', 'How do I translate the name Yahweh?', {'notConcept': '^ta:'}),
     ('es', '¿Cómo traduzco cordero si en mi idioma no hay ovejas?', {'notConcept': '^ta:translate/figs-idiom$', 'useful': False}),
     ('en', 'Who was on the team of Paul?', {'notConcept': '^ta:', 'useful': False}),
+    # words of the list that mean something else here (review of Nov 15)
+    ('en', 'How do I translate the team of horses?', {'notConcept': '^ta:', 'useful': False}),
+    ('en', 'How do I translate draft animals?', {'notConcept': '^ta:', 'useful': False}),
+    ('en', 'How do I translate first fruits?', {'notConcept': '^ta:', 'useful': False}),
+    ('en', 'How do I translate Passover in the first month?', {'notConcept': '^ta:', 'useful': False}),
+    ('es', '¿Cómo traduzco equipo de guerra?', {'notConcept': '^ta:', 'useful': False}),
+    ('id', 'Bagaimana menerjemahkan perumpamaan tentang penabur?', {'notConcept': '^ta:translate/figs-simile$', 'useful': False}),
 ]
 
 

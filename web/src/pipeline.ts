@@ -369,8 +369,15 @@ const slotOf = (spec: string): Slot =>
   spec.split('|').map((a) => (a.endsWith('*') ? { w: fold(a.slice(0, -1)).replace(/^ال(?=[ء-ي]{3})/, ''), prefix: true } : { w: taStem(a), prefix: false }))
 const slotHas = (slot: Slot, t: string) => slot.some((a) => (a.prefix ? t.startsWith(a.w) : t === a.w))
 const CUES: Slot = Object.values(SYN.cues).flatMap((l) => l.split(/\s+/).filter(Boolean)).flatMap(slotOf)
-const ENTRIES: { id: string; slots: Slot[]; spec: string }[] = Object.entries(SYN.ids).flatMap(([id, byLang]) =>
-  Object.values(byLang).flat().map((spec) => ({ id, spec, slots: spec.split(/\s+/).filter(Boolean).map(slotOf) })))
+/** `ordered`: an entry written "=translat* team" holds only with its words in that order, at most one word between two. */
+const ENTRIES: { id: string; slots: Slot[]; spec: string; ordered: boolean }[] = Object.entries(SYN.ids).flatMap(([id, byLang]) =>
+  Object.values(byLang).flat().map((spec) => ({ id, spec, ordered: spec.startsWith('='), slots: spec.replace(/^=/, '').split(/\s+/).filter(Boolean).map(slotOf) })))
+/** Whether the slots stand in order in `toks`, from position `i`, with at most one word between two. */
+function inOrder(slots: Slot[], toks: string[], i: number): boolean {
+  if (!slots.length) return true
+  if (!toks[i] || !slotHas(slots[0]!, toks[i]!)) return false
+  return slots.length === 1 || [i + 1, i + 2].some((j) => inOrder(slots.slice(1), toks, j))
+}
 const TA_STOP = new Set(SYN.stop.split(/\s+/).filter(Boolean).map(taStem))
 /** The words of a title or question that count: no small words, no "how", "translate", "Bible"… */
 const taContent = (ws: string[]) => ws.filter((w) => !TA_STOP.has(w) && !/^\d+$/.test(w) && (w.length >= 3 || (/[^\x00-\x7f]/.test(w) && w.length >= 2)))
@@ -408,9 +415,10 @@ async function hasTa(lang: string, id: string): Promise<boolean> {
 export type TaMatch = { id: string; score: number; how: string }
 /**
  * The Translation Academy article a training question asks for, or null when it is not one or no article clearly wins.
- * `packs`: the packs whose titles are compared (the question's first). A word-list entry scores its number of words (half
- * more when they stand together in the question); a title scores its number of words, when every one of them is in the
- * question and at most one other word is (and that word names no Translation Words article: "the name Yahweh").
+ * `packs`: the packs whose titles are compared (the question's first). A word-list entry counts when its words stand
+ * within three words of each other, and scores its number of words (half more when they stand together); a title scores its
+ * number of words, when every one of them is in the question and at most one other word is. Either way, another word of the
+ * question that names a Translation Words article cancels the match: "the team of horses", "first fruits", "the name Yahweh".
  */
 export async function academyFor(q: string, packs: string[], ui = 'en'): Promise<TaMatch | null> {
   const toks = taTokens(q)
@@ -419,14 +427,27 @@ export async function academyFor(q: string, packs: string[], ui = 'en'): Promise
   // know better (not any language's: "nombres" is Numbers in French)
   const tables = bookTables as Record<string, Record<string, string>>
   if (q.split(/[^\p{L}\p{M}\d]+/u).some((w) => w.length > 2 && [ui, 'en'].some((l) => tables[l]?.[fold(w)]))) return null
+  const asked = new Set(taContent(toks))
+  const twName = new Map<string, boolean>()
+  const namesTw = async (w: string) => {
+    if (!twName.has(w)) twName.set(w, !!(await articleForQuestion(w))?.length)
+    return twName.get(w)!
+  }
+  /** Whether the words of the question besides `used` (and its words of translating) name no Translation Words article. */
+  const noTwBesides = async (used: (t: string) => boolean) => {
+    for (const w of asked) if (!used(w) && !slotHas(CUES, w) && !SITUATION.has(w) && (await namesTw(w))) return false
+    return true
+  }
   const best = new Map<string, TaMatch>()
   const offer = (m: TaMatch) => { if ((best.get(m.id)?.score ?? 0) < m.score) best.set(m.id, m) }
   for (const e of ENTRIES) {
-    if (!e.slots.every((s) => toks.some((t) => slotHas(s, t)))) continue
+    const n = e.slots.length
+    // every word within a window of n + 3 words ("translate … first", not "first" at the other end of the question)
+    const near = e.ordered ? toks.some((_, i) => inOrder(e.slots, toks, i)) : toks.some((_, i) => e.slots.every((s) => toks.slice(i, i + n + 3).some((t) => slotHas(s, t))))
+    if (!near || !(await noTwBesides((t) => e.slots.some((s) => slotHas(s, t))))) continue
     const together = toks.some((_, i) => e.slots.every((s, k) => toks[i + k] !== undefined && slotHas(s, toks[i + k]!)))
-    offer({ id: e.id, score: e.slots.length + (together && e.slots.length > 1 ? 0.5 : 0), how: `words "${e.spec}"` })
+    offer({ id: e.id, score: n + (together && n > 1 ? 0.5 : 0), how: `words "${e.spec}"` })
   }
-  const asked = new Set(taContent(toks))
   for (const pl of packs) {
     for (const t of await titlesOf(pl).catch(() => [])) {
       if (!t.words.every((w) => asked.has(w))) continue
