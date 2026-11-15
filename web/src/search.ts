@@ -2,8 +2,7 @@
 // 1) Words that name a Translation Words article (names and key terms, in any of the five languages) become concepts; the verses
 //    whose word links hold all of them are found through the common map (books) and each book's links (verses). Works whatever
 //    language the question is in. 2) Otherwise, full-text search of the installed texts, dropping common words before names.
-import type { BookModel, HelpRow } from '@bt-synergy/language-pack-v3'
-import { textOfRange } from '@lpc/query/passage'
+import { verseId, type BookModel, type HelpRow } from '@bt-synergy/language-pack-v3'
 import glossary from './data/kt-glossary.json'
 import booknames from './data/booknames.json'
 import books from './data/books.json'
@@ -138,10 +137,56 @@ export type Found = { book: string; ch: number; v: number; text: string; why: st
 export type SearchResult = { keywords: string[]; concepts: string[]; hits: Found[]; how: 'concepts' | 'text' | 'none' }
 
 const BOOKS: string[] = Object.keys((booknames as any).BOOK_EN).filter((c) => c !== 'obs')
-const verseText = (model: BookModel, from: number, to: number): string => {
-  const t = model.texts.find((x) => /\/(ult|glt)$/.test(x.res)) ?? model.texts.find((x) => /\/bsb$/.test(x.res)) ?? model.texts[0]
-  return t ? textOfRange(model.book, t.pieces as any, t.events as any, from, to).replace(/[{}]/g, '') : ''
+type Text = BookModel['texts'][number]
+const mainText = (model: BookModel): Text | undefined =>
+  model.texts.find((x) => /\/(ult|glt)$/.test(x.res)) ?? model.texts.find((x) => /\/bsb$/.test(x.res)) ?? model.texts[0]
+const NUMBER = /^(\d+)(?:-(\d+))?/
+/**
+ * Verse id -> its text, for every verse of a text in one pass: what `textOfRange(book, …, id, id)` gives for each id, which
+ * walks the whole book every time it is called (once per verse and per text made a story search take seconds per book).
+ */
+function verseTexts(book: string, t: Text): Map<number, string> {
+  const parts = new Map<number, string[]>()
+  const pieces = t.pieces as any[]
+  let chapter = 0
+  let first = 0
+  let last = 0
+  let start = 0
+  const flush = (end: number) => {
+    const lo = verseId(book, chapter, first)
+    const hi = verseId(book, chapter, last)
+    if (end <= start) return
+    const s = pieces.slice(start, end).map((p) => p[0]).join('').trim()
+    for (let id = lo; id <= hi; id++) {
+      const l = parts.get(id)
+      if (l) l.push(s)
+      else parts.set(id, [s])
+    }
+  }
+  for (const [position, kind, arg] of t.events as any[]) {
+    if (kind !== 'chapter' && kind !== 'verse') continue
+    flush(position)
+    start = position
+    const m = NUMBER.exec(arg)
+    if (m === null) {
+      first = last = 0
+      continue
+    }
+    if (kind === 'chapter') {
+      chapter = Number(m[1])
+      first = last = 0
+    } else {
+      first = Number(m[1])
+      last = m[2] === undefined ? first : Number(m[2])
+    }
+  }
+  flush(pieces.length)
+  const out = new Map<number, string>()
+  for (const [id, l] of parts) out.set(id, l.filter((p) => p !== '').join(' '))
+  return out
 }
+/** Each text read into verses once, when a verse of it is first needed; kept while the reader keeps the book. */
+const SPLIT = new WeakMap<Text, Map<number, string>>()
 /** A text in another script than the language's is not that language (BSOJ's ar ARST New Testament is the English UST). */
 const wrongScript = (l: string, t: string): boolean =>
   l === 'ar' ? !/[؀-ۿ]/.test(t) : l === 'hi' ? !/[ऀ-ॿ]/.test(t) : false
@@ -206,6 +251,12 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
       e.ids.push(row.concept)
       byVerse.set(row.from, e)
     }
+    const textOf = (t: Text | undefined, from: number): string => {
+      if (!t) return ''
+      if (!SPLIT.has(t)) SPLIT.set(t, verseTexts(model.book, t))
+      return SPLIT.get(t)!.get(from) ?? ''
+    }
+    const verseText = (m: BookModel, from: number) => textOf(mainText(m), from).replace(/[{}]/g, '')
     const groupOf = (id: string) => groups.findIndex((g) => g.includes(id))
     const scored: (Found & { n: number; dense: number; own: number })[] = []
     for (const [from, e] of byVerse) {
@@ -221,10 +272,9 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
       const own = new Set(e.ids.map(groupOf).filter((g) => g >= 0)).size
       if (covered.size < Math.min(2, groups.length) || own === 0) continue
       const [ch, v] = parseRef(e.ref)
-      const localText = local ? verseText(local, from, from) : ''
-      const text = localText && !wrongScript(packLang, localText) ? localText : verseText(model, from, from)
-      const texts = [...model.texts, ...(local?.texts ?? [])]
-      const read = (ts: typeof texts) => ts.map((t) => textOfRange(model.book, t.pieces as any, t.events as any, from, from)).join(' ')
+      const localText = local ? verseText(local, from) : ''
+      const text = localText && !wrongScript(packLang, localText) ? localText : verseText(model, from)
+      const read = (ts: Text[]) => ts.map((t) => textOf(t, from)).join(' ')
       // without the book in the question's language, only its English words (or none) can be compared
       const tx = Math.max(hitsOf(english, read(model.texts)), local ? hitsOf(ownRoots, read(local.texts)) : 0)
       if (groups.length === 1 && roots.length && tx === 0) continue
