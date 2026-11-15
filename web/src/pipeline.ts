@@ -392,10 +392,17 @@ async function titlesOf(lang: string): Promise<{ id: string; words: string[] }[]
     })())
   return taTitles.get(r)!
 }
-/** Whether a pack has a Translation Academy article (by its names). */
+/**
+ * Whether a pack can show a Translation Academy article: read it, not only its name. Older packs list the names of all four
+ * manuals in their maps but carry only the translate manual ("not installed on this device" for "set up a team").
+ */
 async function hasTa(lang: string, id: string): Promise<boolean> {
   if (!(await hasLang(lang))) return false
-  return (await titlesOf(lang)).some((t) => t.id === id)
+  try {
+    return !!(await (await openLang(lang)).article(id, 'all')).data?.sections.length
+  } catch {
+    return false
+  }
 }
 
 export type TaMatch = { id: string; score: number; how: string }
