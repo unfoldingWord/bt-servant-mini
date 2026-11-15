@@ -9,11 +9,11 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Case, check, loadCases, offersNext, type Outcome, runCase } from './harness'
 
-const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall']
+const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall', 'guide']
 // ANSWERS=fast (build.py's default): only the cases marked fast, a minute at most; the scores are compared on a full run
 const FAST = process.env.ANSWERS === 'fast'
 const BASELINE = join(import.meta.dir, 'baseline.json')
-type Score = { pass: number; total: number; known: number; must?: number; empty?: number }
+type Score = { pass: number; total: number; known: number; must?: number; empty?: number; oos?: number }
 const baseline: Record<string, Score> = JSON.parse(readFileSync(BASELINE, 'utf-8')).sets
 const scores: Record<string, Score> = {}
 const nowPassing: string[] = []
@@ -40,6 +40,9 @@ let checkedNext = 0
  * many of its answers are empty, and it must not rise (baseline `empty`).
  */
 const isEmpty = (o: Outcome): boolean => {
+  // (out of scope says what Mini helps with and offers ways back on purpose: counted apart, as `oos`, not as empty; the
+  // weather searched before and found junk)
+  if (o.route === 'outofscope') return false
   const m = o.reply as { info?: string; helps?: unknown[]; study?: unknown; text?: string } | null
   return o.found === 0 || !m || (!m.info?.trim() && !m.helps?.length && !m.study && !m.text?.trim())
 }
@@ -72,6 +75,7 @@ for (const f of FILES)
         if (k.known) s.known++
         if (k.must) s.must = (s.must ?? 0) + (mustPass(k, o) ? 1 : 0)
         s.empty = (s.empty ?? 0) + (isEmpty(o) ? 1 : 0)
+        s.oos = (s.oos ?? 0) + (o.route === 'outofscope' ? 1 : 0)
         if (isEmpty(o)) empties.push(`${k.set} ${k.id}: ${k.q}`)
         if (k.known && !bad.length) nowPassing.push(`${k.id} (${k.known})`)
         if (k.known && bad.length) knownFails.push(`${k.set} ${k.id}: ${bad.join('; ')}`)
@@ -84,6 +88,7 @@ test('every set keeps its baseline score', () => {
   const lines = Object.entries(scores).map(([set, s]) =>
     `${set.padEnd(14)} ${String(s.pass).padStart(3)}/${s.total} right` + `  (known-open ${s.known}, baseline ${baseline[set]?.pass ?? '-'})` +
     `  empty ${s.empty ?? 0}/${s.total} (${Math.round((100 * (s.empty ?? 0)) / s.total)}%, baseline ${baseline[set]?.empty ?? '-'})` +
+    `  out of scope ${s.oos ?? 0} (baseline ${baseline[set]?.oos ?? '-'})` +
     (s.must !== undefined ? `  must-regexes ${s.must}/${s.total}` : ''))
   const all = Object.values(scores).reduce((a, s) => [a[0]! + (s.empty ?? 0), a[1]! + s.total], [0, 0])
   lines.push(`${'all'.padEnd(14)} empty ${all[0]}/${all[1]} (${all[1] ? Math.round((100 * all[0]!) / all[1]!) : 0}%)`)
