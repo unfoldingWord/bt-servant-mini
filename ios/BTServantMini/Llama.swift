@@ -54,7 +54,9 @@ final class Llama {
     }
 
     /// The text the model writes after `prompt`, up to `nPredict` tokens, an end-of-generation token or a stop string.
-    func complete(prompt: String, nPredict: Int, stop: [String]) throws -> String {
+    /// `grammar` (GBNF, the page's web/src/data/slots.gbnf) keeps the reply inside the call sheet's shape, as llama-server
+    /// does on Android; without one, or one llama.cpp cannot read, the reply is free as before.
+    func complete(prompt: String, nPredict: Int, stop: [String], grammar: String? = nil) throws -> String {
         llama_memory_clear(llama_get_memory(ctx), true)
         var tokens = tokenize(prompt)
         let room = Int(llama_n_ctx(ctx)) - nPredict
@@ -63,13 +65,48 @@ final class Llama {
         let sampler = llama_sampler_chain_init(llama_sampler_chain_default_params())
         defer { llama_sampler_free(sampler) }
         llama_sampler_chain_add(sampler, llama_sampler_init_greedy())
+        var gram: UnsafeMutablePointer<llama_sampler>? = grammar.flatMap { llama_sampler_init_grammar(vocab, $0, "root") }
+        defer { if let g = gram { llama_sampler_free(g) } }
+        // As llama-server: the greedy token first, and only when the grammar refuses it, the whole vocabulary through the
+        // grammar (262k tokens: too slow for every token). Dead end (no token allowed): the grammar is dropped.
+        func next() -> llama_token {
+            let token = llama_sampler_sample(sampler, ctx, -1)
+            guard let g = gram else { return token }
+            var one = llama_token_data(id: token, logit: 1, p: 0)
+            let allowed = withUnsafeMutablePointer(to: &one) { p -> Bool in
+                var arr = llama_token_data_array(data: p, size: 1, selected: -1, sorted: false)
+                llama_sampler_apply(g, &arr)
+                return p.pointee.logit.isFinite
+            }
+            if allowed {
+                llama_sampler_accept(g, token)
+                return token
+            }
+            let logits = llama_get_logits_ith(ctx, -1)!
+            let n = Int(llama_vocab_n_tokens(vocab))
+            var all = (0..<n).map { llama_token_data(id: llama_token($0), logit: logits[$0], p: 0) }
+            let best = all.withUnsafeMutableBufferPointer { b -> llama_token? in
+                var arr = llama_token_data_array(data: b.baseAddress, size: n, selected: -1, sorted: false)
+                llama_sampler_apply(g, &arr)
+                var pick: llama_token_data? = nil
+                for c in b where c.logit.isFinite && c.logit > (pick?.logit ?? -.infinity) { pick = c }
+                return pick?.id
+            }
+            guard let t = best else {
+                llama_sampler_free(g)
+                gram = nil
+                return token
+            }
+            llama_sampler_accept(g, t)
+            return t
+        }
 
         var rc = tokens.withUnsafeMutableBufferPointer { llama_decode(ctx, llama_batch_get_one($0.baseAddress, Int32($0.count))) }
         if rc != 0 { throw LlamaError.decode(rc) }
 
         var bytes = Data() // a token may end in the middle of a UTF-8 character: decode the whole, each time
         for _ in 0..<nPredict {
-            var token = llama_sampler_sample(sampler, ctx, -1)
+            var token = next()
             if llama_vocab_is_eog(vocab, token) { break }
             bytes.append(piece(token))
             let text = String(decoding: bytes, as: UTF8.self)

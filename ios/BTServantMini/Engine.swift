@@ -122,14 +122,15 @@ final class Engine: NSObject, URLSessionDownloadDelegate {
 
     // ----------------------------------------------------------------------------------------------------- completion
 
-    /// `body` is the page's JSON ({prompt, n_predict, stop, …}); the reply is {"content": …} or "ERROR:…", as on Android.
+    /// `body` is the page's JSON ({prompt, n_predict, stop, grammar, …}); the reply is {"content": …} or "ERROR:…", as on Android.
     func complete(body: String, reply: @escaping (String) -> Void) {
         queue.async {
             guard let llama = self.llama else { return reply("ERROR:the model is not loaded") }
             do {
                 guard let o = try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
                       let prompt = o["prompt"] as? String else { throw Failure("no prompt") }
-                let text = try llama.complete(prompt: prompt, nPredict: o["n_predict"] as? Int ?? 200, stop: o["stop"] as? [String] ?? [])
+                let text = try llama.complete(prompt: prompt, nPredict: o["n_predict"] as? Int ?? 200, stop: o["stop"] as? [String] ?? [],
+                                              grammar: o["grammar"] as? String)
                 let out = try JSONSerialization.data(withJSONObject: ["content": text])
                 reply(String(decoding: out, as: UTF8.self))
             } catch {

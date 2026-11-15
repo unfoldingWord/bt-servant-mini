@@ -109,9 +109,8 @@ export const appVersion = (): string => (PWA ? `${version.version}-web` : window
 export const isLite = (): boolean => (PWA ? true : window.Android ? window.Android.flavor() === 'lite' : false)
 export const MODEL = models.models[0]!
 /**
- * The shape of the model's reply (data/slots.gbnf): llama-server (Android, desktop) and wllama (the web app) sample only what
- * keeps the reply inside it, so the reply is always a call sheet JSON.parse reads. The iOS app runs llama.cpp itself and does
- * not take it yet (Engine.swift reads only the prompt, n_predict and stop).
+ * The shape of the model's reply (data/slots.gbnf): llama-server (Android, desktop), the iOS app's llama.cpp (Llama.swift)
+ * and wllama (the web app) sample only what keeps the reply inside it, so the reply is always a call sheet JSON.parse reads.
  */
 export const GRAMMAR: string = grammar
 /** Whether the model on this phone reads a follow-up's state (trained with it, models.json "followups"), and is that model. */
