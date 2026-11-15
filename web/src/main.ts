@@ -980,12 +980,13 @@ setViewLang(nav)
 setExploreHooks({
   ui: () => nav,
   packs: () => {
+    // the helps language (else the app's), then English (as the answers fall back to it), then the others
     const first = examplesLang()
-    return first ? [first, ...INSTALLED.filter((l) => l !== first)] : [...INSTALLED]
+    return [...new Set([first, 'en', ...INSTALLED].filter((l): l is string => !!l && INSTALLED.includes(l)))]
   },
   packName: (l) => PACK_NAMES[l] ?? l,
   ask: (label, q) => {
-    if (busy) return false
+    if (busy || locked()) return false
     runSheet(label, { ...bare(q.lang), intent: q.intent, ref: q.ref ?? null, what: q.what ?? [], concept: q.concept ?? null }, nav)
     return true
   },

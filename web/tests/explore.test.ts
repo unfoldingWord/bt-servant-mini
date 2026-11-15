@@ -3,7 +3,7 @@
 import { expect, test } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { openLang } from '../src/packs'
-import { academyManuals, bibleBooks, bookPlan, manualArticles, MANUALS, resetExplore, XT } from '../src/explore'
+import { academyManuals, bibleBooks, bookPlan, manualArticles, manualSections, MANUALS, resetExplore, XT } from '../src/explore'
 
 const need = (l: string[]) => l.every((x) => ALL_PACKS.includes(x))
 
@@ -80,6 +80,27 @@ test('the four Translation Academy manuals and their articles', async () => {
     for (const a of [arts[0]!, arts[arts.length - 1]!]) expect((await r.article(a.id, 'all')).data?.sections.length).toBeGreaterThan(0)
   }
 }, 30_000)
+
+test('the Translate manual in the sections of its table of contents', async () => {
+  await installPacks(['en'])
+  resetExplore()
+  const all = await manualArticles('en', 'translate')
+  const groups = await manualSections('en', 'translate', 'en')
+  expect(groups.length).toBeGreaterThan(10)
+  // every article once, none lost
+  expect(groups.flatMap((g) => g.items.map((a) => a.id)).sort()).toEqual(all.map((a) => a.id).sort())
+  const figs = groups.find((g) => g.title === 'Figures of Speech')!
+  expect(figs.items.map((a) => a.id)).toContain('ta:translate/figs-metaphor')
+  expect(figs.items.every((a) => a.id.startsWith('ta:translate/figs-'))).toBe(true)
+  // in the order of the table of contents: the introduction to the manual comes first
+  expect(groups[0]!.items[0]!.id).toBe('ta:translate/translate-manual')
+  const es = await manualSections('en', 'translate', 'es')
+  expect(es.some((g) => g.title === 'Figuras retóricas')).toBe(true)
+  // the short manuals have no sections
+  const intro = await manualSections('en', 'intro', 'en')
+  expect(intro.length).toBe(1)
+  expect(intro[0]!.title).toBe('')
+})
 
 test('Arabic titles in the Arabic pack', async () => {
   if (!need(['ar'])) return

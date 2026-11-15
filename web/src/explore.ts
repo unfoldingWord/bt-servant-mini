@@ -2,9 +2,11 @@
 // text, notes, questions and key terms), with the book's and the chapter's introductions when the notes have them.
 // Translation Academy: the four manuals → their articles → the article. Only what the installed packs hold is offered (no
 // dead ends), books in canonical order and grouped by testament. Nothing here uses the network.
+import { bookView } from '@bt-synergy/language-pack-v3'
 import { CANON, openLang } from './packs'
 import { bookShown } from './firstuse'
 import { count } from './usage'
+import taSections from './data/ta-sections.json'
 
 // ------------------------------------------------------------------------------------------------------------------ data
 
@@ -34,8 +36,11 @@ export function bookPlan(lang: string, code: string): Promise<BookPlan | null> {
     plans.set(key, (async () => {
       const r = await openLang(lang)
       if (!r.installed(`book:${code}`)) return null
-      const model = await r.book(code)
-      if (!model) return null
+      // decoded here and dropped after: r.book() would keep the whole book in the reader (Psalms, Genesis, Isaiah and
+      // Jeremiah are over 100 MB decoded); only the small plan is kept
+      const seg = (await r.segments(`book:${code}`))?.[0]
+      if (!seg) return null
+      const model = bookView(seg)
       const byCh = new Map<number, Set<number>>()
       for (const t of model.texts) {
         let ch = 0
@@ -55,7 +60,12 @@ export function bookPlan(lang: string, code: string): Promise<BookPlan | null> {
       const chapters = [...byCh.entries()].filter(([, vs]) => vs.size).sort((a, b) => a[0] - b[0])
         .map(([ch, vs]) => ({ ch, verses: [...vs].sort((a, b) => a - b), intro: chIntro.has(ch) }))
       return chapters.length ? { intro: intros.length > 0, chapters } : null
-    })().catch(() => null).finally(() => planned.add(key)))
+    })().catch(() => null).then((p) => {
+      // a book that did not read is tried again next time
+      if (p) planned.add(key)
+      else plans.delete(key)
+      return p
+    }))
   return plans.get(key)!
 }
 
@@ -87,6 +97,32 @@ export async function manualArticles(lang: string, m: Manual): Promise<ArticleEn
     .sort((a, b) => a.title.localeCompare(b.title, base, { sensitivity: 'base', numeric: true }))
 }
 
+export type ArticleGroup = { title: string; items: ArticleEntry[] }
+type SectionMap = { sections: Record<string, string>[]; other: Record<string, string>; ids: Record<string, [number, number]>; prefixes?: Record<string, number> }
+/**
+ * A manual's articles in the sections of the English Translation Academy's table of contents (data/ta-sections.json, the same
+ * ids in every language), in its order; articles it does not list go last, by title. A manual with no such map: one group
+ * with no title.
+ */
+export async function manualSections(lang: string, m: Manual, ui: string): Promise<ArticleGroup[]> {
+  const list = await manualArticles(lang, m)
+  const map = (taSections as unknown as Record<string, SectionMap>)[m]
+  if (!map || !list.length) return list.length ? [{ title: '', items: list }] : []
+  const name = (t: Record<string, string>) => t[ui] ?? t.en!
+  const groups: ArticleGroup[] = map.sections.map((t) => ({ title: name(t), items: [] }))
+  const other: ArticleGroup = { title: name(map.other), items: [] }
+  const at = (a: ArticleEntry): [number, number] | undefined => {
+    const key = a.id.slice(`ta:${m}/`.length)
+    if (map.ids[key]) return map.ids[key]
+    // an article newer than the map: by the start of its id (writing-, grammar-), after the ones the map orders
+    const pre = Object.entries(map.prefixes ?? {}).find(([p]) => key.startsWith(p))
+    return pre ? [pre[1], 9999] : undefined
+  }
+  for (const a of list) (at(a) ? groups[at(a)![0]]! : other).items.push(a)
+  for (const g of groups) g.items.sort((a, b) => at(a)![1] - at(b)![1] || a.title.localeCompare(b.title))
+  return [...groups, other].filter((g) => g.items.length)
+}
+
 /** Tests and a change of packs: forget what was read. */
 export function resetExplore() {
   plans.clear()
@@ -100,6 +136,7 @@ type S = {
   browse: string; browseLong: string; bible: string; academy: string; ot: string; nt: string; chapters: string; verses: string
   bookIntro: string; chapter: string; chIntro: string; loading: string; none: string; addLang: string; back: string; close: string
   manuals: Record<Manual, [name: string, about: string]>; inLang: string
+  busy: string; failed: string; inPack: string; inOther: string
 }
 const STR: Record<string, S> = {
   en: {
@@ -107,6 +144,8 @@ const STR: Record<string, S> = {
     ot: 'Old Testament', nt: 'New Testament', chapters: 'Chapters', verses: 'Verses', bookIntro: 'Introduction to the book',
     chapter: 'Whole chapter {ch}', chIntro: 'Introduction to chapter {ch}', loading: 'Opening…', none: 'There is no language on this phone yet.',
     addLang: 'Add a language', back: 'Back', close: 'Close', inLang: 'in {lang}',
+    busy: 'An answer is on its way: tap again when it is here.', failed: 'This book could not be read on this phone.',
+    inPack: 'In {lang}', inOther: 'In {lang} (no {first} helps for these books yet)',
     manuals: {
       intro: ['Introduction', 'What Translation Academy is and how to use it'],
       process: ['Process', 'How a translation project goes, step by step'],
@@ -119,6 +158,8 @@ const STR: Record<string, S> = {
     ot: 'Antiguo Testamento', nt: 'Nuevo Testamento', chapters: 'Capítulos', verses: 'Versículos', bookIntro: 'Introducción al libro',
     chapter: 'Todo el capítulo {ch}', chIntro: 'Introducción al capítulo {ch}', loading: 'Abriendo…', none: 'Todavía no hay ningún idioma en este teléfono.',
     addLang: 'Agregar un idioma', back: 'Atrás', close: 'Cerrar', inLang: 'en {lang}',
+    busy: 'Ya viene una respuesta: toca de nuevo cuando llegue.', failed: 'Este libro no se pudo leer en este teléfono.',
+    inPack: 'En {lang}', inOther: 'En {lang} (todavía no hay ayudas en {first} para estos libros)',
     manuals: {
       intro: ['Introducción', 'Qué es Translation Academy y cómo usarla'],
       process: ['Proceso', 'Cómo avanza un proyecto de traducción, paso a paso'],
@@ -131,6 +172,8 @@ const STR: Record<string, S> = {
     ot: 'Ancien Testament', nt: 'Nouveau Testament', chapters: 'Chapitres', verses: 'Versets', bookIntro: 'Introduction au livre',
     chapter: 'Tout le chapitre {ch}', chIntro: 'Introduction au chapitre {ch}', loading: 'Ouverture…', none: "Il n'y a encore aucune langue sur ce téléphone.",
     addLang: 'Ajouter une langue', back: 'Retour', close: 'Fermer', inLang: 'en {lang}',
+    busy: 'Une réponse arrive : touchez à nouveau quand elle sera là.', failed: "Ce livre n'a pas pu être lu sur ce téléphone.",
+    inPack: 'En {lang}', inOther: "En {lang} (pas encore d'aides en {first} pour ces livres)",
     manuals: {
       intro: ['Introduction', "Ce qu'est Translation Academy et comment l'utiliser"],
       process: ['Processus', "Comment se déroule un projet de traduction, étape par étape"],
@@ -143,6 +186,8 @@ const STR: Record<string, S> = {
     ot: 'Perjanjian Lama', nt: 'Perjanjian Baru', chapters: 'Pasal', verses: 'Ayat', bookIntro: 'Pengantar kitab',
     chapter: 'Seluruh pasal {ch}', chIntro: 'Pengantar pasal {ch}', loading: 'Membuka…', none: 'Belum ada bahasa di ponsel ini.',
     addLang: 'Tambah bahasa', back: 'Kembali', close: 'Tutup', inLang: 'dalam {lang}',
+    busy: 'Jawaban sedang datang: ketuk lagi setelah jawaban muncul.', failed: 'Kitab ini tidak dapat dibaca di ponsel ini.',
+    inPack: 'Dalam {lang}', inOther: 'Dalam {lang} (belum ada bahan bantu {first} untuk kitab-kitab ini)',
     manuals: {
       intro: ['Pengantar', 'Apa itu Translation Academy dan cara memakainya'],
       process: ['Proses', 'Jalannya proyek penerjemahan, langkah demi langkah'],
@@ -155,6 +200,8 @@ const STR: Record<string, S> = {
     ot: 'पुराना नियम', nt: 'नया नियम', chapters: 'अध्याय', verses: 'पद', bookIntro: 'पुस्तक का परिचय',
     chapter: 'पूरा अध्याय {ch}', chIntro: 'अध्याय {ch} का परिचय', loading: 'खुल रहा है…', none: 'इस फ़ोन पर अभी कोई भाषा नहीं है।',
     addLang: 'भाषा जोड़ें', back: 'वापस', close: 'बंद करें', inLang: '{lang} में',
+    busy: 'एक उत्तर आ रहा है: उसके आने पर फिर से टैप करें।', failed: 'यह पुस्तक इस फ़ोन पर पढ़ी नहीं जा सकी।',
+    inPack: '{lang} में', inOther: '{lang} में (इन पुस्तकों के लिए अभी {first} सहायता नहीं है)',
     manuals: {
       intro: ['परिचय', 'Translation Academy क्या है और इसका उपयोग कैसे करें'],
       process: ['प्रक्रिया', 'अनुवाद परियोजना कैसे चलती है, कदम दर कदम'],
@@ -167,6 +214,8 @@ const STR: Record<string, S> = {
     ot: 'العهد القديم', nt: 'العهد الجديد', chapters: 'الأصحاحات', verses: 'الآيات', bookIntro: 'مقدمة السفر',
     chapter: 'الأصحاح {ch} كاملًا', chIntro: 'مقدمة الأصحاح {ch}', loading: 'جارٍ الفتح…', none: 'لا توجد أي لغة على هذا الهاتف بعد.',
     addLang: 'إضافة لغة', back: 'رجوع', close: 'إغلاق', inLang: 'بـ{lang}',
+    busy: 'هناك إجابة في الطريق: انقر مجددًا عندما تصل.', failed: 'تعذّرت قراءة هذا السفر على هذا الهاتف.',
+    inPack: 'بـ{lang}', inOther: 'بـ{lang} (لا توجد بعد مساعدات بـ{first} لهذه الأسفار)',
     manuals: {
       intro: ['مقدمة', 'ما هي Translation Academy وكيف تستخدمها'],
       process: ['العملية', 'كيف يسير مشروع الترجمة خطوة بخطوة'],
@@ -187,7 +236,7 @@ export type ExploreHooks = {
   packs: () => string[]
   /** the name of a pack's language */
   packName: (lang: string) => string
-  /** ask the chat for this (no typing, no model); false when it cannot now (an answer is on its way) */
+  /** ask the chat for this (no typing, no model); false when it cannot now (an answer is on its way, the app is locked) */
   ask: (label: string, q: Ask) => boolean
   /** no language on the phone: to where one is added */
   addLang: () => void
@@ -206,6 +255,7 @@ type View =
 const stack: View[] = []
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
 let reached = false // whether this opening of the app has reached a help through Browse (counted once)
+let opener: HTMLElement | null = null // where the focus goes back to
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag)
@@ -220,41 +270,67 @@ function button(cls: string, text: string, on: () => void): HTMLButtonElement {
   return b
 }
 const fill = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ''))
+/** A chevron drawn, not a character: "‹" and "›" mirror themselves in right-to-left text, the CSS turns the drawing instead. */
+function chevron(cls: string, back = false): HTMLElement {
+  const s = el('span', cls)
+  s.setAttribute('aria-hidden', 'true')
+  s.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="${back ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'}"/></svg>`
+  return s
+}
 
 function ensure() {
   if (box) return box
   const root = el('div')
   root.id = 'explore'
+  root.tabIndex = -1
   root.setAttribute('role', 'dialog')
   root.setAttribute('aria-modal', 'true')
   const head = el('div', 'ex-head')
-  const back = button('ex-btn ex-back', '‹', () => {
+  const back = button('ex-btn ex-back', '', () => {
     stack.pop()
     draw()
   })
+  back.appendChild(chevron('', true))
   const title = el('h2', 'ex-title')
+  title.id = 'ex-title'
+  root.setAttribute('aria-labelledby', 'ex-title')
   const close = button('ex-btn', '✕', () => closeExplore())
   head.append(back, title, close)
   const body = el('div', 'ex-body')
   root.append(head, body)
-  root.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeExplore() })
   document.body.appendChild(root)
+  // Escape closes, wherever the focus is (a redraw drops the focused button)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && exploreOpen()) {
+      e.preventDefault()
+      closeExplore()
+    }
+  })
+  // the PIN lock (menu > Safety) covers Browse: Browse closes under it, so nothing is asked behind the lock
+  new MutationObserver(() => { if (exploreOpen() && document.querySelector('#lock')) closeExplore(false) }).observe(document.body, { childList: true })
   box = { root, title, body, back, close }
   return box
 }
 
 /** Opens Browse (where it was left, else its first view). `from`: the entry point, for the usage counts. */
 export function openExplore(from: 'bar' | 'menu' | 'welcome') {
-  if (!hooks) return
+  if (!hooks || document.querySelector('#lock')) return
   count('explore.open')
   count(`explore.from.${from}`)
   const b = ensure()
+  opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
   if (!stack.length) stack.push({ k: 'home', tab: 'bible' })
   b.root.classList.add('open')
+  b.root.focus({ preventScroll: true })
   draw()
 }
-export function closeExplore() {
-  box?.root.classList.remove('open')
+/** Closes Browse; the focus goes back to what opened it (not under the lock: `refocus` false). */
+export function closeExplore(refocus = true) {
+  if (!box?.root.classList.contains('open')) return
+  box.root.classList.remove('open')
+  const to = opener
+  opener = null
+  if (refocus && to?.isConnected) to.focus({ preventScroll: true })
 }
 export const exploreOpen = () => !!box?.root.classList.contains('open')
 /** Android's back: one step back in Browse, or closes it. False when it is not open. */
@@ -268,7 +344,16 @@ export function backExplore(): boolean {
 }
 
 function ask(label: string, q: Ask) {
-  if (!hooks?.ask(label, q)) return
+  if (!hooks?.ask(label, q)) {
+    // an answer is still coming: say so where the person is looking, instead of a tap that does nothing
+    const b = ensure()
+    b.body.querySelector('.ex-busy')?.remove()
+    const note = el('p', 'ex-note ex-busy', XT(hooks?.ui() ?? 'en').busy)
+    note.setAttribute('role', 'status')
+    b.body.prepend(note)
+    b.body.scrollTop = 0
+    return
+  }
   count('explore.answer')
   if (!reached) {
     reached = true
@@ -290,6 +375,7 @@ async function draw() {
   b.close.setAttribute('aria-label', s.close)
   b.body.innerHTML = ''
   b.body.scrollTop = 0
+  if (!b.root.contains(document.activeElement)) b.root.focus({ preventScroll: true })
   const wait = el('p', 'ex-note', s.loading)
   const later = setTimeout(() => { if (mine === drawing) b.body.appendChild(wait) }, 150)
   const done = () => {
@@ -298,7 +384,7 @@ async function draw() {
     return mine === drawing // the person moved on while this was read
   }
   const packs = hooks.packs()
-  const tag = (lang: string) => (packs[0] && lang !== packs[0] ? fill(s.inLang, { lang: hooks!.packName(lang) }) : '')
+  const name = (lang: string) => hooks!.packName(lang)
 
   if (v.k === 'home') {
     b.title.textContent = s.browse
@@ -314,8 +400,8 @@ async function draw() {
     if (books.length && manuals.length) {
       const tabs = el('div', 'ex-tabs')
       tabs.setAttribute('role', 'tablist')
-      for (const [k, name] of [['bible', s.bible], ['academy', s.academy]] as const) {
-        const t = button(v.tab === k ? 'on' : '', name, () => { v.tab = k; draw() })
+      for (const [k, label] of [['bible', s.bible], ['academy', s.academy]] as const) {
+        const t = button(v.tab === k ? 'on' : '', label, () => { v.tab = k; draw() })
         t.setAttribute('role', 'tab')
         t.setAttribute('aria-selected', String(v.tab === k))
         tabs.appendChild(t)
@@ -324,26 +410,29 @@ async function draw() {
     }
     const tab = !manuals.length ? 'bible' : !books.length ? 'academy' : v.tab
     if (tab === 'bible') {
-      for (const [head, part] of [[s.ot, books.filter((x) => CANON.indexOf(x.code) < 39)], [s.nt, books.filter((x) => CANON.indexOf(x.code) >= 39)]] as const) {
-        if (!part.length) continue
-        b.body.appendChild(el('h3', '', head))
-        const grid = el('div', 'ex-books')
-        for (const x of part) {
-          const bt = button('', '', () => { stack.push({ k: 'book', code: x.code, lang: x.lang }); draw() })
-          bt.appendChild(el('span', 'ex-name', bookShown(ui, x.code)))
-          const t = tag(x.lang)
-          if (t) bt.appendChild(el('span', 'ex-tag', t))
-          grid.appendChild(bt)
+      // books from more than one pack: those in the first pack's language first, then the others by pack, each said
+      const langs = [...new Set(books.map((x) => x.lang))].sort((a, c) => packs.indexOf(a) - packs.indexOf(c))
+      for (const lang of langs) {
+        const mineBooks = books.filter((x) => x.lang === lang)
+        if (langs.length > 1) {
+          const h = el('h3', 'ex-pack', lang === langs[0] ? fill(s.inPack, { lang: name(lang) }) : fill(s.inOther, { lang: name(lang), first: name(langs[0]!) }))
+          b.body.appendChild(h)
         }
-        b.body.appendChild(grid)
+        for (const [head, part] of [[s.ot, mineBooks.filter((x) => CANON.indexOf(x.code) < 39)], [s.nt, mineBooks.filter((x) => CANON.indexOf(x.code) >= 39)]] as const) {
+          if (!part.length) continue
+          b.body.appendChild(el('h4', 'ex-sub', head))
+          const grid = el('div', 'ex-books')
+          for (const x of part) grid.appendChild(button('', bookShown(ui, x.code), () => { stack.push({ k: 'book', code: x.code, lang: x.lang }); draw() }))
+          b.body.appendChild(grid)
+        }
       }
     } else {
       const list = el('div', 'ex-rows')
       for (const x of manuals) {
-        const [name, about] = s.manuals[x.m]
+        const [title, about] = s.manuals[x.m]
         const row = button('ex-row', '', () => { stack.push({ k: 'manual', m: x.m, lang: x.lang }); draw() })
-        const t = tag(x.lang)
-        row.append(el('span', 'ex-row-t', name), el('span', 'ex-row-s', t ? `${about} · ${t}` : about), el('span', 'ex-row-c', '›'))
+        const other = packs[0] && x.lang !== packs[0] ? ` · ${fill(s.inLang, { lang: name(x.lang) })}` : ''
+        row.append(el('span', 'ex-row-t', title), el('span', 'ex-row-s', about + other), chevron('ex-row-c'))
         list.appendChild(row)
       }
       b.body.appendChild(list)
@@ -352,8 +441,8 @@ async function draw() {
   }
 
   if (v.k === 'book' || v.k === 'chapter') {
-    const name = bookShown(ui, v.code)
-    b.title.textContent = v.k === 'book' ? name : `${name} ${v.ch}`
+    const book = bookShown(ui, v.code)
+    b.title.textContent = v.k === 'book' ? book : `${book} ${v.ch}`
     // reading a long book (Psalms, Genesis) holds the page for a moment, longer on a small phone: "Opening…" is drawn first
     if (!planned.has(`${v.lang}:${v.code}`)) {
       clearTimeout(later)
@@ -365,14 +454,14 @@ async function draw() {
     const plan = await bookPlan(v.lang, v.code)
     if (!done()) return
     if (!plan) {
-      b.body.appendChild(el('p', 'ex-note', s.none))
+      b.body.appendChild(el('p', 'ex-note', s.failed))
       return
     }
     const passage = (label: string, ref: string, what: string[]) => ask(label, { lang: v.lang, intent: 'passage', ref, what })
     if (v.k === 'book') {
       if (plan.intro) {
         const pills = el('div', 'ex-pills')
-        pills.appendChild(button('ex-pill', s.bookIntro, () => passage(`${name}: ${s.bookIntro}`, `${v.code} front:intro`, ['intro'])))
+        pills.appendChild(button('ex-pill', s.bookIntro, () => passage(`${book}: ${s.bookIntro}`, `${v.code} front:intro`, ['intro'])))
         b.body.appendChild(pills)
       }
       b.body.appendChild(el('h3', '', s.chapters))
@@ -387,33 +476,46 @@ async function draw() {
       return draw()
     }
     const pills = el('div', 'ex-pills')
-    pills.appendChild(button('ex-pill', fill(s.chapter, { ch: c.ch }), () => passage(`${name} ${c.ch}`, `${v.code} ${c.ch}`, ['text', 'notes'])))
-    if (c.intro) pills.appendChild(button('ex-pill', fill(s.chIntro, { ch: c.ch }), () => passage(`${name} ${c.ch}: ${fill(s.chIntro, { ch: c.ch })}`, `${v.code} ${c.ch}:intro`, ['intro'])))
+    pills.appendChild(button('ex-pill', fill(s.chapter, { ch: c.ch }), () => passage(`${book} ${c.ch}`, `${v.code} ${c.ch}`, ['text', 'notes'])))
+    if (c.intro) pills.appendChild(button('ex-pill', fill(s.chIntro, { ch: c.ch }), () => passage(`${book} ${c.ch}: ${fill(s.chIntro, { ch: c.ch })}`, `${v.code} ${c.ch}:intro`, ['intro'])))
     b.body.appendChild(pills)
     b.body.appendChild(el('h3', '', s.verses))
     const grid = el('div', 'ex-grid')
-    for (const n of c.verses) grid.appendChild(button('', String(n), () => passage(`${name} ${c.ch}:${n}`, `${v.code} ${c.ch}:${n}`, ['text', 'notes'])))
+    for (const n of c.verses) grid.appendChild(button('', String(n), () => passage(`${book} ${c.ch}:${n}`, `${v.code} ${c.ch}:${n}`, ['text', 'notes'])))
     b.body.appendChild(grid)
     return
   }
 
-  // a manual: its articles; one opens as the chat's answer (the article, and its related articles as buttons)
+  // a manual: its articles, by section when there are many; one opens as the chat's answer (with its related articles)
   b.title.textContent = s.manuals[v.m][0]
-  const list = await manualArticles(v.lang, v.m)
+  const groups = await manualSections(v.lang, v.m, ui)
   if (!done()) return
-  if (!list.length) {
-    b.body.appendChild(el('p', 'ex-note', s.none))
+  if (!groups.length) {
+    b.body.appendChild(el('p', 'ex-note', s.failed))
     return
   }
-  const rows = el('div', 'ex-rows')
-  rows.dataset.lang = v.lang
-  for (const a of list) {
-    const row = button('ex-row', '', () => ask(a.title, { lang: v.lang, intent: 'article', concept: a.id }))
-    row.dir = 'auto'
-    row.appendChild(el('span', 'ex-row-t', a.title))
-    if (a.sub) row.appendChild(el('span', 'ex-row-s', a.sub))
-    row.appendChild(el('span', 'ex-row-c', '›'))
-    rows.appendChild(row)
+  const rows = (items: ArticleEntry[]) => {
+    const list = el('div', 'ex-rows')
+    list.dataset.lang = v.lang
+    for (const a of items) {
+      const row = button('ex-row', '', () => ask(a.title, { lang: v.lang, intent: 'article', concept: a.id }))
+      const t = row.appendChild(el('span', 'ex-row-t', a.title))
+      t.dir = 'auto' // a title in another script than the app's keeps its own direction; the chevron follows the app
+      if (a.sub) row.appendChild(el('span', 'ex-row-s', a.sub)).dir = 'auto'
+      row.appendChild(chevron('ex-row-c'))
+      list.appendChild(row)
+    }
+    return list
   }
-  b.body.appendChild(rows)
+  if (groups.length === 1 && !groups[0]!.title) {
+    b.body.appendChild(rows(groups[0]!.items))
+    return
+  }
+  for (const g of groups) {
+    const d = el('details', 'ex-sec')
+    const sum = el('summary')
+    sum.append(el('span', '', g.title), el('span', 'ex-count', String(g.items.length)))
+    d.append(sum, rows(g.items))
+    b.body.appendChild(d)
+  }
 }
