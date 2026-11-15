@@ -5,7 +5,8 @@ import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
-import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro } from './converse'
+import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
+import { addNode, backLabel, backTarget, type GNode, type Graph, newGraph, type NodeSheet, nodeOf, passageAt } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import type { HelpItem } from './view'
@@ -24,7 +25,9 @@ export type ConvState = { last: Sheet | null; found?: Hit[]
   /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
   state?: { s: Record<string, unknown>; at: number }
   /** the last question asked (without its "reply in …"), to ask it again in another language ("repeat that in Indonesian") */
-  prevQ?: string }
+  prevQ?: string
+  /** the conversation's points and how they join (graph.ts): made by `answer`, saved with the conversation */
+  graph?: Graph }
 
 const ORDINALS: [RegExp, number][] = [
   [/\b(first|primer[oa]?|premier|première|pertama)\b|पहल|الأول/i, 0], [/\b(second|segund[oa]|deuxième|kedua)\b|दूसर|الثاني/i, 1],
@@ -615,6 +618,8 @@ export function questionOf(q0: string, c: ConvState): { q: string; target: strin
 
 /** What a question asks for, from what a reader made of it: the call sheet, the app language it is answered in, the details line. */
 export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
+  /** going back to this point of the graph (returnTo): the answer is attached to it, no new point */
+  at?: string
   /** what code answers by itself, with no sheet to answer: past a book's end, how many verses or chapters */
   note?: { text: string; fromText: boolean } }
 /** The reading step once the slots are known (from the phone's model, the online one, or none): code reads what they missed. */
@@ -1160,7 +1165,7 @@ async function noIntro(sheet: Sheet, ui: string, before: Sheet | null): Promise<
   const at = ch && b.has(ch) ? ch : 1
   const follow: Follow[] = [{ label: nextWords(ui).read.replace('{ref}', `${book} ${at}`), sheet: passageSheet(sheet, `${code} ${at}`, ['text', 'notes']) }]
   if (before?.ref && before.intent === 'passage' && !/intro$/.test(before.ref) && before.ref !== `${code} ${at}`)
-    follow.push({ label: T.back.replace('{ref}', refLabelOf(ui, before.ref)), sheet: { ...before, id: `f${Date.now()}` } })
+    follow.push({ label: T.back.replace('{ref}', refLabelOf(ui, before.ref)), sheet: { ...before, id: `f${Date.now()}` }, back: '' })
   if (intros) {
     const il = intros.lang
     if (ch && intros.front) follow.push({ label: introLabel(ui, book), sheet: passageSheet(sheet, `${code} front:intro`, ['intro'], il) })
@@ -1223,6 +1228,8 @@ export type Answered = {
   ref: string | null; concept: string | null; found: number
   /** the sheet whose passage context online AI may get (when the answer came from a call sheet) */
   sheet: Sheet | null
+  /** the point of the conversation's graph this answer is (null: an answer with nothing in it makes none) */
+  node: string | null
 }
 /** What the routes work on: the question's sheet as it goes, and what earlier routes added to it. */
 type Ctx = Made & {
@@ -1234,7 +1241,7 @@ type Ctx = Made & {
   /** where the answer's notes come from when another pack had them ("Notes in English, from the Arabic pack.") */
   from?: string
 }
-type Done = Omit<Answered, 'route' | 'sheet'>
+type Done = Omit<Answered, 'route' | 'sheet' | 'node'>
 /** A step of the answer: when it applies, and what it does. A step returns the answer, or null to let the next step go on. */
 type Route = { name: string; when: (x: Ctx) => boolean; run: (x: Ctx) => Promise<Done | null> }
 
@@ -1707,6 +1714,95 @@ ${x.meta}` },
   },
 ]
 
+// ------------------------------------------------------------------------------------------------------ the graph
+// Every answer with something in it is a point of the conversation's graph (graph.ts); code alone decides how it joins the
+// one before. Under a point that went deeper or branched off, the first button goes back to the passage it came from.
+
+/** Kinds of answer that are no point: past a book's end, a language not on the phone, "which one do you mean?", nothing understood. */
+const NO_POINT = new Set(['edge', 'nopack', 'choose', 'unknown', 'resources'])
+const compact = (s: Sheet, ref: string | null, concept: string | null): NodeSheet =>
+  ({ intent: s.intent, ref, concept, what: [...(s.what ?? [])], term: s.term ?? null, lang: s.lang })
+/** A point's sheet as a call sheet again (to re-open it, or as the back button's target). */
+export const sheetOfNode = (n: GNode): Sheet => ({ id: `g${Date.now()}`, intent: n.sheet.intent, ref: n.sheet.ref, what: [...n.sheet.what], version: null,
+  concept: n.sheet.concept, term: n.sheet.term, phrase: null, candidates: null, lang: n.sheet.lang })
+const clip = (q: string, words = 6): string => { const w = q.replace(/[¿?¡!]/g, '').trim().split(/\s+/); return w.length > words ? `${w.slice(0, words).join(' ')}…` : w.join(' ') }
+/** Where a point is, said short: "Ruth 2:3", "Introduction to Numbers 6"; else its label. */
+export function placeLabel(n: GNode, ui: string): string {
+  const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(n.sheet.ref ?? '')
+  if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
+  return (n.kind === 'passage') && n.sheet.ref ? refLabelOf(ui, n.sheet.ref) : n.label
+}
+/** A point's name in 2–5 words: the passage and what was shown ("Ruth 2:3 · Notes"), the article's title, else the question. */
+async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | undefined): Promise<string> {
+  const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')
+  if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
+  if (kind === 'passage' && s.ref) {
+    const w = s.what.length === 1 ? whatWord(ui, s.what[0]!) : null
+    return w ? `${refLabelOf(ui, s.ref)} · ${w}` : refLabelOf(ui, s.ref)
+  }
+  if (s.concept && kind !== 'search' && kind !== 'count') {
+    for (const l of new Set([s.lang, 'en'])) {
+      const t = await nameIn(l, s.concept).catch(() => null)
+      if (t) return t
+    }
+  }
+  if (q) return clip(q)
+  return s.concept?.split('/').pop()?.replace(/-/g, ' ') ?? (s.ref ? refLabelOf(ui, s.ref) : '…')
+}
+async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: string): Promise<string | null> {
+  const g = (c.graph ??= newGraph())
+  const reply = done.reply
+  let id: string | null = null
+  if (made.at && nodeOf(g, made.at)) {
+    // back to a point: this answer shows it again, it is no new point
+    id = made.at
+    g.cur = id
+  } else {
+    if (NO_POINT.has(done.answered) || !(done.ref || done.concept || done.found > 0)) return null
+    const kind = done.answered
+    const sheet = compact(x.sheet, done.ref ?? x.sheet.ref, done.concept ?? x.sheet.concept)
+    // what the next point may go into: the key terms and cited articles of the passage, the articles offered, the verses found
+    const links = [
+      ...(reply.study?.terms.map((t) => t.id) ?? []), ...(reply.study?.notes.map((n) => n.concept ?? '') ?? []),
+      ...(reply.sources?.map((s) => s.id) ?? []), ...(reply.ctx ? [reply.ctx] : []),
+      ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' ? f.sheet.concept ?? '' : kind === 'search' ? f.sheet?.ref ?? '' : '')),
+    ].filter(Boolean)
+    // only the sheet's own answer is asked again from the sheet; the others needed the typed question: shown again as they were
+    const n = addNode(g, { kind, sheet, links, label: await pointLabel(kind, sheet, x.ui, made.q), copy: step !== 'reply' || undefined })
+    id = n.id
+  }
+  const to = backTarget(g, id)
+  if (to) {
+    const target = sheetOfNode(to)
+    const back: Follow = { label: backLabel(x.ui, placeLabel(to, x.ui)), sheet: target, back: to.id }
+    const follow = reply.follow ?? []
+    // a button to that same passage already there ("All of Ruth 2:3", "Back to Ruth 1:16" under a missing introduction) becomes it
+    const same = follow.findIndex((f) => f.back === '' || (to.kind !== 'search' && !f.back && f.sheet?.intent === 'passage' && f.sheet.ref === target.ref))
+    if (same >= 0) follow[same] = back
+    else follow.unshift(back)
+    reply.follow = follow.slice(0, MAX_FOLLOW)
+  }
+  return id
+}
+
+/**
+ * Back to a point (the back button, the Map): the conversation's state from its sheet (the passage being read, the compact
+ * state, no search results), and the question that re-opens it attached to the same point; null when the point is shown again
+ * as it was (its message, main.ts), or there is no such point.
+ */
+export function returnTo(c: ConvState, id: string, ui: string): Made | null {
+  const n = nodeOf(c.graph, id)
+  if (!n) return null
+  c.graph!.cur = id
+  const p = passageAt(c.graph!, id)
+  c.last = p ? sheetOfNode(p) : null
+  c.found = []
+  const sheet = sheetOfNode(n)
+  keepState(c, slotsOfSheet(sheet))
+  if (n.copy) return null
+  return { sheet, ui, meta: '(back to an earlier point: no model call)', at: id }
+}
+
 /** The answer to what a question asks for: the first route that gives one (the conversation keeps the last passage and search results). */
 export async function answer(c: ConvState, made: Made, t0: number): Promise<Answered> {
   setUiLang(made.ui)
@@ -1729,7 +1825,9 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
       // a route that made none: the tests list where that is allowed (answers.test.ts NO_OWN_STEPS)
       reply.fallback = true
     }
-    return { ...done, route: route.name, sheet: x.r ? x.sheet : null }
+    // the answer's point in the conversation's graph, and under a point that left the passage, the way back to it
+    const node = await graphStep(c, made, done, x, route.name).catch(() => null)
+    return { ...done, route: route.name, sheet: x.r ? x.sheet : null, node }
   }
   throw new Error('no route answered') // `reply` always answers
 }

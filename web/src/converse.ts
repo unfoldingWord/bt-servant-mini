@@ -140,7 +140,11 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
 export type Browse = { book?: string; manual?: string; lang?: string }
 /** What "Try again" asks again: the question as the person typed it, or the button's sheet (with its label) */
 export type Again = { q?: string; sheet?: Sheet; label?: string }
-export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: Again }
+/**
+ * `back`: the way back to an earlier point of the conversation (graph.ts; the point's id): main.ts goes back there instead of
+ * asking the sheet as a new question. '' marks a button back to the passage before that has no point yet (pipeline.ts noIntro).
+ */
+export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: Again; back?: string }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
 
@@ -220,6 +224,11 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, 
   out.push({ label: fill(label, { what: `${book} ${ch}` }), sheet: same(['intro'], `${code} ${ch}:intro`) })
   out.push({ label: fill(label, { what: book }), sheet: same(['intro'], `${code} front:intro`) })
   return out.slice(0, MAX_FOLLOW)
+}
+/** What a passage answer showed, in a word ("Notes", "Key terms"), for the name of a point of the graph; null for the rest. */
+export function whatWord(ui: string, what: string): string | null {
+  const w = W[lang(ui)]
+  return ({ notes: w.lNotes, questions: w.lQuestions, terms: w.lTerms, text: w.lText } as Record<string, string>)[what] ?? null
 }
 /** "Academy: Metaphor", in the app's language. */
 export const academyLabel = (ui: string, title: string): string => fill(W[lang(ui)].lAcademy, { title })
