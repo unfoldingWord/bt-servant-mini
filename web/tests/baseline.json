@@ -1,0 +1,46 @@
+{
+ "note": "Right answers per set (tests/answers.test.ts). Raise it with UPDATE_BASELINE=1 bun test.",
+ "sets": {
+  "q36": {
+   "pass": 28,
+   "total": 36,
+   "known": 8,
+   "must": 27
+  },
+  "langs": {
+   "pass": 79,
+   "total": 102,
+   "known": 23
+  },
+  "new18": {
+   "pass": 9,
+   "total": 18,
+   "known": 9
+  },
+  "followup": {
+   "pass": 39,
+   "total": 48,
+   "known": 9
+  },
+  "followup-code": {
+   "pass": 24,
+   "total": 48,
+   "known": 24
+  },
+  "reports": {
+   "pass": 7,
+   "total": 12,
+   "known": 5
+  },
+  "quechua": {
+   "pass": 18,
+   "total": 20,
+   "known": 2
+  },
+  "quechua-code": {
+   "pass": 14,
+   "total": 20,
+   "known": 6
+  }
+ }
+}
