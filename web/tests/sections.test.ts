@@ -4,13 +4,14 @@
 // with the passage the person was on.
 import { afterAll, expect, test } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
-import { fullPhone, nextSteps, stepTarget, turn } from './harness'
+import { nextSteps, stepTarget, turn } from './harness'
 import { type ConvState, sectionsOf } from '../src/pipeline'
 
 afterAll(async () => { await installPacks(ALL_PACKS) })
 
 test('a chapter\'s sections come from the BSB headings, else 5 verses each', async () => {
-  await fullPhone()
+  // every pack: an earlier test file may have left fewer installed, which fullPhone would not see
+  await installPacks(ALL_PACKS)
   expect(await sectionsOf('rut', 1, 'en')).toEqual([[1, 5], [6, 18], [19, 22]])
   // Ruth 2 has one heading only (the whole chapter): blocks of 5 verses
   expect((await sectionsOf('rut', 2, 'en'))[0]).toEqual([1, 5])
