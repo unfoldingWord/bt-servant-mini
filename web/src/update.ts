@@ -7,7 +7,7 @@
 // The web app updates itself and the iOS app is not there yet: neither gets any of this.
 
 export const LATEST_URL = 'https://bt-servant-mini.unfoldingword.workers.dev/latest.json'
-const SITE_HOST = 'bt-servant-mini.unfoldingword.workers.dev'
+const RELEASES = '/unfoldingWord/bt-servant-mini/releases/' // the only links opened (the Android bridge checks the same)
 const CHECKED = 'btsm.update.checked' // the day of the last automatic check (YYYY-MM-DD)
 const LATEST = 'btsm.update.latest' // the last latest.json read, so the notice comes back without asking again
 const DISMISSED = 'btsm.update.dismissed' // the versionCode whose notice was closed
@@ -16,12 +16,12 @@ export type Apk = { url: string; sha256: string; bytes: number }
 export type Latest = { version: string; versionCode: number; notes_url?: string; full: Apk; lite: Apk }
 export type Offer = { version: string; versionCode: number; url: string; bytes: number }
 
-/** Only https links to GitHub or the landing site are opened (the Android bridge checks the same). */
+/** Only https links to this app's GitHub releases are opened (the Android bridge checks the same). */
 export function safeUrl(url: unknown): url is string {
   if (typeof url !== 'string') return false
   try {
     const u = new URL(url)
-    return u.protocol === 'https:' && !u.username && !u.password && !u.port && (u.hostname === 'github.com' || u.hostname === SITE_HOST)
+    return u.protocol === 'https:' && !u.username && !u.password && !u.port && u.hostname === 'github.com' && u.pathname.startsWith(RELEASES) && !u.pathname.includes('..')
   } catch {
     return false
   }
@@ -75,13 +75,13 @@ export async function fetchLatest(get: typeof fetch = fetch, ms = 10000): Promis
   }
 }
 
-export const UPDATE_T: Record<string, { found: string; install: string; close: string; check: string; checking: string; latest: string; failed: string }> = {
-  en: { found: 'There is a new version: {v} · {size}', install: 'Install', close: 'Close', check: 'Check for a new version', checking: 'Checking…', latest: 'You have the latest version ({v})', failed: 'Could not check (is there internet?)' },
-  es: { found: 'Hay una versión nueva: {v} · {size}', install: 'Instalar', close: 'Cerrar', check: 'Buscar versión nueva', checking: 'Buscando…', latest: 'Tienes la última versión ({v})', failed: 'No se pudo buscar (¿hay internet?)' },
-  fr: { found: 'Une nouvelle version est disponible : {v} · {size}', install: 'Installer', close: 'Fermer', check: 'Chercher une nouvelle version', checking: 'Recherche…', latest: 'Vous avez la dernière version ({v})', failed: 'Impossible de vérifier (y a-t-il internet ?)' },
-  id: { found: 'Ada versi baru: {v} · {size}', install: 'Pasang', close: 'Tutup', check: 'Cari versi baru', checking: 'Mencari…', latest: 'Anda memakai versi terbaru ({v})', failed: 'Tidak dapat memeriksa (ada internet?)' },
-  hi: { found: 'नया संस्करण उपलब्ध है: {v} · {size}', install: 'इंस्टॉल करें', close: 'बंद करें', check: 'नया संस्करण खोजें', checking: 'खोज रहे हैं…', latest: 'आपके पास नवीनतम संस्करण है ({v})', failed: 'जाँच नहीं हो सकी (क्या इंटरनेट है?)' },
-  ar: { found: 'يتوفر إصدار جديد: {v} · {size}', install: 'تثبيت', close: 'إغلاق', check: 'البحث عن إصدار جديد', checking: 'جارٍ البحث…', latest: 'لديك أحدث إصدار ({v})', failed: 'تعذّر التحقق (هل يوجد إنترنت؟)' },
+export const UPDATE_T: Record<string, { found: string; install: string; close: string; check: string; checking: string; latest: string; failed: string; discreet: string }> = {
+  en: { found: 'There is a new version: {v} · {size}', install: 'Install', close: 'Close', check: 'Check for a new version', checking: 'Checking…', latest: 'You have the latest version ({v})', failed: 'Could not check (is there internet?)', discreet: "Discreet mode: the APK will be saved in Downloads and the browser's history will show a GitHub page. Tap Install again to go on." },
+  es: { found: 'Hay una versión nueva: {v} · {size}', install: 'Instalar', close: 'Cerrar', check: 'Buscar versión nueva', checking: 'Buscando…', latest: 'Tienes la última versión ({v})', failed: 'No se pudo buscar (¿hay internet?)', discreet: 'Modo discreto: el APK quedará en Descargas y el historial del navegador mostrará una página de GitHub. Toca Instalar otra vez para seguir.' },
+  fr: { found: 'Une nouvelle version est disponible : {v} · {size}', install: 'Installer', close: 'Fermer', check: 'Chercher une nouvelle version', checking: 'Recherche…', latest: 'Vous avez la dernière version ({v})', failed: 'Impossible de vérifier (y a-t-il internet ?)', discreet: "Mode discret : l'APK sera enregistré dans Téléchargements et l'historique du navigateur montrera une page GitHub. Touchez Installer à nouveau pour continuer." },
+  id: { found: 'Ada versi baru: {v} · {size}', install: 'Pasang', close: 'Tutup', check: 'Cari versi baru', checking: 'Mencari…', latest: 'Anda memakai versi terbaru ({v})', failed: 'Tidak dapat memeriksa (ada internet?)', discreet: 'Mode tersamar: APK akan disimpan di Unduhan dan riwayat browser akan menampilkan halaman GitHub. Ketuk Pasang lagi untuk melanjutkan.' },
+  hi: { found: 'नया संस्करण उपलब्ध है: {v} · {size}', install: 'इंस्टॉल करें', close: 'बंद करें', check: 'नया संस्करण खोजें', checking: 'खोज रहे हैं…', latest: 'आपके पास नवीनतम संस्करण है ({v})', failed: 'जाँच नहीं हो सकी (क्या इंटरनेट है?)', discreet: 'गुप्त मोड: APK डाउनलोड में सहेजा जाएगा और ब्राउज़र के इतिहास में GitHub का एक पेज दिखेगा। जारी रखने के लिए फिर से इंस्टॉल करें पर टैप करें।' },
+  ar: { found: 'يتوفر إصدار جديد: {v} · {size}', install: 'تثبيت', close: 'إغلاق', check: 'البحث عن إصدار جديد', checking: 'جارٍ البحث…', latest: 'لديك أحدث إصدار ({v})', failed: 'تعذّر التحقق (هل يوجد إنترنت؟)', discreet: 'الوضع المتحفّظ: سيُحفظ ملف APK في التنزيلات وسيظهر في سجل المتصفح صفحة من GitHub. المس «تثبيت» مرة أخرى للمتابعة.' },
 }
 const UT = (lang: string) => UPDATE_T[lang] ?? UPDATE_T.en!
 
@@ -161,8 +161,15 @@ export function showUpdateNote(lang: string, ignoreDismissed = false) {
   go.type = 'button'
   go.className = 'go'
   go.textContent = s.install
+  // in discreet mode, what the download leaves on the phone is said first; the second tap goes on
+  let warned = false
   go.onclick = () => {
     try {
+      if (!warned && bridge()?.discreet?.()) {
+        warned = true
+        text.textContent = s.discreet
+        return
+      }
       bridge()?.openUrl?.(o.url)
     } catch {}
   }

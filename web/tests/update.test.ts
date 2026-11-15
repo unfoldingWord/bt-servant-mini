@@ -27,9 +27,12 @@ test('parse: a bad file gives null, never a half offer', () => {
   expect(parseLatest({ ...rel(), full: { ...rel().full, bytes: 0 } })).toBeNull()
   expect(parseLatest({ ...rel(), notes_url: 'javascript:alert(1)' })!.notes_url).toBeUndefined()
 })
-test('only https links to GitHub or the landing site', () => {
-  expect(safeUrl('https://github.com/unfoldingWord/bt-servant-mini/releases')).toBe(true)
-  expect(safeUrl('https://bt-servant-mini.unfoldingword.workers.dev/')).toBe(true)
+test('only https links to the app releases on GitHub', () => {
+  expect(safeUrl('https://github.com/unfoldingWord/bt-servant-mini/releases/tag/v0.11.0-alpha')).toBe(true)
+  expect(safeUrl('https://bt-servant-mini.unfoldingword.workers.dev/')).toBe(false)
+  expect(safeUrl('https://github.com/someone/else/releases/x.apk')).toBe(false)
+  expect(safeUrl('https://github.com/unfoldingWord/bt-servant-mini/issues')).toBe(false)
+  expect(safeUrl('https://github.com/unfoldingWord/bt-servant-mini/releases/%2e%2e/%2e%2e/x')).toBe(false)
   expect(safeUrl('https://github.com.evil.example/x')).toBe(false)
   expect(safeUrl('https://user@github.com/x')).toBe(false)
   expect(safeUrl('https://github.com:8443/x')).toBe(false)
@@ -84,6 +87,7 @@ test('sizes and texts in the six languages', () => {
     expect(t.found).toContain('{v}')
     expect(t.found).toContain('{size}')
     expect(t.latest).toContain('{v}')
+    expect(t.discreet).toContain('APK')
     for (const v of Object.values(t)) expect(v.length).toBeGreaterThan(0)
   }
 })
