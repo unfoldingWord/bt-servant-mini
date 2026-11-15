@@ -1220,6 +1220,8 @@ export type Reply = {
   fallback?: boolean
   /** the articles online AI is given as sources (its first is `ctx`): a Translation Words article and the Translation Academy one its text links to */
   sources?: { id: string; title?: string }[]
+  /** "← Back to Ruth 2:3": the way back to the passage this point left (graph.ts), on its own row above the next steps */
+  back?: Follow
 }
 /** The answer, what kind it was (for the usage counts), and what tests check: the route-table step that made it, its target, how many sources it shows. */
 export type Answered = {
@@ -1761,26 +1763,31 @@ async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: str
     if (NO_POINT.has(done.answered) || !(done.ref || done.concept || done.found > 0)) return null
     const kind = done.answered
     const sheet = compact(x.sheet, done.ref ?? x.sheet.ref, done.concept ?? x.sheet.concept)
+    // the term the question was about ("what does glean mean here?"), as this turn's state has it: going back restores it
+    const term = c.state?.s.term
+    if (!sheet.term && typeof term === 'string') sheet.term = term
     // what the next point may go into: the key terms and cited articles of the passage, the articles offered, the verses found
     const links = [
       ...(reply.study?.terms.map((t) => t.id) ?? []), ...(reply.study?.notes.map((n) => n.concept ?? '') ?? []),
       ...(reply.sources?.map((s) => s.id) ?? []), ...(reply.ctx ? [reply.ctx] : []),
       ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' ? f.sheet.concept ?? '' : kind === 'search' ? f.sheet?.ref ?? '' : '')),
     ].filter(Boolean)
+    // a search keeps the verses it found, in order: going back to it, "the second one" is its second verse
+    const found = kind === 'search' ? (c.found ?? []).map((h) => `${h.book} ${h.ch}:${h.v}`) : undefined
     // only the sheet's own answer is asked again from the sheet; the others needed the typed question: shown again as they were
-    const n = addNode(g, { kind, sheet, links, label: await pointLabel(kind, sheet, x.ui, made.q), copy: step !== 'reply' || undefined })
+    const n = addNode(g, { kind, sheet, links: [...(found ?? []), ...links], found, label: await pointLabel(kind, sheet, x.ui, made.q), copy: step !== 'reply' || undefined })
     id = n.id
   }
   const to = backTarget(g, id)
   if (to) {
     const target = sheetOfNode(to)
-    const back: Follow = { label: backLabel(x.ui, placeLabel(to, x.ui)), sheet: target, back: to.id }
-    const follow = reply.follow ?? []
-    // a button to that same passage already there ("All of Ruth 2:3", "Back to Ruth 1:16" under a missing introduction) becomes it
-    const same = follow.findIndex((f) => f.back === '' || (to.kind !== 'search' && !f.back && f.sheet?.intent === 'passage' && f.sheet.ref === target.ref))
-    if (same >= 0) follow[same] = back
-    else follow.unshift(back)
-    reply.follow = follow.slice(0, MAX_FOLLOW)
+    reply.back = { label: backLabel(x.ui, placeLabel(to, x.ui)), sheet: target, back: to.id }
+    // no other button to that same passage ("All of Ruth 2:3", "Ruth 2:3", "Back to Ruth 1:16" under a missing introduction)
+    const keep = (reply.follow ?? []).filter((f) => f.back !== '' && !(to.kind !== 'search' && f.sheet?.intent === 'passage' && f.sheet.ref === target.ref))
+    if (keep.length) reply.follow = keep
+  } else if (reply.follow?.some((f) => f.back === '')) {
+    // the button back to the passage before, with no point to go back to: an ordinary button
+    reply.follow = reply.follow.map(({ back, ...f }) => f)
   }
   return id
 }
@@ -1796,7 +1803,10 @@ export function returnTo(c: ConvState, id: string, ui: string): Made | null {
   c.graph!.cur = id
   const p = passageAt(c.graph!, id)
   c.last = p ? sheetOfNode(p) : null
-  c.found = []
+  // a search: its verses again, and its first one as the passage shown (as the search route leaves them); else none
+  c.found = (n.found ?? []).map((r) => /^([0-9a-z]{3}) (\d+):(\d+)$/.exec(r)).filter((m): m is RegExpExecArray => !!m)
+    .map((m) => ({ book: m[1]!, ch: +m[2]!, v: +m[3]! }))
+  if (c.found.length) c.last = { ...sheetOfNode(n), intent: 'passage', ref: n.found![0]!, what: ['text'], concept: null, term: null }
   const sheet = sheetOfNode(n)
   keepState(c, slotsOfSheet(sheet))
   if (n.copy) return null

@@ -270,6 +270,8 @@ function renderMsg(m: Msg): HTMLElement {
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   if (m.text) d.appendChild(el('div', 'plain', m.text))
+  // the way back to the passage this answer left, on its own row, then the next steps
+  if (m.back) d.appendChild(followRow(m, [m.back], 'follow back-row'))
   if (m.follow?.length) d.appendChild(followRow(m, m.follow))
   // the language is missing: straight to where it is added
   if (m.packs) {
@@ -1008,7 +1010,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
         history.push({ role: 'assistant', text: a.ai?.text ?? a.intro ?? '' })
       }
     } else for (const x of c.msgs.slice(-7, -2)) {
-      if (x.who === 'me' && x.text) history.push({ role: 'user', text: x.text })
+      // (not the divider where the person went back to a point: it is no question)
+      if (x.who === 'me' && x.text && !x.mark) history.push({ role: 'user', text: x.text })
       else if (x.who === 'bot') history.push({ role: 'assistant', text: x.ai?.text ?? x.intro ?? '' })
     }
     // the answer found on the phone first (cut to leave room), then the passage's context

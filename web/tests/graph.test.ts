@@ -34,6 +34,33 @@ describe('classification by code', () => {
     expect(classify(g, { kind: 'article', sheet: sh(null, 'tw:kt/love') }).edge).toBe('branch')
     expect(classify(g, { kind: 'intro', sheet: sh('num 6:intro') }).edge).toBe('branch')
   })
+  test("from an introduction, the next chapter's introduction is on its line; the book's goes deeper", () => {
+    const g = newGraph()
+    const a = add(g, 'intro', sh('num 6:intro'))
+    expect(classify(g, { kind: 'intro', sheet: sh('num 7:intro') })).toEqual({ edge: 'line', parent: a.id })
+    expect(classify(g, { kind: 'intro', sheet: sh('num 5:intro') }).edge).toBe('line')
+    expect(classify(g, { kind: 'intro', sheet: sh('num front:intro') }).edge).toBe('deeper')
+    expect(classify(g, { kind: 'intro', sheet: sh('num 9:intro') }).edge).toBe('deeper')
+    const b = newGraph()
+    const f = add(b, 'intro', sh('num front:intro'))
+    expect(classify(b, { kind: 'intro', sheet: sh('num front:intro') })).toEqual({ edge: 'line', parent: f.id })
+  })
+  test("back after a detour: Ruth 2:3 → Mark 1:1 → Ruth 2:5 goes on Ruth's line", () => {
+    const g = newGraph()
+    const a = add(g, 'passage', sh('rut 2:3'))
+    const m = add(g, 'passage', sh('mrk 1:1'))
+    expect(m.edge).toBe('branch')
+    expect(classify(g, { kind: 'passage', sheet: sh('rut 2:5') })).toEqual({ edge: 'line', parent: a.id })
+    expect(classify(g, { kind: 'passage', sheet: sh('mrk 1:2') })).toEqual({ edge: 'line', parent: m.id })
+  })
+  test('an article the passage holds goes under the passage, even from another article', () => {
+    const g = newGraph()
+    const a = add(g, 'passage', sh('rut 2:3'), ['tw:other/glean', 'tw:kt/grace'])
+    const grace = add(g, 'article', sh(null, 'tw:kt/grace'), ['tw:kt/love'])
+    expect(grace.parent).toBe(a.id)
+    expect(classify(g, { kind: 'article', sheet: sh(null, 'tw:other/glean') })).toEqual({ edge: 'deeper', parent: a.id })
+    expect(classify(g, { kind: 'article', sheet: sh(null, 'tw:kt/love') })).toEqual({ edge: 'deeper', parent: grace.id })
+  })
   test('after an article from the passage, the next verse goes back on the passage\'s line', () => {
     const g = newGraph()
     const a = add(g, 'passage', sh('rut 2:3'), ['tw:other/glean'])
@@ -95,19 +122,23 @@ describe('a conversation (the spec\'s)', () => {
     const p3 = nodeOf(c.graph, r3.node)!
     expect([p3.edge, p3.parent]).toEqual(['deeper', p2.id])
     expect(p3.label.toLowerCase()).toContain('glean')
-    // the first button goes back to the passage
-    const b3 = nextSteps({ reply: r3.reply } as any)
-    expect(b3[0]!.label).toBe('← Back to Ruth 2:3')
-    expect((r3.reply.follow ?? [])[0]!.back).toBe(p2.id)
+    // the way back to the passage, on its own row; no other button to Ruth 2:3 next to it
+    expect(r3.reply.back?.label).toBe('← Back to Ruth 2:3')
+    expect(r3.reply.back?.back).toBe(p2.id)
+    expect((r3.reply.follow ?? []).some((f) => f.sheet?.intent === 'passage' && f.sheet.ref === 'rut 2:3')).toBe(false)
+    expect(nextSteps({ reply: r3.reply } as any).at(-1)!.label).toBe('← Back to Ruth 2:3')
+    // going back to "glean" keeps its term in the state
+    expect(p3.sheet.term ?? p3.sheet.concept).toMatch(/glean/)
     const r4 = await turn(c, { q: 'Introduction to Numbers 6' }, 'en')
     const p4 = nodeOf(c.graph, r4.node)!
     expect([p4.edge, p4.parent]).toEqual(['branch', p3.id])
     // the user report: buttons to go on with Numbers, and back to the text it came from (once)
     const f4 = r4.reply.follow ?? []
-    expect(f4.filter((f) => f.back).map((f) => [f.label, f.back])).toEqual([['← Back to Ruth 2:3', p2.id]])
+    expect([r4.reply.back?.label, r4.reply.back?.back]).toEqual(['← Back to Ruth 2:3', p2.id])
+    expect(f4.some((f) => f.back !== undefined || f.sheet?.ref === 'rut 2:3')).toBe(false)
     expect(f4.map((f) => stepTarget(f as any)).some((t) => /^num 6/.test(t))).toBe(true)
     // the back button: the state from that point, its sheet re-opened as an answer attached to it (no new point)
-    const back = f4.find((f) => f.back)!
+    const back = r4.reply.back!
     const made = returnTo(c, back.back!, 'en')!
     expect(made.at).toBe(p2.id)
     const n0 = c.graph!.nodes.length
@@ -122,7 +153,41 @@ describe('a conversation (the spec\'s)', () => {
     const p6 = nodeOf(c.graph, r6.node)!
     expect([p6.edge, p6.parent]).toEqual(['line', p2.id])
     // a line point has no back button
-    expect((r6.reply.follow ?? []).some((f) => f.back)).toBe(false)
+    expect(r6.reply.back).toBeUndefined()
+    // back twice in a row (the Map): to Numbers 6, then to the start; each answer on its own point, no new points
+    const n1 = c.graph!.nodes.length
+    for (const to of [p4, p1]) {
+      const m = returnTo(c, to.id, 'en')!
+      const r = await answer(c, m, performance.now())
+      expect([r.node, c.graph!.cur, r.ref]).toEqual([to.id, to.id, to.sheet.ref])
+    }
+    expect(c.graph!.nodes.length).toBe(n1)
+    const r7 = await turn(c, { q: 'and the notes?' }, 'en')
+    expect(nodeOf(c.graph, r7.node)!.parent).toBe(p1.id)
+  }, 60_000)
+
+  test('going back to "glean" restores its term in the state', async () => {
+    const c: ConvState = { last: null }
+    await turn(c, { q: 'Ruth 2:3' }, 'en')
+    const r = await turn(c, { q: 'what does glean mean here?' }, 'en')
+    await turn(c, { q: 'Introduction to Jonah' }, 'en')
+    returnTo(c, r.node!, 'en')
+    expect(JSON.stringify(c.state?.s)).toMatch(/glean/)
+  }, 60_000)
+
+  test('back to a search: "the second one" is its second verse, not a new search', async () => {
+    const c: ConvState = { last: null }
+    const s = await turn(c, { q: 'Where was Jonah swallowed by the fish?' }, 'en')
+    expect(s.answered).toBe('search')
+    const hits = [...(c.found ?? [])]
+    expect(hits.length).toBeGreaterThan(1)
+    await turn(c, { q: 'Ruth 2:3' }, 'en')
+    await turn(c, { q: 'and the notes?' }, 'en')
+    expect(returnTo(c, s.node!, 'en')).toBeNull() // shown again as it was (main.ts copies its message)
+    expect(c.found).toEqual(hits)
+    const second = await turn(c, { q: 'the second one' }, 'en')
+    expect(second.ref).toBe(`${hits[1]!.book} ${hits[1]!.ch}:${hits[1]!.v}`)
+    expect(nodeOf(c.graph, second.node)!).toMatchObject({ edge: 'deeper', parent: s.node })
   }, 60_000)
 
   test('saved and loaded (JSON), the graph goes on where it was', async () => {

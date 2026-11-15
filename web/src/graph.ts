@@ -22,6 +22,8 @@ export type GNode = {
   links?: string[]
   /** shown again as it was (its message copied), not asked again from its sheet: answers that needed the typed question */
   copy?: boolean
+  /** a search: the verses it found, in order ("the second one" after going back to it) */
+  found?: string[]
 }
 export type Graph = { nodes: GNode[]; cur: string | null }
 
@@ -69,12 +71,22 @@ export function branchOf(g: Graph, id: string, n = 3): GNode[] {
 /** What is compared: the new turn's kind, its sheet, and what it links to. */
 export type Turn = { kind: string; sheet: NodeSheet; links?: string[] }
 
+/** Two places on the same line: introductions of the same book, both of it or of chapters next to each other; a passage of
+ * the book and chapter of a passage or an introduction (or the chapter next to it), or of a book whose introduction it is. */
+function sameLine(A: NonNullable<ReturnType<typeof place>>, N: NonNullable<ReturnType<typeof place>>): boolean {
+  if (A.book !== N.book) return false
+  const near = A.ch !== null && N.ch !== null && Math.abs(N.ch - A.ch) <= 1
+  if (N.intro) return A.intro && ((A.ch === null && N.ch === null) || near)
+  return A.ch === null || N.ch === null || near
+}
+
 /**
  * How a new turn joins the current point (code only, no model):
- * - a passage of the book and chapter being read (or the chapter next to it), after a passage or an article from it: `line`,
- *   on the passage it continues;
- * - an introduction to the book being read, an article or term the current point holds or offers, a question about the
- *   passage being read ("what does glean mean here?"), a verse a search found: `deeper`, under the current point;
+ * - a passage or introduction on the line of a passage the conversation came through (the same book and chapter, or the
+ *   chapter next to it; the nearest such passage above, even past a detour): `line`, on that passage;
+ * - an introduction to the book being read, an article or term the current point holds or offers (under the current point)
+ *   or the passage being read holds (under that passage), a question about the passage being read ("what does glean mean
+ *   here?"), a verse a search found: `deeper`;
  * - anything else: `branch`, under the current point.
  */
 export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null } {
@@ -88,14 +100,17 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
   if ((t.kind === 'passage' || t.kind === 'intro') && N) {
     // a verse the search found
     if (c.kind === 'search' && c.links?.includes(t.sheet.ref!)) return deeper
-    if (P && N.book === P.book) {
-      if (N.intro) return P.intro && N.ch === P.ch ? { edge: 'line', parent: p!.id } : deeper
-      if (P.ch === null || N.ch === null || Math.abs(N.ch - P.ch) <= 1) return { edge: 'line', parent: p!.id }
+    // the line of the nearest passage above that it continues (Ruth 2:3 → Mark 1:1 → Ruth 2:5 goes back on Ruth's line)
+    for (let a: GNode | undefined = p; a; a = passageAt(g, a.id, false)) {
+      const A = place(a.sheet.ref)
+      if (A && sameLine(A, N)) return { edge: 'line', parent: a.id }
     }
+    if (N.intro && P && N.book === P.book) return deeper
     return branch
   }
   const id = t.sheet.concept
-  if (id && (c.links?.includes(id) || p?.links?.includes(id))) return deeper
+  if (id && c.links?.includes(id)) return deeper
+  if (id && p?.links?.includes(id)) return { edge: 'deeper', parent: p.id }
   // about the passage being read: "what does glean mean here?", advice on its verse, a count in its chapter
   if (N && P && N.book === P.book && (N.ch === null || P.ch === null || N.ch === P.ch)) return deeper
   return branch
@@ -103,11 +118,12 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
 
 let seq = 0
 /** A new point, joined by `classify`; it becomes the current one. */
-export function addNode(g: Graph, t: Turn & { label: string; copy?: boolean }, msg = -1): GNode {
+export function addNode(g: Graph, t: Turn & { label: string; copy?: boolean; found?: string[] }, msg = -1): GNode {
   const { edge, parent } = classify(g, t)
   const n: GNode = { id: `n${Date.now().toString(36)}${(seq++).toString(36)}`, parent, edge, label: t.label, sheet: t.sheet, msg, at: Date.now(), kind: t.kind }
   if (t.links?.length) n.links = [...new Set(t.links)].slice(0, 40)
   if (t.copy) n.copy = true
+  if (t.found?.length) n.found = t.found.slice(0, 40)
   g.nodes.push(n)
   g.cur = n.id
   return n
