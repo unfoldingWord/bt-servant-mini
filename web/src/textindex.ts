@@ -6,7 +6,7 @@
 // Words differ on purpose (see TOKEN): marks stay inside a word and Arabic vowel signs are left out, so Arabic and Hindi
 // words match whole; in languages written without combining marks (en, es, id) the hits are the client's.
 import type { PackReader } from '@bt-synergy/language-pack-client'
-import { bookView, type BookModel } from '@bt-synergy/language-pack-v3'
+import { bookView, verseId, type BookModel, type HelpRow } from '@bt-synergy/language-pack-v3'
 import { queryWords, rowsOf, type Hit, type PieceRow, type SearchKind } from '@lpc/search/types'
 import booknames from './data/booknames.json'
 
@@ -73,6 +73,10 @@ type Index = {
   pstart: Uint32Array
   post: Ints
   vocab: Map<string, number>
+  /** The verses whose words link to a Translation Words article (the books' word links), by article id: the verse ranking's names. */
+  links: Map<string, Uint32Array>
+  /** The rows that are book or chapter introductions (notes marked isIntro), ascending. */
+  intro: Uint32Array
 }
 
 /**
@@ -234,6 +238,8 @@ async function build(r: PackReader): Promise<Index> {
     return id
   }
   // a spelling folds the same way every time: fold each one once, not each occurrence
+  const links = new Map<string, number[]>()
+  const intro: number[] = []
   const spellings = new Spellings((w) => {
     const f = foldsToItself(w) ? w : foldTok(w)
     let id = vocab.get(f)
@@ -248,11 +254,19 @@ async function build(r: PackReader): Promise<Index> {
     await breathe()
     const rows = rowsOf(model)
     const bi = books.push(b) - 1
+    for (const l of (model.links?.rows ?? []) as HelpRow[]) {
+      if (!l.concept) continue
+      const vs = links.get(l.concept)
+      if (!vs) links.set(l.concept, [l.from])
+      else if (vs[vs.length - 1] !== l.from) vs.push(l.from)
+    }
+    const intros = new Set(((model.notes?.rows ?? []) as HelpRow[]).filter((n) => n.cols.isIntro === true || n.cols.isIntro === 'true').map((n) => n.id))
     for (let i = 0; i < rows.length; i++) {
       if ((i & 255) === 0) await breathe()
       const row = rows[i]!
       const k = KINDS.indexOf(row.kind)
       if (k < 0) continue
+      if (k === 1 && intros.has(row.rid)) intro.push(kind.length)
       kind.push(k)
       book.push(bi)
       local.push(i)
@@ -291,6 +305,7 @@ async function build(r: PackReader): Promise<Index> {
   return {
     books, kind: Uint8Array.from(kind), book: Uint8Array.from(book), local: local.done(), ref: ref.done(), res: res.done(),
     strs, start: st, toks: tk, pstart, post, vocab,
+    links: new Map([...links].map(([id, vs]) => [id, Uint32Array.from(new Set(vs)).sort()])), intro: Uint32Array.from(intro),
   }
 }
 
@@ -354,7 +369,8 @@ export async function prepareIndex(r: PackReader): Promise<void> {
 /** Bytes an index takes: its arrays, and about 60 bytes a word of the vocabulary and a ref or resource name. */
 function bytesOf(x: Index): number {
   let n = 0
-  for (const a of [x.kind, x.book, x.local, x.ref, x.res, x.start, x.toks, x.pstart, x.post]) n += a.byteLength
+  for (const a of [x.kind, x.book, x.local, x.ref, x.res, x.start, x.toks, x.pstart, x.post, x.intro]) n += a.byteLength
+  for (const [id, vs] of x.links) n += 60 + id.length * 2 + vs.byteLength
   for (const w of x.vocab.keys()) n += 60 + w.length * 2
   for (const w of x.strs) n += 60 + w.length * 2
   return n
@@ -463,4 +479,222 @@ function snippetOf(body: string, phrases: string[][]): string {
     at = tk.end
   }
   return `${lo > 0 ? '…' : ''}${snippet}${hi < toks.length - 1 ? '…' : ''}`
+}
+
+// ------------------------------------------------------------------------------------------------- verses ranked by rarity
+// "Abraham sacrifice Isaac", "Jonah swallowed fish": the verses that hold the most of the question's words, a rare word
+// counting more than a common one (IDF: the log of how many verses there are over how many hold the word). Read from the
+// same index (its postings give how many rows hold a word), plus the word links of the books (a name or key term, whatever
+// word the verse uses: "burnt offering" is "sacrifice").
+
+/**
+ * One thing a question looks for, matched by any of its forms: words as written (folded like the index), word beginnings
+ * ("swallow" finds swallowed, swallowing: at most four letters more), phrases (words in a row: «great fish») and Translation
+ * Words articles (the verses whose word links name them).
+ */
+export type Term = { words?: string[]; forms?: string[]; prefixes?: string[]; phrases?: string[][]; concepts?: string[] }
+export type RankedVerse = {
+  book: string; ch: number; v: number
+  /** the rarity of the terms in the verse, plus half that of the terms only in the two verses either side (a story's names) */
+  score: number
+  /** which terms the verse holds (bit i: term i), which of them as words of its text (not only by its word links), and which
+   * only its neighbours hold */
+  own: number; text: number; near: number
+  /** the main text shown holds one of the words (false: they are only in another text of the verse, or only in its links) */
+  shown: boolean
+  /** the verse's main text (ULT, GLT, BSB, AVD, NAV: the first one the pack has for it), and a snippet around its first match */
+  more: () => Promise<{ text: string; snippet: string }>
+}
+export type Ranking = { hits: RankedVerse[]; df: number[]; idf: number[]; verses: number }
+
+/** "1:17" -> 1017 (chapter * 1000 + verse), -1 for a ref that is not a verse */
+const refNums = new WeakMap<Index, Int32Array>()
+function refNum(x: Index, s: number): number {
+  let a = refNums.get(x)
+  if (!a) refNums.set(x, (a = new Int32Array(x.strs.length).fill(-2)))
+  if (a[s] === -2) { const m = /^(\d+):(\d+)/.exec(x.strs[s]!); a[s] = m ? Number(m[1]) * 1000 + Number(m[2]) : -1 }
+  return a[s]!
+}
+const bookBases = new WeakMap<Index, number[]>()
+const basesOf = (x: Index): number[] => {
+  let bases = bookBases.get(x)
+  if (!bases) bookBases.set(x, (bases = x.books.map((b) => verseId(b, 0, 0))))
+  return bases
+}
+/** A row's verse id (verseId), -1 when its ref is not a verse */
+function verseOfRow(x: Index, row: number): number {
+  const n = refNum(x, x.ref[row]!)
+  return n < 0 ? -1 : basesOf(x)[x.book[row]!]! + n
+}
+/** How many verses have text, in the texts the ranking reads (the N of the IDF). */
+const verseCounts = new WeakMap<Index, Map<string, number>>()
+function versesIn(x: Index, ok: (row: number) => boolean, key: string): number {
+  let m = verseCounts.get(x)
+  if (!m) verseCounts.set(x, (m = new Map()))
+  let n = m.get(key)
+  if (n === undefined) {
+    const seen = new Set<number>()
+    for (let row = 0; row < x.kind.length; row++) if (x.kind[row] === 0 && ok(row)) seen.add(verseOfRow(x, row))
+    seen.delete(-1)
+    m.set(key, (n = seen.size))
+  }
+  return n
+}
+const vocabWords = new WeakMap<Index, string[]>()
+function vocabWord(x: Index, id: number): string {
+  let a = vocabWords.get(x)
+  if (!a) { a = []; for (const [w, i] of x.vocab) a[i] = w; vocabWords.set(x, a) }
+  return a[id]!
+}
+const refIs = (ref: string, v: number) => { const m = /^(\d+):(\d+)/.exec(ref); return !!m && Number(m[1]) * 1000 + Number(m[2]) === v % 1_000_000 }
+/** Whether a text holds one of the words (a snippet needs one to center on). */
+const holds = (body: string, phrases: string[][]) => { const ws = new Set(tokensOf(body)); return phrases.some((p) => ws.has(p[0]!)) }
+
+/**
+ * The verses of a pack ranked by the rarity of the terms they hold, best first (at most `limit`). Ties keep the order of the
+ * client's search (matches over the square root of the row's length, then the rows' order), so a question whose words are
+ * all in its verses gets the verses it got before. `skipRes`: texts that do not count (Arabic ARST is the English UST);
+ * `mainRes`: the texts a verse is shown from.
+ */
+export async function rankVerses(r: PackReader, terms: Term[], f: { limit: number; skipRes?: RegExp; mainRes: RegExp }): Promise<Ranking> {
+  const x = await indexOf(r)
+  const resKind = new Map<number, number>() // res string -> 0 skip, 1 counts, 2 counts and is a main text
+  const kindOfRes = (s: number) => {
+    let k = resKind.get(s)
+    if (k === undefined) { const res = x.strs[s]!; resKind.set(s, (k = f.skipRes?.test(res) ? 0 : f.mainRes.test(res) ? 2 : 1)) }
+    return k
+  }
+  const textRow = (row: number) => x.kind[row] === 0 && kindOfRes(x.res[row]!) > 0
+  const N = versesIn(x, textRow, String(f.skipRes))
+  const own = new Map<number, number>() // verse -> bit mask of its terms
+  const byText = new Map<number, number>() // verse -> bit mask of the terms in its words
+  const mainRows = new Map<number, number[]>() // verse -> its rows in a main text that hold a term
+  const tokenIds: Set<number>[] = []
+  const exact = new Set<number>()
+  const df: number[] = []
+  terms.forEach((t, i) => {
+    const bit = 1 << i
+    const ids = new Set<number>()
+    const id1 = (w: string) => x.vocab.get(tokensOf(w)[0] ?? '')
+    // the words as written are what ties are counted on (the client's score); their other forms only find verses
+    for (const w of t.words ?? []) { const id = id1(w); if (id !== undefined) { ids.add(id); exact.add(id) } }
+    for (const w of t.forms ?? []) { const id = id1(w); if (id !== undefined) ids.add(id) }
+    const pre = (t.prefixes ?? []).map((p) => tokensOf(p)[0]).filter((p): p is string => !!p && p.length >= 3)
+    if (pre.length) for (const [w, id] of x.vocab) if (pre.some((p) => w.length <= p.length + 4 && w.startsWith(p))) ids.add(id)
+    const mine = new Set<number>()
+    const hit = (row: number) => {
+      if (!textRow(row)) return
+      const v = verseOfRow(x, row)
+      if (v < 0) return
+      mine.add(v)
+      byText.set(v, (byText.get(v) ?? 0) | bit)
+      if (kindOfRes(x.res[row]!) === 2) {
+        const l = mainRows.get(v)
+        if (!l) mainRows.set(v, [row])
+        else if (!l.includes(row)) l.push(row)
+      }
+    }
+    for (const id of ids) for (let k = x.pstart[id]!; k < x.pstart[id + 1]!; k++) hit(x.post[k]!)
+    for (const ph of t.phrases ?? []) {
+      const p = ph.flatMap((w) => tokensOf(w)).map((tk) => x.vocab.get(tk))
+      if (!p.length || p.some((id) => id === undefined)) continue
+      const ps = p as number[]
+      for (const row of rowsWithAll(x, ps)) {
+        const s = x.start[row]!
+        const e = x.start[row + 1]!
+        for (let j = s; j + ps.length <= e; j++) {
+          let k = 0
+          while (k < ps.length && x.toks[j + k] === ps[k]) k++
+          if (k === ps.length) { hit(row); break }
+        }
+      }
+      for (const id of ps) { ids.add(id); exact.add(id) }
+    }
+    for (const c of t.concepts ?? []) for (const v of x.links.get(c) ?? []) mine.add(v)
+    tokenIds.push(ids)
+    df.push(mine.size)
+    for (const v of mine) own.set(v, (own.get(v) ?? 0) | bit)
+  })
+  const idf = df.map((n) => (n ? Math.log(1 + N / n) : 0))
+  const weight = (mask: number) => { let s = 0; for (let i = 0; i < idf.length; i++) if (mask & (1 << i)) s += idf[i]!; return s }
+  const scored: { v: number; score: number; own: number; text: number; near: number; tie: number; order: number }[] = []
+  for (const [v, mask] of own) {
+    let near = 0
+    for (const d of [-2, -1, 1, 2]) near |= own.get(v + d) ?? 0
+    near &= ~mask
+    scored.push({ v, score: weight(mask) + weight(near) / 2, own: mask, text: byText.get(v) ?? 0, near, tie: 0, order: Infinity })
+  }
+  scored.sort((a, b) => b.score - a.score)
+  // the client's score of the verse's best main-text row, for the verses that can still make the list (ties at the cut too)
+  const cut = scored[Math.min(scored.length, f.limit * 4) - 1]?.score ?? 0
+  const allIds = new Set(tokenIds.flatMap((s) => [...s]))
+  for (const h of scored) {
+    if (h.score < cut) break
+    for (const row of mainRows.get(h.v) ?? []) {
+      const s = x.start[row]!
+      const e = x.start[row + 1]!
+      let n = 0
+      for (let k = s; k < e; k++) if (exact.has(x.toks[k]!)) n++
+      const tie = n / Math.sqrt(e - s)
+      if (tie > h.tie || (tie === h.tie && row < h.order)) { h.tie = tie; h.order = row }
+    }
+  }
+  scored.sort((a, b) => b.score - a.score || b.tie - a.tie || a.order - b.order || a.v - b.v)
+  const phrases = [...allIds].map((id) => [vocabWord(x, id)])
+  const bases = basesOf(x)
+  const hits = scored.slice(0, f.limit).map((h): RankedVerse => {
+    const base = Math.floor(h.v / 1_000_000) * 1_000_000
+    const b = x.books[bases.indexOf(base)] ?? ALL_BOOKS.find((c) => verseId(c, 0, 0) === base) ?? ''
+    const row = Number.isFinite(h.order) ? h.order : -1
+    return {
+      book: b, ch: Math.floor((h.v % 1_000_000) / 1000), v: h.v % 1000, score: h.score, own: h.own, text: h.text, near: h.near, shown: row >= 0,
+      more: async () => {
+        const rows = await rowsOfBook(r, b)
+        // a verse found through its word links alone: the first main text of the book that has the verse
+        const at = row >= 0 ? x.local[row]! : rows.findIndex((pr) => pr.kind === 'text' && f.mainRes.test(pr.res) && !f.skipRes?.test(pr.res) && refIs(pr.ref, h.v))
+        const body = at >= 0 ? rows[at]!.body : ''
+        const text = body.replace(/\s+/g, ' ').trim()
+        return { text, snippet: phrases.length && holds(body, phrases) ? snippetOf(body, phrases) : text }
+      },
+    }
+  })
+  return { hits, df, idf, verses: N }
+}
+
+/**
+ * The book and chapter introductions that hold every term (a word, or one of its forms or beginnings), best first: most
+ * matches over the square root of the length, those of the books in `prefer` first; ref "front:intro" or "3:intro".
+ */
+export async function searchIntros(r: PackReader, terms: Term[], limit = 3, prefer: string[] = []): Promise<{ book: string; ref: string }[]> {
+  const x = await indexOf(r)
+  if (!terms.length || !x.intro.length) return []
+  const sets = terms.map((t) => {
+    const ids = new Set<number>()
+    for (const w of [...(t.words ?? []), ...(t.forms ?? [])]) { const id = x.vocab.get(tokensOf(w)[0] ?? ''); if (id !== undefined) ids.add(id) }
+    const pre = (t.prefixes ?? []).map((p) => tokensOf(p)[0]).filter((p): p is string => !!p && p.length >= 3)
+    if (pre.length) for (const [w, id] of x.vocab) if (pre.some((p) => w.length <= p.length + 4 && w.startsWith(p))) ids.add(id)
+    return ids
+  })
+  if (sets.some((ids) => !ids.size)) return []
+  const out: { row: number; score: number }[] = []
+  for (const row of x.intro) {
+    const s = x.start[row]!
+    const e = x.start[row + 1]!
+    let mask = 0
+    let n = 0
+    for (let k = s; k < e; k++) {
+      const t = x.toks[k]!
+      sets.forEach((ids, i) => { if (ids.has(t)) { mask |= 1 << i; n++ } })
+    }
+    if (mask === (1 << sets.length) - 1) out.push({ row, score: n / Math.sqrt(e - s) })
+  }
+  // the introductions of a book the question names first ("metaphors in Jonah")
+  const named = (row: number) => (prefer.includes(x.books[x.book[row]!]!) ? 0 : 1)
+  out.sort((a, b) => named(a.row) - named(b.row) || b.score - a.score || a.row - b.row)
+  return out.slice(0, limit).map(({ row }) => {
+    // the first introduction of a book is the book's, the others its chapters' (answer.ts reads them the same way)
+    const first = x.intro.find((i) => x.book[i] === x.book[row])
+    const ch = Math.floor(Math.max(0, refNum(x, x.ref[row]!)) / 1000)
+    return { book: x.books[x.book[row]!]!, ref: first === row ? 'front:intro' : `${ch}:intro` }
+  })
 }

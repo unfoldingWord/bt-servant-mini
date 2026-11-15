@@ -27,7 +27,7 @@ test('an index and the rows of its hits are let go when the packs change', async
   // in a function of its own: no reader left on this one's stack
   await (async () => {
     const q = 'Where is the barley harvest mentioned?'
-    expect((await searchVerses(q, null, 'en')).how).toBe('text')
+    expect((await searchVerses(q, null, 'en')).hits.length).toBeGreaterThan(0)
     expect((await searchHelps(q, 'en')).length).toBeGreaterThan(0)
     bytes = await indexBytes(await openLang('en'))
   })()
@@ -57,10 +57,13 @@ test('at most two big indexes: the one used longest ago goes', async () => {
   }
 }, 120000)
 
+// (since Nov 15: the verses go on to English when the own pack has no verse that fits well, search.ts GOOD_COVERAGE; "the
+// barley harvest" lost its "वर्णन" (description), a question word now, and no Hindi note has the harvest alone, so the
+// question is Jesus walking on the water, which the Hindi pack has in its verses and its notes)
 test('English is indexed only when the question\'s own pack finds nothing', async () => {
   if (!has('hi', 'en')) return
   await installPacks(['hi', 'en'])
-  const q = 'जौ की कटनी का वर्णन कहाँ है?'
+  const q = 'यीशु पानी पर कहाँ चला?'
   expect((await searchVerses(q, null, 'hi')).hits.length).toBeGreaterThan(0)
   const helps = await searchHelps(q, 'hi')
   expect(helps.length).toBeGreaterThan(0)

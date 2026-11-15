@@ -42,12 +42,12 @@ KNOWN = {
                          'advice-rut-1-14-alzaron-voces', 'advice-tit-1-12-malas-bestias', 'evl-id-04', 'evl-hi-04', 'evl-hi-27',
                          'evl-hi-28', 'evl-fr-04', 'evl-fr-10', 'evl-fr-27', 'evl-fr-28', 'evl-ar-04']},
     **{i: R_HI for i in ['evl-hi-05', 'evl-hi-07', 'evl-hi-14', 'evl-hi-15', 'evl-hi-17', 'evl-hi-22', 'fu-hi-what', 'fu-hi-count_ch']},
-    **{i: R_OPEN for i in ['evl-hi-26', 'evl-fr-26', 'evl-ar-26']},
+    **{i: R_OPEN for i in ['evl-hi-26', 'evl-ar-26']},
     **{i: R_TERM for i in ['evl-hi-21', 'evl-ar-19', 'evl-ar-20', 'evl-ar-21', 'new-id-unknown', 'new-ar-unknown', 'fu-hi-new_topic',
                            'fu-ar-new_topic', 'fu-hi-new_topic-code', 'fu-ar-new_topic-code']},
     'new-en-unknown': 'the howTranslate vocabulary has no "render"',
     'new-fr-unknown': '"olivier" names no article, and there is no fr pack: "no pack" answer',
-    **{i: R_BOOKS for i in ['new-es-books', 'new-id-books', 'new-hi-books']},
+    **{i: R_BOOKS for i in ['new-es-books', 'new-id-books']},
     **{i: R_MEANING for i in ['new-hi-meaning', 'new-ar-meaning', 'quechua-05']},
     **{i: R_ISA for i in ['fu-en-term_book', 'fu-es-term_book', 'fu-fr-term_book', 'fu-id-term_book', 'fu-hi-term_book']},
     **{f'fu-{l}-{k}-code': R_CODE for l in ['en', 'es', 'fr', 'id', 'hi', 'ar'] for k in ['next', 'term_here', 'count_ch']},
@@ -281,9 +281,70 @@ def quechua():
          for n, (q, s, e) in enumerate(rows)]
 
 
+# Free searches that must find the event's verse, a book introduction, a Translation Academy article, or say plainly that
+# nothing fits (pipeline.ts route `search`, search.ts rankVerses; Nov 15, phase "two months": one search that always returns
+# something). Code alone reads them unless slots are given (the report of Nov 14 was read as "the book of Jonah").
+G17 = '/^1sa 17:/'
+# an answer that states one verse as THE place it happens
+NOT_WHERE = '^(It is in|Está en|C.est dans|Ada di|إنه في|यह .{0,40} में है:)'
+FINDALL = [
+    # (id, lang, question, slots, expectations)
+    ('en-abraham', 'en', 'In which verse does Abraham sacrifice Isaac?', None, {'route': 'search', 'ref': '/^gen 22:/'}),
+    ('en-jonah-book', 'en', 'Where was Jonah swallowed by a fish?', {'intent': 'passage', 'book': 'Jonah', 'lang': 'en'},
+     {'route': 'search', 'ref': 'jon 1:17', 'has': ['^It is in Jonah 1:17']}),
+    ('en-walk', 'en', 'Where does Jesus walk on the water?', None, {'route': 'search', 'ref': '/^(mat 14:(25|26|29)|mrk 6:(48|49)|jhn 6:19)$/'}),
+    ('en-goliath', 'en', 'Where does David kill Goliath?', None, {'route': 'search', 'ref': G17}),
+    ('en-enemies', 'en', 'Where does it say love your enemies?', None, {'route': 'search', 'ref': '/^(mat 5:44|luk 6:(27|35))$/'}),
+    ('en-quoted', 'en', 'Where does it say "great fish"?', None, {'route': 'search', 'ref': '/^(jon 1:17|mat 12:40)$/'}),
+    ('en-gates', 'en', 'What function did city gates have?', None, {'route': 'intro', 'ref': 'rut front:intro'}),
+    ('en-marriage', 'en', 'What important marriage custom is in Ruth?', None, {'route': 'intro', 'ref': 'rut front:intro'}),
+    ('en-hyperbole', 'en', 'hyperbole', None, {'route': 'article', 'concept': 'ta:translate/figs-hyperbole'}),
+    ('en-merism', 'en', 'merism', None, {'route': 'article', 'concept': 'ta:translate/figs-merism'}),
+    ('en-none', 'en', 'rapture', None, {'route': 'search', 'useful': False, 'has': ['rapture', 'a reference'], 'not': ['one word']}),
+    ('es-jonah-book', 'es', '¿Dónde fue tragado Jonás por un pez?', {'intent': 'passage', 'book': 'Jonás', 'lang': 'es'},
+     {'route': 'search', 'ref': 'jon 1:17', 'has': ['^Está en Jonás 1:17']}),
+    ('es-abraham', 'es', '¿En qué versículo Abraham sacrifica a Isaac?', None, {'route': 'search', 'ref': '/^gen 22:/'}),
+    ('es-goliath', 'es', '¿Dónde mata David a Goliat?', None, {'route': 'search', 'ref': G17}),
+    ('es-snow', 'es', '¿Dónde se habla de la nieve?', None, {'route': 'search', 'has': ['nieve|snow']}),
+    ('es-marriage', 'es', '¿Qué costumbre matrimonial hay en Rut?', None, {'route': 'intro', 'ref': 'rut front:intro'}),
+    ('es-hyperbole', 'es', 'hipérbole', None, {'route': 'article', 'concept': 'ta:translate/figs-hyperbole'}),
+    ('es-none', 'es', 'arrebatamiento', None, {'route': 'search', 'useful': False, 'has': ['arrebatamiento', 'una referencia'], 'not': ['una sola palabra']}),
+    ('fr-jonah', 'fr', 'Où Jonas a-t-il été avalé par un poisson ?', None, {'route': 'search', 'ref': 'jon 1:17'}),
+    ('fr-goliath', 'fr', 'Où David a-t-il tué Goliath ?', None, {'route': 'search', 'ref': G17}),
+    ('id-jonah', 'id', 'Di mana Yunus ditelan ikan besar?', None, {'route': 'search', 'ref': 'jon 1:17'}),
+    ('id-walk', 'id', 'Di mana Yesus berjalan di atas air?', None, {'route': 'search', 'ref': '/^(mat 14:(25|26|29)|mrk 6:(48|49)|jhn 6:19)$/'}),
+    ('id-goliath', 'id', 'Di mana Daud membunuh Goliat?', None, {'route': 'search', 'ref': G17}),
+    ('id-snow', 'id', 'Di mana disebut salju?', None, {'route': 'search', 'has': ['snow|salju']}),
+    ('hi-jonah', 'hi', 'योना को मछली ने कहाँ निगला?', None, {'route': 'search', 'ref': 'jon 1:17'}),
+    ('hi-goliath', 'hi', 'दाऊद ने गोलियत को कहाँ मारा?', None, {'route': 'search', 'ref': G17}),
+    ('ar-jonah', 'ar', 'أين ابتلع الحوت يونان؟', None, {'route': 'search', 'ref': 'jon 1:17'}),
+    ('ar-goliath', 'ar', 'أين قتل داود جليات؟', None, {'route': 'search', 'ref': G17}),
+    ('ar-snow', 'ar', 'أين يذكر الثلج؟', None, {'route': 'search', 'has': ['ثلج|الثلج|ٱلثَّلْجِ|الثَّلْجِ|ثَلْج']}),
+    # review of Nov 15: one verse is THE answer only when it is clearly ahead ("Jesus" and "born" are in many verses alike)
+    ('not-en-born', 'en', 'Where was Jesus born?', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-es-born', 'es', 'dónde nació Jesús', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-ar-born', 'ar', 'أين ولد يسوع', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-hi-born', 'hi', 'यीशु का जन्म कहाँ हुआ?', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-en-boat', 'en', 'Where is the boat?', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-en-car', 'en', 'Where did Jesus park his car?', None, {'not': [NOT_WHERE]}),
+    # the Spanish pack's only "matrimonio" is in a verse it cannot show: English verses, not the introduction to Ruth
+    ('es-marriage-verses', 'es', '¿Qué dice la Biblia sobre el matrimonio?', None, {'route': 'search', 'ref': '/^[1-3a-z]{3} \\d+:\\d+$/'}),
+    # nothing to find: say so, suggest no word no pack has, no article by a close spelling ("internet" is not "intercede")
+    ('none-en-asdf', 'en', 'asdf', None, {'route': 'search', 'useful': False, 'not': ['\\*\\*asdf\\*\\*']}),
+    ('none-en-keys', 'en', 'qwerty zxcvb', None, {'route': 'search', 'useful': False}),
+    ('none-en-phone', 'en', 'Where is the smartphone in the Bible?', None, {'route': 'search', 'useful': False}),
+    ('none-es-internet', 'es', '¿Dónde aparece el internet?', None, {'route': 'search', 'useful': False, 'notConcept': 'intercede'}),
+]
+
+
+def findall():
+    return [{'id': f'findall-{i}', 'set': 'findall', 'lang': lang, 'q': q, 'slots': slots, 'expect': e, 'from': 'one search that always returns something (Nov 15)'}
+            for i, lang, q, slots, e in FINDALL]
+
+
 def main():
     OUT.mkdir(exist_ok=True)
-    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True), 'reports': reports(), 'quechua': quechua(), 'academy': academy()}
+    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True), 'reports': reports(), 'quechua': quechua(), 'academy': academy(), 'findall': findall()}
     for name, rows in sets.items():
         for r in rows:
             if r['id'] in KNOWN:
