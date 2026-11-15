@@ -15,7 +15,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, type ConvState, directRef, env, guessLang, type Made, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, stateLine } from './pipeline'
+import { answer, type ConvState, directRef, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, branchOf, GD, GT, mapRows, nodeOf } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 import { shareButton } from './share'
@@ -134,7 +134,7 @@ type Msg = Reply & {
 }
 type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
-const MAX = 3
+const MAX = MAX_CONVS
 let convs: Conv[] = []
 let current = ''
 function load() {
@@ -410,7 +410,7 @@ function driftOffer(c: Conv, m: Msg): HTMLElement {
   }
   btn(w.newConv, () => {
     if (busy) return
-    if (convs.length >= MAX) {
+    if (!roomForNew(convs.length)) {
       // no room for a fourth: say so, and continue here
       say.textContent = w.full
       row.innerHTML = ''
@@ -429,36 +429,16 @@ function driftOffer(c: Conv, m: Msg): HTMLElement {
  * into a new one whose first point it is. The old conversation stays as it was before them.
  */
 function moveToNew(c: Conv, m: Msg) {
-  const i = c.msgs.indexOf(m)
-  const n = nodeOf(c.graph, m.node)
-  if (i < 0 || !n || !c.graph) return
-  const from = c.msgs[i - 1]?.who === 'me' ? i - 1 : i
-  const moved = c.msgs.splice(from, i - from + 1)
-  c.graph.nodes = c.graph.nodes.filter((x) => x.id !== n.id)
-  // the old conversation goes on from the point before (its state from there), or from nothing
-  if (n.parent && nodeOf(c.graph, n.parent)) returnTo(c, n.parent, nav)
-  else {
-    c.graph.cur = null
-    c.last = null
-    c.found = []
-    delete c.state
-  }
+  if (!roomForNew(convs.length)) return
+  // (pipeline.ts moveOut: out of `c`, its point too; a path only when this answer started it)
+  const out = moveOut(c, m, nav)
+  if (!out) return
   c.updated = Date.now()
   const nc = newConv()
   if (!nc) return
-  const q = moved[0]?.who === 'me' ? moved[0] : null
-  nc.title = (q?.text ?? n.label).slice(0, 48)
-  // (its way back led to a point of the old conversation: none here)
-  nc.msgs = moved.map((x) => ({ ...x, drift: undefined, back: undefined, pathBack: undefined }))
-  nc.graph = { nodes: [{ ...n, parent: null, edge: 'start', drift: 'moved', msg: nc.msgs.length - 1 }], cur: n.id }
-  // a path that starts with this answer ("Voy a traducir Jonás" after a long talk about Ruth) goes with it
-  if (m.pathMark && c.graph.path) {
-    nc.graph.path = c.graph.path
-    delete c.graph.path
-  }
-  nc.msgs[nc.msgs.length - 1]!.node = n.id
+  Object.assign(nc, out)
   // what is asked next goes on from this point (its passage, its search results)
-  returnTo(nc, n.id, nav)
+  returnTo(nc, out.graph.cur!, nav)
   save()
   renderConv()
   if (panel.classList.contains('show')) renderPanel()
@@ -1061,7 +1041,9 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   count('answers')
   count(`kind.${answered}`)
   if (qLang) count(`lang.${qLang}`)
-  if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
+  // (out of scope says what Mini helps with on purpose: counted as such, not as an empty answer)
+  if (answered === 'outofscope') count('oos')
+  else if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
   if (!m.packs && !m.waiting && (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length))) m.limits = true
   count('secs', Math.round((performance.now() - t0) / 1000))
   retries.set(m, () => respond(conv(), label, make, again, mark))

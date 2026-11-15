@@ -31,8 +31,11 @@ export type GNode = {
    */
   drift?: 'offered' | 'stayed' | 'moved'
 }
-/** `path`: the light path the person started through a book ("Voy a traducir Rut"), and where it is */
-export type Graph = { nodes: GNode[]; cur: string | null; path?: Path }
+/**
+ * `path`: the light path the person started through a book ("Voy a traducir Rut"), and where it is; `pathBefore`: the path it
+ * replaced, while the answer that started the new one offers a new conversation (moved there, the old one comes back)
+ */
+export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path }
 
 export const newGraph = (): Graph => ({ nodes: [], cur: null })
 export const nodeOf = (g: Graph | undefined, id: string | null | undefined): GNode | undefined =>
@@ -219,73 +222,54 @@ export function drifts(g: Graph, n: GNode): boolean {
 export type Sec = [number, number]
 /**
  * Where a path is: the book, its chapter (null: the book's introduction, before any chapter), the step (1–5: introduction,
- * sections, key terms, notes, questions), the section (from step 2), the verse (step 4, the notes verse by verse), the pack it
- * reads, and the task the person announced.
+ * the section's text, its key terms, its notes, its comprehension questions), the section (from step 2), the pack it reads,
+ * and the task the person announced.
  */
-export type Path = { book: string; ch: number | null; step: number; sec: Sec | null; v: number | null; lang: string; task: 'translate' | 'review' }
+export type Path = { book: string; ch: number | null; step: number; sec: Sec | null; lang: string; task: 'translate' | 'review' }
 
 const secRef = (ch: number, [a, b]: Sec) => (a === b ? `${ch}:${a}` : `${ch}:${a}-${b}`)
-/** The passage and helps of a step: the introduction; the section's text and notes; its key terms; one verse's notes; its questions. */
+/** The passage and helps of a step: the introduction; then the section's text, its key terms, its notes, its questions. */
 export function stepTarget(p: Path): { ref: string; what: string[] } | null {
   if (p.step === 1) return { ref: p.ch ? `${p.book} ${p.ch}:intro` : `${p.book} front:intro`, what: ['intro'] }
   if (!p.ch || !p.sec) return null
-  const sec = `${p.book} ${secRef(p.ch, p.sec)}`
-  if (p.step === 2) return { ref: sec, what: ['text', 'notes'] }
-  if (p.step === 3) return { ref: sec, what: ['terms'] }
-  if (p.step === 4) return { ref: `${p.book} ${p.ch}:${p.v ?? p.sec[0]}`, what: ['notes'] }
-  return { ref: sec, what: ['questions'] }
+  return { ref: `${p.book} ${secRef(p.ch, p.sec)}`, what: [[], [], ['text'], ['terms'], ['notes'], ['questions']][p.step] ?? ['text'] }
 }
 
 /**
  * Which step of the path an answer is, from its passage and what it shows (`secs`: the sections of the answer's chapter), or
- * null: a chapter's introduction (that chapter, from its start), the book's (only before any chapter), a section's text, its
- * key terms or its questions, the notes of a verse (or of a section, from its first verse).
+ * null: a chapter's introduction (that chapter, from its start), the book's (only before any chapter); a section (by its range,
+ * or a one-verse section) with its text, only its key terms, only its notes, only its questions. A verse, a whole chapter: none.
  */
 export function stepOf(p: Path, ref: string | null, what: string[], secs: Sec[]): Path | null {
   const m = /^([0-9a-z]{3}) (front|\d+)(?::(intro|\d+)(?:-(\d+))?)?$/.exec(ref ?? '')
   if (!m || m[1] !== p.book || !m[3]) return null
-  if (m[3] === 'intro') return m[2] === 'front' ? (p.ch === null ? { ...p, step: 1, sec: null, v: null } : null) : { ...p, step: 1, ch: +m[2]!, sec: null, v: null }
+  if (m[3] === 'intro') return m[2] === 'front' ? (p.ch === null ? { ...p, step: 1, sec: null } : null) : { ...p, step: 1, ch: +m[2]!, sec: null }
   if (m[2] === 'front') return null
-  const ch = +m[2]!, a = +m[3], b = m[4] ? +m[4] : a
-  const sec: Sec | null = m[4] ? [a, b] : secs.find(([x, y]) => x <= a && a <= y) ?? null
+  const ch = +m[2]!, a = +m[3]
+  const sec: Sec | null = m[4] ? [a, +m[4]] : secs.some(([x, y]) => x === a && y === a) ? [a, a] : null
   if (!sec) return null
   const only = (k: string) => what.length === 1 && what[0] === k
-  // a section is asked by its range (or it is one verse long)
-  const whole = !!m[4] || (sec[0] === a && sec[1] === a)
-  if (what.includes('text') && whole) return { ...p, step: 2, ch, sec, v: null }
-  if (only('terms') && whole) return { ...p, step: 3, ch, sec, v: null }
-  if (only('questions') && whole) return { ...p, step: 5, ch, sec, v: null }
-  if (what.includes('notes') && !what.includes('text')) {
-    // the notes of a verse: the section it is in
-    const in_ = secs.find(([x, y]) => x <= a && a <= y) ?? sec
-    return { ...p, step: 4, ch, sec: in_, v: a }
-  }
-  return null
+  const step = what.includes('text') ? 2 : only('terms') ? 3 : only('notes') ? 4 : only('questions') ? 5 : 0
+  return step ? { ...p, step, ch, sec } : null
 }
 
 /**
  * The step after this one: after an introduction, the first section of its chapter (`secs`: the sections of the path's chapter,
- * chapter 1 before any); then the section's key terms; the notes of its first verse, of the next until its last; its questions;
- * then the next section, or the first of the next chapter (`nextSecs`). Null at the end of the book.
+ * chapter 1 before any); then the section's key terms, its notes, its questions; then the next section's text, or the first of
+ * the next chapter (`nextSecs`). Null at the end of the book.
  */
 export function nextStep(p: Path, secs: Sec[], nextSecs: Sec[]): Path | null {
-  if (p.step === 1) return secs[0] ? { ...p, step: 2, ch: p.ch ?? 1, sec: secs[0], v: null } : null
+  if (p.step === 1) return secs[0] ? { ...p, step: 2, ch: p.ch ?? 1, sec: secs[0] } : null
   if (!p.sec || !p.ch) return null
-  if (p.step === 2) return { ...p, step: 3, v: null }
-  if (p.step === 3) return { ...p, step: 4, v: p.sec[0] }
-  if (p.step === 4) {
-    const v = p.v ?? p.sec[0]
-    return v < p.sec[1] ? { ...p, v: v + 1 } : { ...p, step: 5, v: null }
-  }
+  if (p.step < 5) return { ...p, step: p.step + 1 }
   const i = secs.findIndex(([a]) => a === p.sec![0])
-  if (i >= 0 && secs[i + 1]) return { ...p, step: 2, sec: secs[i + 1]!, v: null }
-  return nextSecs[0] ? { ...p, step: 2, ch: p.ch + 1, sec: nextSecs[0], v: null } : null
+  if (i >= 0 && secs[i + 1]) return { ...p, step: 2, sec: secs[i + 1]! }
+  return nextSecs[0] ? { ...p, step: 2, ch: p.ch + 1, sec: nextSecs[0] } : null
 }
 
-/** Where a step is, said short: "Ruth", "Ruth 1", "Ruth 1:6–18", "Ruth 1:7" (`book`: the book's name in the app's language). */
+/** Where a step is, said short: "Ruth", "Ruth 1", "Ruth 1:6–18" (`book`: the book's name in the app's language). */
 export function stepPlace(p: Path, book: string): string {
   if (p.step === 1 || !p.ch || !p.sec) return p.ch ? `${book} ${p.ch}` : book
-  if (p.step === 4) return `${book} ${p.ch}:${p.v ?? p.sec[0]}`
   return `${book} ${secRef(p.ch, p.sec).replace('-', '–')}`
 }
 
