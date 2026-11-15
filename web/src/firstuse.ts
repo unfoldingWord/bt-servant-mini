@@ -4,6 +4,7 @@
 import { CANDIDATES, CANON, downloadLang, offers, openLang, PACK_NAMES, type Offer, type Progress } from './packs'
 import { bookLabel } from './converse'
 import books from './data/books.json'
+import shapes from './data/shapes.json'
 
 type F = {
   title: string; lead: string; looking: string; download: string; cancel: string; retry: string; offline: string
@@ -17,7 +18,7 @@ const STR: Record<string, F> = {
     offline: 'No internet, or the server did not answer.',
     stopped: 'The download stopped:', canceled: 'Download canceled. What already arrived stays on the phone.', of: '{a} of {b}',
     file: 'Or load a .tcpack file', kept: 'I kept your question. Choose a language below: I will answer it as soon as the language is on the phone.',
-    notes: 'What do the notes say about {ref}?', term: 'What does {term} mean?', ta: 'Translation Academy: {topic}', books: '{n} books',
+    notes: 'What do the notes say about {ref}?', term: shapes.meaning.text.en, ta: 'Translation Academy: {topic}', books: '{n} books',
     resume: 'Continue', model: 'Also download the reading model ({size}) to ask free questions without internet.', modelGo: 'Download the model',
   },
   es: {
@@ -26,7 +27,7 @@ const STR: Record<string, F> = {
     offline: 'Sin internet, o el servidor no respondió.',
     stopped: 'La descarga se detuvo:', canceled: 'Descarga cancelada. Lo que ya llegó se queda en el teléfono.', of: '{a} de {b}',
     file: 'O carga un archivo .tcpack', kept: 'Guardé tu pregunta. Elige un idioma aquí abajo: la responderé en cuanto el idioma esté en el teléfono.',
-    notes: '¿Qué dicen las notas sobre {ref}?', term: '¿Qué significa {term}?', ta: 'Translation Academy: {topic}', books: '{n} libros',
+    notes: '¿Qué dicen las notas sobre {ref}?', term: shapes.meaning.text.es, ta: 'Translation Academy: {topic}', books: '{n} libros',
     resume: 'Continuar', model: 'Descarga también el modelo de lectura ({size}) para hacer preguntas libres sin internet.', modelGo: 'Descargar el modelo',
   },
   fr: {
@@ -35,7 +36,7 @@ const STR: Record<string, F> = {
     offline: "Pas d'internet, ou le serveur n'a pas répondu.",
     stopped: "Le téléchargement s'est arrêté :", canceled: 'Téléchargement annulé. Ce qui est déjà arrivé reste sur le téléphone.', of: '{a} sur {b}',
     file: 'Ou chargez un fichier .tcpack', kept: "J'ai gardé votre question. Choisissez une langue ci-dessous : j'y répondrai dès que la langue sera sur le téléphone.",
-    notes: 'Que disent les notes sur {ref} ?', term: 'Que signifie {term} ?', ta: 'Translation Academy : {topic}', books: '{n} livres',
+    notes: 'Que disent les notes sur {ref} ?', term: shapes.meaning.text.fr, ta: 'Translation Academy : {topic}', books: '{n} livres',
     resume: 'Continuer', model: 'Téléchargez aussi le modèle de lecture ({size}) pour poser des questions libres sans internet.', modelGo: 'Télécharger le modèle',
   },
   id: {
@@ -44,7 +45,7 @@ const STR: Record<string, F> = {
     offline: 'Tidak ada internet, atau server tidak menjawab.',
     stopped: 'Unduhan berhenti:', canceled: 'Unduhan dibatalkan. Yang sudah masuk tetap ada di ponsel.', of: '{a} dari {b}',
     file: 'Atau muat berkas .tcpack', kept: 'Pertanyaan Anda saya simpan. Pilih bahasa di bawah: saya akan menjawabnya begitu bahasa itu ada di ponsel.',
-    notes: 'Apa kata catatan tentang {ref}?', term: 'Apa arti {term}?', ta: 'Translation Academy: {topic}', books: '{n} kitab',
+    notes: 'Apa kata catatan tentang {ref}?', term: shapes.meaning.text.id, ta: 'Translation Academy: {topic}', books: '{n} kitab',
     resume: 'Lanjutkan', model: 'Unduh juga model pembaca ({size}) untuk mengajukan pertanyaan bebas tanpa internet.', modelGo: 'Unduh model',
   },
   hi: {
@@ -53,7 +54,7 @@ const STR: Record<string, F> = {
     offline: 'इंटरनेट नहीं है, या सर्वर ने उत्तर नहीं दिया।',
     stopped: 'डाउनलोड रुक गया:', canceled: 'डाउनलोड रद्द हुआ। जो आ चुका है वह फ़ोन पर रहेगा।', of: '{b} में से {a}',
     file: 'या .tcpack फ़ाइल लोड करें', kept: 'मैंने आपका प्रश्न रख लिया है। नीचे एक भाषा चुनें: भाषा फ़ोन पर आते ही मैं उत्तर दूँगा।',
-    notes: '{ref} के बारे में नोट्स क्या कहते हैं?', term: '{term} का क्या अर्थ है?', ta: 'Translation Academy: {topic}', books: '{n} पुस्तकें',
+    notes: '{ref} के बारे में नोट्स क्या कहते हैं?', term: shapes.meaning.text.hi, ta: 'Translation Academy: {topic}', books: '{n} पुस्तकें',
     resume: 'जारी रखें', model: 'बिना इंटरनेट के खुले प्रश्न पूछने के लिए पढ़ने वाला मॉडल ({size}) भी डाउनलोड करें।', modelGo: 'मॉडल डाउनलोड करें',
   },
   ar: {
@@ -62,7 +63,7 @@ const STR: Record<string, F> = {
     offline: 'لا يوجد إنترنت، أو لم يُجب الخادم.',
     stopped: 'توقف التنزيل:', canceled: 'أُلغي التنزيل. ما وصل يبقى على الهاتف.', of: '{a} من {b}',
     file: 'أو حمّل ملف ‎.tcpack', kept: 'احتفظت بسؤالك. اختر لغة من الأسفل: سأجيب عنه حالما تصبح اللغة على الهاتف.',
-    notes: 'ماذا تقول الملاحظات عن {ref}؟', term: 'ما معنى {term}؟', ta: 'Translation Academy: {topic}', books: 'الأسفار: {n}',
+    notes: 'ماذا تقول الملاحظات عن {ref}؟', term: shapes.meaning.text.ar, ta: 'Translation Academy: {topic}', books: 'الأسفار: {n}',
     resume: 'متابعة', model: 'نزّل أيضًا نموذج القراءة ({size}) لتطرح أسئلة حرة دون إنترنت.', modelGo: 'تنزيل النموذج',
   },
 }

@@ -1,0 +1,24 @@
+{
+ "_": "The ways of asking that code reads without a model (the composer, propuesta-composer-sugerencias.md): per shape, the start button's label and how the question is written, in the six app languages. {ref} is a passage (book chapter:verse), {term} a word, {what} a book or a chapter. tests/shapes.test.ts checks that each one, typed as text, gives the sheet its button gives. The welcome's examples (firstuse.ts) and the next steps (converse.ts) take their phrases from here.",
+ "order": ["passage", "notes", "meaning", "howTranslate"],
+ "passage": {
+  "label": { "en": "Passage", "es": "Pasaje", "fr": "Passage", "id": "Perikop", "hi": "अंश", "ar": "مقطع" },
+  "text": { "en": "{ref}", "es": "{ref}", "fr": "{ref}", "id": "{ref}", "hi": "{ref}", "ar": "{ref}" }
+ },
+ "notes": {
+  "label": { "en": "Notes on…", "es": "Notas de…", "fr": "Notes sur…", "id": "Catatan…", "hi": "…की टिप्पणियाँ", "ar": "ملاحظات…" },
+  "text": { "en": "Notes on {ref}", "es": "Notas de {ref}", "fr": "Notes sur {ref}", "id": "Catatan {ref}", "hi": "{ref} की टिप्पणियाँ", "ar": "ملاحظات {ref}" }
+ },
+ "meaning": {
+  "label": { "en": "What does … mean?", "es": "¿Qué significa…?", "fr": "Que signifie… ?", "id": "Apa arti…?", "hi": "…का क्या अर्थ है?", "ar": "ما معنى…؟" },
+  "text": { "en": "What does {term} mean?", "es": "¿Qué significa {term}?", "fr": "Que signifie {term} ?", "id": "Apa arti {term}?", "hi": "{term} का क्या अर्थ है?", "ar": "ما معنى {term}؟" }
+ },
+ "howTranslate": {
+  "label": { "en": "How to translate…?", "es": "¿Cómo traducir…?", "fr": "Comment traduire… ?", "id": "Bagaimana menerjemahkan…?", "hi": "…का अनुवाद कैसे करें?", "ar": "كيف أترجم…؟" },
+  "text": { "en": "How to translate {term}?", "es": "¿Cómo traducir {term}?", "fr": "Comment traduire {term} ?", "id": "Bagaimana menerjemahkan {term}?", "hi": "{term} का अनुवाद कैसे करें?", "ar": "كيف أترجم {term}؟" }
+ },
+ "intro": {
+  "label": { "en": "Introduction", "es": "Introducción", "fr": "Introduction", "id": "Pengantar", "hi": "परिचय", "ar": "مقدمة" },
+  "text": { "en": "Introduction to {what}", "es": "Introducción a {what}", "fr": "Introduction à {what}", "id": "Pengantar {what}", "hi": "{what} का परिचय", "ar": "مقدمة {what}" }
+ }
+}

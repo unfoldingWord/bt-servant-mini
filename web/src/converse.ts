@@ -3,6 +3,7 @@
 // (Qwen3 0.6B, Llama 3.2 1B and Gemma 3 1B measured on 12 Nov 2026), so no model writes these words.
 import type { Sheet } from './answer'
 import booknames from './data/booknames.json'
+import shapes from './data/shapes.json'
 
 type L = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 const pick = <T,>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)]!
@@ -103,12 +104,12 @@ const bookFor = (ui: string, code: string): string =>
 
 /** The sentence before the found information, or null when the answer already speaks for itself (not understood, not found). */
 const INTRO: Record<L, { found: string; label: string }> = {
-  en: { found: 'Here is the introduction to {what}.', label: 'Introduction to {what}' },
-  es: { found: 'Esta es la introducción a {what}.', label: 'Introducción a {what}' },
-  fr: { found: "Voici l'introduction à {what}.", label: 'Introduction à {what}' },
-  id: { found: 'Ini pengantar untuk {what}.', label: 'Pengantar {what}' },
-  hi: { found: 'यह {what} का परिचय है।', label: '{what} का परिचय' },
-  ar: { found: 'هذه مقدمة {what}.', label: 'مقدمة {what}' },
+  en: { found: 'Here is the introduction to {what}.', label: shapes.intro.text.en },
+  es: { found: 'Esta es la introducción a {what}.', label: shapes.intro.text.es },
+  fr: { found: "Voici l'introduction à {what}.", label: shapes.intro.text.fr },
+  id: { found: 'Ini pengantar untuk {what}.', label: shapes.intro.text.id },
+  hi: { found: 'यह {what} का परिचय है।', label: shapes.intro.text.hi },
+  ar: { found: 'هذه مقدمة {what}.', label: shapes.intro.text.ar },
 }
 
 export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): string | null {
@@ -154,12 +155,12 @@ export const MAX_FOLLOW = 9
 
 /** The words of the next steps that are not about one verse: a chapter to read, Browse, try again. */
 const NX: Record<L, { read: string; notesOf: string; termsOf: string; browseBook: string; browseAcademy: string; browse: string; again: string; howName: string; howThing: string }> = {
-  en: { read: 'Read {ref}', notesOf: 'Notes on {ref}', termsOf: 'Key terms of {ref}', browseBook: 'Browse {book}', browseAcademy: 'Browse Translation Academy', browse: 'Browse the Bible and the helps', again: 'Try again', howName: 'How to translate this name', howThing: 'How to translate it' },
-  es: { read: 'Leer {ref}', notesOf: 'Notas de {ref}', termsOf: 'Palabras clave de {ref}', browseBook: 'Explorar {book}', browseAcademy: 'Explorar Translation Academy', browse: 'Explorar la Biblia y las ayudas', again: 'Intentar de nuevo', howName: 'Cómo traducir este nombre', howThing: 'Cómo traducirlo' },
-  fr: { read: 'Lire {ref}', notesOf: 'Notes sur {ref}', termsOf: 'Mots clés de {ref}', browseBook: 'Parcourir {book}', browseAcademy: 'Parcourir Translation Academy', browse: 'Parcourir la Bible et les aides', again: 'Réessayer', howName: 'Comment traduire ce nom', howThing: 'Comment le traduire' },
-  id: { read: 'Baca {ref}', notesOf: 'Catatan {ref}', termsOf: 'Istilah kunci {ref}', browseBook: 'Jelajahi {book}', browseAcademy: 'Jelajahi Translation Academy', browse: 'Jelajahi Alkitab dan bahan bantu', again: 'Coba lagi', howName: 'Cara menerjemahkan nama ini', howThing: 'Cara menerjemahkannya' },
-  hi: { read: '{ref} पढ़ें', notesOf: '{ref} की टिप्पणियाँ', termsOf: '{ref} के मुख्य शब्द', browseBook: '{book} ब्राउज़ करें', browseAcademy: 'Translation Academy ब्राउज़ करें', browse: 'बाइबल और सहायता ब्राउज़ करें', again: 'फिर से कोशिश करें', howName: 'इस नाम का अनुवाद कैसे करें', howThing: 'इसका अनुवाद कैसे करें' },
-  ar: { read: 'اقرأ {ref}', notesOf: 'ملاحظات {ref}', termsOf: 'الكلمات الرئيسية في {ref}', browseBook: 'تصفّح {book}', browseAcademy: 'تصفّح Translation Academy', browse: 'تصفّح الكتاب المقدس والمساعدات', again: 'حاول مرة أخرى', howName: 'كيف أترجم هذا الاسم', howThing: 'كيف أترجمه' },
+  en: { read: 'Read {ref}', notesOf: shapes.notes.text.en, termsOf: 'Key terms of {ref}', browseBook: 'Browse {book}', browseAcademy: 'Browse Translation Academy', browse: 'Browse the Bible and the helps', again: 'Try again', howName: 'How to translate this name', howThing: 'How to translate it' },
+  es: { read: 'Leer {ref}', notesOf: shapes.notes.text.es, termsOf: 'Palabras clave de {ref}', browseBook: 'Explorar {book}', browseAcademy: 'Explorar Translation Academy', browse: 'Explorar la Biblia y las ayudas', again: 'Intentar de nuevo', howName: 'Cómo traducir este nombre', howThing: 'Cómo traducirlo' },
+  fr: { read: 'Lire {ref}', notesOf: shapes.notes.text.fr, termsOf: 'Mots clés de {ref}', browseBook: 'Parcourir {book}', browseAcademy: 'Parcourir Translation Academy', browse: 'Parcourir la Bible et les aides', again: 'Réessayer', howName: 'Comment traduire ce nom', howThing: 'Comment le traduire' },
+  id: { read: 'Baca {ref}', notesOf: shapes.notes.text.id, termsOf: 'Istilah kunci {ref}', browseBook: 'Jelajahi {book}', browseAcademy: 'Jelajahi Translation Academy', browse: 'Jelajahi Alkitab dan bahan bantu', again: 'Coba lagi', howName: 'Cara menerjemahkan nama ini', howThing: 'Cara menerjemahkannya' },
+  hi: { read: '{ref} पढ़ें', notesOf: shapes.notes.text.hi, termsOf: '{ref} के मुख्य शब्द', browseBook: '{book} ब्राउज़ करें', browseAcademy: 'Translation Academy ब्राउज़ करें', browse: 'बाइबल और सहायता ब्राउज़ करें', again: 'फिर से कोशिश करें', howName: 'इस नाम का अनुवाद कैसे करें', howThing: 'इसका अनुवाद कैसे करें' },
+  ar: { read: 'اقرأ {ref}', notesOf: shapes.notes.text.ar, termsOf: 'الكلمات الرئيسية في {ref}', browseBook: 'تصفّح {book}', browseAcademy: 'تصفّح Translation Academy', browse: 'تصفّح الكتاب المقدس والمساعدات', again: 'حاول مرة أخرى', howName: 'كيف أترجم هذا الاسم', howThing: 'كيف أترجمه' },
 }
 export const nextWords = (ui: string) => NX[lang(ui)]
 /** "Introduction to Jonah", in the app's language. */
