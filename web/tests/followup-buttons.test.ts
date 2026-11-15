@@ -3,6 +3,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { answer, type ConvState } from '../src/pipeline'
+import { againStep } from '../src/converse'
+import { ALL_PACKS, installPacks } from './fs-packs'
 
 beforeAll(fullPhone)
 const refs = (f: { sheet?: { ref: string | null; concept: string | null } }[]) => f.map((x) => x.sheet?.ref ?? x.sheet?.concept)
@@ -160,5 +162,31 @@ describe('the other answers offer next steps too', () => {
   test("the labels in the app's language (Arabic)", async () => {
     const r = await turn({ last: null }, { q: 'asdf', slots: null }, 'ar')
     expect((r.reply.follow ?? []).at(-1)?.label).toBe('تصفّح الكتاب المقدس والمساعدات')
+  }, 60_000)
+})
+
+describe('review of Nov 15', () => {
+  test('a book no pack has ("Pengantar Obaja" with only Indonesian): no buttons to it, only the ways forward', async () => {
+    try {
+      await installPacks(['id'])
+      const r = await turn({ last: null }, { q: 'Pengantar Obaja', slots: null }, 'id')
+      const f = r.reply.follow ?? []
+      expect(f.length).toBeGreaterThan(0)
+      expect(f.some((x) => x.sheet?.ref?.startsWith('oba') || x.browse?.book === 'oba')).toBe(false)
+      expect(f.at(-1)?.browse).toEqual({})
+    } finally {
+      await installPacks(ALL_PACKS)
+    }
+  }, 60_000)
+  test('"Try again" carries what to ask again: the typed question or the button\'s sheet; with neither, no button', () => {
+    expect(againStep('es', { q: '¿Qué es la gracia?' })[0]?.again?.q).toBe('¿Qué es la gracia?')
+    const sheet = { id: 'x', intent: 'passage', ref: 'rut 1', what: ['text'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'en' }
+    expect(againStep('en', { sheet, label: 'Read Ruth 1' })[0]).toMatchObject({ label: 'Try again', again: { sheet, label: 'Read Ruth 1' } })
+    expect(againStep('en', undefined)).toEqual([])
+  })
+  test('"the name Yahweh" is a key term: its article with "Translate Unknowns" (its own links may still name the other)', async () => {
+    const r = await turn({ last: null }, { q: 'How do I translate the name Yahweh?', slots: null }, 'en')
+    expect(refs(r.reply.follow ?? []).slice(0, 2)).toEqual(['tw:kt/yahweh', 'ta:translate/translate-unknown'])
+    expect(r.reply.sources?.[1]?.id).toBe('ta:translate/translate-unknown')
   }, 60_000)
 })

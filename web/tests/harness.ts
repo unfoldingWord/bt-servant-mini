@@ -16,6 +16,8 @@ export type Expect = {
   notRef?: string
   /** not an article matching this regex (a question the academy route must leave alone) */
   notConcept?: string
+  /** not this kind of answer ("I want to translate Jonah's prayer" is not the book's introduction) */
+  notRoute?: string
   /** next-step buttons the answer must offer: each regex matches a button's target ("jon 1", "ta:translate/translate-names", "browse") */
   follow?: string[]
 }
@@ -79,6 +81,7 @@ export function check(k: Case, o: Outcome): string[] {
   if (e.route && !asList(e.route).includes(o.route)) bad.push(`route ${o.route} (want ${asList(e.route).join('|')})`)
   if (e.ref !== undefined && !fits(e.ref, o.ref)) bad.push(`ref ${o.ref} (want ${e.ref})`)
   if (e.notRef && o.ref === e.notRef) bad.push(`ref ${o.ref} (must not be)`)
+  if (e.notRoute && o.route === e.notRoute) bad.push(`route ${o.route} (must not be)`)
   if (e.notConcept && new RegExp(e.notConcept).test(o.concept ?? '')) bad.push(`concept ${o.concept} (must not match ${e.notConcept})`)
   if (e.concept !== undefined && !fits(e.concept, o.concept)) bad.push(`concept ${o.concept} (want ${e.concept})`)
   for (const h of e.has ?? []) if (!new RegExp(h, 'iu').test(o.text)) bad.push(`missing /${h}/`)

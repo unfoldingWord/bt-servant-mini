@@ -299,6 +299,20 @@ def reports():
         ('report-name-ruth-fr', 'fr', 'Comment traduire le nom de Ruth ?', None, {'route': 'translate-unknown', 'concept': 'tw:names/ruth', 'follow': ['^tw:names/ruth', '^ta:translate/translate-names']}),
         ('report-who-jonah', 'en', 'Who was Jonah?', None, {'concept': 'tw:names/jonah', 'follow': ['^jon ', '^ta:translate/translate-names']}),
         ('report-chapter-intro', 'en', 'Introduction to Ruth 2', None, {'route': 'intro', 'ref': 'rut 2:intro', 'follow': ['^rut 2 ', '^rut 2:1 ', '^rut 3:intro']}),
+        # the review of Nov 15: starting a book only with nothing else in the question (no verse, chapter or other words)
+        ('start-not-prayer', 'en', "I want to translate Jonah's prayer", None, {'notRoute': 'intro', 'ref': '/^jon 2:/'}),
+        ('start-not-prayer-read', 'en', "I want to translate Jonah's prayer", S(intent='passage', book='Jonah', chapter=2, verse_start=1, verse_end=None, what=['text']), {'ref': 'jon 2:1'}),
+        ('start-not-oracion', 'es', 'Voy a traducir la oración de Jonás', None, {'notRoute': 'intro', 'ref': '/^jon 2:/'}),
+        ('start-not-oracion-read', 'es', 'Voy a traducir la oración de Jonás', S(intent='passage', book='Jonás', chapter=2, verse_start=1, verse_end=None, what=['text'], lang='es'), {'ref': 'jon 2:1'}),
+        ('start-not-lamb', 'en', 'I want to translate Lamb of God in John', None, {'notRoute': 'intro', 'ref': 'jhn 1:29'}),
+        ('start-not-lamb-read', 'en', 'I want to translate Lamb of God in John', S(intent='passage', book='John', chapter=1, verse_start=29, verse_end=None, what=['text']), {'ref': 'jhn 1:29'}),
+        ('start-not-biblia', 'es', 'Vamos a traducir la Biblia', None, {'notRoute': 'intro', 'useful': False}),
+        ('start-not-chapter', 'en', 'Jonah chapter two', None, {'ref': '/^jon 2/'}),
+        ('start-not-chapter-read', 'en', 'Jonah chapter two', S(intent='passage', book='Jonah', chapter=2, verse_start=None, verse_end=None, what=['text']), {'ref': 'jon 2'}),
+        ('start-not-story', 'en', 'the story of Jonah and the big fish', None, {'notRoute': 'intro'}),
+        ('start-not-pez', 'es', 'pez grande en Jonás', None, {'notRoute': 'intro', 'ref': 'jon 1:17'}),
+        ('start-not-grace', 'en', 'the word grace in Ruth', None, {'notRoute': 'intro'}),
+        ('start-not-grace-read', 'en', 'the word grace in Ruth', S(intent='article', term='grace'), {'concept': 'tw:kt/grace'}),
     ]
     out += [{'id': i, 'set': 'reports', 'lang': lang, 'q': q, 'slots': s, 'before': [], 'expect': e, 'from': 'user reports Nov 15'}
             for i, lang, q, s, e in nov15]
