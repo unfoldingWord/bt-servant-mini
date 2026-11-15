@@ -665,10 +665,11 @@ export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
 export async function readQuestion(q: string, read: { slots: Slots | null; raw: string; ms: number }, c: ConvState, target: string | null): Promise<Made> {
   const { slots, raw, ms } = read
   // never out of scope (ROUTES 'out-of-scope') over a reading of the question (a book, a term, a known intent: the phone's or the
-  // online reader), nor while the conversation is on a passage (its state, before this question changes it)
+  // online reader), nor over a follow-up code read from the conversation ("thanks, and the next verse?"); on a passage, "What is
+  // the weather tomorrow?" is out of scope (its first button goes back to the passage), not a search that finds junk
   const heard = !!slots && (!!slots.book || !!slots.term || ['passage', 'article', 'count', 'rank', 'advice', 'resources'].includes(slots.intent ?? ''))
-  const inScope = heard ? 'read by the reader' : stateLine(c) && c.state?.s.book ? 'the conversation is on a passage' : undefined
-  const scope = inScope ? { inScope } : {}
+  const scope = heard ? { inScope: 'read by the reader' } : {}
+  const followed = { inScope: 'a follow-up of the conversation' }
   const s0 = refInText(slots?.lang ? slots : { ...(slots ?? { intent: 'unknown' }), lang: guessLang(q) }, q)
   if (s0.phrase) s0.phrase = cleanPhrase(s0.phrase, q)
   // the script says the language even when the model does not know it: Arabic letters, Devanagari
@@ -689,7 +690,7 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
       const { sheet, ui } = await buildSheet(`q${Date.now()}`, fu.slots, env.helpsLang)
       return { sheet, ui, meta: `model ${ms} ms
 ${raw}
-(follow-up by code: ${fu.how}, checked against the book)`, q, note: { text: checked.note, fromText: !!fu.counted }, ...scope }
+(follow-up by code: ${fu.how}, checked against the book)`, q, note: { text: checked.note, fromText: !!fu.counted }, ...followed }
     }
     let s = target ? { ...checked.slots, lang: target } : checked.slots
     // "who is speaking here?" names no article: the passage with its notes, not its key terms
@@ -702,7 +703,7 @@ ${raw}
     // "how many times does lamb appear in this chapter?": the article a word names exactly (not "appear")
     const named = fu.termWords ? [...(await articlesNamed(fu.termWords))].filter((id) => id.startsWith('tw:')) : []
     if (named.length === 1) Object.assign(sheet, { concept: named[0]!, candidates: null, what: ['terms'] })
-    return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up by code: ${fu.how})`, q, ...scope }
+    return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up by code: ${fu.how})`, q, ...followed }
   }
   const picked = pickFound(q, s0, c)
   if (picked) {

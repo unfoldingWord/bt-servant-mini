@@ -80,11 +80,11 @@
    "oos": 0
   },
   "guide": {
-   "pass": 60,
-   "total": 60,
+   "pass": 66,
+   "total": 66,
    "known": 0,
    "empty": 2,
-   "oos": 21
+   "oos": 27
   }
  }
 }

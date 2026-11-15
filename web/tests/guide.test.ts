@@ -233,12 +233,14 @@ describe('in a conversation', () => {
     expect(r3.reply.follow![0]!.label).toMatch(/^Next: Titus 1:\d+–\d+ · sections$/)
   }, 120_000)
 
-  test('out of scope only after something that is not a passage: no point, the way back to the path', async () => {
+  test('out of scope on the path: no point, the way back to the path (on its passage, and after an article)', async () => {
     const c: ConvState = { last: null }
     const r1 = await turn(c, { q: 'Voy a traducir Rut' }, 'es')
     await press(c, r1.reply.follow![0]!, 'es')
-    // on the passage: never out of scope
-    expect((await turn(c, { q: '¿Qué tiempo hace mañana?' }, 'es')).answered).not.toBe('outofscope')
+    // on the passage: its first button goes back to it, named as the way back to the path
+    const on = await turn(c, { q: '¿Qué tiempo hace mañana?' }, 'es')
+    expect(on.answered).toBe('outofscope')
+    expect(on.reply.follow![0]!.label).toBe('← Volver al camino: Rut 1:1–5 · secciones')
     await turn(c, { q: '¿Qué significa amor?' }, 'es')
     const n = c.graph!.nodes.length
     const o = await turn(c, { q: '¿Qué tiempo hace mañana?' }, 'es')
@@ -258,7 +260,7 @@ describe('in a conversation', () => {
       expect([q, await outOfScopeQ(q, 'en')]).toEqual([q, false])
   }, 120_000)
 
-  test('never over a reading of the question, nor on a passage', async () => {
+  test('never over a reading of the question, nor over a follow-up of the conversation', async () => {
     const c: ConvState = { last: null }
     env.nav = 'en'
     const read = await readQuestion('What is the weather?', { slots: { intent: 'article', term: 'weather', lang: 'en' } as any, raw: '', ms: 0 }, c, null)
@@ -266,7 +268,10 @@ describe('in a conversation', () => {
     const unread = await readQuestion('What is the weather?', { slots: { intent: 'unknown', lang: 'en' } as any, raw: '', ms: 0 }, c, null)
     expect(unread.inScope).toBeUndefined()
     await turn(c, { q: 'Ruth 2:3' }, 'en')
-    expect((await readQuestion('how much is an ephah?', { slots: null, raw: '', ms: 0 }, c, null)).inScope).toBe('the conversation is on a passage')
+    expect((await readQuestion('thanks, and the next verse?', { slots: null, raw: '', ms: 0 }, c, null)).inScope).toBe('a follow-up of the conversation')
+    // on a passage, a question about something else is weighed as anywhere else
+    expect((await readQuestion('how much is an ephah?', { slots: null, raw: '', ms: 0 }, c, null)).inScope).toBeUndefined()
+    expect(await outOfScopeQ('how much is an ephah?', 'en')).toBe(false)
   }, 120_000)
 })
 

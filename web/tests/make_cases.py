@@ -515,7 +515,14 @@ GUIDE = [
     ('oos-ar-hello', 'ar', 'مرحبا، كيف حالك؟', {'oos': True}, None),
     # after an article read from a passage: back to that passage (its point), its key term and the Academy article its notes cite
     ('oos-en-after-article', 'en', 'What is the weather tomorrow?', {'oos': True, 'follow': ['^rut 2:3 ', '^tw:', '^ta:']}, [RUT23, {'q': 'What does love mean?'}]),
-    # never out of scope in a conversation on a passage (review of Nov 15: "gracias, ¿y el siguiente?" after Rut 2:3)
+    # on a passage, the weather is out of scope too; its first button goes back to the passage (re-review of Nov 15)
+    ('oos-en-tomorrow-ctx', 'en', 'What is the weather tomorrow?', {'oos': True, 'follow': ['^rut 2:3 ']}, [{'q': 'Show me Ruth 2:3'}]),
+    ('oos-es-tomorrow-ctx', 'es', '¿Qué tiempo hace mañana?', {'oos': True, 'follow': ['^rut 2:3 ']}, [{'q': 'Muéstrame Rut 2:3'}]),
+    ('oos-fr-tomorrow-ctx', 'fr', 'Quel temps fera-t-il demain ?', {'oos': True, 'follow': ['^rut 2:3 ']}, [{'q': 'Montre-moi Ruth 2:3'}]),
+    ('oos-id-tomorrow-ctx', 'id', 'Bagaimana cuaca besok?', {'oos': True, 'follow': ['^rut 2:3 ']}, [{'q': 'Tunjukkan Rut 2:3'}]),
+    ('oos-hi-tomorrow-ctx', 'hi', 'कल मौसम कैसा रहेगा?', {'oos': True, 'follow': ['^rut 2:3 ']}, [{'q': 'रूत 2:3 दिखाइए'}]),
+    ('oos-ar-tomorrow-ctx', 'ar', 'كيف الطقس غدا؟', {'oos': True, 'follow': ['^rut 2:3 ']}, [{'q': 'أرني راعوث 2:3'}]),
+    # never over a follow-up of the conversation, nor with something else than weak words ("gracias, ¿y el siguiente?")
     ('in-en-there', 'en', 'What is the weather there?', {'useful': False}, [RUT23]),
     ('in-es-gracias-next', 'es', 'gracias, ¿y el siguiente?', {'ref': 'rut 2:4'}, [RUT23]),
     ('in-en-ephah-ctx', 'en', 'how much is an ephah?', {'useful': False}, [RUT23]),
