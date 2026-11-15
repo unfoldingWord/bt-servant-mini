@@ -34,25 +34,22 @@ R_TERM = 'the term in this language names no article (glossary / pack names)'
 R_BOOKS = 'the whichBooks vocabulary misses this wording'
 R_MEANING = 'the meaning route is not taken for this wording or language'
 R_ISA = 'Isaiah is not in the packs on disk'
-R_CODE = 'follow-up read by code alone: withContext does not cover this kind (needs a reader with the state)'
 # Expected to fail today, by case id: why. Reported apart, never fail the build; flagged when they start passing.
 KNOWN = {
     'obs-3-5-text': R_OBS, 'obs-notes-3-4': R_OBS, 'ta-rhetorical-question': R_OPEN,
     **{i: R_TU for i in ['advice-rut-1-13-hand-of-yahweh', 'advice-jon-2-10-vomited-nonote', 'advice-tit-3-5-lavamiento',
                          'advice-rut-1-14-alzaron-voces', 'advice-tit-1-12-malas-bestias', 'evl-id-04', 'evl-hi-04', 'evl-hi-27',
                          'evl-hi-28', 'evl-fr-04', 'evl-fr-10', 'evl-fr-27', 'evl-fr-28', 'evl-ar-04']},
-    **{i: R_HI for i in ['evl-hi-05', 'evl-hi-07', 'evl-hi-14', 'evl-hi-15', 'evl-hi-17', 'evl-hi-22', 'fu-hi-what', 'fu-hi-count_ch']},
+    **{i: R_HI for i in ['evl-hi-05', 'evl-hi-07', 'evl-hi-14', 'evl-hi-15', 'evl-hi-17', 'evl-hi-22', 'fu-hi-what', 'fu-hi-count_ch',
+                         'fu-hi-what-code', 'fu-hi-count_ch-code', 'fu-hi-new_passage-code']},
     **{i: R_OPEN for i in ['evl-hi-26', 'evl-ar-26']},
     **{i: R_TERM for i in ['evl-hi-21', 'evl-ar-19', 'evl-ar-20', 'evl-ar-21', 'new-id-unknown', 'new-ar-unknown', 'fu-hi-new_topic',
                            'fu-ar-new_topic', 'fu-hi-new_topic-code', 'fu-ar-new_topic-code']},
     'new-en-unknown': 'the howTranslate vocabulary has no "render"',
     'new-fr-unknown': '"olivier" names no article, and there is no fr pack: "no pack" answer',
     **{i: R_BOOKS for i in ['new-es-books', 'new-id-books']},
-    **{i: R_MEANING for i in ['new-hi-meaning', 'new-ar-meaning', 'quechua-05']},
+    **{i: R_MEANING for i in ['new-ar-meaning', 'quechua-05']},
     **{i: R_ISA for i in ['fu-en-term_book', 'fu-es-term_book', 'fu-fr-term_book', 'fu-id-term_book', 'fu-hi-term_book']},
-    **{f'fu-{l}-{k}-code': R_CODE for l in ['en', 'es', 'fr', 'id', 'hi', 'ar'] for k in ['next', 'term_here', 'count_ch']},
-    **{f'fu-{l}-what-code': R_CODE for l in ['id', 'hi', 'ar']},
-    'fu-ar-verse-code': 'refInText reads العدد ("the verse") as the book of Numbers',
     'quechua-16': 'a question in Quechua: should answer in the app language and suggest asking in Spanish',
     'quechua-16-code': 'a question in Quechua: should answer in the app language and suggest asking in Spanish',
     'quechua-05-code': R_MEANING,
@@ -166,6 +163,108 @@ def followup(code_only):
                     'before': [{'q': r['prev_q'], 'slots': prev}], 'q': r['q'], 'slots': None if code_only else slots, 'expect': e,
                     'from': 'fase0/data/eval-followup.jsonl' + (' (turn 2 read by code alone, no reader)' if code_only else '')})
     return out
+
+
+# More follow-ups read by code alone (Nov 15): the kinds the 48 do not have, and new topics that must not take the state.
+# Each: kind -> the first turn (a kind of eval-followup.jsonl whose first turn it reuses, or a question with its slots), the
+# second question per language, and what the answer must be.
+FU_MORE = {
+    'prev': ('what', {'en': 'And the previous verse?', 'es': '¿Y el versículo anterior?', 'fr': 'Et le verset précédent ?', 'id': 'Dan ayat sebelumnya?',
+                      'hi': 'और पिछला पद?', 'ar': 'والعدد السابق؟'}, {'route': ['passage'], 'ref': 'rut 2:2'}),
+    # the verse after the last of a chapter is the first of the next one (as the answer found it)
+    'next_ch': ({'en': 'Show me Ruth 1:22', 'es': 'Muéstrame Rut 1:22', 'fr': 'Montre-moi Ruth 1:22', 'id': 'Tunjukkan Rut 1:22', 'hi': 'रूत 1:22 दिखाइए',
+                 'ar': 'اعرض راعوث 1:22'}, {'en': 'And the next verse?', 'es': '¿Y el siguiente versículo?', 'fr': 'Et le verset suivant ?',
+                 'id': 'Dan ayat berikutnya?', 'hi': 'और अगला पद?', 'ar': 'والعدد التالي؟'}, {'route': ['passage'], 'ref': 'rut 2:1'}),
+    'whole': ('what', {'en': 'Show me the whole chapter', 'es': 'Muéstrame todo el capítulo', 'fr': 'Montre-moi tout le chapitre', 'id': 'Tunjukkan seluruh pasal',
+                       'hi': 'पूरा अध्याय दिखाइए', 'ar': 'اعرض الأصحاح كله'}, {'route': ['passage'], 'ref': 'rut 2'}),
+    'terms': ('what', {'en': 'And the key words?', 'es': '¿Y las palabras clave?', 'fr': 'Et les mots clés ?', 'id': 'Dan kata kuncinya?',
+                       'hi': 'और मुख्य शब्द?', 'ar': 'والكلمات الرئيسية؟'}, {'route': ['passage'], 'ref': 'rut 2:3'}),
+    'count_here': ('term_book', {'en': 'How many times does it appear in this chapter?', 'es': '¿Cuántas veces aparece en este capítulo?',
+                                 'fr': 'Combien de fois apparaît-il dans ce chapitre ?', 'id': 'Berapa kali muncul di pasal ini?',
+                                 'hi': 'इस अध्याय में यह कितनी बार आता है?', 'ar': 'كم مرة يرد في هذا الأصحاح؟'}, {'route': 'count', 'ref': 'rut 3'}),
+    'translate': ('what', {'en': 'How do I translate this?', 'es': '¿Cómo traduzco esto?', 'fr': 'Comment traduire ceci ?', 'id': 'Bagaimana menerjemahkan ini?',
+                           'hi': 'इसका अनुवाद कैसे करूँ?', 'ar': 'كيف أترجم هذا؟'}, {'route': ['passage'], 'ref': 'rut 2:3'}),
+    # new topics: another passage, a word with no "here", a count over the whole Bible
+    'new_passage': ('what', {'en': 'Jonah 1:3 notes', 'es': 'Jonás 1:3 notas', 'fr': 'Jonas 1:3 notes', 'id': 'Yunus 1:3 catatan', 'hi': 'योना 1:3 नोट्स',
+                             'ar': 'يونان 1:3 ملاحظات'}, {'route': ['passage'], 'ref': 'jon 1:3'}),
+    'new_word': ('what', {'en': 'What does lamb mean?', 'es': '¿Qué significa cordero?', 'fr': 'Que veut dire agneau ?', 'id': 'Apa arti anak domba?',
+                          'hi': 'मेम्ना का क्या अर्थ है?', 'ar': 'ما معنى الحمل؟'}, {'route': ['article', 'choose', 'search', 'translate-unknown'], 'notRef': 'rut 2:3', 'useful': False}),
+    # "who is speaking here?" names no article: the passage with its notes, not a meaning nor its key terms alone (in English;
+    # the other languages' "who is" words are not those of `meaning`, so the question stays a free search, as before)
+    'who_here': ('what', {'en': 'Who is speaking here?', 'es': '¿Quién habla aquí?', 'fr': 'Qui parle ici ?', 'id': 'Siapa yang berbicara di sini?',
+                          'hi': 'यहाँ कौन बोल रहा है?', 'ar': 'من يتكلم هنا؟'}, {'route': ['passage', 'search', 'nopack'], 'notConcept': '^tw:', 'useful': False}),
+    # Numbers named as a book in Arabic ("سفر العدد"): a new passage, not verse 5 of Ruth
+    'new_numbers': ('what', {'ar': 'سفر العدد 5'}, {'route': ['passage'], 'ref': 'num 5', 'useful': False}),
+    'new_count': ('term_book', {'en': 'How many times does grace appear in the Bible?', 'es': '¿Cuántas veces aparece gracia en la Biblia?',
+                                'fr': 'Combien de fois grâce apparaît-elle dans la Bible ?', 'id': 'Berapa kali kasih karunia muncul di Alkitab?',
+                                'hi': 'बाइबल में अनुग्रह कितनी बार आता है?', 'ar': 'كم مرة ترد النعمة في الكتاب المقدس؟'}, {'notRef': 'rut 3', 'useful': False}),
+}
+
+
+def followup_more():
+    first = {}
+    for r in jl(DATA / 'eval-followup.jsonl'):
+        first[(r['kind'], r['lang'])] = {'q': r['prev_q'], 'slots': dict(r['prev'])}
+    out = []
+    for kind, (before, qs, e) in FU_MORE.items():
+        for lang, q in qs.items():
+            b = first[(before, lang)] if isinstance(before, str) else {'q': before[lang], 'slots': None}
+            out.append({'id': f'fu-{lang}-{kind}-code', 'set': 'followup-more', 'lang': lang, 'before': [b], 'q': q, 'slots': None, 'expect': e,
+                        'from': 'follow-ups read by code (Nov 15): kinds the 48 lack, and new topics'})
+    # the review of Nov 15: each question with what a correct reader gives (-read: code must not override it) and with none (-code)
+    for i, lang, first_q, first_ref, q, read, e_read, e_code in FU_REVIEW:
+        bk, ch, v = first_ref
+        b = {'q': first_q, 'slots': {'intent': 'passage', 'book': bk, 'chapter': ch, 'verse_start': v, 'what': ['text'], 'lang': lang}}
+        for mode, slots, e in [('read', read, e_read), ('code', None, e_code if e_code is not None else e_read)]:
+            out.append({'id': f'fu-{lang}-{i}-{mode}', 'set': 'followup-more', 'lang': lang, 'before': [b], 'q': q, 'slots': slots, 'expect': e,
+                        'from': 'review of ms/followups, round 1 (Nov 15): ' + ('a correct reader' if mode == 'read' else 'no reader')})
+    return out
+
+
+def P(lang, book, ch, v=None, v2=None, what=('text',)):
+    return {'intent': 'passage', 'book': book, 'chapter': ch, 'verse_start': v, 'verse_end': v2, 'what': list(what), 'lang': lang}
+
+
+RUT23 = ('rut', 2, 3)
+def UNK(lang):
+    return {'intent': 'unknown', 'lang': lang}
+def EDGE(rx):
+    return {'route': 'edge', 'ref': None, 'useful': False, 'has': [rx]}
+def NOT_HERE(ref):
+    return {'route': ['article', 'choose', 'search', 'translate-unknown', 'books', 'intro'], 'notRef': ref, 'useful': False}
+# id, lang, first question, its passage, the follow-up, a correct reader's slots, what the answer must be (with them; without, if different)
+FU_REVIEW = [
+    ('range', 'en', 'Show me Ruth 2:3', RUT23, 'and verses 3-5?', P('en', 'rut', 2, 3, 5), {'route': ['passage'], 'ref': 'rut 2:3-5'}, None),
+    ('chv_range', 'en', 'Show me Ruth 2:3', RUT23, 'and 1:3-5?', P('en', 'rut', 1, 3, 5), {'route': ['passage'], 'ref': 'rut 1:3-5'}, None),
+    ('ch_verse', 'en', 'Show me Ruth 2:3', RUT23, 'and chapter 3 verse 5?', P('en', 'rut', 3, 5), {'route': ['passage'], 'ref': 'rut 3:5'}, None),
+    ('next_n', 'en', 'Show me Ruth 2:3', RUT23, 'show me the next 3 verses', P('en', 'rut', 2, 4, 6), {'route': ['passage'], 'ref': 'rut 2:4-6'}, None),
+    ('next_book', 'en', 'Show me Ruth 2:3', RUT23, 'and the next book?', P('en', '1sa', 1, what=('intro',)), {'route': ['intro'], 'ref': '1sa 1:intro'}, NOT_HERE('rut 2:4')),
+    ('verses_n', 'en', 'Show me Ruth 2:3', RUT23, 'How many verses are in this chapter?', UNK('en'), {'route': 'count', 'ref': 'rut 2', 'has': ['\\b23 verses']}, None),
+    ('chapters_n', 'en', 'Show me Ruth 2:3', RUT23, 'How many chapters are there?', UNK('en'), {'route': 'count', 'has': ['\\b4 chapters']}, None),
+    ('books_n', 'en', 'Show me Ruth 2:3', RUT23, 'How many books are there in the Bible?', UNK('en'), NOT_HERE('rut 2'), None),
+    ('famine', 'en', 'Show me Ruth 1:1', ('rut', 1, 1), 'What does it mean that there was a famine?', {'intent': 'article', 'term': 'famine', 'lang': 'en'},
+     {'route': ['article'], 'concept': 'tw:other/famine'}, NOT_HERE('rut 1:1')),
+    ('famine', 'es', 'Muéstrame Rut 1:1', ('rut', 1, 1), '¿Qué significa que allí había hambre?', {'intent': 'article', 'term': 'hambre', 'lang': 'es'},
+     # "hambre" names no Spanish article: a free search, which finds Ruth 1:1 by its words (not by the state); never the meaning route
+     {'route': ['article', 'search'], 'useful': False}, None),
+    ('next_book', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y el siguiente libro?', UNK('es'), NOT_HERE('rut 2:4'), None),
+    ('range', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y los versículos 3 al 5?', P('es', 'rut', 2, 3, 5), {'route': ['passage'], 'ref': 'rut 2:3-5'}, None),
+    ('ch_verse', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y el capítulo 3 versículo 5?', P('es', 'rut', 3, 5), {'route': ['passage'], 'ref': 'rut 3:5'}, None),
+    ('new_ref', 'es', 'Muéstrame Rut 2:3', RUT23, '¿Y Juan 3:16?', P('es', 'jhn', 3, 16), {'route': ['passage'], 'ref': 'jhn 3:16'}, None),
+    ('range', 'fr', 'Montre-moi Ruth 2:3', RUT23, 'et les versets 3 à 5 ?', P('fr', 'rut', 2, 3, 5), {'route': ['passage'], 'ref': 'rut 2:3-5'}, None),
+    # Arabic: "العدد" is "the verse" and the book of Numbers: a reader that says Numbers wins; with no reader, a bare
+    # "العدد 5" right after a passage is its verse 5
+    ('numbers', 'ar', 'اعرض راعوث 2:3', RUT23, 'العدد 5', P('ar', 'num', 5), {'route': ['passage'], 'ref': 'num 5'}, {'route': ['passage'], 'ref': 'rut 2:5'}),
+    ('notes_es', 'en', 'Show me Ruth 2:3', RUT23, 'and the notes in Spanish?', P('es', 'rut', 2, 3, what=('notes',)), {'route': ['passage'], 'ref': 'rut 2:3', 'has': ['[Nn]ota']}, None),
+    # past the book's ends: it says so, in the question's language
+    ('end_verse', 'en', 'Show me Ruth 4:22', ('rut', 4, 22), 'and the next verse?', UNK('en'), EDGE('last verse of Ruth'), None),
+    ('end_chapter', 'en', 'Show me Ruth 4:22', ('rut', 4, 22), 'and the next chapter?', UNK('en'), EDGE('4 chapters'), None),
+    ('first_verse', 'en', 'Show me Ruth 1:1', ('rut', 1, 1), 'and the previous verse?', UNK('en'), EDGE('first verse of Ruth'), None),
+    ('prev_ch_end', 'en', 'Show me Ruth 2:1', ('rut', 2, 1), 'and the previous verse?', UNK('en'), {'route': ['passage'], 'ref': 'rut 1:22'}, None),
+    ('verse_50', 'en', 'Show me Ruth 2:3', RUT23, 'what about verse 50?', UNK('en'), EDGE('23 verses'), None),
+    ('chapter_9', 'es', 'Muéstrame Rut 2:3', RUT23, '¿y el capítulo 9?', UNK('es'), EDGE('4 capítulos'), None),
+    ('end_verse', 'ar', 'اعرض راعوث 4:22', ('rut', 4, 22), 'والآية التالية؟', UNK('ar'), EDGE('الأخيرة'), None),
+]
 
 
 # The user reports (Nov 13-14) and what the answer should be. slots None: code alone reads the question.
@@ -344,7 +443,7 @@ def findall():
 
 def main():
     OUT.mkdir(exist_ok=True)
-    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True), 'reports': reports(), 'quechua': quechua(), 'academy': academy(), 'findall': findall()}
+    sets = {'q36': q36(), 'langs': langs(), 'new18': new18(), 'followup': followup(False) + followup(True) + followup_more(),'reports': reports(), 'quechua': quechua(), 'academy': academy(), 'findall': findall()}
     for name, rows in sets.items():
         for r in rows:
             if r['id'] in KNOWN:
