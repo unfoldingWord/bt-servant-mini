@@ -29,8 +29,7 @@ test('nothing to share', () => {
   expect(shareText({ who: 'bot', info: 'x', limits: true }, 'en')).toBeNull()
 })
 test('a bold note heading is not the source', () => {
-  expect(referenceOf({ who: 'bot', info: '### Notes
-**YHWH**: the name of God', meta }, 'ar')).toBe('راعوث 2:3')
+  expect(referenceOf({ who: 'bot', info: '### Notes\n**YHWH**: the name of God', meta }, 'ar')).toBe('راعوث 2:3')
 })
 test('Hindi and Arabic full stops end a sentence', () => {
   const hi = 'यह एक वाक्य है। '.repeat(100)
