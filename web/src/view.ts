@@ -105,7 +105,8 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     termsN: s.heads.termsN ?? `${ui.terms} ({n})`, questionsN: s.heads.questionsN ?? `${s.heads.questions} ({n})`,
   }
   const asked = s.focus?.length ? s.focus.join(' ') : question
-  const stems = focusWords(asked)
+  // the study's words were chosen already (focus.ts): they count as they are; else the question's
+  const stems = s.focus?.length ? focusWords(null, s.focus) : focusWords(question)
   const order = focusOrder(s.notes.map((n) => ({ quote: n.quotes ?? n.said, titles: n.about ?? '' })), stems)
 
   const texts = [...s.texts].sort((a, b) => ORDER(a.label) - ORDER(b.label))

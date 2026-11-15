@@ -32,8 +32,8 @@ const STOP = new Set(words(
   'mean means meaning meant say says said tell tells telling explain explains explaining word words term terms phrase verse verses ' +
   'chapter bible book passage note notes translation translate translating question questions text help helps key show shows give ' +
   'please here it its one ones other others something someone like understand understanding language people our comprehension ' +
-  'ult ust glt gst bsb happen happens happened happening going need needs want wants summarize summarise summary read let know ' +
-  'find look see teach describe ' +
+  'ult ust glt gst bsb happen happens happened happening going need needs want wants summarize summarise summary let ' +
+  'not any all use get put way also has had have very much many more most some ' +
   // es
   'el la los las un una unos unas de del en y o u que qué quien quién quienes donde dónde cuando como cómo cual cuál es son fue era eran ' +
   'se su sus mi mis tu tus lo le les al por para con sin sobre hay dice dicen decir quiere significa significado puede ser esto eso ' +
@@ -41,12 +41,12 @@ const STOP = new Set(words(
   'pregunta preguntas texto ayuda ayudas idioma pueblo nuestro nuestra explica explicame explícame explique expliquen explicar ' +
   'comprension comprensión pasa pasó paso sucede sucedió ocurre ocurrió necesito necesita quiero entender entiendo comprender ' +
   'resume resumen resumir resúmeme muestra muéstrame muestrame muestre enseña enséñame dime digame dígame cuenta cuéntame leer lee ' +
-  'ayúdame ayudame dame ' +
+  'ayúdame ayudame dame muy más mas también tambien todo todos ' +
   // fr
   'le la les un une des de du d l et ou qui quoi où quand comment est sont était sa son ses mon ma mes dans sur pour par avec ' +
   'veut dire signifie mot mots verset versets chapitre livre traduire traduction note notes quel quelle quels quelles ce cette ' +
   'passe arrive besoin comprendre résume résumer résumez explique expliquez expliquer montre montrez dis dites moi donne donnez ' +
-  'aide aidez lis lisez ' +
+  'aide aidez lis lisez aux ont été tout tous très plus ' +
   // id
   'yang di ke dari dan atau apa siapa mana kapan bagaimana adalah itu ini ada dalam pada untuk dengan tentang ayat pasal kitab ' +
   'arti maksud kata catatan terjemahan menerjemahkan alkitab terjadi perlu butuh mengerti memahami ringkas ringkasan jelaskan ' +
@@ -70,19 +70,28 @@ export const stem = (w: string): string => {
 }
 
 /** The stems of the words a question is about, with how it asks and the passage it names left out. */
-export function focusWords(...texts: (string | null | undefined)[]): string[] {
+export function focusWords(question: string | null | undefined, exact: (string | null | undefined)[] = []): string[] {
   const out: string[] = []
-  for (const t of texts) {
-    if (!t) continue
-    for (const w of words(t.replace(PHRASES, ' '))) {
-      if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w)) continue
-      if (w.length < (/[\x00-\x7f]/.test(w) ? 4 : 3)) continue
-      const s = stem(w)
-      if (!out.includes(s)) out.push(s)
-    }
+  const add = (w: string) => {
+    const s = stem(w)
+    if (!out.includes(s)) out.push(s)
+  }
+  // what names the word exactly is never left out as a way of asking: the sheet's term and phrase, and what the question
+  // quotes ("What does «see» mean in John 1:39?")
+  for (const t of [...exact, ...quoted(question ?? '')]) for (const w of words(t ?? '')) if (!/^\d+$/.test(w) && w.length >= 2) add(w)
+  for (const w of words((question ?? '').replace(PHRASES, ' '))) {
+    if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w)) continue
+    if (w.length < 3) continue
+    add(w)
   }
   return out
 }
+/** What a question quotes: «…», "…", “…”. */
+const quoted = (q: string): string[] => [...q.matchAll(/«([^»]{1,80})»|"([^"]{1,80})"|“([^”]{1,80})”/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? '')
+
+/** An answer without its fold buttons and fold ends: for plain text (sharing, the online AI's context). */
+export const unfold = (md: string): string =>
+  md.split('\n').filter((l) => !l.startsWith(FOLD) && l.trim() !== FOLD_END).join('\n').replace(/\n{3,}/g, '\n\n')
 
 /** The question's own words for some stems ("redeemer", not "redee"), as written, to name what the first notes are about. */
 export function wordsOf(stems: string[], ...texts: (string | null | undefined)[]): string[] {

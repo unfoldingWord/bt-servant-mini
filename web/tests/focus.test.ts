@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { focusOrder, focusWords, FOLD, FOLD_END, hits } from '../src/focus'
+import { focusOrder, focusWords, FOLD, FOLD_END, hits, unfold } from '../src/focus'
 import { plainText } from '../src/share'
 import { md } from '../src/md'
 import { setQuestion, type Study } from '../src/answer'
@@ -38,6 +38,13 @@ describe('the words a question is about', () => {
       expect(focusWords(q), q).toEqual([])
     // "favor" said by itself is a word of the passage
     expect(focusWords('Ruth 2: why did Boaz show favor to Ruth?')).toContain('favor')
+  })
+  test('the word asked about counts even when it is a common one: the term, the phrase, a quoted word', () => {
+    expect(focusWords('What does know mean in Genesis 4:1?')).toEqual(['know'])
+    expect(focusWords('What does «see» mean in John 1:39?')).toEqual(['see'])
+    // the sheet's term and phrase are never a way of asking, whatever they are
+    expect(focusWords('Ruth 4 notes, please', ['show'])).toEqual(['show'])
+    expect(focusWords('¿Qué dice Rut 2?', [null, 'por favor'])).toEqual(['por', 'favor'])
   })
   test('Arabic words match with or without their vowel signs, alef wasla and alef maqsura', () => {
     expect(hits('ٱلرَّبُّ إِلَٰهُ إِسْرَائِيلَ', focusWords('الرب'))).toEqual(focusWords('الرب'))
@@ -88,6 +95,24 @@ after`)
     expect(html).toMatch(/<\/ol><\/details><p><em>Source: x v1\.<\/em><\/p><p>after<\/p>$/)
     expect(html).not.toContain(FOLD_END)
     expect(html.indexOf('first')).toBeLessThan(html.indexOf('<details'))
+  })
+  test('"no questions" is said before the folds, not inside the key terms button', async () => {
+    const o = await runCase(ask('m-noq', 'en', 'Ruth 2:3', { intent: 'passage', book: 'Ruth', chapter: 2, verse_start: 3, lang: 'en' } as any))
+    const info = String((o.reply as any).info)
+    const none = info.indexOf('No comprehension questions')
+    expect(none).toBeGreaterThan(0)
+    expect(none).toBeLessThan(info.indexOf(FOLD))
+  }, 120_000)
+  test('the online AI gets the answer without fold markers', () => {
+    expect(unfold(`a
+
+${FOLD}More notes (2)
+
+1. b
+
+${FOLD_END}
+
+*Source*`)).toBe('a\n\n1. b\n\n*Source*')
   })
   test('a shared answer has no fold buttons or markers', () => {
     const text = plainText(`## Ruth 4

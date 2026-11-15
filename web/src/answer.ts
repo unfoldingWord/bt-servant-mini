@@ -63,7 +63,12 @@ export function setUiLang(l: string | null) { UI = l && templates[l] ? l : null 
  * (focus.ts). Without it, only the sheet's own term or phrase can say what the question is about.
  */
 let QUESTION: string | null = null
-export function setQuestion(q: string | null | undefined) { QUESTION = q?.trim() || null }
+/** The words the reader took from the question as its term or phrase: they count whatever they are ("know", "see"). */
+let NAMED: (string | null | undefined)[] = []
+export function setQuestion(q: string | null | undefined, sheet?: { term?: string | null; phrase?: string | null } | null) {
+  QUESTION = q?.trim() || null
+  NAMED = sheet ? [sheet.term, sheet.phrase] : []
+}
 function tpl(lang: string): Record<string, string> {
   return templates[UI ?? (lang.startsWith('es') ? 'es' : 'en')]!
 }
@@ -334,7 +339,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   // the notes, and which of them are about the words of the question
   const notes = wantNotes ? rowsIn(model.notes).filter((x) => clean(x.cols.note)) : []
   facts.notes = notes.length
-  const stems = focusWords(s.term, s.phrase, QUESTION)
+  const stems = focusWords(QUESTION, [s.term, s.phrase, ...NAMED])
   const focus = stems.length && notes.length > 1
     ? focusOrder(await Promise.all(notes.map(async (n) => ({
       quote: quoteIn(al, n.quote).map((q) => q.text).join(' '),
@@ -364,7 +369,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const rest = focus.rest
   if (focus.first.length) {
     // the question names a word: its notes, then the verses they are in; the other notes behind a button
-    const words = wordsOf(focus.used, s.term, s.phrase, QUESTION).map((w) => `«${w}»`).join(', ')
+    const words = wordsOf(focus.used, s.term, s.phrase, ...NAMED, QUESTION).map((w) => `«${w}»`).join(', ')
     out.push('### ' + say(lang, 'focus_head', { words, book, ref: lab, n: focus.first.length, all: notes.length }))
     for (const i of focus.first) out.push(await noteLine(i, long))
     if (long) {
@@ -376,6 +381,8 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     if (wantText && !intros && !cited.size) out.push(say(lang, 'text_none', { label: (s.version ?? '').toUpperCase(), ref: `${book} ${lab}`.trim() }))
   }
   if (wantNotes && !notes.length) out.push(say(lang, 'notes_none', { book, ref: lab }))
+  // "no questions" is said before the folds, not inside the last one
+  if (wantQs && !qs.length) out.push(say(lang, 'questions_none', { book, ref: lab }))
   if (!long) {
     if (notes.length && !focus.first.length) {
       // a verse's notes: all of them when they are few, else the first ones and a button for the others
@@ -407,9 +414,8 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     if (only) out.push('### ' + say(lang, 'terms_head', { book, ref: lab }), ...(termLines.length ? termLines : ['-']))
     else if (termLines.length) out.push(FOLD + say(lang, 'terms_fold', { n: termLines.length }), ...termLines)
   }
-  if (wantQs) {
-    if (!qs.length) out.push(say(lang, 'questions_none', { book, ref: lab }))
-    else if (only) out.push('### ' + say(lang, 'questions_head', { book, ref: lab }), ...qLines)
+  if (wantQs && qs.length) {
+    if (only) out.push('### ' + say(lang, 'questions_head', { book, ref: lab }), ...qLines)
     else out.push(FOLD + say(lang, 'questions_fold', { n: qs.length }), ...qLines)
   }
   // where it comes from, at the top: resource, release and passage (the full source line still ends the answer)
@@ -927,7 +933,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
     source: `${[...new Set(releases)].join(' · ')} — ${book} ${lab}`.trim(),
     long, summary: long ? say(lang, 'chapter_summary', { book, ref: lab, v: nVerses, n: notes.length }) : undefined,
     first: asked.length === 1 ? asked[0] : undefined,
-    focus: wordsOf(focusWords(s.term, s.phrase, QUESTION), s.term, s.phrase, QUESTION),
+    focus: wordsOf(focusWords(QUESTION, [s.term, s.phrase, ...NAMED]), s.term, s.phrase, ...NAMED, QUESTION),
   }
 }
 

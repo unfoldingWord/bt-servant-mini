@@ -18,6 +18,7 @@ import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, tod
 import { answer, type ConvState, directRef, env, guessLang, type Made, NP, questionOf, readQuestion, type Reply, stateLine } from './pipeline'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
 import { shareButton } from './share'
+import { unfold } from './focus'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 
 type UiText = {
@@ -923,7 +924,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
       else if (x.who === 'bot') history.push({ role: 'assistant', text: x.ai?.text ?? x.intro ?? '' })
     }
     // the answer found on the phone first (cut to leave room), then the passage's context
-    const found = `${m.intro ?? ''}\n\n${m.info ?? ''}`
+    // without the fold buttons and ends (focus.ts): the model reads the contents, not "▸ More notes (64)"
+    const found = `${m.intro ?? ''}\n\n${unfold(m.info ?? '')}`
     const helps = onlineCtx ? `${found.length > 5000 ? found.slice(0, 5000) + ' …' : found}\n\n# Context of the passage\n\n${onlineCtx}` : found
     // the article the phone found goes with the helps, so the answer is grounded in it and names it
     const sources = m.ctx && /^(ta|tw):/.test(m.ctx) ? [{ id: m.ctx }] : []
