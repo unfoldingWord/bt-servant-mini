@@ -138,7 +138,9 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
  * (`browse`), or the same question asked again (`again`, after an error).
  */
 export type Browse = { book?: string; manual?: string; lang?: string }
-export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: string }
+/** What "Try again" asks again: the question as the person typed it, or the button's sheet (with its label) */
+export type Again = { q?: string; sheet?: Sheet; label?: string }
+export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: Again }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
 
@@ -152,13 +154,16 @@ const NX: Record<L, { read: string; notesOf: string; termsOf: string; browseBook
   ar: { read: 'اقرأ {ref}', notesOf: 'ملاحظات {ref}', termsOf: 'الكلمات الرئيسية في {ref}', browseBook: 'تصفّح {book}', browseAcademy: 'تصفّح Translation Academy', browse: 'تصفّح الكتاب المقدس والمساعدات', again: 'حاول مرة أخرى', howName: 'كيف أترجم هذا الاسم', howThing: 'كيف أترجمه' },
 }
 export const nextWords = (ui: string) => NX[lang(ui)]
+/** "Introduction to Jonah", in the app's language. */
+export const introLabel = (ui: string, what: string): string => fill(INTRO[lang(ui)].label, { what })
 /** Browse: at a book, at a Translation Academy manual, or where it was left. */
 export function browseStep(ui: string, at: Browse = {}): Followup {
   const n = NX[lang(ui)]
   return { label: at.book ? fill(n.browseBook, { book: bookFor(ui, at.book) }) : at.manual ? n.browseAcademy : n.browse, browse: at }
 }
-/** The same question asked again (an answer that failed). */
-export const againStep = (ui: string, q: string): Followup => ({ label: NX[lang(ui)].again, again: q })
+/** The same question asked again (an answer that failed): none when there is nothing to ask again with. */
+export const againStep = (ui: string, again: Again | undefined): Followup[] =>
+  again?.q || again?.sheet ? [{ label: NX[lang(ui)].again, again }] : []
 
 /**
  * Next steps the person can tap under a passage: they carry a ready call sheet, so they do not go through the model again.

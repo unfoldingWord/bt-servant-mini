@@ -6,7 +6,7 @@ import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { installedLangs, onPacksChanged, updateLangs } from './packs'
-import { againStep, bookLabel, browseStep, type Followup } from './converse'
+import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
 import { has } from './commands'
 import { resetSearch } from './search'
 import { md } from './md'
@@ -335,12 +335,15 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
       if (x.browse) {
         closePanel()
         openExploreAt(x.browse)
-      } else if (x.again !== undefined) {
+      } else if (x.again) {
         if (busy) return
+        // the same question the same way: while the app is open, its own call; after a reload, the button's sheet again, or
+        // the text the person typed (never a button's label as if typed)
         const again = retries.get(m)
         if (again) again()
-        else {
-          input.value = x.again
+        else if (x.again.sheet) runSheet(x.again.label ?? x.label, x.again.sheet, m.ui ?? nav)
+        else if (x.again.q) {
+          input.value = x.again.q
           form.requestSubmit()
         }
       } else if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav)
@@ -891,7 +894,8 @@ async function helpAnswer(q: string, ui: string): Promise<Msg> {
 (help: what you can ask)` }
 }
 
-async function respond(c: Conv, label: string, make: () => Promise<Made>) {
+/** `again`: what "Try again" asks again (the typed question, or a button's sheet); none, no "Try again" */
+async function respond(c: Conv, label: string, make: () => Promise<Made>, again?: Again) {
   busy = true
   btn.disabled = true
   const mine: Msg = { who: 'me', text: label }
@@ -924,7 +928,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
     if (r.sheet && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(r.sheet).catch(() => '')
   } catch (err: any) {
     // an error: the same question again, or Browse (no dead end)
-    m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}`, ui: nav, follow: [againStep(nav, label), browseStep(nav)] }
+    m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}`, ui: nav, follow: [...againStep(nav, again), browseStep(nav)] }
     if (!err?.done) answered = 'failed'
   }
   count('answers')
@@ -933,7 +937,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
   if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
   if (!m.packs && !m.waiting && (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length))) m.limits = true
   count('secs', Math.round((performance.now() - t0) / 1000))
-  retries.set(m, () => respond(conv(), label, make))
+  retries.set(m, () => respond(conv(), label, make, again))
   c.msgs.push(m)
   c.updated = Date.now()
   save()
@@ -983,7 +987,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
       writing.textContent = onlineProblem === 'signin' ? OT().relogin : onlineProblem === 'limit' ? OT().limit : NT().unreachable
       if (onlineProblem === 'network' && !isOnline()) netNote('off')
       // online AI did not answer: the question again (when there is a connection), or Browse; the phone's answer stands
-      if (onlineProblem === 'network') writing.after(followRow(m, [...(isOnline() ? [againStep(m.ui ?? nav, label)] : []), browseStep(m.ui ?? nav)], 'follow ai-retry'))
+      if (onlineProblem === 'network') writing.after(followRow(m, [...(isOnline() ? againStep(m.ui ?? nav, again) : []), browseStep(m.ui ?? nav)], 'follow ai-retry'))
     } else writing.remove()
   }
 }
@@ -1022,7 +1026,7 @@ setExploreHooks({
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
   if (busy) return
-  respond(conv(), label, async () => ({ sheet: { ...sheet, id: `f${Date.now()}` }, ui, meta: '(follow-up: no model call)' }))
+  respond(conv(), label, async () => ({ sheet: { ...sheet, id: `f${Date.now()}` }, ui, meta: '(follow-up: no model call)' }), { sheet, label })
 }
 
 form.addEventListener('submit', (e) => {
@@ -1051,7 +1055,7 @@ form.addEventListener('submit', (e) => {
     const { slots, raw, ms } = on ? { slots: on.slots, raw: `${st ? `${st}\n` : ''}(read online by ${modelLabel(on.model)})
 ${JSON.stringify(on.slots)}`, ms: on.ms } : await slotsOf(q, local).then((r) => ({ ...r, raw: local ? `${local}\n${r.raw}` : r.raw }))
     return readQuestion(q, { slots, raw, ms }, c, target)
-  })
+  }, { q: q0 })
 })
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
