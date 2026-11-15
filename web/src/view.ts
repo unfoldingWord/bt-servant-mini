@@ -2,6 +2,7 @@
 // and a bottom panel that opens what is tapped (the notes of a word, a note, an article) and follows the links inside it.
 // The panel keeps a stack, so "back" returns to where the reader was; "Open in chat" turns an article into a message.
 import { articleView, helpView, type Study, titleFor } from './answer'
+import { focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { linkTarget } from './links'
 import { md } from './md'
 import { count } from './usage'
@@ -63,7 +64,6 @@ export function fillTitles(root: HTMLElement, lang: string) {
 
 const ORDER = (label: string) => (/^(ULT|GLT)$/.test(label) ? 0 : /^(UST|GST)$/.test(label) ? 1 : 2)
 
-/** The passage in the bubble. */
 export type HelpItem = { kind: 'note' | 'question'; book: string; ch: number; v: number; snippet: string; id: string; lang: string; ref: string }
 /** The notes and questions a free search found, each a row that opens the whole note or question in the panel. */
 export function renderHelps(groups: { head: string; items: HelpItem[] }[]): HTMLElement {
@@ -87,9 +87,28 @@ export function renderHelps(groups: { head: string; items: HelpItem[] }[]): HTML
   return box
 }
 
-export function renderStudy(s: Study): HTMLElement {
+/**
+ * The passage in the bubble, in the order of the Markdown answer (answer.ts): what the question names first. `question`: what
+ * the person asked, when the study itself does not say what it is about (focus.ts finds the notes about its words).
+ */
+export function renderStudy(s: Study, question?: string): HTMLElement {
   const box = el('div', 'info study')
   box.appendChild(el('h3', '', s.head))
+  if (s.source) {
+    const src = box.appendChild(el('p', 'src', s.source))
+    src.dir = 'auto' // Latin resource names in an Arabic bubble keep their order
+  }
+  if (s.summary) box.appendChild(el('p', 'summary', s.summary))
+  const fill = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ''))
+  const heads = {
+    focus: s.heads.focus ?? `${ui.notes}: {words}`, more: s.heads.more ?? `${ui.notes} (+{n})`, verse: s.heads.verse ?? '{ref} · {n}',
+    termsN: s.heads.termsN ?? `${ui.terms} ({n})`, questionsN: s.heads.questionsN ?? `${s.heads.questions} ({n})`,
+  }
+  const asked = s.focus?.length ? s.focus.join(' ') : question
+  // the study's words were chosen already (focus.ts): they count as they are; else the question's
+  const stems = s.focus?.length ? focusWords(null, s.focus) : focusWords(question)
+  const order = focusOrder(s.notes.map((n) => ({ quote: n.quotes ?? n.said, titles: n.about ?? '' })), stems)
+
   const texts = [...s.texts].sort((a, b) => ORDER(a.label) - ORDER(b.label))
   const shown = texts.slice(0, 2)
   const rest = texts.slice(2)
@@ -116,15 +135,16 @@ export function renderStudy(s: Study): HTMLElement {
     wrap.appendChild(p)
     host.appendChild(wrap)
   }
-  for (const t of shown) drawText(t, box)
-  if (rest.length) {
-    const d = el('details', 'more-tx')
-    d.appendChild(el('summary', '', `${ui.texts} (${rest.map((t) => t.label).join(', ')})`))
-    for (const t of rest) drawText(t, d)
-    box.appendChild(d)
+  const drawTexts = () => {
+    for (const t of shown) drawText(t, box)
+    if (rest.length) {
+      const d = el('details', 'more-tx fold')
+      d.appendChild(el('summary', '', `${ui.texts} (${rest.map((t) => t.label).join(', ')})`))
+      for (const t of rest) drawText(t, d)
+      box.appendChild(d)
+    }
   }
-  if (s.terms.length) {
-    box.appendChild(el('h4', '', s.heads.terms))
+  const drawTerms = (host: HTMLElement) => {
     const chips = el('div', 'chips')
     for (const t of s.terms) {
       const b = el('button', 'chip', t.title)
@@ -135,15 +155,30 @@ export function renderStudy(s: Study): HTMLElement {
       }
       chips.appendChild(b)
     }
-    box.appendChild(chips)
+    host.appendChild(chips)
   }
-  if (s.notes.length) {
-    box.appendChild(el('h4', '', s.heads.notes))
+  const terms = () => {
+    if (!s.terms.length) return
+    // a chapter's many key terms behind a button; a verse's few stay in sight
+    if (s.long && s.first !== 'terms') {
+      const d = el('details', 'fold')
+      d.appendChild(el('summary', '', fill(heads.termsN, { n: s.terms.length })))
+      drawTerms(d)
+      box.appendChild(d)
+    } else {
+      box.appendChild(el('h4', '', s.heads.terms))
+      drawTerms(box)
+    }
+  }
+  /** A list of notes (by their index in the study, which the words of the text point to). */
+  const noteList = (idx: number[], host: HTMLElement, withRef: boolean) => {
     const list = el('ol', 'nl')
-    s.notes.forEach((n, i) => {
+    for (const i of idx) {
+      const n = s.notes[i]!
       const li = el('li')
       const b = el('button', 'nrow')
       b.type = 'button'
+      if (withRef) b.appendChild(el('span', 'nref', `${n.ref} `))
       if (n.said) b.appendChild(el('strong', '', `«${n.said}» `))
       b.appendChild(document.createTextNode(first(n.note)))
       b.onclick = () => {
@@ -152,12 +187,66 @@ export function renderStudy(s: Study): HTMLElement {
       }
       li.appendChild(b)
       list.appendChild(li)
-    })
-    box.appendChild(list)
+    }
+    host.appendChild(list)
+  }
+  /** The notes not about the question: per verse for a chapter, else the first few and a button for the others. */
+  const notes = (idx: number[], focused: boolean) => {
+    if (!idx.length) return
+    if (s.long) {
+      const host = focused ? el('details', 'fold') : box
+      if (focused) {
+        host.appendChild(el('summary', '', fill(heads.more, { n: idx.length })))
+        box.appendChild(host)
+      } else box.appendChild(el('h4', '', s.heads.notes))
+      const byRef = new Map<string, number[]>()
+      for (const i of idx) {
+        const v = s.notes[i]!.ref.split('-')[0]!
+        byRef.set(v, [...(byRef.get(v) ?? []), i])
+      }
+      for (const [ref, list] of byRef) {
+        const d = el('details', 'fold verse')
+        d.appendChild(el('summary', '', fill(heads.verse, { ref, n: list.length })))
+        noteList(list, d, false)
+        host.appendChild(d)
+      }
+      return
+    }
+    const few = focused ? 0 : idx.length > SHOWN + 2 ? SHOWN : idx.length
+    if (!focused) box.appendChild(el('h4', '', s.heads.notes))
+    if (few) noteList(idx.slice(0, few), box, false)
+    if (idx.length > few) {
+      const d = el('details', 'fold')
+      d.appendChild(el('summary', '', fill(heads.more, { n: idx.length - few })))
+      noteList(idx.slice(few), d, false)
+      box.appendChild(d)
+    }
+  }
+
+  if (order.first.length) {
+    // the question names a word: its notes first, then the passage, then the rest behind buttons
+    const words = wordsOf(order.used, asked).map((w) => `«${w}»`).join(', ')
+    box.appendChild(el('h4', 'focus', fill(heads.focus, { words, n: order.first.length, all: s.notes.length })))
+    noteList(order.first, box, !!s.long)
+    drawTexts()
+    notes(order.rest, true)
+    terms()
+  } else if (s.first === 'notes') {
+    notes(order.rest, false)
+    drawTexts()
+    terms()
+  } else if (s.first === 'terms') {
+    terms()
+    drawTexts()
+    notes(order.rest, false)
+  } else {
+    drawTexts()
+    terms()
+    notes(order.rest, false)
   }
   if (s.questions.length) {
-    const d = el('details', 'qs')
-    d.appendChild(el('summary', '', `${s.heads.questions} (${s.questions.length})`))
+    const d = el('details', 'qs fold')
+    d.appendChild(el('summary', '', fill(heads.questionsN, { n: s.questions.length })))
     for (const q of s.questions) {
       const p = el('p')
       p.appendChild(el('strong', '', q.q))

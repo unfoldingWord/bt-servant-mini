@@ -56,5 +56,14 @@
   "books_head": "Istilah kunci «{title}» ada dalam {v} ayat di {b} kitab. Per kitab:",
   "books_none": "Saya tidak menemukan ayat yang terkait dengan «{title}».",
   "word_notes": "catatan",
-  "word_links": "tautan istilah kunci"
+  "word_links": "tautan istilah kunci",
+  "chapter_summary": "{book} {ref}: {v} ayat, catatan terjemahan: {n}.",
+  "chapter_verses": "{book} {ref}: {v} ayat.",
+  "focus_head": "Catatan tentang {words} di {book} {ref} ({n} dari {all}):",
+  "more_notes": "Catatan lain ({n})",
+  "verse_fold": "{ref} · catatan: {n}",
+  "terms_fold": "Istilah kunci ({n})",
+  "questions_fold": "Pertanyaan pemahaman ({n})",
+  "article_more": "Selengkapnya tentang «{title}»",
+  "article_suggestions": "Saran penerjemahan"
 }

@@ -2,6 +2,7 @@
 // link. Android and iOS apps have a native share sheet through the bridge (window.Android.share); the browser uses
 // navigator.share, or opens WhatsApp with the text ready. Only the number of shares is counted (usage.ts), never the text.
 import { bookLabel } from './converse'
+import { unfold } from './focus'
 import { slugLabel } from './links'
 import { count } from './usage'
 
@@ -22,8 +23,8 @@ const LABELS: Record<string, { label: string; tip: string }> = {
 
 /** Markdown to the plain words (what WhatsApp would otherwise show as stars and hashes). */
 export function plainText(src: string): string {
-  return src
-    .replace(/\r/g, '')
+  // the folds' buttons and ends (focus.ts) are for the screen: a shared answer has their contents, not "▸ More notes (64)"
+  return unfold(src.replace(/\r/g, ''))
     .replace(/\[\[([^\]\n]+)\]\]/g, (_, h: string) => slugLabel(h))
     .replace(/\[([^\]\n]+)\]\([^)\n]*\)/g, '$1')
     .replace(/^#{1,6}\s*/gm, '')
