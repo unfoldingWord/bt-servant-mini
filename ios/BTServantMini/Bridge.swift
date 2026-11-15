@@ -20,6 +20,7 @@ enum Bridge {
             flavor: () => 'lite',
             version: () => S.version,
             online: () => S.online,
+            share: (text) => post({ op: 'share', text: String(text) }),
             downloadModel: (url, sha, size) => post({ op: 'download', url: String(url), sha: String(sha), size: String(size) }),
             pickModel: () => {},
             exportModel: () => no,

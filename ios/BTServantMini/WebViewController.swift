@@ -79,6 +79,17 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
             }
         case "download":
             Engine.shared.download(url: m["url"] as? String ?? "", sha: m["sha"] as? String ?? "", size: m["size"] as? String ?? "")
+        case "share":
+            // the system share sheet (WhatsApp is in it); on iPad it needs an anchor
+            let text = m["text"] as? String ?? ""
+            guard !text.isEmpty else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, self.presentedViewController == nil else { return }
+                let sheet = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+                sheet.popoverPresentationController?.sourceView = self.view
+                sheet.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.maxY - 1, width: 1, height: 1)
+                self.present(sheet, animated: true)
+            }
         case "selftest":
             SelfTest.record(step: m["step"] as? String ?? "?", data: m["data"] as? String ?? "")
         default:
