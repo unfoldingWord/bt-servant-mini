@@ -32,11 +32,18 @@ describe('buttons under a passage', () => {
     expect(labels.some((l) => l.startsWith('Versículo anterior'))).toBe(true)
     expect(labels.some((l) => l.startsWith('Capítulo completo'))).toBe(true)
   })
-  test('the first verse of a chapter has no "previous verse"', async () => {
-    const c: ConvState = { last: null }
-    const r = await turn(c, { q: 'Show me Ruth 2:1', slots: null }, 'en')
+  test('verse 1: the previous verse is the last of the chapter before; Ruth 1:1 has none', async () => {
+    const r = await turn({ last: null }, { q: 'Show me Ruth 2:1', slots: null }, 'en')
     expect(refs(r.reply.follow ?? [])).not.toContain('rut 2:0')
-    expect((r.reply.follow ?? []).some((x) => x.label.startsWith('Previous verse'))).toBe(false)
+    expect(refs(r.reply.follow ?? [])).toContain('rut 1:22')
+    const r1 = await turn({ last: null }, { q: 'Show me Ruth 1:1', slots: null }, 'en')
+    expect((r1.reply.follow ?? []).some((x) => x.label.startsWith('Previous verse'))).toBe(false)
+  })
+  test('a whole chapter: the next chapter, while the book has one', async () => {
+    const r = await turn({ last: null }, { q: 'Show me Ruth 2', slots: { intent: 'passage', book: 'rut', chapter: 2, what: ['text'], lang: 'en' } }, 'en')
+    expect(refs(r.reply.follow ?? [])).toContain('rut 3')
+    const r4 = await turn({ last: null }, { q: 'Show me Ruth 4', slots: { intent: 'passage', book: 'rut', chapter: 4, what: ['text'], lang: 'en' } }, 'en')
+    expect(refs(r4.reply.follow ?? [])).not.toContain('rut 5')
   })
 })
 
