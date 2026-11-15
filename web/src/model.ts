@@ -1,11 +1,11 @@
 // The offline model: FunctionGemma 270M fine-tuned to write the slots of the call sheet. It runs in llama-server inside the
 // app; the page reaches it through the Android bridge (window.Android), or through http://127.0.0.1:8080 on a desktop.
-// The light build ships no model: it is downloaded from the packs server (stored there as a content-addressed segment, so
-// the server needs no route of its own) or loaded from a file.
+// The light build ships no model: it is downloaded from the packs servers (stored there as a content-addressed segment, so
+// a server needs no route of its own; the first server that has it, the next when one fails) or loaded from a file.
 import prompt from './data/prompt.json'
 import models from './data/models.json'
 import type { Slots } from './sheet'
-import { PACKS_SERVER } from './packs'
+import { packsServers } from './packs'
 import { webComplete, webInit, webLoad, webState } from './webmodel'
 
 // The installable web app (build.py defines __PWA__ for its bundle): the model runs in the browser (webmodel.ts).
@@ -79,6 +79,8 @@ export type ModelState = { state: 'ready' | 'missing' | 'copying' | 'starting' |
 export function modelState(): ModelState {
   if (PWA) return webState()
   if (!window.Android) return { state: 'ready', detail: '' }
+  // the servers are being asked which one has the model: for the page, the download has started
+  if (choosing) return { state: 'downloading', detail: '0' }
   const s = window.Android.status()
   const i = s.indexOf(':')
   return { state: (i < 0 ? s : s.slice(0, i)) as ModelState['state'], detail: i < 0 ? '' : s.slice(i + 1) }
@@ -116,9 +118,48 @@ export function modelOutdated(): boolean {
     return false
   }
 }
+/** Whether the page is asking the servers which one has the model, before the phone's download starts. */
+let choosing = false
+/**
+ * The first packs server that has the model (a HEAD request, `ms` each); the first server when none answers, so the phone's
+ * own download reports the failure. Each server is asked in turn: Mini's own first, the old one after it.
+ */
+export async function modelServer(list: readonly string[] = packsServers(), f: typeof fetch = (i, o) => fetch(i, o), ms = 8000): Promise<string> {
+  for (const base of list) {
+    const c = new AbortController()
+    const t = setTimeout(() => c.abort(), ms)
+    try {
+      const r = await f(base + MODEL.path, { method: 'HEAD', signal: c.signal, cache: 'no-store' })
+      const size = Number(r.headers.get('Content-Length') ?? '')
+      if (r.ok && (!size || size === MODEL.bytes)) return base
+    } catch {
+      /* no answer: the next one */
+    } finally {
+      clearTimeout(t)
+    }
+  }
+  return list[0]!
+}
+/** The addresses of the model, the one to try first at the head. */
+export function modelUrls(first: string, list: readonly string[] = packsServers()): string[] {
+  return [first, ...list.filter((s) => s !== first)].map((s) => s + MODEL.path)
+}
 export function downloadModel() {
   if (PWA) return void webLoad()
-  window.Android?.downloadModel(PACKS_SERVER + MODEL.path, MODEL.sha256, String(MODEL.bytes))
+  const A = window.Android
+  if (!A || choosing) return
+  choosing = true
+  void modelServer()
+    .then((first) => {
+      const urls = modelUrls(first)
+      // the iOS app takes them all (Engine.swift goes to the next address when a download fails); Android takes one, and a
+      // retry asks the servers again (a cut download resumes from any of them: the same bytes)
+      A.downloadModel(IOS ? urls.join(' ') : urls[0]!, MODEL.sha256, String(MODEL.bytes))
+    })
+    .catch(() => {})
+    .finally(() => {
+      choosing = false
+    })
 }
 export function pickModelFile() {
   window.Android?.pickModel(MODEL.sha256)

@@ -167,6 +167,11 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** The file read is not the expected model (its sha256 differs). */
+    private static final class BadModel extends IllegalStateException {
+        BadModel() { super("the file is not the expected model (sha256 differs)"); }
+    }
+
     /** Copies a stream into `target` through a .part file; checks the sha256 when one is given. */
     private void copyInto(InputStream in, long size, File target, String sha) throws Exception {
         File tmp = new File(getFilesDir(), target.getName() + ".part");
@@ -185,7 +190,7 @@ public class MainActivity extends Activity {
         String got = hex(md.digest());
         if (sha != null && !sha.isEmpty() && !got.equalsIgnoreCase(sha)) {
             tmp.delete();
-            throw new IllegalStateException("the file is not the expected model (sha256 differs)");
+            throw new BadModel();
         }
         if (target.exists() && !target.delete()) throw new IllegalStateException("cannot replace the model file");
         if (!tmp.renameTo(target)) throw new IllegalStateException("cannot place the model file");
@@ -270,36 +275,52 @@ public class MainActivity extends Activity {
             detail = "0";
             File part = new File(getFilesDir(), MODEL_FILE + ".download");
             long have = part.exists() ? part.length() : 0;
-            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-            c.setConnectTimeout(15000);
-            c.setReadTimeout(60000);
-            if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
-            int code = c.getResponseCode();
-            if (code != 200 && code != 206) throw new IllegalStateException("download failed: HTTP " + code);
-            boolean append = code == 206;
-            if (!append) have = 0;
-            try (InputStream in = c.getInputStream(); OutputStream out = new FileOutputStream(part, append)) {
-                byte[] buf = new byte[1 << 20];
-                int n;
-                long done = have;
-                while ((n = in.read(buf)) > 0) {
-                    out.write(buf, 0, n);
-                    done += n;
-                    if (size > 0) detail = String.valueOf(100 * done / size);
-                }
-            } finally {
-                c.disconnect();
+            // longer than the model: not a cut download of it (a Range past the end would get 416 on every retry)
+            if (size > 0 && have > size) {
+                part.delete();
+                have = 0;
             }
+            if (size <= 0 || have < size) fetchInto(url, part, have, size);
             state = "importing";
             detail = "";
             stopServer();
-            try (InputStream in = new FileInputStream(part)) { copyInto(in, size, modelFile(), sha); }
+            try (InputStream in = new FileInputStream(part)) {
+                copyInto(in, size, modelFile(), sha);
+            } catch (BadModel e) {
+                // damaged or another file: the next try downloads it from the start, not past its end
+                part.delete();
+                throw e;
+            }
             part.delete();
             startServer(modelFile());
         } catch (Exception e) {
             Log.e(TAG, "download", e);
             state = "error";
-            detail = String.valueOf(e.getMessage()) + " (the download resumes where it stopped)";
+            detail = String.valueOf(e.getMessage()) + (e instanceof BadModel ? "" : " (the download resumes where it stopped)");
+        }
+    }
+
+    /** Appends the rest of the model to `part` (from byte `have`), or writes it whole when the server does not resume. */
+    private void fetchInto(String url, File part, long have, long size) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(60000);
+        if (have > 0) c.setRequestProperty("Range", "bytes=" + have + "-");
+        int code = c.getResponseCode();
+        if (code != 200 && code != 206) throw new IllegalStateException("download failed: HTTP " + code);
+        boolean append = code == 206;
+        if (!append) have = 0;
+        try (InputStream in = c.getInputStream(); OutputStream out = new FileOutputStream(part, append)) {
+            byte[] buf = new byte[1 << 20];
+            int n;
+            long done = have;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+                done += n;
+                if (size > 0) detail = String.valueOf(100 * done / size);
+            }
+        } finally {
+            c.disconnect();
         }
     }
 

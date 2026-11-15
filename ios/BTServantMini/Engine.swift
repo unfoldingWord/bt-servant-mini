@@ -1,5 +1,6 @@
-// The model's file and state, for the page: downloaded once from the packs server (the page gives the address, the SHA-256 and
-// the size, as on Android), checked, kept in Application Support (not in iCloud backups) and loaded at launch.
+// The model's file and state, for the page: downloaded once from the packs servers (the page gives the addresses, separated by
+// spaces and tried in order, the SHA-256 and the size, as on Android), checked, kept in Application Support (not in iCloud
+// backups) and loaded at launch.
 // The state is the Android app's: "missing", "downloading:42", "starting", "ready", "error:…".
 import CryptoKit
 import Foundation
@@ -25,6 +26,8 @@ final class Engine: NSObject, URLSessionDownloadDelegate {
     private let queue = DispatchQueue(label: "org.unfoldingword.btservantmini.llama", qos: .userInitiated)
     private var llama: Llama?
     private var expected: (sha: String, size: Int64)?
+    /// The addresses not tried yet in this download: the next one is tried when one fails.
+    private var next: [URL] = []
     private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
 
     static var modelFile: URL {
@@ -53,11 +56,25 @@ final class Engine: NSObject, URLSessionDownloadDelegate {
 
     // ------------------------------------------------------------------------------------------------------- download
 
+    /// `url`: one address, or several separated by spaces (Mini's packs server first, the old one after it).
     func download(url: String, sha: String, size: String) {
-        guard status == "missing" || status.hasPrefix("error"), let u = URL(string: url) else { return }
+        let urls = url.split(whereSeparator: { $0.isWhitespace }).compactMap { URL(string: String($0)) }
+        guard status == "missing" || status.hasPrefix("error"), let first = urls.first else { return }
         expected = (sha.lowercased(), Int64(size) ?? 0)
+        next = Array(urls.dropFirst())
         set("downloading:0")
-        session.downloadTask(with: u).resume()
+        session.downloadTask(with: first).resume()
+    }
+
+    /// After a failed try: the next address, or the error when none is left. Main queue.
+    private func failed(_ message: String) {
+        if !next.isEmpty {
+            let u = next.removeFirst()
+            set("downloading:0")
+            session.downloadTask(with: u).resume()
+        } else {
+            set("error:\(message)")
+        }
     }
 
     func urlSession(_ s: URLSession, downloadTask: URLSessionDownloadTask, didWriteData _: Int64, totalBytesWritten done: Int64,
@@ -80,15 +97,18 @@ final class Engine: NSObject, URLSessionDownloadDelegate {
             values.isExcludedFromBackup = true
             try? url.setResourceValues(values)
             load()
+            DispatchQueue.main.async { self.next = [] }
         } catch {
-            set("error:\(error.localizedDescription)")
+            let message = error.localizedDescription
+            // a server error, a missing file or damaged bytes from one server: the next server may have it whole
+            DispatchQueue.main.async { self.failed(message) }
         }
     }
 
     func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error else { return }
         DispatchQueue.main.async {
-            if self.status.hasPrefix("downloading") { self.set("error:\(error.localizedDescription)") }
+            if self.status.hasPrefix("downloading") { self.failed(error.localizedDescription) }
         }
     }
 
