@@ -9,6 +9,7 @@ import books from './data/books.json'
 import { installedLangs, openLang } from './packs'
 import { fold } from './sheet'
 import storyWords from './data/story-words.json'
+import { searchIndex } from './textindex'
 
 /** Common story words of a question in English ("mar" -> "sea"), to match the English text when the language's pack lacks the book. */
 const LEX = storyWords as unknown as Record<string, Record<string, string>>
@@ -332,8 +333,7 @@ async function byText(words: string[], packLang: string): Promise<Found[]> {
     const english = pl === 'en' ? toEnglish(words, packLang) : []
     const tries = [...triesOf(words), ...(english.length ? triesOf([...words.filter((w) => !toEnglish([w], packLang).length), ...english]) : [])]
     for (const ws of tries) {
-      const ans = await r.search(ws.join(' '), { kinds: ['text'], limit: 30 })
-      const hits = (ans.data ?? []).filter((h) => /\/(ult|glt|bsb)$/.test(h.res))
+      const hits = (await searchIndex(r, ws.join(' '), { kinds: ['text'], limit: 30 })).filter((h) => /\/(ult|glt|bsb)$/.test(h.res))
       if (!hits.length) continue
       const seen = new Set<string>()
       const out: Found[] = []
@@ -342,7 +342,7 @@ async function byText(words: string[], packLang: string): Promise<Found[]> {
         if (seen.has(key)) continue
         seen.add(key)
         const [ch, v] = parseRef(h.ref)
-        out.push({ book: h.book, ch, v, text: h.snippet, why: `text:${ws.join(' ')}` })
+        out.push({ book: h.book, ch, v, text: (await h.more()).snippet, why: `text:${ws.join(' ')}` })
         if (out.length >= 6) break
       }
       return out
@@ -361,17 +361,17 @@ export async function searchHelps(question: string, packLang: string, limit = 4)
     const english = pl === 'en' ? toEnglish(words, packLang) : []
     const tries = [...triesOf(words), ...(english.length ? triesOf([...words.filter((w) => !toEnglish([w], packLang).length), ...english]) : [])]
     for (const ws of tries) {
-      const ans = await r.search(ws.join(' '), { kinds: ['note', 'question'], limit: 20 })
-      const hits = (ans.data ?? []).filter((h) => /^\d+:\d+/.test(h.ref))
+      const hits = (await searchIndex(r, ws.join(' '), { kinds: ['note', 'question'], limit: 20 })).filter((h) => /^\d+:\d+/.test(h.ref))
       if (!hits.length) continue
-      const out: HelpHit[] = []
+      const out: (HelpHit & { more: (typeof hits)[number]['more'] })[] = []
       for (const h of hits) {
         const [ch, v] = parseRef(h.ref)
         if (out.some((o) => o.book === h.book && o.ch === ch && o.v === v && o.kind === h.kind)) continue
-        out.push({ kind: h.kind === 'question' ? 'question' : 'note', book: h.book, ch, v, snippet: h.snippet, id: h.id ?? '', lang: pl })
+        out.push({ kind: h.kind === 'question' ? 'question' : 'note', book: h.book, ch, v, snippet: '', id: '', lang: pl, more: h.more })
       }
-      // notes first, then questions
-      return out.sort((x, y) => (x.kind === y.kind ? 0 : x.kind === 'note' ? -1 : 1)).slice(0, limit)
+      // notes first, then questions; the snippets of those kept only (each reads its book)
+      const kept = out.sort((x, y) => (x.kind === y.kind ? 0 : x.kind === 'note' ? -1 : 1)).slice(0, limit)
+      return Promise.all(kept.map(async ({ more, ...h }) => { const m = await more(); return { ...h, snippet: m.snippet, id: m.id ?? '' } }))
     }
   }
   return []
