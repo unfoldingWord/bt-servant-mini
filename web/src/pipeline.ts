@@ -6,12 +6,13 @@ import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
-import { addNode, backLabel, backTarget, type GNode, type Graph, newGraph, type NodeSheet, nodeOf, passageAt } from './graph'
+import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
+import guideWords from './data/guide.json'
 
 /**
  * What the page tells the decisions: the app's language (the fallback for a question's), the helps language chosen in the
@@ -544,6 +545,40 @@ export function startBookCode(q: string): string | null {
 /** Whether the question is about starting to translate a book ("voy a empezar a traducir Jonás", "how do I translate the book of Ruth?"). */
 export const startsBook = (q: string): boolean => !!startBookCode(q) || (has('translateBook', q) && !NAME_RE.test(q))
 
+// ------------------------------------------------------------------------------------------------------- light paths
+// "Voy a traducir Rut", "Estoy revisando Jonás 2", "I'm translating Titus 1": the person announces a task on a book. The answer
+// is the book's (or the chapter's) introduction, as before, and a path through it starts (graph.ts Path): each answer on it
+// says where it is and offers the next step first. Proposed, never imposed: anything can be asked any time.
+type Phrases = Record<string, string[]>
+const G_DATA = guideWords as unknown as { offTopic: Phrases; bible: Phrases; translate: Phrases; review: Phrases }
+const anyOf = (p: Phrases) => new RegExp(`(?<![\\p{L}\\p{M}])(?:${Object.values(p).flat().join('|')})(?![\\p{L}\\p{M}])`, 'giu')
+const TASK_TRANSLATE = anyOf(G_DATA.translate)
+const TASK_REVIEW = anyOf(G_DATA.review)
+const PATH_FILLER = new Set('i am we are now the chapter estoy estamos ahora el capitulo je nous suis le chapitre saya kami sedang pasal मैं हम अध्याय أنا نحن الأصحاح'.split(' ').map(fold))
+export type PathStart = { book: string; ch: number | null; task: 'translate' | 'review' }
+/**
+ * The book (and chapter) a person announces working on, only when nothing else is left once the task's words (data/guide.json,
+ * and the start words of `startBookCode`), the book's exact name, a chapter number and a few small words are taken out: "I want
+ * to translate Jonah's prayer" or "Estoy revisando Jonás 2:3, ¿qué significa…?" ask something else.
+ */
+export function pathStart(q: string): PathStart | null {
+  const t0 = latinDigits(q)
+  const test = (re: RegExp) => { re.lastIndex = 0; const a = re.test(t0); re.lastIndex = 0; const b = re.test(fold(t0)); re.lastIndex = 0; return a || b }
+  const review = test(TASK_REVIEW)
+  const sb = new RegExp(START_BOOK.source, 'giu')
+  const tb = new RegExp(pattern('translateBook').source, 'giu')
+  if (!review && !test(TASK_TRANSLATE) && !sb.test(t0) && !sb.test(fold(t0)) && !has('translateBook', q)) return null
+  const out = (s: string) => s.replace(TASK_REVIEW, ' ').replace(TASK_TRANSLATE, ' ').replace(sb, ' ').replace(tb, ' ')
+  const words = out(fold(out(t0))).replace(/[¿?!¡.,;:«»"“”؟،]/g, ' ').split(/\s+/)
+    .filter((w) => w && !START_FILLER.has(w) && !PATH_FILLER.has(w) && !new RegExp(`^${pattern('chapter').source}$`, 'iu').test(w))
+  // a chapter last ("Jonás 2", "Ruth 1:6": its chapter)
+  const num = /^(\d+)(?::\d+(?:-\d+)?)?$/.exec(words[words.length - 1] ?? '')
+  const name = num ? words.slice(0, -1) : words
+  if (!name.length || name.length > 3) return null
+  const book = bookExact(name.join(' '))
+  return book ? { book, ch: num ? +num[1]! : null, task: review ? 'review' : 'translate' } : null
+}
+
 /** "Introduction to Jonah", "Introducción a Jonás 1", "¿De qué trata el libro de Jonás?": the book or chapter asked about. */
 export function introAsked(q: string, lang: string): Slots | null {
   // "Voy a empezar a traducir Jonás" too: the start words and the book's name, nothing else
@@ -620,6 +655,8 @@ export function questionOf(q0: string, c: ConvState): { q: string; target: strin
 export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
   /** going back to this point of the graph (returnTo): the answer is attached to it, no new point */
   at?: string
+  /** the person announced a task on a book ("Voy a traducir Rut", "I'm reviewing Jonah 2"): a path through it starts (pathStart) */
+  path?: PathStart
   /** what code answers by itself, with no sheet to answer: past a book's end, how many verses or chapters */
   note?: { text: string; fromText: boolean } }
 /** The reading step once the slots are known (from the phone's model, the online one, or none): code reads what they missed. */
@@ -666,13 +703,16 @@ ${raw}
     const { sheet, ui } = await buildSheet(`q${Date.now()}`, p, env.helpsLang)
     return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
   }
-  const asked = introAsked(q, s0.lang ?? env.nav)
+  // a task announced on a book ("Estoy revisando Jonás 2"): its introduction, where the path starts
+  const path = pathStart(q) ?? undefined
+  const asked = introAsked(q, s0.lang ?? env.nav) ??
+    (path ? ({ intent: 'passage', book: path.book, chapter: path.ch, verse_start: null, verse_end: null, what: ['intro'] } as Slots) : null)
   let s = asked ? { ...asked, lang: s0.lang ?? env.nav } : withContext(s0, c.last, q)
   // asked in one language, wanted in another: the book by its code, then the other language's pack and words
   if (target) s = { ...s, book: s.book ? bookCode(s.lang ?? env.nav, s.book) ?? s.book : s.book, lang: target }
   keepState(c, s)
   const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : env.helpsLang)
-  return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q }
+  return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q, ...(path ? { path } : {}) }
 }
 
 // What may stand next to a reference that is only a reference ("muéstrame Rut 2:3", "montre-moi Ruth 2:3 s'il te plaît")
@@ -1222,6 +1262,12 @@ export type Reply = {
   sources?: { id: string; title?: string }[]
   /** "← Back to Ruth 2:3": the way back to the passage this point left (graph.ts), on its own row above the next steps */
   back?: Follow
+  /** on a light path: where it is ("Ruth 1:6–18 · step 4 of 5: notes"); when it starts, the line that proposes it */
+  pathMark?: string; pathLine?: string
+  /** off the path: "← Back to the path: Ruth 1:6–18 · notes", on the row of the way back */
+  pathBack?: Follow
+  /** the conversation drifted far from its topic: offer a new conversation for this question (main.ts, while it is the last answer) */
+  drift?: boolean
 }
 /** The answer, what kind it was (for the usage counts), and what tests check: the route-table step that made it, its target, how many sources it shows. */
 export type Answered = {
@@ -1342,6 +1388,70 @@ async function otherSteps(x: Ctx, steps: Follow[]): Promise<Follow[]> {
   return [...steps, ...(await wayForward(sheet, ui, m?.[1] ?? null))]
 }
 
+// ------------------------------------------------------------------------------------------------------- out of scope
+// "What's the weather tomorrow?", "¿Quién ganó el partido?", "Bonjour": nothing Mini helps with. Today such a question searched
+// anyway ("hello" found hell); now one line says what Mini helps with and two or three buttons lead back. Detected
+// conservatively: a word of data/guide.json `offTopic` must be there, and nothing about the Bible or its helps.
+const OFF_TOPIC = anyOf(G_DATA.offTopic)
+const BIBLE_WORDS = anyOf(G_DATA.bible)
+const HELP_WORDS: Command[] = ['intro', 'notes', 'questions', 'terms', 'verse', 'chapter', 'translateBook', 'howTranslate', 'translateThis', 'bookWord']
+const hit = (re: RegExp, q: string) => { re.lastIndex = 0; const a = re.test(q); re.lastIndex = 0; const b = re.test(fold(q)); re.lastIndex = 0; return a || b }
+/** Whether a question says something Mini does not help with (a word of `offTopic`): the gate before {@link aboutBible}. */
+export const offTopic = (q: string): boolean => hit(OFF_TOPIC, q)
+/**
+ * Whether anything in a question is about the Bible or its helps: a reference, a book's name, a help word (notes, verse,
+ * translate…), a word of `bible` (God, church, Scripture…), a key term of the packs named exactly, a Translation Academy title.
+ */
+export async function aboutBible(q: string, ui: string): Promise<boolean> {
+  const t = latinDigits(q)
+  if (/\d+\s*[:.]\s*\d+/.test(t)) return true
+  if (hit(BIBLE_WORDS, q) || HELP_WORDS.some((c) => has(c, q))) return true
+  const words = t.replace(/[¿?!¡.,;:«»"“”؟،()]/g, ' ').split(/\s+/).filter(Boolean)
+  for (let i = 0; i < words.length; i++)
+    for (let k = 3; k >= 1; k--) if (i + k <= words.length && bookExact(words.slice(i, i + k).join(' '))) return true
+  // the rest, once the off-topic words are out: a key term named there ("the weather in Jerusalem"), not one the off-topic words
+  // look like ("hello" is not hell, "gracias" not grace, "terima kasih" not love)
+  const rest = fold(q.replace(OFF_TOPIC, ' ')).replace(OFF_TOPIC, ' ')
+  OFF_TOPIC.lastIndex = 0
+  const kw = keywords(rest)
+  if (kw.length && [...(await articlesNamed(kw).catch(() => new Set<string>()))].some((id) => id.startsWith('tw:'))) return true
+  if (!kw.length) return false
+  const packs: string[] = []
+  for (const l of new Set([packCode(ui), 'en'])) if (await hasLang(l).catch(() => false)) packs.push(l)
+  return !!(await academyFor(rest, packs, ui, true).catch(() => null))
+}
+/**
+ * Out of scope: what Mini helps with in one line, in the question's language, and the ways back: the passage the conversation
+ * is on (back to that point) or an example passage of an installed pack; a key term (of that passage, else an example); a
+ * Translation Academy topic (the one its notes cite, else how translation is done).
+ */
+async function outOfScope(x: Ctx): Promise<Done> {
+  const { ui } = x
+  const g = x.c.graph
+  const at = g?.cur ? passageAt(g, g.cur) : undefined
+  // a pack that is on the phone (a question in French on a phone without French reads the English one)
+  const base: Sheet = (await hasLang(x.sheet.lang).catch(() => false)) ? x.sheet : { ...x.sheet, lang: (await hasLang('en')) ? 'en' : (await installedLangs())[0] ?? 'en' }
+  const follow: Follow[] = []
+  if (at) follow.push({ label: backLabel(ui, placeLabel(at, ui)), sheet: sheetOfNode(at), back: at.id })
+  else {
+    const ex = await exampleBook(base.lang, null).catch(() => null)
+    if (ex) follow.push({ label: nextWords(ui).read.replace('{ref}', `${bookLabel(ui, ex.code)} 1`), sheet: passageSheet(base, `${ex.code} 1`, ['text', 'notes'], ex.lang) })
+  }
+  const links = at?.links ?? []
+  for (const id of [...links.filter((l) => l.startsWith('tw:')), 'tw:kt/grace', 'tw:kt/faith', 'tw:kt/love']) {
+    const f = await twStep(base, id).catch(() => null)
+    if (f) { follow.push({ ...f, label: GD(ui).term.replace('{t}', f.label) }); break }
+  }
+  for (const id of [...links.filter((l) => l.startsWith('ta:')), 'ta:translate/translate-process', 'ta:intro/finding-answers']) {
+    const f = await taStep(base, id, ui).catch(() => null)
+    if (f) { follow.push(f); break }
+  }
+  return {
+    answered: 'outofscope', ref: null, concept: null, found: 0,
+    reply: { intro: GD(ui).scope, follow, ui, meta: `${env.details} · ${secs(x)} s\n${x.meta}\n(out of scope: no help searched)` },
+  }
+}
+
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
   {
@@ -1354,6 +1464,12 @@ export const ROUTES: Route[] = [
       reply: { info: x.note!.text, ui: x.ui, follow: await bookSteps(x.sheet, x.ui).catch(() => []), meta: `${env.details} · ${secs(x)} s
 ${x.meta}` },
     }),
+  },
+  {
+    // a typed question about nothing Mini helps with (the weather, a match, a price, "hello"): what it helps with, and ways back
+    name: 'out-of-scope',
+    when: (x) => x.q !== undefined && !x.at && offTopic(x.q),
+    run: async (x) => ((await aboutBible(x.q!, x.ui)) ? null : outOfScope(x)),
   },
   {
     // "How do I translate idioms?", "What book should I translate first?", "How do I set up a translation team?": the Translation
@@ -1721,7 +1837,7 @@ ${x.meta}` },
 // one before. Under a point that went deeper or branched off, the first button goes back to the passage it came from.
 
 /** Kinds of answer that are no point: past a book's end, a language not on the phone, "which one do you mean?", nothing understood. */
-const NO_POINT = new Set(['edge', 'nopack', 'choose', 'unknown', 'resources'])
+const NO_POINT = new Set(['edge', 'nopack', 'choose', 'unknown', 'resources', 'outofscope'])
 const compact = (s: Sheet, ref: string | null, concept: string | null): NodeSheet =>
   ({ intent: s.intent, ref, concept, what: [...(s.what ?? [])], term: s.term ?? null, lang: s.lang })
 /** A point's sheet as a call sheet again (to re-open it, or as the back button's target). */
@@ -1777,6 +1893,11 @@ async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: str
     // only the sheet's own answer is asked again from the sheet; the others needed the typed question: shown again as they were
     const n = addNode(g, { kind, sheet, links: [...(found ?? []), ...links], found, label: await pointLabel(kind, sheet, x.ui, made.q), copy: step !== 'reply' || undefined })
     id = n.id
+    // far from where the conversation started: offer once to go on in a new conversation (main.ts, under this answer)
+    if (drifts(g, n)) {
+      n.drift = 'offered'
+      reply.drift = true
+    }
   }
   const to = backTarget(g, id)
   if (to) {
@@ -1813,6 +1934,67 @@ export function returnTo(c: ConvState, id: string, ui: string): Made | null {
   return { sheet, ui, meta: '(back to an earlier point: no model call)', at: id }
 }
 
+// ------------------------------------------------------------------------------------------------- the path, per answer
+/** The sections of a book's chapter (none when it has no such chapter or no text on the phone). */
+const secsOf = (p: Path, ch: number | null): Promise<Sec[]> => (ch ? sectionsOf(p.book, ch, p.lang).catch(() => []) : Promise.resolve([]))
+/** A step of the path as a call sheet (the next step's button, the way back to it, the Map's "Continue the path"). */
+export function pathSheet(p: Path, base?: Sheet): Sheet | null {
+  const t = stepTarget(p)
+  if (!t) return null
+  const b: Sheet = base ?? { id: '', intent: 'passage', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: p.lang }
+  return passageSheet(b, t.ref, t.what, p.lang)
+}
+/** "Continue the path: Ruth 1:6–18 · notes", "← Back to the path: …", in the app's language. */
+export const pathLabel = (ui: string, p: Path, kind: 'mark' | 'next' | 'toPath' | 'resume'): string => pathWords(ui, p, bookLabel(ui, p.book), kind)
+
+/**
+ * The light path after an answer (graph.ts Path): a task announced on a book starts one at its introduction; an answer that is
+ * a step of it (by its passage and what it shows) moves it there, says where it is, and offers the next step first; an answer
+ * off it (another book, an article, a search) offers one tap back to where it was. Kept in the conversation's graph.
+ */
+async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<void> {
+  const reply = done.reply
+  const ref = done.ref ?? x.sheet.ref
+  const P = place(ref)
+  const g = (c.graph ??= newGraph())
+  let at: Path | null = null
+  if (made.path && P?.book === made.path.book) {
+    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, v: null }
+    reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book))
+  } else if (g.path) at = stepOf(g.path, ref, x.sheet.what ?? [], await secsOf(g.path, P?.ch ?? null))
+  const p = g.path
+  if (at) {
+    g.path = at
+    reply.pathMark = pathLabel(x.ui, at, 'mark')
+    const ch = at.ch ?? 1
+    const nx = nextStep(at, await secsOf(at, ch), at.step === 5 ? await secsOf(at, ch + 1) : [])
+    const sheet = nx ? pathSheet(nx, x.sheet) : null
+    if (nx && sheet) {
+      // the next step first; a button to the same passage and helps is that step (the first section under an introduction)
+      const same = (f: Follow) => f.sheet?.intent === 'passage' && f.sheet.ref === sheet.ref && f.sheet.what.join() === sheet.what.join()
+      reply.follow = [{ label: pathLabel(x.ui, nx, 'next'), sheet, pathNext: true },...(reply.follow ?? []).filter((f) => !same(f))].slice(0, MAX_FOLLOW)
+    }
+    return
+  }
+  // off the path (another book, an article, a search): one tap back to where it was; not under an answer in the path's book
+  // (near it). When the way back of the graph goes to that very step, it is that button, named as the way back to the path
+  if (!p || P?.book === p.book || done.answered === 'edge' || done.answered === 'nopack') return
+  const t = stepTarget(p)
+  const to = (f: Follow | undefined) => !!f && f.back !== undefined && f.sheet?.ref === t?.ref && f.sheet?.what.join() === t?.what.join()
+  if (t && to(reply.back)) {
+    reply.back = { ...reply.back!, label: pathLabel(x.ui, p, 'toPath'), toPath: true }
+    return
+  }
+  // (out of scope: its way back to the point the conversation is on)
+  const i = t ? (reply.follow ?? []).findIndex(to) : -1
+  if (i >= 0) {
+    reply.follow![i] = { ...reply.follow![i]!, label: pathLabel(x.ui, p, 'toPath'), toPath: true }
+    return
+  }
+  const sheet = pathSheet(p, x.sheet)
+  if (sheet) reply.pathBack = { label: pathLabel(x.ui, p, 'toPath'), sheet, toPath: true }
+}
+
 /** The answer to what a question asks for: the first route that gives one (the conversation keeps the last passage and search results). */
 export async function answer(c: ConvState, made: Made, t0: number): Promise<Answered> {
   setUiLang(made.ui)
@@ -1837,6 +2019,8 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     }
     // the answer's point in the conversation's graph, and under a point that left the passage, the way back to it
     const node = await graphStep(c, made, done, x, route.name).catch(() => null)
+    // on a light path: where it is and its next step first; off it, the way back to it
+    await pathStep(c, made, done, x).catch(() => {})
     return { ...done, route: route.name, sheet: x.r ? x.sheet : null, node }
   }
   throw new Error('no route answered') // `reply` always answers
