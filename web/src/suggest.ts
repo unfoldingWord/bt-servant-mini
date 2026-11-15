@@ -145,21 +145,15 @@ export function fillName(ui: string, code: string): string {
 export const SHAPES_OFF: Record<string, string[]> = { meaning: ['en', 'es', 'hi', 'ar'], howTranslate: ['es', 'hi', 'ar'] }
 type ShapeData = Record<string, { label: Record<string, string>; text: Record<string, string> }>
 const SHAPES = shapes as unknown as ShapeData
-/**
- * Whether a shape is offered in this language (and for this book): a shape with words before the reference ("Notas de {ref}")
- * does not read with a numbered book ("Notas de 1 Juan 3:2": pipeline.ts refInText takes "de 1" for the reference).
- */
-export function shapeOffered(shape: string, ui: string, code?: string): boolean {
-  if (SHAPES_OFF[shape]?.includes(ui)) return false
-  const t = SHAPES[shape]?.text[ui]
-  if (!t) return false
-  return !(code && /^[1-3]/.test(code) && !t.startsWith('{'))
+/** Whether a shape is offered in this language (with a numbered book too since refInText reads "Notas de 1 Juan 3:2"). */
+export function shapeOffered(shape: string, ui: string, _code?: string): boolean {
+  return !SHAPES_OFF[shape]?.includes(ui) && !!SHAPES[shape]?.text[ui]
 }
-/** "Introducción a Rut 2", or "1 Juan 3 Introducción" where the shape does not read (a numbered book). */
+/** "Introducción a Rut 2", in the app's language (English where it has none). */
 export function introText(ui: string, code: string, ch: number | null): string {
   const what = ch ? `${fillName(ui, code)} ${ch}` : fillName(ui, code)
   const l = SHAPES.intro!.text[ui] ? ui : 'en'
-  return shapeOffered('intro', l, code) ? fillT(SHAPES.intro!.text[l]!, { what }) : `${what} ${SHAPES.intro!.label[l]}`
+  return fillT(SHAPES.intro!.text[l]!, { what })
 }
 
 /** The help words a verse may get ("Rut 2:3 notas"), each one read back by code in every language (tests/shapes.test.ts). */

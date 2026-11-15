@@ -609,18 +609,32 @@ export function refInText(slots: Slots, q: string): Slots {
     .replace(new RegExp(`${ch}\\s*(\\d+)\\s+(?:of|de|del|du|dari|का|من)\\s+((?:[123]\\s*)?[\\p{L}][\\p{L}\\p{M}]+)`, 'iu'), '$2 $1')
     .replace(new RegExp(`\\s+${ch}\\s*(\\d+)`, 'iu'), ' $1')
     .replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-  const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/u.exec(t)
-  if (!m) return slots
-  const words = m[1]!.trim().split(/\s+/)
+  // every reference-like match, in order, until one names a book: "Notas de 1 Juan 3:2" first matches "de 1", whose number
+  // starts a numbered book, so the reading starts again at that digit ("1 Juan 3:2"); the word before it ("Catatan") is never
+  // read as a misspelled book (it was Lamentations, "Ratapan")
+  const re = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/gu
+  const lang = slots.lang ?? env.nav
+  let m: RegExpExecArray | null
   let code: string | null = null
   let name = ''
-  for (let k = Math.min(3, words.length); k >= 1 && !code; k--) {
-    name = words.slice(-k).join(' ')
-    code = bookCode(slots.lang ?? env.nav, name)
+  while (!code && (m = re.exec(t))) {
+    if (!m[3] && /^[123]$/.test(m[2]!)) {
+      const after = t.slice(m.index + m[0].length).match(/^\s+([\p{L}][\p{L}\p{M}]*)(?:\s+([\p{L}][\p{L}\p{M}]*))?/u)
+      if (after && (bookExact(`${m[2]} ${after[1]}`) || (after[2] && bookExact(`${m[2]} ${after[1]} ${after[2]}`)))) {
+        re.lastIndex = m.index + m[0].length - m[2]!.length
+        continue
+      }
+    }
+    const words = m[1]!.trim().split(/\s+/)
+    for (let k = Math.min(3, words.length); k >= 1 && !code; k--) {
+      name = words.slice(-k).join(' ')
+      code = bookCode(lang, name)
+    }
+    if (!code) continue
+    const what = kindOf(q) ?? slots.what ?? []
+    return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
   }
-  if (!code) return slots
-  const what = kindOf(q) ?? slots.what ?? []
-  return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
+  return slots
 }
 
 /** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
