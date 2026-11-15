@@ -17,14 +17,27 @@ test('cut at a paragraph when there is one late enough', () => {
   expect(trimAt(s)).toBe('a'.repeat(700) + '…')
 })
 test('reference and source', () => {
-  expect(referenceOf({ who: 'bot', info: '**GLT** texto', meta }, 'es')).toBe('Rut 2:3 (GLT)')
+  expect(referenceOf({ who: 'bot', info: '**GLT** (x, v1): texto', meta }, 'es')).toBe('Rut 2:3 (GLT)')
   expect(referenceOf({ who: 'bot', info: '# Redentor\ntexto' }, 'es')).toBe('Redentor')
 })
 test('the full text: question, answer, reference, link; online answer first', () => {
-  const t = shareText({ who: 'bot', info: '**GLT** offline', ai: { text: 'online answer' }, meta }, 'en', '¿Qué dice?')!
+  const t = shareText({ who: 'bot', info: '**GLT** (x, v1): offline', ai: { text: 'online answer' }, meta }, 'en', '¿Qué dice?')!
   expect(t).toBe(`¿Qué dice?\n\nonline answer\n\nRuth 2:3 (GLT)\n\n${APP_LINK}`)
 })
 test('nothing to share', () => {
   expect(shareText({ who: 'bot', intro: 'hi' }, 'en')).toBeNull()
   expect(shareText({ who: 'bot', info: 'x', limits: true }, 'en')).toBeNull()
+})
+test('a bold note heading is not the source', () => {
+  expect(referenceOf({ who: 'bot', info: '### Notes
+**YHWH**: the name of God', meta }, 'ar')).toBe('راعوث 2:3')
+})
+test('Hindi and Arabic full stops end a sentence', () => {
+  const hi = 'यह एक वाक्य है। '.repeat(100)
+  expect(trimAt(hi).endsWith('।…')).toBe(true)
+  const ar = 'هذه جملة. '.repeat(120)
+  expect(trimAt(ar).endsWith('.…')).toBe(true)
+})
+test('note links read as their label', () => {
+  expect(plainText('see [[ta:translate/figs-metaphor]]')).toBe('see figs metaphor')
 })

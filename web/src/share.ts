@@ -2,6 +2,7 @@
 // link. Android and iOS apps have a native share sheet through the bridge (window.Android.share); the browser uses
 // navigator.share, or opens WhatsApp with the text ready. Only the number of shares is counted (usage.ts), never the text.
 import { bookLabel } from './converse'
+import { slugLabel } from './links'
 import { count } from './usage'
 
 export const APP_LINK = 'https://bt-servant-mini.unfoldingword.workers.dev'
@@ -23,7 +24,7 @@ const LABELS: Record<string, { label: string; tip: string }> = {
 export function plainText(src: string): string {
   return src
     .replace(/\r/g, '')
-    .replace(/\[\[([^\]\n]+)\]\]/g, (_, h: string) => (h.split('/').pop() ?? h).replace(/[-_]+/g, ' '))
+    .replace(/\[\[([^\]\n]+)\]\]/g, (_, h: string) => slugLabel(h))
     .replace(/\[([^\]\n]+)\]\([^)\n]*\)/g, '$1')
     .replace(/^#{1,6}\s*/gm, '')
     .replace(/\*\*([^*\n]+?)\*\*/g, '$1')
@@ -43,7 +44,7 @@ export function trimAt(s: string, max = LIMIT): string {
   const para = head.lastIndexOf('\n\n')
   let cut = para >= floor ? para : -1
   if (cut < 0) {
-    const m = [...head.matchAll(/[.!?。؟](?=\s|$)/g)].pop()
+    const m = [...head.matchAll(/[.!?。؟۔।](?=\s|$)/g)].pop()
     if (m && m.index! + 1 >= floor) cut = m.index! + 1
   }
   if (cut < 0) cut = Math.max(head.lastIndexOf(' '), floor)
@@ -53,7 +54,7 @@ export function trimAt(s: string, max = LIMIT): string {
 /** "Rut 2:3 (GLT)": the reference from the call sheet in the details, and the text's label from the answer. */
 export function referenceOf(m: ShareMsg, ui: string): string {
   const ref = /"ref":\s*"([^"]+)"/.exec(m.meta ?? '')?.[1]
-  const source = /\*\*([A-Z]{2,6})\*\*/.exec(m.info ?? '')?.[1]
+  const source = /^\*\*([A-Z]{2,6})\*\* \(/m.exec(m.info ?? '')?.[1]
   let label = ''
   if (ref) {
     const [code, rest] = ref.split(' ')
