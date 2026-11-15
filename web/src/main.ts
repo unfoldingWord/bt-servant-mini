@@ -5,7 +5,8 @@ import { backPanel, fillTitles, renderHelps, renderStudy, setHooks, setViewLang 
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
-import { installedLangs, onPacksChanged, updateLangs } from './packs'
+import { installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
+import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
 import { has } from './commands'
 import { resetSearch } from './search'
@@ -16,10 +17,9 @@ import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, 
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { answer, type ConvState, directRef, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
-import { backLine, branchOf, GD, GT, mapRows, nodeOf } from './graph'
-import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut, type Turn } from './online'
+import { backLine, GD, GT, mapRows, nodeOf } from './graph'
+import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton } from './share'
-import { unfold } from './focus'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 
@@ -1077,29 +1077,14 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   if (m.who === 'bot' && (m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()) {
     const writing = el('p', 'ai pending', OT().writing)
     node.prepend(writing)
-    const history: Turn[] = []
-    // the branch this answer is on (its point and up to 3 above it), not the conversation's other branches; with no point, the
-    // last turns
-    const branch = c.graph && pt ? branchOf(c.graph, pt.id, 3).slice(0, -1) : null
-    if (branch) {
-      for (const n of branch) {
-        const a = c.msgs[n.msg], q = c.msgs[n.msg - 1]
-        if (a?.who !== 'bot') continue
-        history.push({ role: 'user', text: q?.who === 'me' && !q.mark && q.text ? q.text : n.label })
-        history.push({ role: 'assistant', text: a.ai?.text ?? a.intro ?? '' })
-      }
-    } else for (const x of c.msgs.slice(-7, -2)) {
-      // (not the divider where the person went back to a point: it is no question)
-      if (x.who === 'me' && x.text && !x.mark) history.push({ role: 'user', text: x.text })
-      else if (x.who === 'bot') history.push({ role: 'assistant', text: x.ai?.text ?? x.intro ?? '' })
-    }
-    // the answer found on the phone first (cut to leave room), then the passage's context
-    // without the fold buttons and ends (focus.ts): the model reads the contents, not "▸ More notes (64)"
-    const found = `${m.intro ?? ''}\n\n${unfold(m.info ?? '')}`
-    const helps = onlineCtx ? `${found.length > 5000 ? found.slice(0, 5000) + ' …' : found}\n\n# Context of the passage\n\n${onlineCtx}` : found
-    // the article the phone found goes with the helps, so the answer is grounded in it and names it
-    // and the Translation Academy article its text links to ("How to Translate Names"), when the answer says which
-    const sources = (m.sources ?? (m.ctx ? [{ id: m.ctx }] : [])).filter((s) => /^(ta|tw):/.test(s.id))
+    // what the model is given, chosen with the conversation's graph (context.ts): the history of this answer's branch; the
+    // helps the phone found (of an article, the sections the question needs) with the passage's context; the articles one
+    // link away and the earlier points that share a word with the question; the path to this point. The articles the phone
+    // found go as sources, so the answer is grounded in them and names them.
+    // (on any error there, the phone's answer and the passage's context as before, so "writing…" never stays)
+    const { helps, history, sources } = await buildContext({
+      question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
+    }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
     if (res) {

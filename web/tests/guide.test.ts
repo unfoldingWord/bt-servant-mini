@@ -252,6 +252,25 @@ describe('in a conversation', () => {
     expect(backs.map((f) => f.label)).toEqual(['← Volver al camino: Rut 1:1–5 · secciones'])
   }, 120_000)
 
+  test("the app in English, the question in Spanish, French or Indonesian: the reply and its buttons in the question's language", async () => {
+    const es = await turn({ last: null }, { q: '¿Qué tiempo hará mañana?' }, 'en')
+    expect([es.answered, es.reply.ui, es.reply.intro]).toEqual(['outofscope', 'es', expect.stringContaining('traducción de la Biblia')])
+    const labels = (es.reply.follow ?? []).map((f) => f.label)
+    expect(labels).toEqual([expect.stringMatching(/^Leer /), expect.stringMatching(/^Palabra clave: gracia/), expect.stringMatching(/^Academia: /)])
+    const fr = await turn({ last: null }, { q: 'Quel temps fera-t-il demain ?' }, 'en')
+    expect(fr.reply.intro).toMatch(/traduire la Bible/)
+    expect((fr.reply.follow ?? []).map((f) => f.label)[1]).toMatch(/^Mot clé : /)
+    const id = await turn({ last: null }, { q: 'Bagaimana cuaca besok?' }, 'en')
+    expect((id.reply.follow ?? []).map((f) => f.label)[1]).toMatch(/^Istilah kunci: /)
+    // on a path started in English, the way back to it in Spanish too
+    const c: ConvState = { last: null }
+    await turn(c, { q: 'I am translating Ruth' }, 'en')
+    await turn(c, { q: 'What does love mean?' }, 'en')
+    const o = await turn(c, { q: '¿Qué tiempo hará mañana?' }, 'en')
+    const back = [...(o.reply.follow ?? []), ...(o.reply.pathBack ? [o.reply.pathBack] : [])].find((f) => f.toPath)
+    expect(back?.label).toBe('← Volver al camino: Rut · introducción')
+  }, 120_000)
+
   test('weak words (greetings, thanks, "how much") alone are out of scope; with anything else, never', async () => {
     for (const q of ['Hello, how are you?', 'Thanks!', 'What time is it?', 'Hola, ¿cómo estás?', 'Halo, apa kabar?', 'नमस्ते, आप कैसे हैं?', 'مرحبا، كيف حالك؟'])
       expect([q, await outOfScopeQ(q, 'en')]).toEqual([q, true])

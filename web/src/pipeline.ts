@@ -658,8 +658,10 @@ export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
   at?: string
   /** the person announced a task on a book ("Voy a traducir Rut", "I'm reviewing Jonah 2"): a path through it starts (pathStart) */
   path?: PathStart
-  /** why the question cannot be out of scope: the reader read a book, a term or an intent, or the conversation is on a passage */
+  /** why the question cannot be out of scope: the reader read a book, a term or an intent, or code read a follow-up */
   inScope?: string
+  /** the language the reader said the question is in (the out-of-scope reply is in it) */
+  qLang?: string
   /** what code answers by itself, with no sheet to answer: past a book's end, how many verses or chapters */
   note?: { text: string; fromText: boolean } }
 /** The reading step once the slots are known (from the phone's model, the online one, or none): code reads what they missed. */
@@ -722,7 +724,7 @@ ${raw}
   if (target) s = { ...s, book: s.book ? bookCode(s.lang ?? env.nav, s.book) ?? s.book : s.book, lang: target }
   keepState(c, s)
   const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : env.helpsLang)
-  return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q, ...(path ? { path } : {}), ...scope }
+  return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q, ...(path ? { path } : {}), ...scope, ...(slots?.lang ? { qLang: slots.lang } : {}) }
 }
 
 // What may stand next to a reference that is only a reference ("muéstrame Rut 2:3", "montre-moi Ruth 2:3 s'il te plaît")
@@ -1463,6 +1465,21 @@ export function withoutWeak(q: string): string {
 }
 /** Whether a question has a word of `offTopic` or `weak`: the gate before {@link outOfScopeQ}. */
 export const offTopic = (q: string): boolean => hit(OFF_TOPIC, q) || hit(WEAK, q)
+const UI_LANGS6 = ['en', 'es', 'fr', 'id', 'hi', 'ar']
+const OFF_BY_LANG = Object.keys(G_DATA.offTopic).map((l) => [l, anyOf({ [l]: [...G_DATA.offTopic[l]!, ...(G_DATA.weak[l] ?? [])] })] as const)
+/** The language whose off-topic or weak words a question has (the most of them), or null: "¿Qué tiempo hará mañana?" is Spanish. */
+export function offTopicLang(q: string): string | null {
+  let best: string | null = null
+  let most = 0
+  for (const [l, re] of OFF_BY_LANG) {
+    const n = (q.match(re)?.length ?? 0) + (fold(q).match(re)?.length ?? 0)
+    if (n > most) {
+      most = n
+      best = l
+    }
+  }
+  return best
+}
 /**
  * Whether a typed question is out of scope (with no reading of it and no passage in the conversation): an off-topic word and
  * nothing about the Bible ({@link aboutBible}); or weak words only, nothing else left once they are out.
@@ -1499,11 +1516,16 @@ export async function aboutBible(q: string, ui: string): Promise<boolean> {
  * Translation Academy topic (the one its notes cite, else how translation is done).
  */
 async function outOfScope(x: Ctx): Promise<Done> {
-  const { ui } = x
+  // in the question's language, not the app's (a report of Nov 15: "¿Qué tiempo hará mañana?" was answered in English): the
+  // reader's, else the language of its off-topic words, else the common words'; the way back to a path too (pathStep reads x.ui)
+  const ql = x.qLang ?? offTopicLang(x.q ?? '') ?? guessLang(x.q ?? '')
+  const ui = UI_LANGS6.includes(ql) ? ql : x.ui
+  x.ui = ui
   const g = x.c.graph
   const at = g?.cur ? passageAt(g, g.cur) : undefined
-  // a pack that is on the phone (a question in French on a phone without French reads the English one)
-  const base: Sheet = (await hasLang(x.sheet.lang).catch(() => false)) ? x.sheet : { ...x.sheet, lang: (await hasLang('en')) ? 'en' : (await installedLangs())[0] ?? 'en' }
+  // the pack of that language when it is on the phone (the key term's name), else the sheet's, else English or the first there is
+  const base: Sheet = (await hasLang(packCode(ui)).catch(() => false)) ? { ...x.sheet, lang: packCode(ui) }
+    : (await hasLang(x.sheet.lang).catch(() => false)) ? x.sheet : { ...x.sheet, lang: (await hasLang('en')) ? 'en' : (await installedLangs())[0] ?? 'en' }
   const follow: Follow[] = []
   if (at) follow.push({ label: backLabel(ui, placeLabel(at, ui)), sheet: sheetOfNode(at), back: at.id })
   else {
