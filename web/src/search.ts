@@ -245,11 +245,13 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
 
 /** Full-text search of the Bible texts, all words together first, then fewer words. */
 /** The packs a search looks in: the question's, those of the languages its words come from ("pez": es-419), then English. */
-async function packsFor(words: string[], packLang: string): Promise<string[]> {
+export async function packsFor(words: string[], packLang: string): Promise<string[]> {
   const PACK: Record<string, string> = { es: 'es-419', id: 'id', hi: 'hi', ar: 'ar' }
   const fromWords = Object.entries(LEX).filter(([k, t]) => k !== '_' && words.some((w) => t[fold(w)])).map(([k]) => PACK[k]).filter((x): x is string => !!x)
   const have = await installedLangs()
-  return [...new Set([packLang, ...fromWords, 'en', ...have])].filter((l) => have.includes(l))
+  const own = [...new Set([packLang, ...fromWords, 'en'])].filter((l) => have.includes(l))
+  // none of those installed: one pack, not all (every extra pack scanned costs seconds)
+  return own.length ? own : have.slice(0, 1)
 }
 /** All words together first, then the two longest, then the longest. */
 const triesOf = (words: string[]): string[][] => {

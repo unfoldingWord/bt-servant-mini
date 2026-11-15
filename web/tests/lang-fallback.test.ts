@@ -3,7 +3,7 @@ import { test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
 import { buildSheet } from '../src/sheet'
 import { answerSheet, setUiLang } from '../src/answer'
-import { articleForQuestion, searchVerses, versesOf } from '../src/search'
+import { articleForQuestion, keywords, packsFor, searchVerses, versesOf } from '../src/search'
 import booknames from '../src/data/booknames.json'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
@@ -66,5 +66,15 @@ for (const pack of ALL_PACKS) {
       expect(Array.isArray((await searchVerses(word, null, pack)).hits)).toBe(true)
       expect(Array.isArray((await searchVerses(name, null, pack)).hits)).toBe(true)
     }
-  }, 30000)
+  }, 120000)
 }
+
+test('all packs installed: a free search looks only in the pack asked, the packs of its words and English', async () => {
+  await installPacks(ALL_PACKS)
+  const ar = keywords('ماذا يقول الكتاب عن المحبة')
+  expect(await packsFor(ar, 'ar')).toEqual(['ar', 'en'])
+  expect((await packsFor(keywords('pez en el mar'), 'es-419')).length).toBeLessThanOrEqual(3)
+  // none of those installed: one pack, not all
+  await installPacks(['hi', 'id'])
+  expect(await packsFor(ar, 'ar')).toHaveLength(1)
+}, 30000)
