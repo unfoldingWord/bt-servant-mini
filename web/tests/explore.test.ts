@@ -59,7 +59,7 @@ test('every verse offered for Jonah reads in the pack', async () => {
       const a = await r.passage(`jon ${c.ch}:${v}`)
       expect(JSON.stringify(a.data ?? '').length).toBeGreaterThan(20)
     }
-})
+}, 30_000) // (a busy machine: the full suite timed it out at 5 s)
 
 test('the four Translation Academy manuals and their articles', async () => {
   await installPacks(ALL_PACKS)
