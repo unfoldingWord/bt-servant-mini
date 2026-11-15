@@ -571,8 +571,8 @@ export function pathStart(q: string): PathStart | null {
   const out = (s: string) => s.replace(TASK_REVIEW, ' ').replace(TASK_TRANSLATE, ' ').replace(sb, ' ').replace(tb, ' ')
   const words = out(fold(out(t0))).replace(/[¿?!¡.,;:«»"“”؟،]/g, ' ').split(/\s+/)
     .filter((w) => w && !START_FILLER.has(w) && !PATH_FILLER.has(w) && !new RegExp(`^${pattern('chapter').source}$`, 'iu').test(w))
-  // a chapter last ("Jonás 2", "Ruth 1:6": its chapter)
-  const num = /^(\d+)(?::\d+(?:-\d+)?)?$/.exec(words[words.length - 1] ?? '')
+  // a chapter last ("Jonás 2"); a verse ("Quiero traducir Jonás 1:3") asks for that verse, not a path
+  const num = /^(\d+)$/.exec(words[words.length - 1] ?? '')
   const name = num ? words.slice(0, -1) : words
   if (!name.length || name.length > 3) return null
   const book = bookExact(name.join(' '))
