@@ -7,6 +7,7 @@ import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro } from './converse'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
+import { verseId } from '@bt-synergy/language-pack-v3'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
@@ -963,6 +964,170 @@ async function bookSteps(base: Sheet, ui: string): Promise<Follow[]> {
   out.push(browseStep(ui, { book: code! }))
   return out
 }
+// --------------------------------------------------------------------------------------------- sections and introductions
+// A report of Nov 15 ("Voy a empezar a traducir el libro de Rut"): after an introduction, one studies a chapter a section at a
+// time ("Rut 1:1–5"), not only the whole chapter or one verse. And "Introduction to Numbers 6" (the English notes have no
+// Numbers, only its BSB text): say so plainly and offer what there is, with the passage the person was on.
+const SEC_T: Record<string, { first: string; next: string; back: string; noIntro: string; noNotes: string }> = {
+  en: { first: 'First section: {ref}', next: 'Next section: {ref}', back: 'Back to {ref}', noIntro: 'The helps on this phone have no introduction to {what}.',
+    noNotes: 'The Translation Notes here do not cover {book} yet, so it has no introductions; its text is here.' },
+  es: { first: 'Primera sección: {ref}', next: 'Sección siguiente: {ref}', back: 'Volver a {ref}', noIntro: 'Las ayudas de este teléfono no tienen introducción a {what}.',
+    noNotes: 'Las Notas de traducción de aquí todavía no cubren {book}, así que no tiene introducciones; su texto sí está.' },
+  fr: { first: 'Première section : {ref}', next: 'Section suivante : {ref}', back: 'Revenir à {ref}', noIntro: "Les aides de ce téléphone n'ont pas d'introduction à {what}.",
+    noNotes: "Les Notes de traduction d'ici ne couvrent pas encore {book} : pas d'introductions, mais son texte est là." },
+  id: { first: 'Bagian pertama: {ref}', next: 'Bagian berikutnya: {ref}', back: 'Kembali ke {ref}', noIntro: 'Bahan bantu di ponsel ini tidak punya pengantar untuk {what}.',
+    noNotes: 'Catatan Terjemahan di sini belum mencakup {book}, jadi tidak ada pengantarnya; teksnya ada.' },
+  hi: { first: 'पहला खंड: {ref}', next: 'अगला खंड: {ref}', back: '{ref} पर लौटें', noIntro: 'इस फ़ोन की सहायता में {what} का कोई परिचय नहीं है।',
+    noNotes: 'यहाँ की अनुवाद टिप्पणियाँ अभी {book} को शामिल नहीं करतीं, इसलिए इसका कोई परिचय नहीं है; इसका पाठ यहाँ है।' },
+  ar: { first: 'المقطع الأول: {ref}', next: 'المقطع التالي: {ref}', back: 'العودة إلى {ref}', noIntro: 'لا توجد في مساعدات هذا الهاتف مقدمة لـ {what}.',
+    noNotes: 'ملاحظات الترجمة هنا لا تغطي {book} بعد، فلا مقدمات له؛ لكن نصه موجود.' },
+}
+const ST = (ui: string) => SEC_T[ui] ?? SEC_T.en!
+/**
+ * A book's introductions in the first pack whose notes have the book (`want`: the first that has that one): the book's
+ * (`front`) and the chapters that have one. (The Arabic pack has the English notes of Numbers, which the English pack lacks.)
+ */
+type Intros = { lang: string; front: boolean; chapters: Set<number> }
+async function introsOf(code: string, l: string, want?: number | 'front'): Promise<Intros | null> {
+  for (const x of new Set([l, 'en', ...(await installedLangs())])) {
+    try {
+      const r = await openLang(x)
+      if (!r.installed(`book:${code}`)) continue
+      const rows = (((await r.book(code)) as any)?.notes?.rows ?? []).filter((y: any) => y.cols?.isIntro === true || y.cols?.isIntro === 'true')
+      if (!rows.length) continue
+      // as answer.ts reads them: the first is the book's, a chapter's starts at its verse 1
+      const chapters = new Set<number>()
+      for (let ch = 1; ch <= 150; ch++) if (rows.some((y: any) => y !== rows[0] && y.from === verseId(code, ch, 1))) chapters.add(ch)
+      if (typeof want === 'number' && !chapters.has(want)) continue
+      return { lang: x, front: true, chapters }
+    } catch {}
+  }
+  return null
+}
+/** An introduction the sheet's pack does not have, from another installed pack that has it (null: none has it). */
+export async function introElsewhere(sheet: Sheet): Promise<string | null> {
+  const m = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(sheet.ref ?? '')
+  if (!m) return null
+  const i = await introsOf(m[1]!, sheet.lang, m[2] === 'front' ? 'front' : +m[2]!).catch(() => null)
+  return i && i.lang !== sheet.lang ? i.lang : null
+}
+/** Chapter -> the verses its sections start at, from a text's section headings (BSB has them; ULT, UST, GLT, GST do not). */
+const headsCache = new Map<string, Promise<Map<number, number[]> | null>>()
+function headsOf(code: string): Promise<Map<number, number[]> | null> {
+  if (!headsCache.has(code)) {
+    const p = (async () => {
+      for (const l of new Set([env.helpsLang ?? 'en', 'en', ...(await installedLangs())])) {
+        try {
+          const r = await openLang(l)
+          if (!r.installed(`book:${code}`)) continue
+          for (const t of (((await r.book(code)) as any)?.texts ?? []) as { events?: [number, string, string][] }[]) {
+            const out = new Map<number, number[]>()
+            let ch = 0, heading = false
+            for (const [, kind, arg] of t.events ?? []) {
+              if (kind === 'chapter') ch = parseInt(String(arg), 10) || ch
+              else if (kind === 'open' && /^para:s\d?$/.test(String(arg))) heading = true
+              else if (kind === 'verse' && heading && ch) {
+                const v = parseInt(String(arg), 10)
+                if (v) out.set(ch, [...(out.get(ch) ?? []), v])
+                heading = false
+              }
+            }
+            if (out.size) return out
+          }
+        } catch {}
+      }
+      return null
+    })().catch(() => null)
+    headsCache.set(code, p)
+    p.then((h) => { if (!h && headsCache.get(code) === p) headsCache.delete(code) })
+  }
+  return headsCache.get(code)!
+}
+/** The ranges a chapter's introduction (else the book's) outlines in that chapter ("1:1-5 …"): where its sections start. */
+async function outlineStarts(code: string, ch: number, l: string, last: number): Promise<number[]> {
+  for (const x of new Set([l, 'en'])) {
+    try {
+      const r = await openLang(x)
+      if (!r.installed(`book:${code}`)) continue
+      const rows = (((await r.book(code)) as any)?.notes?.rows ?? []).filter((y: any) => y.cols?.isIntro === true || y.cols?.isIntro === 'true')
+      const chapIntro = rows.find((y: any) => y !== rows[0] && y.from === verseId(code, ch, 1))
+      for (const row of [chapIntro, rows[0]].filter(Boolean)) {
+        const starts = new Set<number>()
+        for (const m of String(row.cols.note ?? '').matchAll(/(?<![\d:])(\d+):(\d+)\s*[-–]\s*(?:(\d+):)?(\d+)/g)) {
+          if (+m[1]! !== ch || (m[3] && +m[3] !== ch) || +m[4]! >= last || +m[4]! < +m[2]!) continue
+          starts.add(+m[2]!).add(+m[4]! + 1)
+        }
+        if (starts.size) return [...starts].sort((a, b) => a - b)
+      }
+    } catch {}
+  }
+  return []
+}
+/** A chapter's sections as [first verse, last verse]: from the text's headings, else its introduction's outline, else 5 verses each. */
+export async function sectionsOf(code: string, ch: number, l: string): Promise<[number, number][]> {
+  const last = (await boundsOf(code).catch(() => null))?.get(ch)
+  if (!last) return []
+  // (a source that leaves the whole chapter as one section is no help: the next one)
+  const splits = (s: number[]) => s.filter((v) => v > 1 && v <= last).length > 0
+  let starts = (await headsOf(code).catch(() => null))?.get(ch) ?? []
+  if (!splits(starts)) starts = await outlineStarts(code, ch, l, last)
+  if (!splits(starts)) { starts = []; for (let v = 1; v <= last; v += 5) starts.push(v) }
+  starts = [...new Set([1, ...starts.filter((v) => v >= 1 && v <= last)])].sort((a, b) => a - b)
+  return starts.map((v, i) => [v, (starts[i + 1] ?? last + 1) - 1] as [number, number])
+}
+const secRef = (ch: number, [a, b]: [number, number]) => (a === b ? `${ch}:${a}` : `${ch}:${a}-${b}`)
+/** "First section: Ruth 1:1–5" (or "Next section: …"), a button to its text and notes. */
+function sectionStep(base: Sheet, code: string, ch: number, sec: [number, number], ui: string, kind: 'first' | 'next'): Follow {
+  const label = ST(ui)[kind].replace('{ref}', `${bookLabel(ui, code)} ${secRef(ch, sec).replace('-', '–')}`)
+  return { label, sheet: passageSheet(base, `${code} ${secRef(ch, sec)}`, ['text', 'notes']) }
+}
+/** The first section of a chapter as a button (none when the book's text is in no pack). */
+async function firstSection(base: Sheet, code: string, ch: number, ui: string): Promise<Follow | null> {
+  const secs = await sectionsOf(code, ch, base.lang).catch(() => [])
+  return secs[0] && secs.length > 1 ? sectionStep(base, code, ch, secs[0], ui, 'first') : null
+}
+/** Under a passage that is one section ("Ruth 1:1-5"): the next one, in this chapter or the first of the next. */
+async function nextSection(base: Sheet, ui: string): Promise<Follow | null> {
+  const m = /^([0-9a-z]{3}) (\d+):(\d+)-(\d+)$/.exec(base.ref ?? '')
+  if (!m) return null
+  const [code, ch, v1, v2] = [m[1]!, +m[2]!, +m[3]!, +m[4]!]
+  const secs = await sectionsOf(code, ch, base.lang).catch(() => [])
+  const i = secs.findIndex(([a, b]) => a === v1 && b === v2)
+  if (i < 0) return null
+  if (secs[i + 1]) return sectionStep(base, code, ch, secs[i + 1]!, ui, 'next')
+  const after = await sectionsOf(code, ch + 1, base.lang).catch(() => [])
+  return after[0] ? sectionStep(base, code, ch + 1, after[0], ui, 'next') : null
+}
+/**
+ * An introduction the helps do not have ("Introduction to Numbers 6"): what to say, and what there is instead: the chapter's
+ * text, the passage the person was on, the book's introduction and the nearest chapter introductions that exist, Browse.
+ */
+async function noIntro(sheet: Sheet, ui: string, before: Sheet | null): Promise<{ said: string; follow: Follow[] } | null> {
+  const m = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(sheet.ref ?? '')
+  if (!m) return null
+  const code = m[1]!
+  const ch = m[2] === 'front' ? null : +m[2]!
+  const b = await boundsOf(code).catch(() => null)
+  if (!b) return null
+  const book = bookLabel(ui, code)
+  const T = ST(ui)
+  const intros = await introsOf(code, sheet.lang).catch(() => null)
+  const said = [T.noIntro.replace('{what}', ch ? `${book} ${ch}` : book), intros ? '' : T.noNotes.replace('{book}', book)].filter(Boolean).join(' ')
+  const at = ch && b.has(ch) ? ch : 1
+  const follow: Follow[] = [{ label: nextWords(ui).read.replace('{ref}', `${book} ${at}`), sheet: passageSheet(sheet, `${code} ${at}`, ['text', 'notes']) }]
+  if (before?.ref && before.intent === 'passage' && !/intro$/.test(before.ref) && before.ref !== `${code} ${at}`)
+    follow.push({ label: T.back.replace('{ref}', refLabelOf(ui, before.ref)), sheet: { ...before, id: `f${Date.now()}` } })
+  if (intros) {
+    const il = intros.lang
+    if (ch && intros.front) follow.push({ label: introLabel(ui, book), sheet: passageSheet(sheet, `${code} front:intro`, ['intro'], il) })
+    const has = [...intros.chapters].sort((x, y) => x - y)
+    const prev = ch ? has.filter((c) => c < ch).pop() : undefined
+    const next = has.find((c) => c > (ch ?? 0))
+    for (const c of [prev, next]) if (c) follow.push({ label: introLabel(ui, `${book} ${c}`), sheet: passageSheet(sheet, `${code} ${c}:intro`, ['intro'], il) })
+  }
+  follow.push(browseStep(ui, { book: code }))
+  return { said, follow }
+}
 /** Each button once (the same sheet or the same Browse), at most MAX_FOLLOW; Browse at a book opens the pack that has it. */
 async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
   const seen = new Set<string>()
@@ -1393,6 +1558,20 @@ ${x.meta}` },
     },
   },
   {
+    // an introduction the sheet's pack lacks and another installed pack has: from that one (the Arabic pack has the English
+    // notes of Numbers, which the English pack lacks: "Introduction to Numbers 6")
+    name: 'intro-elsewhere',
+    when: (x) => x.sheet.intent === 'passage' && /:intro$/.test(x.sheet.ref ?? '') && !facts.intro,
+    run: async (x) => {
+      const l = await introElsewhere(x.sheet).catch(() => null)
+      if (l) {
+        x.sheet = { ...x.sheet, lang: l }
+        x.r = await answerSheet(x.sheet)
+      }
+      return null
+    },
+  },
+  {
     // Only a name ("John the Baptist"): the article, and also the verses that mention him (each opens its text and notes)
     name: 'name-verses',
     when: ({ q, sheet }) => q !== undefined && sheet.intent === 'article' && !!sheet.concept && !asksAbout(q),
@@ -1423,8 +1602,11 @@ ${x.meta}` },
     when: () => true,
     run: async (x) => {
       const { sheet, ui, r } = x
-      const said = intro(sheet, facts, ui)
+      let said = intro(sheet, facts, ui)
       const found = facts // the answer's own facts (the steps below read the packs)
+      // an introduction the helps do not have: say so, and offer what there is (the passage before this one among it)
+      const none = sheet.intent === 'passage' && !found.intro ? await noIntro(sheet, ui, x.c.last).catch(() => null) : null
+      if (none) said = none.said
       const study = await studyOf(sheet).catch(() => null)
       const steps = await packSteps(sheet, study, ui).catch(() => [])
       const bounds = sheet.intent === 'passage' && sheet.ref ? await boundsOf(sheet.ref.slice(0, 3)).catch(() => null) : null
@@ -1435,7 +1617,20 @@ ${x.meta}` },
       // buttons would fail the same way, so only the ways forward
       const pack = sheet.intent === 'passage' && sheet.ref ? await packWithBook(sheet.ref.slice(0, 3), sheet.lang).catch(() => null) : null
       const follow: Follow[] = sheet.intent !== 'passage' ? await otherSteps(x, steps)
+        : none ? none.follow
         : pack && r!.cites.length ? followups({ ...sheet, lang: pack }, found, ui, [...steps, ...start], bounds) : []
+      // sections: under a chapter's introduction (and a book's, to start translating) its first one, after "Read …"; under
+      // a section, the next one first
+      if (sheet.intent === 'passage' && pack && !none && follow.length) {
+        const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(sheet.ref ?? '')
+        if (im && (im[2] !== 'front' || start.length)) {
+          const f = await firstSection({ ...sheet, lang: pack }, im[1]!, im[2] === 'front' ? 1 : +im[2]!, ui).catch(() => null)
+          if (f) follow.splice(1, 0, f)
+        } else if (!im) {
+          const f = await nextSection({ ...sheet, lang: pack }, ui).catch(() => null)
+          if (f) follow.unshift(f)
+        }
+      }
       // a passage with nothing to go on from (the version asked for is not here): the ways forward, its book first
       if (sheet.intent === 'passage' && !follow.length) follow.push(...(await wayForward(sheet, ui, pack ? sheet.ref!.slice(0, 3) : null)))
       // online AI is given the article and the Translation Academy article its text links to ("How to Translate Names")
