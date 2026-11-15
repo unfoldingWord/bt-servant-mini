@@ -1,6 +1,7 @@
 // The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
+import { FU } from './firstuse'
 import { availableLangs, downloadLang, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
 
 type S = {
@@ -256,7 +257,8 @@ export async function languagesSection(lang: string, after: () => void): Promise
       const l = offer.lang
       const row = el('div', 'row')
       const label = el('span', 'grow', `${PACK_NAMES[l] ?? l} · ${mb1(offer.bytes)}`)
-      row.append(label, btn(s.download, async () => {
+      // a download that did not end goes on from where it stopped
+      row.append(label, btn(offer.partial ? FU(lang).resume : s.download, async () => {
         try {
           label.textContent = `${PACK_NAMES[l] ?? l} · ${s.working}`
           const r = await downloadLang(l, (p) => (label.textContent = `${PACK_NAMES[l] ?? l} · ${mb1(p.bytes)} / ${mb1(p.totalBytes)}`), { offer })

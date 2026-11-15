@@ -3,9 +3,9 @@
 import { passageContext, resetLangs, type Sheet } from './answer'
 import { backPanel, fillTitles, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { bookExact, buildSheet, type Slots } from './sheet'
-import { appVersion, followUps, isLite, LIMITED, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
+import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
-import { installedLangs, onPacksChanged } from './packs'
+import { installedLangs, onPacksChanged, updateLangs } from './packs'
 import { bookLabel } from './converse'
 import { has } from './commands'
 import { resetSearch } from './search'
@@ -342,10 +342,8 @@ function examplesLang(): string | null {
 function pickerFor(prefer: string[]): HTMLElement {
   const phone = [...(navigator.languages ?? []), navigator.language ?? '']
   return languagePicker(nav, [...prefer, nav, ...phone], {
-    done: async () => {
-      await refreshInstalled()
-      if (!reaskWaiting()) renderConv()
-    },
+    // the download's end reaches refreshInstalled through onPacksChanged too: the waiting question is asked from there
+    done: async () => { await refreshInstalled() },
     file: () => {
       panelView = 'packs'
       panel.classList.add('show')
@@ -354,7 +352,13 @@ function pickerFor(prefer: string[]): HTMLElement {
   })
 }
 /** The question that waited for a language: asked again once, in its conversation (the question and its note give way to the answer). */
+let reaskLater = false
 function reaskWaiting(): boolean {
+  // an answer is on its way: the question keeps waiting, and is asked when that answer is done (respond)
+  if (busy) {
+    reaskLater = convs.some((c) => c.msgs[c.msgs.length - 1]?.waiting)
+    return reaskLater
+  }
   for (const c of convs) {
     const n = c.msgs.length
     const bot = c.msgs[n - 1], me = c.msgs[n - 2]
@@ -377,6 +381,29 @@ function waitingLang(c: Conv): string[] {
   while (i >= 0 && !c.msgs[i]!.waiting) i--
   const q = i > 0 ? c.msgs[i - 1] : undefined
   return q?.who === 'me' && q.text ? [guessLang(q.text)] : []
+}
+// The light build with no model, right after its first language: one optional line offers the reading model (no gate)
+let offerModel = false
+function modelOffer(): HTMLElement | null {
+  if (!offerModel || !isLite() || modelState().state !== 'missing') return null
+  const box = el('div', 'fu-model')
+  box.appendChild(el('span', '', FU(nav).model.replace('{size}', `${Math.round(MODEL.bytes / 1048576)} MB`)))
+  const go = el('button', '', FU(nav).modelGo) as HTMLButtonElement
+  go.type = 'button'
+  go.onclick = () => {
+    offerModel = false
+    downloadModel()
+    box.remove()
+    setReady()
+  }
+  box.appendChild(go)
+  return box
+}
+/** Puts the model line (if it is offered) at the end of the conversation, after what was just answered. */
+function placeModelOffer() {
+  log.querySelectorAll('.fu-model').forEach((x) => x.remove())
+  const line = modelOffer()
+  if (line) log.appendChild(line)
 }
 function fillExamples(ex: HTMLElement) {
   const lang = examplesLang()
@@ -408,10 +435,12 @@ function renderConv() {
       fillExamples(ex)
     }
     log.appendChild(w)
+    placeModelOffer()
     return
   }
   for (const m of c.msgs) log.appendChild(renderMsg(m))
   if (noPacks) log.appendChild(pickerFor(waitingLang(c)))
+  placeModelOffer()
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
 type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs' | 'usage' | 'safety'
@@ -875,6 +904,12 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>) {
   log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   busy = false
   setReady()
+  if (log.contains(node)) placeModelOffer()
+  // a language arrived while this was answered: the question that waited for it is asked now
+  if (reaskLater) {
+    reaskLater = false
+    setTimeout(() => reaskWaiting(), 0)
+  }
   // level 3: the online answer, if allowed and there is internet; the offline answer already stands
   // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
   if (m.who === 'bot' && (m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()) {
@@ -970,8 +1005,12 @@ function refreshInstalled() {
     INSTALLED = ls
     packsKnown = true
     $('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · ')
+    // from no language to one (a download here or in the menu, a .tcpack file): the light build without a model offers it once
+    if (had === false && ls.length && isLite() && modelState().state === 'missing') offerModel = true
     // the welcome (picker or examples) and a picker under a waiting question follow what is installed
     if (had !== ls.length > 0 && (!conv().msgs.length || !ls.length || had === false)) renderConv()
+    // and a question that waited for a language is asked now (also at the start, if the app closed before it was)
+    if (had !== true && ls.length) reaskWaiting()
   }).catch(() => {})
 }
 refreshInstalled()
@@ -989,6 +1028,8 @@ setSnapshot(() => ({
 }))
 count('opens')
 setTimeout(() => sendUsage(), 5000)
+// once a day with internet, the added languages get the shared articles they lack (packs.ts updateLangs); silent
+setTimeout(() => { if (isOnline()) updateLangs().catch(() => {}) }, 8000)
 window.addEventListener('online', () => { sendUsage(); sendFeedback() })
 setTimeout(() => sendFeedback(), 6000)
 if (!isOnline()) netNote('off')

@@ -22,18 +22,25 @@ export const CANON = 'gen exo lev num deu jos jdg rut 1sa 2sa 1ki 2ki 1ch 2ch ez
 
 // ------------------------------------------------------------------------------------------------- shipped (assets)
 
-let index: { langs: string[] } | null = null
-async function shipped(): Promise<string[]> {
-  try {
-    return (index ??= await (await fetch(`${BASE}/index.json`, NOCACHE)).json()).langs
-  } catch {
-    return []
+// the promise is kept, not its result: a reset (reloadPacks) while a read is on its way is not undone when the old read ends
+let index: Promise<string[]> | null = null
+function shipped(): Promise<string[]> {
+  if (!index) {
+    const p: Promise<string[]> = fetch(`${BASE}/index.json`, NOCACHE)
+      .then((r) => r.json())
+      .then((j) => (Array.isArray(j?.langs) ? (j.langs as string[]) : []))
+      .catch(() => {
+        if (index === p) index = null // not kept: the next call tries again
+        return []
+      })
+    index = p
   }
+  return index
 }
 const ID_RE = /^[0-9a-f]{64}$/
 function assetStore(lang: string): BlobStore {
   const dir = `${BASE}/${lang}`
-  let ids: string[] | null = null
+  let ids: Promise<string[]> | null = null
   const ro = async () => {
     throw new Error('read-only pack store')
   }
@@ -49,8 +56,13 @@ function assetStore(lang: string): BlobStore {
     put: ro,
     delete: ro,
     setState: ro,
-    async ids() {
-      return (ids ??= await (await fetch(`${dir}/ids.json`, NOCACHE)).json())
+    ids() {
+      if (!ids) {
+        const p: Promise<string[]> = fetch(`${dir}/ids.json`, NOCACHE).then((r) => r.json())
+        p.catch(() => { if (ids === p) ids = null })
+        ids = p
+      }
+      return ids
     },
     async getState() {
       const r = await fetch(`${dir}/state.json`, NOCACHE)
@@ -66,13 +78,50 @@ const added = () => (idb ??= indexedDbStore({ name: 'btsm-packs' }))
 const trust = { trustedKeys: trustedKeys() }
 const addedClient = async () => createClient({ store: await added(), source: httpSource({ base: PACKS_SERVER }), trust })
 
-async function addedLangs(): Promise<string[]> {
+/** The languages with units in the phone's store, complete or not. */
+async function storedLangs(): Promise<string[]> {
   try {
     const st: any = await (await added()).getState()
     return Object.keys(st?.active ?? {}).filter((l) => l !== 'common')
   } catch {
     return []
   }
+}
+/** The added languages that are whole: a download that did not end (cancelled, failed, the app closed) does not count. */
+async function addedLangs(): Promise<string[]> {
+  const part = partialLangs()
+  return (await storedLangs()).filter((l) => !part.includes(l))
+}
+
+// A download that has not ended is marked (per language, before the first byte, cleared when it ends well), so a language half
+// on the phone is offered again ("Continue") instead of counting as installed. On a phone with little memory Android may close
+// the app in the middle of a download: the mark survives that.
+const PARTIAL = 'btsm.partial.'
+function kv(): Storage | null {
+  try {
+    return (globalThis as any).localStorage ?? null
+  } catch {
+    return null
+  }
+}
+/** The languages whose download started and did not end. */
+export function partialLangs(): string[] {
+  const s = kv()
+  if (!s) return []
+  const out: string[] = []
+  try {
+    for (let i = 0; i < s.length; i++) {
+      const k = s.key(i)
+      if (k?.startsWith(PARTIAL)) out.push(k.slice(PARTIAL.length))
+    }
+  } catch {}
+  return out
+}
+export function markPartial(lang: string, on: boolean) {
+  try {
+    if (on) kv()?.setItem(PARTIAL + lang, '1')
+    else kv()?.removeItem(PARTIAL + lang)
+  } catch {}
 }
 
 // ------------------------------------------------------------------------------------------------------------ reading
@@ -119,7 +168,20 @@ export function reloadPacks() {
 // ------------------------------------------------------------------------------------------------------------ adding
 
 /** What the server offers for a language: its books, the size of the whole download, and the segments in install order. */
-export type Offer = { lang: string; books: string[]; bytes: number; segments: string[]; sizes: Record<string, number> }
+export type Offer = {
+  lang: string; books: string[]; bytes: number; segments: string[]; sizes: Record<string, number>
+  /** a download of it started and did not end: what arrived stays, the next one goes on from there */
+  partial?: boolean
+}
+/** A signal that aborts after `ms` (AbortSignal.timeout where the WebView has it). */
+function timeout(ms: number): AbortSignal {
+  if (typeof (AbortSignal as any).timeout === 'function') return (AbortSignal as any).timeout(ms)
+  const c = new AbortController()
+  setTimeout(() => c.abort(new Error('timeout')), ms)
+  return c.signal
+}
+/** How long a catalog request may take before it counts as no answer. */
+export const CATALOG_MS = 15000
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
 /**
@@ -128,7 +190,7 @@ const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
  */
 export async function offerOf(lang: string, source: PackSource = httpSource({ base: PACKS_SERVER })): Promise<Offer | null> {
   try {
-    const got = await source.catalog(lang)
+    const got = await source.catalog(lang, { signal: timeout(CATALOG_MS) })
     if (got === 'not-modified') return null
     const cat = await verifyCatalogFile(got.bytes, trust, { from: 'network' })
     const catalogs = [cat]
@@ -136,7 +198,7 @@ export async function offerOf(lang: string, source: PackSource = httpSource({ ba
       const id = hex(rid)
       if (!commonCats.has(id)) {
         commonCats.set(id, (async () => {
-          const c = await source.catalog(rname)
+          const c = await source.catalog(rname, { signal: timeout(CATALOG_MS) })
           if (c === 'not-modified') return null
           const v = await verifyCatalogFile(c.bytes, trust, { from: 'network' })
           return v.id === id ? v : null
@@ -151,7 +213,7 @@ export async function offerOf(lang: string, source: PackSource = httpSource({ ba
     const plan = planInstall(catalogs, emptyState(), { books, defaults: true, units: SHARED_UNITS }, new Set())
     const sizes: Record<string, number> = {}
     for (const st of plan.steps) for (const x of st.segments) sizes[x.id] = x.size
-    return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes }
+    return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, ...(partialLangs().includes(lang) ? { partial: true } : {}) }
   } catch {
     return null
   }
@@ -217,19 +279,77 @@ export async function downloadLang(
   const already = before.reduce((n, id) => n + (offer.sizes[id] ?? 0), 0)
   const order = offer.segments.filter((id) => !have.has(id))
   const client = createClient({ store, source: prefetching(http, order, o.ahead ?? 6), trust })
-  const report = await client.install(lang, { books: offer.books, defaults: true, units: SHARED_UNITS }, {
-    ...(o.signal ? { signal: o.signal } : {}),
-    onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
-  })
-  changed()
-  return { books: offer.books.length, bytes: report.bytes ?? 0 }
+  // a language already whole that gets an update stays usable meanwhile; a new one is marked until its download ends well
+  const fresh = !(await addedLangs()).includes(lang)
+  if (fresh) markPartial(lang, true)
+  try {
+    const report = await serial(() => client.install(lang, { books: offer.books, defaults: true, units: SHARED_UNITS }, {
+      ...(o.signal ? { signal: o.signal } : {}),
+      onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
+    }))
+    markPartial(lang, false)
+    return { books: offer.books.length, bytes: report.bytes ?? 0 }
+  } finally {
+    // what is complete was activated even after a cancel or a failure: every cache that holds readers drops them
+    changed()
+  }
+}
+
+// ------------------------------------------------------------------------------------------------------------ updating
+
+/** The shared units (articles) the server lists for a language and the phone does not have yet. */
+export function missingUnits(r: { listed(u: string): boolean; installed(u: string): boolean }, units: readonly string[] = SHARED_UNITS): string[] {
+  return units.filter((u) => r.listed(u) && !r.installed(u))
+}
+type Updater = {
+  refresh(lang: string, o?: { signal?: AbortSignal }): Promise<unknown>
+  open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean }>
+  install(lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal }): Promise<unknown>
+}
+/** Brings one language's shared units up to SHARED_UNITS: reads its catalog again, installs only what is missing. The units installed. */
+export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal): Promise<string[]> {
+  await client.refresh(lang, signal ? { signal } : {})
+  const missing = missingUnits(await client.open(lang), units)
+  if (missing.length) await client.install(lang, { units: missing, defaults: false }, signal ? { signal } : {})
+  return missing
+}
+const CHECKED = 'btsm.packs.checked'
+/**
+ * Once a day with internet, each added language gets the shared units it lacks (a few articles collections, ~50–60 KB each),
+ * silently and with the same verification as a download. A failure is left for the next day. The number of languages updated.
+ */
+export async function updateLangs(): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10)
+  try {
+    if (kv()?.getItem(CHECKED) === today) return 0
+    kv()?.setItem(CHECKED, today)
+  } catch {}
+  let n = 0
+  for (const lang of await addedLangs()) {
+    try {
+      const got = await serial(async () => updateLang(await addedClient(), lang, SHARED_UNITS, timeout(120000)))
+      if (got.length) n++
+    } catch { /* tried again tomorrow */ }
+  }
+  if (n) changed()
+  return n
+}
+
+let queue: Promise<unknown> = Promise.resolve()
+/** Runs installs one after the other: a download, an import, a removal, an update. */
+function serial<T>(f: () => Promise<T>): Promise<T> {
+  const run = queue.then(f, f)
+  queue = run.catch(() => {})
+  return run
 }
 
 /** A .tcpack file (made by another phone, or by the team): its languages go into the phone. */
 export async function importPack(bytes: Uint8Array): Promise<{ langs: string[]; rejected: number }> {
-  const report = await (await addedClient()).importTransfer(bytes)
+  const report = await serial(async () => (await addedClient()).importTransfer(bytes))
   changed()
   const langs = [...new Set(report.catalogs.map((c: any) => String(c.name ?? c.lang ?? '')).filter((l) => l && l !== 'common'))]
+  // a whole language from a file ends a download that had not
+  for (const l of langs) markPartial(l, false)
   return { langs, rejected: report.rejected.length }
 }
 
@@ -239,17 +359,21 @@ export async function exportPack(lang: string): Promise<Uint8Array> {
     (await origin(lang)) === 'added' ? await addedClient() : createClient({ store: assetStore(lang), source: noNetwork, trust })
   const r = await client.open(lang)
   const books = CANON.filter((b) => r.installed(`book:${b}`))
-  return client.exportTransfer({ lang, mode: 'full', books, units: SHARED_UNITS })
+  // only what this language has: a language installed before a unit was added to SHARED_UNITS lacks it, and asking for it fails
+  return client.exportTransfer({ lang, mode: 'full', books, units: SHARED_UNITS.filter((u) => r.installed(u)) })
 }
 
 /** Removes an added language (the shipped ones stay). */
 export async function removeLang(lang: string): Promise<void> {
-  const store = await added()
-  const st: any = await store.getState()
-  if (!st) return
-  for (const k of ['active', 'published']) if (st[k]) delete st[k][lang]
-  for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${lang}/`)) delete st.units[key]
-  await store.setState(st)
-  await (await addedClient()).prune()
+  await serial(async () => {
+    const store = await added()
+    const st: any = await store.getState()
+    if (!st) return
+    for (const k of ['active', 'published']) if (st[k]) delete st[k][lang]
+    for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${lang}/`)) delete st.units[key]
+    await store.setState(st)
+    await (await addedClient()).prune()
+  })
+  markPartial(lang, false)
   changed()
 }

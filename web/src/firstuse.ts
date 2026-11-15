@@ -8,6 +8,7 @@ import books from './data/books.json'
 type F = {
   title: string; lead: string; looking: string; download: string; cancel: string; retry: string; offline: string
   stopped: string; canceled: string; of: string; file: string; kept: string; notes: string; term: string; ta: string; books: string
+  resume: string; model: string; modelGo: string
 }
 const STR: Record<string, F> = {
   en: {
@@ -17,6 +18,7 @@ const STR: Record<string, F> = {
     stopped: 'The download stopped:', canceled: 'Download canceled. What already arrived stays on the phone.', of: '{a} of {b}',
     file: 'Or load a .tcpack file', kept: 'I kept your question. Choose a language below: I will answer it as soon as the language is on the phone.',
     notes: 'What do the notes say about {ref}?', term: 'What does {term} mean?', ta: 'Translation Academy: {topic}', books: '{n} books',
+    resume: 'Continue', model: 'Also download the reading model ({size}) to ask free questions without internet.', modelGo: 'Download the model',
   },
   es: {
     title: 'Elige un idioma para las ayudas', lead: 'Descárgalo una vez (necesita internet). Después, todo funciona sin internet.',
@@ -25,6 +27,7 @@ const STR: Record<string, F> = {
     stopped: 'La descarga se detuvo:', canceled: 'Descarga cancelada. Lo que ya llegó se queda en el teléfono.', of: '{a} de {b}',
     file: 'O carga un archivo .tcpack', kept: 'Guardé tu pregunta. Elige un idioma aquí abajo: la responderé en cuanto el idioma esté en el teléfono.',
     notes: '¿Qué dicen las notas sobre {ref}?', term: '¿Qué significa {term}?', ta: 'Translation Academy: {topic}', books: '{n} libros',
+    resume: 'Continuar', model: 'Descarga también el modelo de lectura ({size}) para hacer preguntas libres sin internet.', modelGo: 'Descargar el modelo',
   },
   fr: {
     title: 'Choisissez une langue pour les aides', lead: 'Téléchargez-la une fois (internet nécessaire). Ensuite, tout fonctionne sans internet.',
@@ -33,6 +36,7 @@ const STR: Record<string, F> = {
     stopped: "Le téléchargement s'est arrêté :", canceled: 'Téléchargement annulé. Ce qui est déjà arrivé reste sur le téléphone.', of: '{a} sur {b}',
     file: 'Ou chargez un fichier .tcpack', kept: "J'ai gardé votre question. Choisissez une langue ci-dessous : j'y répondrai dès que la langue sera sur le téléphone.",
     notes: 'Que disent les notes sur {ref} ?', term: 'Que signifie {term} ?', ta: 'Translation Academy : {topic}', books: '{n} livres',
+    resume: 'Continuer', model: 'Téléchargez aussi le modèle de lecture ({size}) pour poser des questions libres sans internet.', modelGo: 'Télécharger le modèle',
   },
   id: {
     title: 'Pilih bahasa untuk bahan bantu', lead: 'Unduh sekali (perlu internet). Setelah itu, semuanya bekerja tanpa internet.',
@@ -41,6 +45,7 @@ const STR: Record<string, F> = {
     stopped: 'Unduhan berhenti:', canceled: 'Unduhan dibatalkan. Yang sudah masuk tetap ada di ponsel.', of: '{a} dari {b}',
     file: 'Atau muat berkas .tcpack', kept: 'Pertanyaan Anda saya simpan. Pilih bahasa di bawah: saya akan menjawabnya begitu bahasa itu ada di ponsel.',
     notes: 'Apa kata catatan tentang {ref}?', term: 'Apa arti {term}?', ta: 'Translation Academy: {topic}', books: '{n} kitab',
+    resume: 'Lanjutkan', model: 'Unduh juga model pembaca ({size}) untuk mengajukan pertanyaan bebas tanpa internet.', modelGo: 'Unduh model',
   },
   hi: {
     title: 'सहायता की भाषा चुनें', lead: 'इसे एक बार डाउनलोड करें (इंटरनेट चाहिए)। उसके बाद सब कुछ बिना इंटरनेट चलता है।',
@@ -49,6 +54,7 @@ const STR: Record<string, F> = {
     stopped: 'डाउनलोड रुक गया:', canceled: 'डाउनलोड रद्द हुआ। जो आ चुका है वह फ़ोन पर रहेगा।', of: '{b} में से {a}',
     file: 'या .tcpack फ़ाइल लोड करें', kept: 'मैंने आपका प्रश्न रख लिया है। नीचे एक भाषा चुनें: भाषा फ़ोन पर आते ही मैं उत्तर दूँगा।',
     notes: '{ref} के बारे में नोट्स क्या कहते हैं?', term: '{term} का क्या अर्थ है?', ta: 'Translation Academy: {topic}', books: '{n} पुस्तकें',
+    resume: 'जारी रखें', model: 'बिना इंटरनेट के खुले प्रश्न पूछने के लिए पढ़ने वाला मॉडल ({size}) भी डाउनलोड करें।', modelGo: 'मॉडल डाउनलोड करें',
   },
   ar: {
     title: 'اختر لغة المساعدات', lead: 'نزّلها مرة واحدة (يلزم الإنترنت). بعد ذلك يعمل كل شيء دون إنترنت.',
@@ -56,7 +62,8 @@ const STR: Record<string, F> = {
     offline: 'لا يوجد إنترنت، أو لم يُجب الخادم.',
     stopped: 'توقف التنزيل:', canceled: 'أُلغي التنزيل. ما وصل يبقى على الهاتف.', of: '{a} من {b}',
     file: 'أو حمّل ملف ‎.tcpack', kept: 'احتفظت بسؤالك. اختر لغة من الأسفل: سأجيب عنه حالما تصبح اللغة على الهاتف.',
-    notes: 'ماذا تقول الملاحظات عن {ref}؟', term: 'ما معنى {term}؟', ta: 'Translation Academy: {topic}', books: '{n} أسفار',
+    notes: 'ماذا تقول الملاحظات عن {ref}؟', term: 'ما معنى {term}؟', ta: 'Translation Academy: {topic}', books: 'الأسفار: {n}',
+    resume: 'متابعة', model: 'نزّل أيضًا نموذج القراءة ({size}) لتطرح أسئلة حرة دون إنترنت.', modelGo: 'تنزيل النموذج',
   },
 }
 export const FU = (ui: string): F => STR[ui] ?? STR.en!
@@ -113,6 +120,10 @@ function redraw() {
   }
 }
 
+/** The language picked for the person: a download that did not end ("Continue"), else the preferred languages' pack. */
+function pick() {
+  st.sel = st.offers.find((o) => o.partial)?.lang ?? preferred(st.offers.map((o) => o.lang), st.prefer)
+}
 async function look() {
   st.phase = 'looking'
   redraw()
@@ -120,7 +131,7 @@ async function look() {
   st.offers = list
   // nothing back: most likely the connection or the server (a phone in a light build has candidates on the server); a retry
   st.phase = list.length ? 'list' : 'offline'
-  if (!st.chosen || !list.some((o) => o.lang === st.sel)) st.sel = preferred(list.map((o) => o.lang), st.prefer)
+  if (!st.chosen || !list.some((o) => o.lang === st.sel)) pick()
   redraw()
 }
 
@@ -140,6 +151,7 @@ async function start() {
     st.abort = null
     await hooks.done(offer.lang)
   } catch (e) {
+    offer.partial = true // what arrived stays: the next try goes on from there
     const canceled = st.abort?.signal.aborted
     st.abort = null
     st.phase = 'failed'
@@ -200,7 +212,9 @@ function build(): HTMLElement {
     }
     box.appendChild(list)
     if (st.phase === 'failed') box.appendChild(el('p', 'fu-note fu-err', st.error))
-    if (sel) box.appendChild(button(`${st.phase === 'failed' ? s.retry : s.download} · ${nameOf(sel.lang)} · ${size(sel.bytes)}`, () => void start(), 'fu-go'))
+    // a download that did not end (cancelled, or the app was closed in the middle) goes on: "Continue"
+    const verb = st.phase === 'failed' ? s.retry : sel?.partial ? s.resume : s.download
+    if (sel) box.appendChild(button(`${verb} · ${nameOf(sel.lang)} · ${size(sel.bytes)}`, () => void start(), 'fu-go'))
   }
   if (st.phase !== 'downloading') box.appendChild(button(s.file, () => hooks.file(), 'fu-file'))
   return box
@@ -215,7 +229,7 @@ export function languagePicker(ui: string, prefer: string[], h: typeof hooks): H
   st.prefer = prefer
   hooks = h
   // a question asked in another language than the one picked for the person: its language comes first, unless they chose
-  if (!st.chosen && st.phase === 'list') st.sel = preferred(st.offers.map((o) => o.lang), prefer)
+  if (!st.chosen && st.phase === 'list') pick()
   const box = build()
   st.mounted = box
   if (st.phase === 'idle') void look()
