@@ -17,7 +17,7 @@ export function system(lang: string): string {
     'Only when the message has an "Articles found" line: build the answer from those articles, restating their explanation and strategies in simple words,',
     'and name each one in the first two sentences exactly as that line lists it. Give no advice, step, example or fact that is not in the articles.',
     'Without that line (notes, passages, questions), answer as described above and do not name an article the helps do not mention.',
-    'If the helps cover only part of the question, say what they do contain and which part they do not cover; do not fill that part from memory.',
+    'If the helps cover only part of the question, say what they do contain and which part they do not cover; do not fill that part from memory: no general steps, tips or advice of your own, and do not describe the articles at length.',
     'If the helps do not answer the question, say so in one sentence and suggest how to ask (a reference, a word, a phrase in quotes).',
     'Never invent verses, notes, numbers or facts that are not in the helps. Do not preach.',
     'Be brief: at most about 230 words. Use short paragraphs or a short list; you may use **bold** for key words.',
@@ -31,12 +31,17 @@ const KIND: Record<string, string> = { ta: 'Translation Academy', tw: 'Translati
 export function cleanSources(raw: unknown, helps: string): Source[] {
   if (!Array.isArray(raw)) return []
   const out: Source[] = []
-  for (const s of raw.slice(0, 4) as { id?: unknown; title?: unknown }[]) {
+  for (const s of raw.slice(0, 5) as { id?: unknown; title?: unknown }[]) {
     const id = typeof s?.id === 'string' ? s.id.trim() : ''
-    if (!/^(ta|tw):[\w/-]{1,80}$/.test(id) || out.some((o) => o.id === id)) continue
+    if (!/^(ta|tw):[a-z0-9/_-]+$/.test(id) || id.length > 90 || out.some((o) => o.id === id)) continue
+    let title = ''
+    if (s.title !== undefined && s.title !== null && s.title !== '') {
+      // a title that is not plain words, or too long, drops the whole entry
+      if (typeof s.title !== 'string' || s.title.length > 120 || !/^[\p{L}\p{N}\p{M} .,'’:;()?!&\-]+$/u.test(s.title)) continue
+      title = s.title.replace(/\s+/g, ' ').trim()
+    }
     // without a title from the phone: the heading the article starts with, else the end of its id
-    const given = typeof s.title === 'string' ? s.title.replace(/\s+/g, ' ').trim().slice(0, 80) : ''
-    const title = given || (helps.match(/^#{1,3} (.+)$/m)?.[1] ?? '').trim().slice(0, 80) || id.split('/').pop()!
+    title ||= (helps.match(/^#{1,3} ([\p{L}\p{N}\p{M} .,'’:;()?!&\-]{1,120})$/mu)?.[1] ?? '').trim() || id.split('/').pop()!
     out.push({ id, title })
   }
   return out
@@ -47,4 +52,20 @@ export const sourceName = (s: Source): string => `${KIND[s.id.slice(0, 2)] ?? 'H
 export function userMessage(question: string, helps: string, sources: Source[]): string {
   const found = sources.length ? `Articles found: ${sources.map(sourceName).join('; ')}\n\n` : ''
   return `Question: ${question}\n\n${found}Translation helps found on the phone:\n${helps || '(none found)'}`
+}
+
+/** The request body of /v1/answer as the model gets it: what the handler uses, and the evaluation script too. */
+export function answerRequest(body: { question?: unknown; lang?: unknown; helps?: unknown; sources?: unknown; history?: unknown }, maxContext: number) {
+  const question = typeof body.question === 'string' ? body.question.trim().slice(0, 600) : ''
+  const lang = typeof body.lang === 'string' ? body.lang : 'en'
+  const helps = typeof body.helps === 'string' ? body.helps.slice(0, maxContext) : ''
+  const sources = cleanSources(body.sources, helps)
+  const history = Array.isArray(body.history)
+    ? (body.history as { role?: string; text?: string }[])
+        .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
+        .slice(-4)
+        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.text!.slice(0, 800) }))
+    : []
+  const messages = [{ role: 'system', content: system(lang) }, ...history, { role: 'user', content: userMessage(question, helps, sources) }]
+  return { question, sources, messages }
 }

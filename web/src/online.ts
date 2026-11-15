@@ -83,9 +83,8 @@ const KIND_NAME: Record<string, Record<string, string>> = {
   ta: { en: 'Translation Academy', es: 'Traducción Académica (Translation Academy)', fr: 'Académie de traduction (Translation Academy)', id: 'Akademi Terjemahan (Translation Academy)', hi: 'अनुवाद अकादमी (Translation Academy)', ar: 'أكاديمية الترجمة (Translation Academy)' },
   tw: { en: 'Translation Words', es: 'Palabras de traducción (Translation Words)', fr: 'Mots de traduction (Translation Words)', id: 'Kata-kata Terjemahan (Translation Words)', hi: 'अनुवाद शब्द (Translation Words)', ar: 'كلمات الترجمة (Translation Words)' },
 }
-const SOURCE_WORD: Record<string, [string, string]> = {
-  en: ['Source', 'Sources'], es: ['Fuente', 'Fuentes'], fr: ['Source', 'Sources'], id: ['Sumber', 'Sumber'], hi: ['स्रोत', 'स्रोत'], ar: ['المصدر', 'المصادر'],
-}
+// the service drops a source whose title is not plain words, so a title with other characters is not sent (it uses the heading)
+const SAFE_TITLE = /^[\p{L}\p{N}\p{M} .,'’:;()?!&-]{1,120}$/u
 /** "Translation Academy: Metaphor", in the app's language. */
 export const sourceLabel = (id: string, title: string, ui: string): string => `${(KIND_NAME[id.slice(0, 2)] ?? KIND_NAME.ta!)[ui] ?? KIND_NAME[id.slice(0, 2)]?.en ?? 'Helps'}: ${title}`
 
@@ -104,23 +103,9 @@ export function withSources(sources: Source[], helps: string, ui: string): Onlin
   return out
 }
 /**
- * The answer's text with its sources named: when the model already wrote an article's title the text stands as it is; otherwise
- * a last line "Source: Translation Academy: Metaphor" is added, so a source is never missing even if Llama forgot it.
- */
-export function citeSources(text: string, sources: OnlineAnswer['sources'], ui: string): string {
-  const low = text.toLowerCase()
-  const missing = sources.filter((s) => !low.includes(s.title.toLowerCase()))
-  if (!missing.length) return text
-  const w = SOURCE_WORD[ui] ?? SOURCE_WORD.en!
-  return `${text}
-
-*${w[missing.length > 1 ? 1 : 0]}: ${missing.map((s) => s.label).join('; ')}*`
-}
-
-/**
  * The online answer, or null when it cannot be had (off, no internet, server error, more than 45 s). `sources` are the articles
  * the phone found (the message's `ctx`): they are sent so the model grounds the answer in them and names them, and come back in
- * `sources` (always, whatever the model wrote) for the app to show as a source line or button under the answer.
+ * `sources` (always, whatever the model wrote, and the text is not changed) for the app to show as buttons under the answer.
  */
 export async function onlineAnswer(question: string, lang: string, helps: string, history: Turn[], sources: Source[] = []): Promise<OnlineAnswer | null> {
   if (!onlineOn() || !onlineAvailable() || !isOnline()) return null
@@ -132,7 +117,7 @@ export async function onlineAnswer(question: string, lang: string, helps: string
     const r = await fetch(`${onlineUrl()}/v1/answer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-BTSM-Key': onlineKey(), ...(onlineSession() ? { Authorization: `Bearer ${onlineSession()!.token}` } : {}) },
-      body: JSON.stringify({ question, lang, helps: cut, history: history.slice(-4), sources: found.map(({ id, title }) => ({ id, title })) }),
+      body: JSON.stringify({ question, lang, helps: cut, history: history.slice(-4), sources: found.map(({ id, title }) => (SAFE_TITLE.test(title) ? { id, title } : { id })) }),
       signal: ctrl.signal,
     })
     onlineProblem = ''
@@ -153,7 +138,7 @@ export async function onlineAnswer(question: string, lang: string, helps: string
       return null
     }
     const j = await r.json()
-    return typeof j.text === 'string' && j.text.trim() ? { text: citeSources(j.text.trim(), found, lang), model: String(j.model ?? ''), sources: found } : null
+    return typeof j.text === 'string' && j.text.trim() ? { text: j.text.trim(), model: String(j.model ?? ''), sources: found } : null
   } catch {
     onlineProblem = 'network' // no connection, the service down, or more than 45 s
     return null

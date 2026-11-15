@@ -13,7 +13,7 @@
 // the key is dug out of an APK.
 
 import SLOTS from './slots-prompt.json'
-import { cleanSources, system, userMessage } from './prompt'
+import { answerRequest } from './prompt'
 
 export interface Env {
   AI: { run(model: string, input: unknown): Promise<any> }
@@ -335,24 +335,8 @@ export default {
       }
     }
 
-    const question = typeof body.question === 'string' ? body.question.trim().slice(0, 600) : ''
-    const lang = typeof body.lang === 'string' ? body.lang : 'en'
-    const max = Number(env.MAX_CONTEXT) || 9500
-    const helps = typeof body.helps === 'string' ? body.helps.slice(0, max) : ''
+    const { question, sources, messages } = answerRequest(body, Number(env.MAX_CONTEXT) || 9500)
     if (!question) return json({ error: 'no question' }, 400)
-    const sources = cleanSources(body.sources, helps)
-
-    const history = Array.isArray(body.history)
-      ? (body.history as { role?: string; text?: string }[])
-          .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
-          .slice(-4)
-          .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.text!.slice(0, 800) }))
-      : []
-    const messages = [
-      { role: 'system', content: system(lang) },
-      ...history,
-      { role: 'user', content: `Question: ${question}\n\nTranslation helps found on the phone:\n${helps || '(none found)'}` },
-    ]
     try {
       const out = await env.AI.run(env.MODEL, { messages, max_tokens: 550, temperature: 0.3 })
       const answer = String(out?.response ?? '').trim()
