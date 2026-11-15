@@ -131,6 +131,10 @@ async function getLang(lang: string): Promise<Lang | null> {
   langs.set(lang, out)
   return out
 }
+/** `lang` first, then English, then every other installed pack: where an answer can come from when `lang` is not installed. */
+async function packsFor(lang: string): Promise<string[]> {
+  return [...new Set([lang, 'en', ...(await installedLangs())])]
+}
 async function bookOf(l: Lang, code: string): Promise<BookModel | undefined> {
   return l.r.installed(`book:${code}`) ? await l.r.book(code) : undefined
 }
@@ -154,6 +158,16 @@ const sourceLine = (lang: string, cites: string[]): string => {
 const textKey = (model: BookModel, version: 'ult' | 'ust'): string | undefined =>
   model.texts.map((t) => t.res).find((k) => (version === 'ult' ? /\/(ult|glt)$/ : /\/(ust|gst)$/).test(k))
 const names = (l: Lang, id: string): string => (l.maps.map?.core.names?.[id] as string[] | undefined)?.[0] ?? id.split('/').pop()!
+/** Whether the pack of `l` (or the English one, where the panel looks next) has this article: packs carry only some Academy manuals. */
+async function hasArticle(l: Lang, id: string): Promise<boolean> {
+  for (const pl of await packsFor(l.lang)) {
+    try {
+      const x = await getLang(pl)
+      if (x && (await x.r.article(id)).data) return true
+    } catch { /* the next pack */ }
+  }
+  return false
+}
 async function titleOf(l: Lang, id: string): Promise<string> {
   try {
     const t = (await l.r.article(id)).data?.title
@@ -265,7 +279,8 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       const said = quoteIn(al, n.quote).map((q) => `«${q.text}»`).join(' / ')
       const orig = n.cols.quote && !clean(n.cols.note).startsWith(String(n.cols.quote)) ? String(n.cols.quote) : ''
       const headTxt = [said, orig ? `(${orig})` : ''].filter(Boolean).join(' ')
-      const academy = n.concept ? say(lang, 'note_academy', { title: await titleOf(l, n.concept) }) : ''
+      // "[Academy: title]" is a tap when the article can be opened: "[text](id)" is the link md() and linkTarget() know
+      const academy = n.concept ? say(lang, 'note_academy', { title: await titleOf(l, n.concept) }) + (!clean(n.cols.note).includes(n.concept) && (await hasArticle(l, n.concept)) ? `(${n.concept})` : '') : ''
       out.push(say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy }))
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${n.ref}, note ${n.id}`))
     }
@@ -384,7 +399,7 @@ async function count(s: Sheet, l: Lang): Promise<Result> {
 export async function linkedVerses(ref: string, concept: string, packLang: string): Promise<string[]> {
   const r = parseRef(ref)
   if (!r) return []
-  for (const pl of [...new Set([packLang, 'en'])]) {
+  for (const pl of await packsFor(packLang)) {
     const l = await getLang(pl)
     const model = l ? await bookOf(l, r.book) : undefined
     const rows = (model?.links?.rows ?? []) as HelpRow[]
@@ -401,7 +416,8 @@ export async function linkedVerses(ref: string, concept: string, packLang: strin
  */
 export async function booksWith(concept: string, packLang: string): Promise<Result> {
   const own = await getLang(packLang)
-  const en = packLang === 'en' ? own : await getLang('en')
+  let en: Lang | null = packLang === 'en' ? own : await getLang('en')
+  if (!own && !en) for (const pl of await installedLangs()) if ((en = await getLang(pl))) break
   const l = own?.maps.xmap?.core ? own : en
   const title = own ? names(own, concept) : l ? names(l, concept) : concept.split('/').pop()!
   const lang = own?.lang ?? packLang
@@ -568,8 +584,10 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
 export async function answerSheet(s: Sheet): Promise<Result> {
   facts = {}
   const lang = s.lang
-  const l = await getLang(lang)
+  let l = await getLang(lang)
   if (s.intent === 'resources') return resources(s, l)
+  // a sheet made for a language that is not (or no longer) installed: any installed pack answers
+  if (!l) for (const pl of await packsFor(lang)) if ((l = await getLang(pl))) break
   if (!l) return { answer: say('en', 'res_not_installed', { lang }), cites: [] }
   let r: Result
   switch (s.intent) {
@@ -718,7 +736,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
 
 /** An article for the panel: its title and its text with the links kept, or null when the pack has no such article. */
 export async function articleView(lang: string, id: string): Promise<{ title: string; md: string; lang: string } | null> {
-  for (const pl of [lang, 'en']) {
+  for (const pl of await packsFor(lang)) {
     const l = await getLang(pl)
     if (!l) continue
     try {
@@ -737,7 +755,8 @@ export async function articleView(lang: string, id: string): Promise<{ title: st
 
 /** The title of an article in a language (or its name from the maps), for links shown before it is opened. */
 export async function titleFor(lang: string, id: string): Promise<string> {
-  const l = (await getLang(lang)) ?? (await getLang('en'))
+  let l: Lang | null = null
+  for (const pl of await packsFor(lang)) if ((l = await getLang(pl))) break
   return l ? titleOf(l, id) : id.split('/').pop()!
 }
 

@@ -3,7 +3,7 @@ import books from './data/books.json'
 import figs from './data/figs.json'
 import glossary from './data/kt-glossary.json'
 import type { Sheet } from './answer'
-import { hasLang, openLang } from './packs'
+import { hasLang, installedLangs, openLang } from './packs'
 
 export type Slots = {
   intent?: string; book?: string | null; chapter?: number | null; verse_start?: number | null; verse_end?: number | null
@@ -140,8 +140,11 @@ const UI_PACK: Record<string, string> = { es: 'es-419', id: 'id', hi: 'hi', ar: 
 /** `prefer`: the helps language chosen in the app (null: the pack of the language the person wrote in, else English). */
 export async function buildSheet(qid: string, d: Slots, prefer: string | null = null): Promise<{ sheet: Sheet; ui: string }> {
   const ui = UI_LANGS.includes(d.lang ?? '') ? d.lang! : 'en'
-  const want = prefer ?? UI_PACK[ui] ?? null
-  const lang = want && (await hasLang(want)) ? want : 'en'
+  // the helps language chosen, else the pack of the question's language, else English, else any pack there is:
+  // never a language that is not installed (nothing installed: 'en', and the app shows its "no packs" screen)
+  let lang = 'en'
+  for (const c of [prefer, UI_PACK[ui], 'en']) if (c && (await hasLang(c))) { lang = c; break }
+  if (!(await hasLang(lang))) lang = (await installedLangs())[0] ?? 'en'
   const packLangs = lang === 'en' ? ['en'] : [lang, 'en']
   const sheet: Sheet = {
     id: qid, intent: d.intent ?? 'unknown', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang,
@@ -212,7 +215,7 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
       sheet.term = term
   }
   // The Spanish pack holds few books: for a book it lacks, answer from the English pack (the answer's words stay in Spanish).
-  if (sheet.lang !== 'en' && sheet.ref && /^[0-9a-z]{3}( |$)/.test(sheet.ref) && !sheet.ref.startsWith('obs')) {
+  if (sheet.ref && /^[0-9a-z]{3}( |$)/.test(sheet.ref) && !sheet.ref.startsWith('obs')) {
     const code = sheet.ref.slice(0, 3)
     // installed() is optimistic (a listed unit counts): read the book to know.
     const has = async (l: string) => {
@@ -223,7 +226,9 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
         return false
       }
     }
-    if (!(await has(sheet.lang)) && (await has('en'))) sheet.lang = 'en'
+    if (!(await has(sheet.lang))) {
+      for (const pl of [...new Set(['en', ...(await installedLangs())])]) if (pl !== sheet.lang && (await has(pl))) { sheet.lang = pl; break }
+    }
   }
   return { sheet, ui }
 }

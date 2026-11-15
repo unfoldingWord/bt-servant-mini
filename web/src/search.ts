@@ -159,7 +159,18 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
   const english = [...new Set([...rootsOf(untranslated), ...rootsOf(toEnglish(words, packLang))])]
   const roots = [...new Set([...ownRoots, ...english])]
   const hitsOf = (rs: string[], t: string) => { const toks = fold(t).split(/[^\p{L}]+/u); return rs.filter((r) => toks.some((x) => x.startsWith(r))).length }
-  const { r, maps } = await lang('en')
+  // English has every book, but a phone may not have it: the question's pack, then English, then any pack with the map
+  const have = await installedLangs()
+  let found: Awaited<ReturnType<typeof lang>> | null = null
+  for (const pl of [...new Set([packLang, 'en', ...have])]) {
+    if (!have.includes(pl)) continue
+    try {
+      const x = await lang(pl)
+      if (x.maps.xmap?.core) { found = x; break }
+    } catch {}
+  }
+  if (!found) return []
+  const { r, maps } = found
   const links = maps.xmap?.core?.links?.rows as Map<string, Map<string, [number, number]>> | undefined
   if (!links) return []
   // books that hold the most concept groups
@@ -238,7 +249,7 @@ async function packsFor(words: string[], packLang: string): Promise<string[]> {
   const PACK: Record<string, string> = { es: 'es-419', id: 'id', hi: 'hi', ar: 'ar' }
   const fromWords = Object.entries(LEX).filter(([k, t]) => k !== '_' && words.some((w) => t[fold(w)])).map(([k]) => PACK[k]).filter((x): x is string => !!x)
   const have = await installedLangs()
-  return [...new Set([packLang, ...fromWords, 'en'])].filter((l) => have.includes(l))
+  return [...new Set([packLang, ...fromWords, 'en', ...have])].filter((l) => have.includes(l))
 }
 /** All words together first, then the two longest, then the longest. */
 const triesOf = (words: string[]): string[][] => {
