@@ -285,8 +285,24 @@ def reports():
         ('report-jonah-fish', 'Jonah fish', None, [], {'route': 'search', 'ref': '/^jon /'}),
         ('report-daniel-lion', 'Daniel lion', None, [], {'route': 'search', 'ref': '/^dan /'}),
     ]
-    return [{'id': i, 'set': 'reports', 'lang': 'en', 'q': q, 'slots': s, 'before': b, 'expect': e, 'from': 'user reports Nov 13-14'}
-            for i, q, s, b, e in rows]
+    out = [{'id': i, 'set': 'reports', 'lang': 'en', 'q': q, 'slots': s, 'before': b, 'expect': e, 'from': 'user reports Nov 13-14'}
+           for i, q, s, b, e in rows]
+    # Nov 15 (0.10.0): the book's introduction came with no next step; the name's answer had no button to "How to Translate
+    # Names". Each with the buttons it must offer (code alone, and as the phone's model read the first one).
+    start = {'route': 'intro', 'ref': 'jon front:intro', 'follow': ['^jon 1 ', '^jon 1:intro', '^jon 1:1 ', '^ta:translate/translate-process', '^browse jon']}
+    names = {'route': 'translate-unknown', 'concept': 'tw:names/jonah', 'has': ['Jon[aá]s', 'nombres'], 'follow': ['^tw:names/jonah', '^ta:translate/translate-names']}
+    nov15 = [
+        ('report-start-jonah', 'es', 'Voy a empezar a traducir Jonás', None, start),
+        ('report-start-jonah-read', 'es', 'Voy a empezar a traducir Jonás', S(intent='passage', book='Jonás', what=['intro'], lang='es'), start),
+        ('report-start-ruth-en', 'en', 'I want to translate Ruth', None, {**start, 'ref': 'rut front:intro', 'follow': ['^rut 1 ', '^rut 1:intro', '^ta:translate/translate-process']}),
+        ('report-name-jonah', 'es', '¿Cómo debo traducir el nombre de Jonás?', None, names),
+        ('report-name-ruth-fr', 'fr', 'Comment traduire le nom de Ruth ?', None, {'route': 'translate-unknown', 'concept': 'tw:names/ruth', 'follow': ['^tw:names/ruth', '^ta:translate/translate-names']}),
+        ('report-who-jonah', 'en', 'Who was Jonah?', None, {'concept': 'tw:names/jonah', 'follow': ['^jon ', '^ta:translate/translate-names']}),
+        ('report-chapter-intro', 'en', 'Introduction to Ruth 2', None, {'route': 'intro', 'ref': 'rut 2:intro', 'follow': ['^rut 2 ', '^rut 2:1 ', '^rut 3:intro']}),
+    ]
+    out += [{'id': i, 'set': 'reports', 'lang': lang, 'q': q, 'slots': s, 'before': [], 'expect': e, 'from': 'user reports Nov 15'}
+            for i, lang, q, s, e in nov15]
+    return out
 
 
 # Training questions -> Translation Academy (pipeline.ts, route `academy`): the reports of Nov 13-14 in the six languages, and

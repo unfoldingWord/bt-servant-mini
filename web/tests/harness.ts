@@ -16,6 +16,8 @@ export type Expect = {
   notRef?: string
   /** not an article matching this regex (a question the academy route must leave alone) */
   notConcept?: string
+  /** next-step buttons the answer must offer: each regex matches a button's target ("jon 1", "ta:translate/translate-names", "browse") */
+  follow?: string[]
 }
 export type Turn = { q: string; slots?: Slots | null; sheet?: Sheet }
 export type Case = Turn & {
@@ -81,6 +83,20 @@ export function check(k: Case, o: Outcome): string[] {
   if (e.concept !== undefined && !fits(e.concept, o.concept)) bad.push(`concept ${o.concept} (want ${e.concept})`)
   for (const h of e.has ?? []) if (!new RegExp(h, 'iu').test(o.text)) bad.push(`missing /${h}/`)
   for (const h of e.not ?? []) if (new RegExp(h, 'iu').test(o.text)) bad.push(`has /${h}/`)
+  const targets = nextSteps(o).map(stepTarget)
+  for (const f of e.follow ?? []) if (!targets.some((t) => new RegExp(f, 'iu').test(t))) bad.push(`no button /${f}/ (has ${targets.join(', ') || 'none'})`)
   if ((e.useful ?? true) && !o.useful) bad.push('nothing found (no source cited)')
   return bad
 }
+
+type Step = { label: string; sheet?: { ref: string | null; concept: string | null; what: string[] }; browse?: { book?: string; manual?: string }; again?: string }
+/** The next-step buttons under an answer. */
+export const nextSteps = (o: Outcome): Step[] => ((o.reply as { follow?: Step[] } | null)?.follow ?? [])
+/** What a button leads to: "jon 1 text,notes", "ta:translate/translate-names", "browse jon", "again". */
+export const stepTarget = (f: Step): string =>
+  f.sheet ? `${f.sheet.ref ?? f.sheet.concept ?? ''} ${f.sheet.what.join(',')}`.trim() : f.browse ? `browse ${f.browse.book ?? f.browse.manual ?? ''}`.trim() : 'again'
+/**
+ * Whether an answer offers a next step (Abel, Nov 15: every answer must): a button, or the way to add the language asked in
+ * (`packs`: the languages view). An error never reaches here as a reply (main.ts gives it "Try again" and Browse).
+ */
+export const offersNext = (o: Outcome): boolean => nextSteps(o).length > 0 || !!(o.reply as { packs?: boolean } | null)?.packs
