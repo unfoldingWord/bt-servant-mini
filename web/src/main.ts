@@ -216,21 +216,25 @@ function renderMsg(m: Msg): HTMLElement {
     body.dir = 'auto' // an Arabic answer reads right to left
     body.innerHTML = md(m.ai.text)
     ai.appendChild(body)
-    // the article the answer was written from, always shown, whatever the model wrote: a tap opens it
+    d.appendChild(ai)
+    const src = document.createElement('details')
+    src.className = 'sources'
+    src.appendChild(el('summary', '', OT().sources))
+    // the article the answer was written from, always named, whatever the model wrote: a tap opens it in the sources below
+    // (it is this answer's own article, so no new question and no second online call)
     if (m.ai.sources?.length) {
       const f = el('div', 'follow ai-sources')
       for (const s of m.ai.sources) {
         const b = el('button', '', s.label) as HTMLButtonElement
         b.type = 'button'
-        b.onclick = () => runSheet(s.title, { ...bare(m.lang ?? 'en'), intent: 'article', concept: s.id }, m.ui ?? nav)
+        b.onclick = () => {
+          src.open = true
+          src.scrollIntoView({ block: 'start', behavior: 'smooth' })
+        }
         f.appendChild(b)
       }
       ai.appendChild(f)
     }
-    d.appendChild(ai)
-    const src = document.createElement('details')
-    src.className = 'sources'
-    src.appendChild(el('summary', '', OT().sources))
     d.appendChild(src)
     host = src
   }
