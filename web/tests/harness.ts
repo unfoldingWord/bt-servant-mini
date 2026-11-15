@@ -93,8 +93,11 @@ export function check(k: Case, o: Outcome): string[] {
 }
 
 type Step = { label: string; sheet?: { ref: string | null; concept: string | null; what: string[] }; browse?: { book?: string; manual?: string }; again?: string }
-/** The next-step buttons under an answer. */
-export const nextSteps = (o: Outcome): Step[] => ((o.reply as { follow?: Step[] } | null)?.follow ?? [])
+/** The next-step buttons under an answer, and the way back to the passage it left ("← Back to …", its own row) last. */
+export const nextSteps = (o: Outcome): Step[] => {
+  const r = o.reply as { follow?: Step[]; back?: Step } | null
+  return [...(r?.follow ?? []), ...(r?.back ? [r.back] : [])]
+}
 /** What a button leads to: "jon 1 text,notes", "ta:translate/translate-names", "browse jon", "again". */
 export const stepTarget = (f: Step): string =>
   f.sheet ? `${f.sheet.ref ?? f.sheet.concept ?? ''} ${f.sheet.what.join(',')}`.trim() : f.browse ? `browse ${f.browse.book ?? f.browse.manual ?? ''}`.trim() : 'again'
