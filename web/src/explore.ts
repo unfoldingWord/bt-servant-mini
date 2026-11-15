@@ -23,6 +23,7 @@ export async function bibleBooks(packs: string[]): Promise<BookEntry[]> {
 export type ChapterEntry = { ch: number; verses: number[]; intro: boolean }
 export type BookPlan = { intro: boolean; chapters: ChapterEntry[] }
 const plans = new Map<string, Promise<BookPlan | null>>()
+const planned = new Set<string>() // the plans already read: no wait to show for them
 /**
  * A book's chapters and verses as its texts publish them (a bridge "4-5" gives 4 and 5), and which introductions its notes
  * have (as answer.ts finds them: the first intro row is the book's, another one starting at chapter:1 is that chapter's).
@@ -54,7 +55,7 @@ export function bookPlan(lang: string, code: string): Promise<BookPlan | null> {
       const chapters = [...byCh.entries()].filter(([, vs]) => vs.size).sort((a, b) => a[0] - b[0])
         .map(([ch, vs]) => ({ ch, verses: [...vs].sort((a, b) => a - b), intro: chIntro.has(ch) }))
       return chapters.length ? { intro: intros.length > 0, chapters } : null
-    })().catch(() => null))
+    })().catch(() => null).finally(() => planned.add(key)))
   return plans.get(key)!
 }
 
@@ -89,6 +90,7 @@ export async function manualArticles(lang: string, m: Manual): Promise<ArticleEn
 /** Tests and a change of packs: forget what was read. */
 export function resetExplore() {
   plans.clear()
+  planned.clear()
   stack.length = 0
 }
 
@@ -352,6 +354,14 @@ async function draw() {
   if (v.k === 'book' || v.k === 'chapter') {
     const name = bookShown(ui, v.code)
     b.title.textContent = v.k === 'book' ? name : `${name} ${v.ch}`
+    // reading a long book (Psalms, Genesis) holds the page for a moment, longer on a small phone: "Opening…" is drawn first
+    if (!planned.has(`${v.lang}:${v.code}`)) {
+      clearTimeout(later)
+      b.body.appendChild(wait)
+      // after the next paint; a page out of sight paints nothing, so not longer than a moment
+      await new Promise((r) => { requestAnimationFrame(() => setTimeout(r, 0)); setTimeout(r, 80) })
+      if (mine !== drawing) return
+    }
     const plan = await bookPlan(v.lang, v.code)
     if (!done()) return
     if (!plan) {
