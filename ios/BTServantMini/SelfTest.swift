@@ -1,7 +1,8 @@
-// A self-test for CI (launch argument --selftest): it goes through the app as a person would, in the simulator. It downloads
-// the model from About, answers the safety question, asks with no language (expects the "no language yet" answer), adds
-// English from the server, and asks a free question (the model reads it, the pack answers). Each step goes to
-// Documents/selftest.json, which CI reads from the simulator; the last step is "done" or "error".
+// A self-test for CI (launch argument --selftest): it goes through the app as a person would, in the simulator, along the
+// first use of 0.9.9 and later: it answers the safety question, asks with no language (the question is kept and the language
+// picker shows in the chat), downloads English from the picker (the kept question is then answered by itself), downloads the
+// reading model from the line offered after the first language, and asks a free question (the model reads it, the pack
+// answers). Each step goes to Documents/selftest.json, which CI reads from the simulator; the last step is "done" or "error".
 import Foundation
 
 enum SelfTest {
@@ -43,33 +44,34 @@ enum SelfTest {
       }
       try {
         log('bridge', [typeof window.Android, window.Android.platform(), window.Android.status(), window.Android.version(), 'secure context: ' + window.isSecureContext, 'crypto.subtle: ' + !!(window.crypto && crypto.subtle)].join(' | '))
-        const about = await until(() => document.querySelector('#about'), 30000, 'About on first launch')
-        const t0 = Date.now()
-        const dl = button(/^Download \\(/, about)
-        if (dl) { dl.click(); log('download', dl.textContent.trim()) }
-        await until(() => /^(ready|error)/.test(window.Android.status()), 20 * 60000, 'the model')
-        log('model', window.Android.status() + ' after ' + Math.round((Date.now() - t0) / 1000) + ' s')
-        button(/^(Start|Close)$/, document.querySelector('#about'))?.click()
+        // the safety question comes first (About no longer opens by itself)
+        const safety = await until(() => document.querySelector('#safety'), 30000, 'the safety question')
+        for (const b of [...safety.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'No')) b.click()
+        await sleep(300)
+        button(/^Continue$/, safety)?.click()
         await sleep(800)
-        const safety = document.querySelector('#safety')
-        if (safety) {
-          for (const b of [...safety.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'No')) b.click()
-          button(/^Continue$/, safety)?.click()
-          await sleep(500)
-        }
+        // with no language, the question is kept and the language picker shows in the chat
         log('no-language', await ask('Ruth 1:16'))
-        document.querySelector('#menu').click()
+        const english = await until(() => button(/^English.*MB/), 60000, 'English in the language picker')
+        english.click()
         await sleep(500)
-        button(/Languages on this phone/)?.click()
-        await sleep(500)
-        button(/^Look on the server/)?.click()
-        const english = await until(() => [...document.querySelectorAll('#panel .row')].find((r) => /^English/.test(r.textContent.trim())), 60000, 'the server list')
         const t1 = Date.now()
-        button(/^Download$/, english).click()
+        const n = document.querySelectorAll('.msg.bot:not(.pending)').length
+        const go = await until(() => button(/^Download · English/), 10000, 'the download button')
+        log('download', go.textContent.trim())
+        go.click()
         await until(() => /English/.test(document.querySelector('#packs')?.textContent || ''), 10 * 60000, 'the English pack')
         log('pack', 'English added after ' + Math.round((Date.now() - t1) / 1000) + ' s')
-        document.querySelector('#panel').classList.remove('show')
-        await sleep(500)
+        // the kept question is answered by itself
+        await until(() => [...document.querySelectorAll('.msg.bot:not(.pending)')].slice(n).some((d) => /1:16/.test(d.innerText)), 120000, 'the kept question answered')
+        log('kept-answered', [...document.querySelectorAll('.msg.bot:not(.pending)')].at(-1).innerText.slice(0, 600))
+        // the reading model, from the line offered after the first language
+        const t0 = Date.now()
+        const model = await until(() => button(/^Download the model$/), 60000, 'the model line')
+        model.click()
+        await until(() => /^(ready|error)/.test(window.Android.status()), 20 * 60000, 'the model')
+        log('model', window.Android.status() + ' after ' + Math.round((Date.now() - t0) / 1000) + ' s')
+        if (!/^ready/.test(window.Android.status())) throw new Error('model: ' + window.Android.status())
         log('question', await ask('Where was Jonah swallowed by the fish?'))
         log('reference', await ask('Ruth 1:16'))
         log('done', 'ok')
