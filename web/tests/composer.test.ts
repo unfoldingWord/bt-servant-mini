@@ -69,7 +69,7 @@ describe('suggest() by table', () => {
     ['hi', 'योना 1:3 की टिप्पणियाँ', ['missing:योना 1:3 · इस फ़ोन पर टिप्पणियाँ नहीं']],
     ['hi', 'Acts 2:1 टिप्पणियाँ', ['ok:✓ प्रेरितों के काम 2:1 · टिप्पणियाँ']], // (Acts: the one book with Hindi notes)
     // (introductions come from another pack when this one has none, as the answer gives them)
-    ['hi', 'योना 1 का परिचय', ['ok:✓ योना 1 का परिचय']],
+    ['hi', 'योना 1 का परिचय', ['ok:✓ योना 1 का परिचय · अंग्रेज़ी में']],
     // numbered books after a shape's words read now (refInText)
     ['es', 'Notas de 1 Juan 3:2', ['ok:✓ 1 Juan 3:2 · notas · en inglés']],
     ['ar', 'يونان ١:٣ ملاحظات', ['ok:✓ يونان 1:3 · الملاحظات']],
@@ -279,6 +279,15 @@ describe('the box and the keyboard', () => {
     k.compositionStart()
     await k.tap(k.row.items[0]!)
     box.value = 'Rut 2:3 por qué'
+    k.compositionEnd()
+    expect(log).toEqual(['send'])
+    // typed on to a text that reads the same ("Rut 2:3?"): the person went on typing, so the queued send is dropped
+    box.value = 'Rut 2:3'
+    k.refresh()
+    await settle(k)
+    k.compositionStart()
+    await k.tap(k.row.items[0]!)
+    box.value = 'Rut 2:3?'
     k.compositionEnd()
     expect(log).toEqual(['send'])
   })

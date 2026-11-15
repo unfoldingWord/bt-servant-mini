@@ -57,6 +57,8 @@ export class Composer {
   pending: string | null = null
   /** the "✓" tapped while the keyboard was composing: sent when it ends */
   sendLabel: string | null = null
+  /** the box's text when that "✓" was tapped: typed on since, the send is dropped */
+  sendText = ''
   /** a book that is not on this phone, tapped: the row says so and offers Browse */
   missing: string | null = null
   books: Record<string, Set<string>> | null = null
@@ -108,6 +110,11 @@ export class Composer {
     if (this.sendLabel !== null) {
       const label = this.sendLabel
       this.sendLabel = null
+      // (a word committed now counts: "Rut 2:3?" reads the same, but the person went on typing, so nothing is sent)
+      if (this.box.value !== this.sendText) {
+        this.pending = null
+        return this.onInput()
+      }
       this.pending = null
       return this.sendIf(label)
     }
@@ -174,6 +181,7 @@ export class Composer {
       // while the keyboard composes, the send waits for the composition to end (Gboard keeps a word open)
       if (this.composing) {
         this.sendLabel = s.label
+        this.sendText = this.box.value
         return
       }
       // only the "✓" made for this very text, and only if read again now it says the same; otherwise the row is made again

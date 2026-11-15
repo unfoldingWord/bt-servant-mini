@@ -30,7 +30,7 @@ export type Strip = { unit: 'chapter' | 'verse'; max: number; base: string; sep:
 /** `needs`: books to read before the row can say what they have (loadHelps); the composer reads them and makes the row again. */
 export type Row = { items: Suggestion[]; strip?: Strip; understood?: Understood; needs?: [string, string][] }
 /** What a "✓" stands for: the slots the answer is built from, the pack it is read from, and the words it shows. */
-export type Understood = { label: string; slots: Slots; code: string; pack: string; has: boolean; other: boolean; needs?: [string, string][] }
+export type Understood = { label: string; ui: string; slots: Slots; code: string; pack: string; has: boolean; other: boolean; needs?: [string, string][] }
 export type Ctx = {
   /** the app's language */
   ui: string
@@ -156,12 +156,12 @@ export function packOf(slots: Slots, code: string, ctx: Ctx, quick = false): { p
  * Whether the answer will have the introduction (a book's, or a chapter's), as pipeline.ts introsOf looks for it: in the
  * sheet's pack, then English, then the others (an introduction from another pack is said so in the answer).
  */
-function introIn(pack: string, code: string, ch: number | null, ctx: Ctx): { has: boolean; needs?: [string, string][] } {
+function introIn(pack: string, code: string, ch: number | null, ctx: Ctx): { has: boolean; from?: string; needs?: [string, string][] } {
   for (const pl of new Set([pack, 'en', ...ctx.packs])) {
     if (!ctx.books?.[pl]?.has(code)) continue
     const h = helpsKnown(pl, code)
     if (h === undefined) return { has: false, needs: [[pl, code]] }
-    if (h && h.front && (!ch || h.chapters.has(ch))) return { has: true }
+    if (h && h.front && (!ch || h.chapters.has(ch))) return { has: true, from: pl }
   }
   return { has: false }
 }
@@ -229,6 +229,9 @@ export function introText(ui: string, code: string, ch: number | null): string {
 /** The help words a verse may get ("Rut 2:3 notas"), each one read back by code in every language (tests/shapes.test.ts). */
 const HELP_KINDS = ['notes', 'questions', 'terms', 'text'] as const
 
+/** The "✓" label of an introduction without its pack's note: "योना 1 का परिचय". */
+const ref0 = (u: Understood) => introLabel(u.ui, refShown(u.ui, u.code, u.slots))
+
 /** A reference as the row shows it: the book in the app's language, Latin digits. */
 function refShown(ui: string, code: string, s: Slots): string {
   const name = bookShown(ui, code)
@@ -248,14 +251,14 @@ export function understood(text: string, ctx: Ctx): Understood | null {
   const code = slots?.book ? bookCode(slots.lang ?? ctx.ui, slots.book) : null
   if (!slots || !code) return null
   const where = packOf(slots, code, ctx)
-  if (where.needs) return { label: '', slots, code, ...where }
+  if (where.needs) return { label: '', ui: ctx.ui, slots, code, ...where }
   const what = slots.what ?? []
   const ref = refShown(ctx.ui, code, slots)
   let label = what.length === 1 && what[0] === 'intro' ? introLabel(ctx.ui, ref) : ref
   const w = what.length === 1 ? whatWord(ctx.ui, what[0]!) : null
   if (w) label += ` · ${w.toLocaleLowerCase(ctx.ui)}`
   if (where.other) label += ` · ${fillT(ST(ctx.ui).inLang, { lang: ST(ctx.ui).langs[where.pack] ?? where.pack })}`
-  return { label, slots, code, ...where }
+  return { label, ui: ctx.ui, slots, code, ...where }
 }
 
 const endsWithNumber = (t: string) => /[\d०-९٠-٩]\s*:?\s*$/.test(t)
@@ -287,6 +290,7 @@ function rowOf(t: string, u: Understood, ctx: Ctx): Row {
   const plain = !what.length
   // the "✓" only for what the answer will have: a help this book lacks here ("योना 1:3 · टिप्पणियाँ": the Hindi pack has no
   // notes for Jonah), or an introduction no installed pack has, says so and sends nothing
+  let okLabel = u.label
   const lacks = (k: string): Row => {
     const w = (k === 'intro' ? SHAPES.intro!.label[ui] : whatWord(ui, k)) ?? k
     return { items: [{ kind: 'missing', label: `${refShown(ui, u.code, u.slots)} · ${fillT(s.none, { what: w.toLocaleLowerCase(ui) })}`, book: u.code }] }
@@ -295,10 +299,12 @@ function rowOf(t: string, u: Understood, ctx: Ctx): Row {
     const i = introIn(u.pack, u.code, u.slots.chapter ?? null, ctx)
     if (i.needs) return { items: [], needs: i.needs }
     if (!i.has) return lacks('intro')
+    // an introduction from another pack says so, as the answer does ("· अंग्रेज़ी में")
+    if (i.from && i.from !== u.pack) okLabel = `${ref0(u)} · ${fillT(s.inLang, { lang: s.langs[i.from] ?? i.from })}`
   } else if (what.length === 1 && (HELP_KINDS as readonly string[]).includes(what[0]!)) {
     if (!h[what[0] as (typeof HELP_KINDS)[number]]) return lacks(what[0]!)
   } else if (!(h.text || h.notes || h.questions || h.terms)) return lacks('text')
-  const items: Suggestion[] = [{ kind: 'ok', label: `✓ ${u.label}`, send: true }]
+  const items: Suggestion[] = [{ kind: 'ok', label: `✓ ${okLabel}`, send: true }]
   let strip: Strip | undefined
   if (u.slots.chapter && !u.slots.verse_start && plain && endsWithNumber(t) && lastNumber(t) === u.slots.chapter) {
     const max = VERSES[u.code]?.[u.slots.chapter - 1] ?? 0
