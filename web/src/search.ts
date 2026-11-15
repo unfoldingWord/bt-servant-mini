@@ -9,7 +9,7 @@ import books from './data/books.json'
 import { installedLangs, openLang } from './packs'
 import { fold } from './sheet'
 import storyWords from './data/story-words.json'
-import { searchIndex } from './textindex'
+import { resetIndexes, searchIndex } from './textindex'
 
 /** Common story words of a question in English ("mar" -> "sea"), to match the English text when the language's pack lacks the book. */
 const LEX = storyWords as unknown as Record<string, Record<string, string>>
@@ -100,6 +100,7 @@ let NAMES: Map<string, string[]> | null = null
 /** After a language is added or removed. */
 export function resetSearch() {
   opened.clear()
+  resetIndexes()
   NAMES = null
 }
 async function names(): Promise<Map<string, string[]>> {

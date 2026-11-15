@@ -37,42 +37,62 @@ const isWordAstral = (cp: number): boolean => {
  * Every book a pack can hold, in the order the client reads them: its catalog's, which lists units sorted by code point
  * (language-pack-v3 build/catalog.ts). Hits with the same score keep this order, so it must be the same.
  */
-const ALL_BOOKS: string[] = Object.keys((booknames as any).BOOK_EN).sort()
+export const ALL_BOOKS: string[] = Object.keys((booknames as any).BOOK_EN).sort()
 const KINDS: SearchKind[] = ['text', 'note', 'question']
 
+type Ints = Uint8Array | Uint16Array | Uint32Array
 type Index = {
   books: string[]
   /** Per row: its kind (index in KINDS), book (index in `books`), place among the rows of its book (`rowsOf`), ref and resource. */
   kind: Uint8Array
   book: Uint8Array
-  local: Uint32Array
-  ref: Uint32Array
-  res: Uint32Array
+  local: Ints
+  ref: Ints
+  res: Ints
   strs: string[]
   /** The token ids of row i are toks[start[i]..start[i+1]). */
   start: Uint32Array
-  toks: Uint32Array
+  toks: Ints
   /** The rows that hold token t are post[pstart[t]..pstart[t+1]), ascending. */
   pstart: Uint32Array
-  post: Uint32Array
+  post: Ints
   vocab: Map<string, number>
 }
 
-/** Growable Uint32 array: a pack has millions of tokens, and plain arrays of numbers take twice the memory. */
-class U32 {
-  a = new Uint32Array(1 << 16)
+/**
+ * Growable array of numbers, 16 bits while they fit (a pack has fewer than 65,536 words in en and ar: half the memory of its
+ * millions of tokens), 32 from the first one that does not. Plain arrays of numbers would take four times as much.
+ */
+class Grow {
+  a: Uint16Array | Uint32Array = new Uint16Array(1 << 12)
   n = 0
   push(x: number) {
+    if (x > 0xffff && this.a instanceof Uint16Array) this.a = Uint32Array.from(this.a)
     if (this.n === this.a.length) {
-      const b = new Uint32Array(this.a.length * 2)
+      const b = this.a instanceof Uint16Array ? new Uint16Array(this.a.length * 2) : new Uint32Array(this.a.length * 2)
       b.set(this.a)
       this.a = b
     }
     this.a[this.n++] = x
   }
-  done(): Uint32Array {
+  done(): Uint16Array | Uint32Array {
     return this.a.slice(0, this.n)
   }
+}
+
+/**
+ * A task boundary, where the screen and timers get their turn: `scheduler.yield()` where the WebView has it, `setImmediate`
+ * under bun (a timeout waits 15 ms there on Windows), else a timeout.
+ */
+const nextTask = (): Promise<void> => {
+  const sch = (globalThis as any).scheduler
+  if (typeof sch?.yield === 'function') return sch.yield()
+  return new Promise((res) => (typeof setImmediate === 'function' ? setImmediate(res) : setTimeout(res, 0)))
+}
+/** Gives the screen a turn after about `ms` of work, so building an index (seconds) does not freeze it. */
+function breather(ms = 25): () => Promise<void> | undefined {
+  let since = performance.now()
+  return () => (performance.now() - since < ms ? undefined : nextTask().then(() => { since = performance.now() }))
 }
 
 /**
@@ -123,10 +143,15 @@ class Spellings {
   }
 }
 
-/** A book decoded for this once, not kept by the reader (which keeps every book it decodes). */
-async function decode(r: PackReader, b: string): Promise<BookModel | undefined> {
+/**
+ * A book decoded for this once, not kept by the reader as a book (it keeps every book it decodes). The reader still keeps the
+ * book's segment (its `segments` cache, in the pack client): about 75 MB for all of ar.
+ */
+async function decode(r: PackReader, b: string, breathe?: () => Promise<void> | undefined): Promise<BookModel | undefined> {
   try {
     const seg = (await r.segments(`book:${b}`))?.[0]
+    // reading the segment and viewing it are each up to 100 ms for a long book: a turn for the screen between them
+    await breathe?.()
     if (seg) return bookView(seg)
   } catch {}
   // a segment the reader finds bad: let it record the problem, as its search did
@@ -135,13 +160,14 @@ async function decode(r: PackReader, b: string): Promise<BookModel | undefined> 
 
 async function build(r: PackReader): Promise<Index> {
   const books: string[] = []
-  const kind = new U32()
-  const book = new U32()
-  const local = new U32()
-  const ref = new U32()
-  const res = new U32()
-  const start = new U32()
-  const toks = new U32()
+  const kind: number[] = []
+  const book: number[] = []
+  const local = new Grow()
+  const ref = new Grow()
+  const res = new Grow()
+  const start: number[] = []
+  const toks = new Grow()
+  const breathe = breather()
   const vocab = new Map<string, number>()
   const strs: string[] = []
   const strIds = new Map<string, number>()
@@ -159,11 +185,14 @@ async function build(r: PackReader): Promise<Index> {
   })
   for (const b of ALL_BOOKS) {
     if (!r.installed(`book:${b}`)) continue
-    const model = await decode(r, b)
+    await breathe()
+    const model = await decode(r, b, breathe)
     if (!model) continue
+    await breathe()
     const rows = rowsOf(model)
     const bi = books.push(b) - 1
     for (let i = 0; i < rows.length; i++) {
+      if ((i & 255) === 0) await breathe()
       const row = rows[i]!
       const k = KINDS.indexOf(row.kind)
       if (k < 0) continue
@@ -202,61 +231,110 @@ async function build(r: PackReader): Promise<Index> {
     }
   }
   start.push(toks.n)
-  const st = start.done()
+  const st = Uint32Array.from(start)
+  start.length = 0
   const tk = toks.done()
   const nRows = st.length - 1
   // postings: count the rows of each token, then fill (one entry per row, however many times the token is in it)
   const pstart = new Uint32Array(vocab.size + 1)
   const last = new Int32Array(vocab.size).fill(-1)
-  for (let i = 0; i < nRows; i++)
+  for (let i = 0; i < nRows; i++) {
+    if ((i & 4095) === 0) await breathe()
     for (let k = st[i]!; k < st[i + 1]!; k++) {
       const t = tk[k]!
       if (last[t] !== i) { last[t] = i; pstart[t + 1]!++ }
     }
+  }
   for (let t = 0; t < vocab.size; t++) pstart[t + 1]! += pstart[t]!
-  const post = new Uint32Array(pstart[vocab.size]!)
+  const post = nRows <= 0x10000 ? new Uint16Array(pstart[vocab.size]!) : new Uint32Array(pstart[vocab.size]!)
   const fill = pstart.slice(0, vocab.size)
   last.fill(-1)
-  for (let i = 0; i < nRows; i++)
+  for (let i = 0; i < nRows; i++) {
+    if ((i & 4095) === 0) await breathe()
     for (let k = st[i]!; k < st[i + 1]!; k++) {
       const t = tk[k]!
       if (last[t] !== i) { last[t] = i; post[fill[t]!++] = i }
     }
+  }
   return {
-    books, kind: new Uint8Array(kind.done()), book: new Uint8Array(book.done()), local: local.done(), ref: ref.done(),
-    res: res.done(), strs, start: st, toks: tk, pstart, post, vocab,
+    books, kind: Uint8Array.from(kind), book: Uint8Array.from(book), local: local.done(), ref: ref.done(), res: res.done(),
+    strs, start: st, toks: tk, pstart, post, vocab,
   }
 }
 
-const built = new WeakMap<PackReader, Promise<Index>>()
+/**
+ * The indexes kept, the last used last: at most two bigger than 4 MB (en and ar take 30-45 MB each), so a phone asked in
+ * several languages does not keep them all; small ones (a pack of a few books) do not count. A dropped index takes its
+ * books' rows with it.
+ */
+let MAX_BIG = 2
+let SMALL = 4 * 2 ** 20
+/** Tests: other limits (how many big indexes, from how many bytes an index is big); gives back the old ones. */
+export function indexLimits(maxBig: number, small: number): [number, number] {
+  const old: [number, number] = [MAX_BIG, SMALL]
+  MAX_BIG = maxBig
+  SMALL = small
+  return old
+}
+const built = new Map<PackReader, Promise<Index>>()
+const sizes = new Map<PackReader, number>()
 function indexOf(r: PackReader): Promise<Index> {
   let p = built.get(r)
-  if (!p) {
-    built.set(r, (p = build(r)))
-    // a read that failed is tried again next time
-    p.catch(() => { if (built.get(r) === p) built.delete(r) })
+  if (p) {
+    built.delete(r)
+    built.set(r, p)
+    return p
   }
+  p = build(r)
+  built.set(r, p)
+  const mine = p
+  p.then(
+    (x) => {
+      if (built.get(r) !== mine) return
+      sizes.set(r, bytesOf(x))
+      evict()
+    },
+    // a read that failed is tried again next time
+    () => { if (built.get(r) === mine) drop(r) },
+  )
   return p
 }
-/** Builds the index of a pack ahead of the first search (it reads every book of the pack). */
+function evict() {
+  const big = [...built.keys()].filter((r) => (sizes.get(r) ?? 0) > SMALL)
+  for (const r of big.slice(0, Math.max(0, big.length - MAX_BIG))) drop(r)
+}
+function drop(r: PackReader) {
+  built.delete(r)
+  sizes.delete(r)
+  recent.delete(r)
+}
+/** After a language is added or removed (search.ts `resetSearch`): every index, and the rows of the books of hits, let go. */
+export function resetIndexes() {
+  for (const r of [...built.keys()]) drop(r)
+}
+/** The languages that have an index (or are building one), the last used last. */
+export const indexedLangs = (): string[] => [...built.keys()].map((r) => r.lang)
+/** Builds the index of a pack ahead of its first search (it reads every book of the pack, giving the screen turns). */
 export async function prepareIndex(r: PackReader): Promise<void> {
   await indexOf(r)
 }
 
-/** Bytes the index of a pack takes: its arrays, and about 60 bytes a word of the vocabulary and a ref or resource name. */
-export async function indexBytes(r: PackReader): Promise<number> {
-  const x = await indexOf(r)
+/** Bytes an index takes: its arrays, and about 60 bytes a word of the vocabulary and a ref or resource name. */
+function bytesOf(x: Index): number {
   let n = 0
   for (const a of [x.kind, x.book, x.local, x.ref, x.res, x.start, x.toks, x.pstart, x.post]) n += a.byteLength
   for (const w of x.vocab.keys()) n += 60 + w.length * 2
   for (const w of x.strs) n += 60 + w.length * 2
   return n
 }
+export async function indexBytes(r: PackReader): Promise<number> {
+  return bytesOf(await indexOf(r))
+}
 
 /** The rows holding every token of `ts`: the shortest list first, each next one walked from where the last match was. */
-function rowsWithAll(x: Index, ts: number[]): Uint32Array | number[] {
+function rowsWithAll(x: Index, ts: number[]): Ints | number[] {
   const lists = [...new Set(ts)].map((t) => x.post.subarray(x.pstart[t]!, x.pstart[t + 1]!)).sort((a, b) => a.length - b.length)
-  let cur: Uint32Array | number[] = lists[0]!
+  let cur: Ints | number[] = lists[0]!
   for (const l of lists.slice(1)) {
     const next: number[] = []
     let j = 0
@@ -317,20 +395,21 @@ export async function searchIndex(r: PackReader, text: string, f: { kinds: Searc
   })
 }
 
-/** The rows of the last few books a hit came from (a search keeps 4 to 6 hits, often in the same books). */
-const recent = new Map<string, { r: PackReader; rows: Promise<PieceRow[]> }>()
+/** The rows of the last few books hits came from, per reader (a search keeps 4 to 6 hits, often in the same books). */
+const recent = new WeakMap<PackReader, Map<string, Promise<PieceRow[]>>>()
 function rowsOfBook(r: PackReader, b: string): Promise<PieceRow[]> {
-  const key = `${r.lang} ${b}`
-  const hit = recent.get(key)
-  if (hit && hit.r === r) {
-    recent.delete(key)
-    recent.set(key, hit)
-    return hit.rows
+  let books = recent.get(r)
+  if (!books) recent.set(r, (books = new Map()))
+  let rows = books.get(b)
+  if (rows) books.delete(b)
+  else {
+    rows = decode(r, b).then((m) => (m ? rowsOf(m) : []))
+    const mine = rows
+    const of = books
+    rows.catch(() => { if (of.get(b) === mine) of.delete(b) })
   }
-  const rows = decode(r, b).then((m) => (m ? rowsOf(m) : []))
-  recent.set(key, { r, rows })
-  rows.catch(() => recent.delete(key))
-  if (recent.size > 6) recent.delete(recent.keys().next().value!)
+  books.set(b, rows)
+  if (books.size > 4) books.delete(books.keys().next().value!)
   return rows
 }
 
