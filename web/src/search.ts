@@ -2,7 +2,7 @@
 // 1) Words that name a Translation Words article (names and key terms, in any of the five languages) become concepts; the verses
 //    whose word links hold all of them are found through the common map (books) and each book's links (verses). Works whatever
 //    language the question is in. 2) Otherwise, full-text search of the installed texts, dropping common words before names.
-import { verseId, type BookModel, type HelpRow } from '@bt-synergy/language-pack-v3'
+import { mapView, verseId, type BookModel, type HelpRow } from '@bt-synergy/language-pack-v3'
 import glossary from './data/kt-glossary.json'
 import booknames from './data/booknames.json'
 import books from './data/books.json'
@@ -69,11 +69,29 @@ export function keywords(q: string): string[] {
   return out.slice(0, 6)
 }
 
-type Lang = { r: Awaited<ReturnType<typeof openLang>>; maps: any }
-const opened = new Map<string, Promise<Lang>>()
-const lang = (l: string) => {
-  if (!opened.has(l)) opened.set(l, openLang(l).then(async (r) => ({ r, maps: await r.maps() })))
+type Reader = Awaited<ReturnType<typeof openLang>>
+const opened = new Map<string, Promise<Reader>>()
+/** A pack's reader; its maps only when asked (they take most of a second per pack to read). */
+const reader = (l: string): Promise<Reader> => {
+  if (!opened.has(l)) opened.set(l, openLang(l))
   return opened.get(l)!
+}
+const lang = async (l: string): Promise<{ r: Reader; maps: any }> => {
+  const r = await reader(l)
+  return { r, maps: await r.maps() }
+}
+/**
+ * The article names of a pack: the core of its `map` unit alone, not all its maps (the word links of every book, read again
+ * by every pack). Same names as `(await r.maps()).map.core.names`, which is still asked when the core does not read.
+ */
+async function namesOf(r: Reader): Promise<Record<string, string[]>> {
+  try {
+    for (const seg of (await r.segments('map')) ?? []) {
+      if ((seg as any).h?.part !== 'core') continue
+      return ((mapView(seg as any) as any).names ?? {}) as Record<string, string[]>
+    }
+  } catch {}
+  return (await r.maps()).map?.core?.names ?? {}
 }
 
 /** name -> Translation Words ids, from the pack's article names (en, es) and the key-term glossary (fr, id, hi). */
@@ -94,13 +112,11 @@ async function names(): Promise<Map<string, string[]>> {
     put(fold(n.replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim(), id)
     if (/\(/.test(n)) put(fold(n.replace(/[()]/g, ' ')).replace(/[,;]/g, ' ').replace(/\s+/g, ' ').trim(), id)
   }
-  for (const pl of await installedLangs()) {
-    try {
-      const { maps } = await lang(pl)
-      for (const [id, ns] of Object.entries<string[]>(maps.map?.core?.names ?? {}))
-        if (id.startsWith('tw:')) for (const n of ns) for (const part of String(n).split(/,\s*/)) add(part, id)
-    } catch {}
-  }
+  // read side by side, added in the order of the packs
+  const all = await Promise.all((await installedLangs()).map((pl) => reader(pl).then(namesOf).catch(() => ({}))))
+  for (const ns0 of all)
+    for (const [id, ns] of Object.entries<string[]>(ns0))
+      if (id.startsWith('tw:')) for (const n of ns) for (const part of String(n).split(/,\s*/)) add(part, id)
   for (const [id, byLang] of Object.entries(glossary as Record<string, Record<string, string[]>>))
     for (const ns of Object.values(byLang)) for (const n of ns) add(n, id)
   // People named like books, in every language of the book table: Jonas, Yunus, योना -> Jonah (tw:names/jonah)
@@ -240,7 +256,7 @@ async function byConcepts(groups: string[][], words: string[], packLang = 'en'):
     let local: BookModel | undefined
     if (packLang !== 'en') {
       try {
-        const lr = (await lang(packLang)).r
+        const lr = await reader(packLang)
         if (lr.installed(`book:${b}`)) local = await lr.book(b)
       } catch {}
     }
@@ -311,7 +327,7 @@ const triesOf = (words: string[]): string[][] => {
 
 async function byText(words: string[], packLang: string): Promise<Found[]> {
   for (const pl of await packsFor(words, packLang)) {
-    const { r } = await lang(pl)
+    const r = await reader(pl)
     // in English, the words as written and their English for the story words ("pez" -> "fish")
     const english = pl === 'en' ? toEnglish(words, packLang) : []
     const tries = [...triesOf(words), ...(english.length ? triesOf([...words.filter((w) => !toEnglish([w], packLang).length), ...english]) : [])]
@@ -341,7 +357,7 @@ export async function searchHelps(question: string, packLang: string, limit = 4)
   const words = keywords(question)
   if (!words.length) return []
   for (const pl of await packsFor(words, packLang)) {
-    const { r } = await lang(pl)
+    const r = await reader(pl)
     const english = pl === 'en' ? toEnglish(words, packLang) : []
     const tries = [...triesOf(words), ...(english.length ? triesOf([...words.filter((w) => !toEnglish([w], packLang).length), ...english]) : [])]
     for (const ws of tries) {
