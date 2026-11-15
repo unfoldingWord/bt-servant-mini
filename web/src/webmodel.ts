@@ -192,11 +192,21 @@ export async function sha256Blob(blob: Blob): Promise<string> {
   return Array.from(H, (x) => x.toString(16).padStart(8, '0')).join('')
 }
 
-/** One completion (greedy, as on the phone). */
-export async function webComplete(prompt: string, nPredict: number, stop: string[]): Promise<string> {
+/**
+ * One completion (greedy, as on the phone). `grammar` (GBNF, model.ts GRAMMAR) keeps the reply inside the call sheet's shape;
+ * wllama passes it to llama.cpp's sampler as llama-server does. When it fails with the grammar, it is asked once more without.
+ */
+export async function webComplete(prompt: string, nPredict: number, stop: string[], grammar?: string): Promise<string> {
   if (st.state !== 'ready' || !w) throw new Error('the model is not loaded')
-  const r = await w.createCompletion({ prompt, max_tokens: nPredict, temperature: 0, seed: 0, stop })
-  return r.choices[0]?.text ?? ''
+  const m = w
+  const run = async (g?: string) =>
+    (await m.createCompletion({ prompt, max_tokens: nPredict, temperature: 0, seed: 0, stop, ...(g ? { grammar: g } : {}) })).choices[0]?.text ?? ''
+  try {
+    return await run(grammar)
+  } catch (e) {
+    if (!grammar) throw e
+    return run()
+  }
 }
 
 /** Removes the downloaded model from this browser. */

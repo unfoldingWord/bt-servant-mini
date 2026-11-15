@@ -4,6 +4,8 @@
 // a server needs no route of its own; the first server that has it, the next when one fails) or loaded from a file.
 import prompt from './data/prompt.json'
 import models from './data/models.json'
+// @ts-ignore: bun bundles the grammar as text (TypeScript has no type for a .gbnf file)
+import grammar from './data/slots.gbnf' with { type: 'text' }
 import type { Slots } from './sheet'
 import { packsServers } from './packs'
 import { webComplete, webInit, webLoad, webState } from './webmodel'
@@ -59,8 +61,8 @@ let seq = 0
 async function complete(body: object): Promise<any> {
   const json = JSON.stringify(body)
   if (PWA) {
-    const b = body as { prompt: string; n_predict: number; stop: string[] }
-    return { content: await webComplete(b.prompt, b.n_predict, b.stop) }
+    const b = body as { prompt: string; n_predict: number; stop: string[]; grammar?: string }
+    return { content: await webComplete(b.prompt, b.n_predict, b.stop, b.grammar) }
   }
   if (window.Android) {
     const id = String(++seq)
@@ -106,6 +108,11 @@ export function modelReady(): boolean {
 export const appVersion = (): string => (PWA ? `${version.version}-web` : window.Android ? window.Android.version() : 'desktop')
 export const isLite = (): boolean => (PWA ? true : window.Android ? window.Android.flavor() === 'lite' : false)
 export const MODEL = models.models[0]!
+/**
+ * The shape of the model's reply (data/slots.gbnf): llama-server (Android, desktop), the iOS app's llama.cpp (Llama.swift)
+ * and wllama (the web app) sample only what keeps the reply inside it, so the reply is always a call sheet JSON.parse reads.
+ */
+export const GRAMMAR: string = grammar
 /** Whether the model on this phone reads a follow-up's state (trained with it, models.json "followups"), and is that model. */
 export const followUps = (): boolean => !!(MODEL as { followups?: boolean }).followups && !modelOutdated()
 /** The Android app has a model, but not the one this version expects (it records the sha256 of what it installs). */
@@ -201,12 +208,15 @@ export async function slotsOf(question: string, state = ''): Promise<{ slots: Sl
   if (!modelReady()) return { slots: null, raw: '(no model on this phone yet: references and searches only)', ms: 0 }
   const t0 = performance.now()
   let r: any
-  try {
-    r = await complete({
-      prompt: prompt.template.replace('<<Q>>', (state ? `${state}
+  const body = {
+    prompt: prompt.template.replace('<<Q>>', (state ? `${state}
 ` : '') + question.replace(/\s+/g, ' ').trim()),
-      temperature: 0, seed: 0, n_predict: 200, stop: ['<end_of_turn>'], cache_prompt: true,
-    })
+    temperature: 0, seed: 0, n_predict: 200, stop: ['<end_of_turn>'], cache_prompt: true, grammar: GRAMMAR,
+  }
+  try {
+    r = await complete(body)
+    // a llama-server that cannot read the grammar answers with an error and no reply: once more without it, as before
+    if (r?.error && typeof r.content !== 'string') r = await complete({ ...body, grammar: undefined })
   } catch (e) {
     // the model did not answer (it stopped, or is still starting): go on as without a model, references and searches
     return { slots: null, raw: `(the model did not answer: ${e instanceof Error ? e.message : String(e)})`, ms: Math.round(performance.now() - t0) }
