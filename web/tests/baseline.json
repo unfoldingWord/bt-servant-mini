@@ -63,10 +63,10 @@
    "empty": 6
   },
   "followup-more": {
-   "pass": 60,
-   "total": 61,
+   "pass": 108,
+   "total": 109,
    "known": 1,
-   "empty": 2
+   "empty": 14
   }
  }
 }
