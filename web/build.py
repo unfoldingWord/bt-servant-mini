@@ -4,7 +4,8 @@ import json, re, shutil, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WWW = ROOT / 'app' / 'src' / 'main' / 'assets' / 'www'
-PACKS = ROOT.parent / 'fase0-mini-servant' / 'packs'
+# the packs with all four Translation Academy manuals, else the older ones (the same choice as web/tests/fs-packs.ts)
+PACKS = next((p for p in (ROOT.parent / 'lp3-ta-packs', ROOT.parent / 'fase0-mini-servant' / 'packs') if p.is_dir()), ROOT.parent / 'fase0-mini-servant' / 'packs')
 shutil.rmtree(WWW, ignore_errors=True)
 WWW.mkdir(parents=True)
 # the app's version, for the installable web app's About (the Android app asks the APK)

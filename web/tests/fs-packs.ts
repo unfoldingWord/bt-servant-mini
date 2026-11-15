@@ -1,5 +1,6 @@
 // Runs the app's own pack reading under bun, with no browser: `fetch('./packs/…')` is served from the packs on disk
-// (../fase0-mini-servant/packs, the same ones build.py ships in the full build), and only the languages given to
+// (../lp3-ta-packs, with all four Translation Academy manuals, else ../fase0-mini-servant/packs: the same ones build.py
+// ships in the full build; PACKS_DIR=<dir> picks others), and only the languages given to
 // `installPacks` count as installed. Any other fetch fails, as on a phone with no internet.
 //   import { installPacks } from './fs-packs'
 //   await installPacks(['es-419'])          // a phone with only Spanish
@@ -9,7 +10,8 @@ import { reloadPacks } from '../src/packs'
 import { resetLangs } from '../src/answer'
 import { resetSearch } from '../src/search'
 
-export const PACKS_DIR = resolve(import.meta.dir, '../../../fase0-mini-servant/packs')
+export const PACKS_DIR = process.env.PACKS_DIR ? resolve(process.env.PACKS_DIR)
+  : ['lp3-ta-packs', 'fase0-mini-servant/packs'].map((d) => resolve(import.meta.dir, '../../..', d)).find((d) => existsSync(d))!
 /** The languages there are packs for on this machine. */
 export const ALL_PACKS = readdirSync(PACKS_DIR).filter((d) => existsSync(join(PACKS_DIR, d, 'state.json')))
 
