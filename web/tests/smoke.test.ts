@@ -10,10 +10,10 @@ test('Rut 2:3, Spanish only, app in Spanish', async () => {
   const r = await answerSheet(sheet)
   console.log(sheet.lang, sheet.ref, r.answer.slice(0, 120))
   expect(r.answer).toContain('2:3')
-})
+}, 30_000) // (a busy machine: timed out at 5 s in full runs)
 test('Ruth 2:3, Spanish only, app in English (known bug)', async () => {
   await installPacks(['es-419'])
   const { sheet } = await buildSheet('t', { intent: 'passage', book: 'Ruth', chapter: 2, verse_start: 3, verse_end: null, what: ['text'], lang: 'en' } as any)
   const r = await answerSheet(sheet)
   console.log(sheet.lang, sheet.ref, r.answer.slice(0, 120))
-})
+}, 30_000)

@@ -322,7 +322,7 @@ def reports():
     # next one; "Introduction to Numbers 6" (the en pack has no Numbers notes, the ar pack has the English ones) after a passage
     num6 = {'route': 'intro', 'ref': 'num 6:intro', 'has': ['Nazirite'], 'not': ["didn't find anything", 'العدد'], 'follow': ['^num 6 text']}
     sections = [
-        ('start-rut-section', 'es', 'Voy a empezar a traducir el libro de Rut', [], {'ref': 'rut front:intro', 'follow': ['^rut 1:1-5 text,notes$', '^rut 1:intro', '^ta:translate/translate-process$']}),
+        ('start-rut-section', 'es', 'Voy a empezar a traducir el libro de Rut', [], {'ref': 'rut front:intro', 'follow': ['^rut 1:1-5 text', '^rut 1:intro', '^ta:translate/translate-process$']}),
         ('chapter-intro-section', 'en', 'Introduction to Ruth 1', [], {'ref': 'rut 1:intro', 'follow': ['^rut 1:1-5 text,notes$', '^rut 1 text']}),
         ('section-next', 'es', 'Rut 1:1-5', [], {'ref': 'rut 1:1-5', 'follow': ['^rut 1:6-18 text,notes$']}),
         ('intro-num-6', 'en', 'Introduction to Numbers 6', [{'q': 'Ruth 1:16'}], {**num6, 'follow': ['^num 6 text', '^num front:intro']}),
@@ -513,8 +513,29 @@ GUIDE = [
     ('oos-ar-weather', 'ar', 'كيف الطقس غدا؟', {'oos': True, 'has': ['ترجمة الكتاب المقدس'], 'follow': OOS_BACK}, None),
     ('oos-ar-football', 'ar', 'من فاز في مباراة كرة القدم؟', {'oos': True}, None),
     ('oos-ar-hello', 'ar', 'مرحبا، كيف حالك؟', {'oos': True}, None),
-    # in a conversation: back to the passage it is on (that point), its key term and the Academy article its notes cite
-    ('oos-en-there', 'en', 'What is the weather there?', {'oos': True, 'follow': ['^rut 2:3 ', '^tw:', '^ta:']}, [RUT23]),
+    # after an article read from a passage: back to that passage (its point), its key term and the Academy article its notes cite
+    ('oos-en-after-article', 'en', 'What is the weather tomorrow?', {'oos': True, 'follow': ['^rut 2:3 ', '^tw:', '^ta:']}, [RUT23, {'q': 'What does love mean?'}]),
+    # never out of scope in a conversation on a passage (review of Nov 15: "gracias, ¿y el siguiente?" after Rut 2:3)
+    ('in-en-there', 'en', 'What is the weather there?', {'useful': False}, [RUT23]),
+    ('in-es-gracias-next', 'es', 'gracias, ¿y el siguiente?', {'ref': 'rut 2:4'}, [RUT23]),
+    ('in-en-ephah-ctx', 'en', 'how much is an ephah?', {'useful': False}, [RUT23]),
+    ('in-es-efa-ctx', 'es', '¿cuánto vale un efa?', {'useful': False}, [RUT23]),
+    # greetings, thanks, "how much", "what time" are weak: only with nothing else are they out of scope (review of Nov 15)
+    ('in-en-hello-naomi', 'en', 'hello, who is Naomi?', {'useful': False}, None),
+    ('in-en-denarius', 'en', 'How much is a denarius?', {'useful': False}, None),
+    ('in-en-talent', 'en', 'How much is a talent worth?', {'useful': False}, None),
+    ('in-es-denario', 'es', '¿Cuánto vale un denario?', {'useful': False}, None),
+    ('in-es-hola-noemi', 'es', 'Hola, ¿quién es Noemí?', {'useful': False}, None),
+    ('in-fr-bonjour-noemi', 'fr', 'Bonjour, qui est Noémi ?', {'useful': False}, None),
+    ('in-id-sparrows', 'id', 'berapa harga dua burung pipit?', {'useful': False}, None),
+    ('in-id-halo-naomi', 'id', 'Halo, siapa Naomi?', {'useful': False}, None),
+    ('in-hi-namaste-naomi', 'hi', 'नमस्ते, नाओमी कौन है?', {'useful': False}, None),
+    ('in-hi-price-wheat', 'hi', 'गेहूँ का दाम क्या था?', {'useful': False}, None),
+    ('in-ar-grace', 'ar', 'مرحبا، ما معنى النعمة؟', {'useful': False}, None),
+    ('in-ar-boaz', 'ar', 'شكرا، من هو بوعز؟', {'useful': False}, None),
+    # never over a reading of the question: the reader read a term ("weather" as an article to look up)
+    ('in-en-reader-term', 'en', 'What does the Bible say about the weather?', {'useful': False}, None, {'intent': 'article', 'term': 'weather', 'lang': 'en'}),
+    ('in-en-reader-term2', 'en', 'Weather?', {'useful': False}, None, {'intent': 'article', 'term': 'weather', 'lang': 'en'}),
     # an off-topic word with something about the Bible: answered as usual
     ('in-en-hello-ref', 'en', 'Hello, show me Ruth 2:3', {'route': 'passage', 'ref': 'rut 2:3'}, None),
     ('in-en-jerusalem', 'en', 'What is the weather like in Jerusalem?', {'useful': False}, None),
@@ -526,14 +547,14 @@ GUIDE = [
     ('in-hi-namaste-ref', 'hi', 'नमस्ते, रूत 1:1 दिखाइए', {'route': 'passage', 'ref': 'rut 1:1'}, None),
     ('in-ar-marhaba-ref', 'ar', 'مرحبا، أرني راعوث 1:1', {'route': 'passage', 'ref': 'rut 1:1'}, None),
     # a task announced on a book: its introduction, and a path through it
-    ('path-en-titus', 'en', "I'm translating Titus 1", {'route': 'intro', 'ref': 'tit 1:intro', 'mark': '^Titus 1 · step 1 of 5: introduction$', 'follow': ['^tit 1:1-\\d+ text,notes$']}, None),
-    ('path-en-review', 'en', 'I am reviewing Jonah 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': '^Jonah 2 · step 1 of 5', 'follow': ['^jon 2:1-\\d+ text,notes$']}, None),
-    ('path-es-ruth', 'es', 'Voy a traducir Rut', {'route': 'intro', 'ref': 'rut front:intro', 'mark': '^Rut · paso 1 de 5: introducción$', 'follow': ['^rut 1:1-5 text,notes$']}, None),
-    ('path-es-review', 'es', 'Estoy revisando Jonás 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': '^Jonás 2 · paso 1 de 5', 'follow': ['^jon 2:1-\\d+ text,notes$']}, None),
-    ('path-fr-ruth', 'fr', 'Je vais traduire Ruth', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'étape 1 sur 5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
-    ('path-id-ruth', 'id', 'Saya sedang menerjemahkan Rut 1', {'route': 'intro', 'ref': 'rut 1:intro', 'mark': 'langkah 1 dari 5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
-    ('path-hi-ruth', 'hi', 'मैं रूत का अनुवाद कर रहा हूँ', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'चरण 1/5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
-    ('path-ar-ruth', 'ar', 'سأترجم راعوث', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'الخطوة 1 من 5', 'follow': ['^rut 1:1-5 text,notes$']}, None),
+    ('path-en-titus', 'en', "I'm translating Titus 1", {'route': 'intro', 'ref': 'tit 1:intro', 'mark': '^Titus 1 · step 1 of 5: introduction$', 'follow': ['^tit 1:1-\\d+ text$']}, None),
+    ('path-en-review', 'en', 'I am reviewing Jonah 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': '^Jonah 2 · step 1 of 5', 'follow': ['^jon 2:1-\\d+ text$']}, None),
+    ('path-es-ruth', 'es', 'Voy a traducir Rut', {'route': 'intro', 'ref': 'rut front:intro', 'mark': '^Rut · paso 1 de 5: introducción$', 'follow': ['^rut 1:1-5 text$']}, None),
+    ('path-es-review', 'es', 'Estoy revisando Jonás 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': '^Jonás 2 · paso 1 de 5', 'follow': ['^jon 2:1-\\d+ text$']}, None),
+    ('path-fr-ruth', 'fr', 'Je vais traduire Ruth', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'étape 1 sur 5', 'follow': ['^rut 1:1-5 text$']}, None),
+    ('path-id-ruth', 'id', 'Saya sedang menerjemahkan Rut 1', {'route': 'intro', 'ref': 'rut 1:intro', 'mark': 'langkah 1 dari 5', 'follow': ['^rut 1:1-5 text$']}, None),
+    ('path-hi-ruth', 'hi', 'मैं रूत का अनुवाद कर रहा हूँ', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'चरण 1/5', 'follow': ['^rut 1:1-5 text$']}, None),
+    ('path-ar-ruth', 'ar', 'سأترجم راعوث', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'الخطوة 1 من 5', 'follow': ['^rut 1:1-5 text$']}, None),
     ('path-ar-review', 'ar', 'أراجع يونان 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': 'الخطوة 1 من 5'}, None),
     # not a task on a book: no path
     ('nopath-en-prayer', 'en', "I want to translate Jonah's prayer", {'mark': None, 'useful': False}, None),
@@ -543,9 +564,10 @@ GUIDE = [
 
 
 def guide():
-    return [{'id': i, 'set': 'guide', 'lang': lang, 'q': q, 'slots': None, 'expect': e, **({'before': b} if b else {}),
-             'from': 'guiding without blocking (Nov 15): out of scope, paths', 'fast': i.endswith(('-weather', '-ruth'))}
-            for i, lang, q, e, b in GUIDE]
+    # (id, lang, question, expectations, turns before[, the reader's slots])
+    return [{'id': g[0], 'set': 'guide', 'lang': g[1], 'q': g[2], 'slots': g[5] if len(g) > 5 else None, 'expect': g[3], **({'before': g[4]} if g[4] else {}),
+             'from': 'guiding without blocking (Nov 15): out of scope, paths', 'fast': g[0].endswith(('-weather', '-ruth'))}
+            for g in GUIDE]
 
 
 def main():

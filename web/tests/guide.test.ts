@@ -5,7 +5,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, loadCases, turn } from './harness'
 import { addNode, drifts, type Graph, newGraph, nextStep, type NodeSheet, type Path, stepOf, stepTarget } from '../src/graph'
-import { answer, type ConvState, env, type Follow, offTopic, pathStart, returnTo } from '../src/pipeline'
+import { answer, type ConvState, env, type Follow, MAX_CONVS, moveOut, offTopic, outOfScopeQ, pathStart, readQuestion, returnTo, roomForNew } from '../src/pipeline'
 import { bookCode } from '../src/sheet'
 
 const sh = (ref: string | null, concept: string | null = null): NodeSheet =>
@@ -17,6 +17,16 @@ async function press(c: ConvState, f: Follow, lang: string) {
   return answer(c, { sheet: { ...f.sheet!, id: `b${Date.now()}` }, ui: lang, meta: '(button)' }, performance.now())
 }
 const edgeOf = (c: ConvState, id: string | null) => c.graph?.nodes.find((n) => n.id === id)?.edge
+
+// the same conversation in each language: four turns along Ruth 2, then another book (a drift), then a third
+const DRIFTS: Record<string, string[]> = {
+  en: ['Show me Ruth 2:3', 'And the notes?', 'And the next verse?', 'Ruth 2:5', 'Show me Mark 1:1', 'John 3:16'],
+  es: ['Muéstrame Rut 2:3', '¿Y las notas?', '¿Y el versículo siguiente?', 'Rut 2:5', 'Muéstrame Marcos 1:1', 'Juan 3:16'],
+  fr: ['Montre-moi Ruth 2:3', 'Et les notes ?', 'Et le verset suivant ?', 'Ruth 2:5', 'Montre-moi Marc 1:1', 'Jean 3:16'],
+  id: ['Tunjukkan Rut 2:3', 'Dan catatannya?', 'Dan ayat berikutnya?', 'Rut 2:5', 'Tunjukkan Markus 1:1', 'Yohanes 3:16'],
+  hi: ['रूत 2:3 दिखाइए', 'और टिप्पणियाँ?', 'और अगला पद?', 'रूत 2:5', 'मरकुस 1:1 दिखाइए', 'यूहन्ना 3:16'],
+  ar: ['أرني راعوث 2:3', 'والملاحظات؟', 'والآية التالية؟', 'راعوث 2:5', 'أرني مرقس 1:1', 'يوحنا 3:16'],
+}
 
 describe('drift, by code', () => {
   test('never in the first 4 points, never on line or deeper', () => {
@@ -64,18 +74,18 @@ describe('drift, by code', () => {
 })
 
 describe('paths, by code', () => {
-  const P: Path = { book: 'rut', ch: null, step: 1, sec: null, v: null, lang: 'en', task: 'translate' }
+  const P: Path = { book: 'rut', ch: null, step: 1, sec: null, lang: 'en', task: 'translate' }
   const secs: [number, number][] = [[1, 5], [6, 18], [19, 22]]
-  test('the steps in order: introduction, the first section, its key terms, its notes verse by verse, its questions, the next section', () => {
+  test("the steps in order: introduction, the first section's text, its key terms, its notes, its questions, the next section", () => {
     const seq: string[] = []
     let p: Path | null = P
-    for (let i = 0; i < 11 && p; i++) {
+    for (let i = 0; i < 7 && p; i++) {
       const t = stepTarget(p)!
       seq.push(`${p.step} ${t.ref} ${t.what.join(',')}`)
       p = nextStep(p, secs, [[1, 7]])
     }
-    expect(seq).toEqual(['1 rut front:intro intro', '2 rut 1:1-5 text,notes', '3 rut 1:1-5 terms', '4 rut 1:1 notes', '4 rut 1:2 notes', '4 rut 1:3 notes',
-      '4 rut 1:4 notes', '4 rut 1:5 notes', '5 rut 1:1-5 questions', '2 rut 1:6-18 text,notes', '3 rut 1:6-18 terms'])
+    expect(seq).toEqual(['1 rut front:intro intro', '2 rut 1:1-5 text', '3 rut 1:1-5 terms', '4 rut 1:1-5 notes', '5 rut 1:1-5 questions',
+      '2 rut 1:6-18 text', '3 rut 1:6-18 terms'])
     // the last section of a chapter: the first of the next one; the last of the book: none
     expect(nextStep({ ...P, ch: 1, step: 5, sec: [19, 22] }, secs, [[1, 7]])).toMatchObject({ step: 2, ch: 2, sec: [1, 7] })
     expect(nextStep({ ...P, ch: 4, step: 5, sec: [13, 22] }, [[13, 22]], [])).toBeNull()
@@ -83,13 +93,15 @@ describe('paths, by code', () => {
   test('an answer is the step it shows; anything else is no step', () => {
     const on = { ...P, ch: 1, step: 2, sec: [1, 5] as [number, number] }
     expect(stepOf(on, 'rut 1:6-18', ['text', 'notes'], secs)).toMatchObject({ step: 2, sec: [6, 18] })
-    expect(stepOf(on, 'rut 1:7', ['notes'], secs)).toMatchObject({ step: 4, sec: [6, 18], v: 7 })
+    expect(stepOf(on, 'rut 1:6-18', ['notes'], secs)).toMatchObject({ step: 4, sec: [6, 18] })
+    expect(stepOf(on, 'rut 1:6-18', ['terms'], secs)).toMatchObject({ step: 3, sec: [6, 18] })
     expect(stepOf(on, 'rut 1:1-5', ['questions'], secs)).toMatchObject({ step: 5 })
     expect(stepOf(on, 'rut 2:intro', ['intro'], [])).toMatchObject({ step: 1, ch: 2 })
     // the book's introduction once in a chapter, a whole chapter, one verse's text, another book: no step
     expect(stepOf(on, 'rut front:intro', ['intro'], [])).toBeNull()
     expect(stepOf(on, 'rut 1', ['text'], secs)).toBeNull()
     expect(stepOf(on, 'rut 1:3', ['text'], secs)).toBeNull()
+    expect(stepOf(on, 'rut 1:7', ['notes'], secs)).toBeNull()
     expect(stepOf(on, 'jon 1:1-3', ['text', 'notes'], secs)).toBeNull()
   })
   test('a task announced on a book, in 6 languages; anything more is no task', () => {
@@ -117,15 +129,7 @@ describe('paths, by code', () => {
 describe('in a conversation', () => {
   beforeAll(fullPhone)
 
-  // the same conversation in each language: four turns along Ruth 2, then another book (a drift), then a third
-  const DRIFT: Record<string, string[]> = {
-    en: ['Show me Ruth 2:3', 'And the notes?', 'And the next verse?', 'Ruth 2:5', 'Show me Mark 1:1', 'John 3:16'],
-    es: ['Muéstrame Rut 2:3', '¿Y las notas?', '¿Y el versículo siguiente?', 'Rut 2:5', 'Muéstrame Marcos 1:1', 'Juan 3:16'],
-    fr: ['Montre-moi Ruth 2:3', 'Et les notes ?', 'Et le verset suivant ?', 'Ruth 2:5', 'Montre-moi Marc 1:1', 'Jean 3:16'],
-    id: ['Tunjukkan Rut 2:3', 'Dan catatannya?', 'Dan ayat berikutnya?', 'Rut 2:5', 'Tunjukkan Markus 1:1', 'Yohanes 3:16'],
-    hi: ['रूत 2:3 दिखाइए', 'और टिप्पणियाँ?', 'और अगला पद?', 'रूत 2:5', 'मरकुस 1:1 दिखाइए', 'यूहन्ना 3:16'],
-    ar: ['أرني راعوث 2:3', 'والملاحظات؟', 'والآية التالية؟', 'راعوث 2:5', 'أرني مرقس 1:1', 'يوحنا 3:16'],
-  }
+  const DRIFT = DRIFTS
   for (const [lang, qs] of Object.entries(DRIFT))
     test(`drift (${lang}): offered once, on the other book after a long line; not on the line, not again`, async () => {
       const c: ConvState = { last: null }
@@ -196,13 +200,13 @@ describe('in a conversation', () => {
     const c: ConvState = { last: null }
     let r = await turn(c, { q: 'Voy a traducir Rut' }, 'es')
     const marks = [r.reply.pathMark]
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 5; i++) {
       r = await press(c, r.reply.follow![0]!, 'es')
       marks.push(r.reply.pathMark)
     }
     expect(marks).toEqual(['Rut · paso 1 de 5: introducción', 'Rut 1:1–5 · paso 2 de 5: secciones', 'Rut 1:1–5 · paso 3 de 5: palabras clave',
-      'Rut 1:1 · paso 4 de 5: notas', 'Rut 1:2 · paso 4 de 5: notas', 'Rut 1:3 · paso 4 de 5: notas', 'Rut 1:4 · paso 4 de 5: notas', 'Rut 1:5 · paso 4 de 5: notas',
-      'Rut 1:1–5 · paso 5 de 5: preguntas', 'Rut 1:6–18 · paso 2 de 5: secciones'])
+      'Rut 1:1–5 · paso 4 de 5: notas', 'Rut 1:1–5 · paso 5 de 5: preguntas', 'Rut 1:6–18 · paso 2 de 5: secciones'])
+    expect(c.graph!.path).toMatchObject({ step: 2, sec: [6, 18] })
     // an aside about another book: no marker, and the way back is the way back to the path
     const aside = await turn(c, { q: 'Muéstrame Juan 3:16' }, 'es')
     expect(aside.reply.pathMark).toBeUndefined()
@@ -229,17 +233,105 @@ describe('in a conversation', () => {
     expect(r3.reply.follow![0]!.label).toMatch(/^Next: Titus 1:\d+–\d+ · sections$/)
   }, 120_000)
 
-  test('out of scope in a conversation: no point, the passage it is on first, and the way back to the path', async () => {
+  test('out of scope only after something that is not a passage: no point, the way back to the path', async () => {
     const c: ConvState = { last: null }
     const r1 = await turn(c, { q: 'Voy a traducir Rut' }, 'es')
     await press(c, r1.reply.follow![0]!, 'es')
+    // on the passage: never out of scope
+    expect((await turn(c, { q: '¿Qué tiempo hace mañana?' }, 'es')).answered).not.toBe('outofscope')
+    await turn(c, { q: '¿Qué significa amor?' }, 'es')
     const n = c.graph!.nodes.length
     const o = await turn(c, { q: '¿Qué tiempo hace mañana?' }, 'es')
     expect(o.answered).toBe('outofscope')
     expect(o.node).toBeNull()
     expect(c.graph!.nodes.length).toBe(n)
-    // (that passage is the path's step: the way back to it is the way back to the path, once)
-    expect(o.reply.follow![0]!).toMatchObject({ label: '← Volver al camino: Rut 1:1–5 · secciones', back: c.graph!.cur })
-    expect(o.reply.pathBack).toBeUndefined()
+    // one button back to the path
+    const backs = [...(o.reply.follow ?? []), ...(o.reply.pathBack ? [o.reply.pathBack] : [])].filter((f) => f.toPath)
+    expect(backs.map((f) => f.label)).toEqual(['← Volver al camino: Rut 1:1–5 · secciones'])
   }, 120_000)
+
+  test('weak words (greetings, thanks, "how much") alone are out of scope; with anything else, never', async () => {
+    for (const q of ['Hello, how are you?', 'Thanks!', 'What time is it?', 'Hola, ¿cómo estás?', 'Halo, apa kabar?', 'नमस्ते, आप कैसे हैं?', 'مرحبا، كيف حالك؟'])
+      expect([q, await outOfScopeQ(q, 'en')]).toEqual([q, true])
+    for (const q of ['hello, who is Naomi?', 'How much is a denarius?', 'How much is a talent worth?', '¿Cuánto vale un denario?', 'berapa harga dua burung pipit?',
+      'مرحبا، ما معنى النعمة؟', 'شكرا، من هو بوعز؟', 'Bonjour, qui est Noémi ?', 'नमस्ते, नाओमी कौन है?'])
+      expect([q, await outOfScopeQ(q, 'en')]).toEqual([q, false])
+  }, 120_000)
+
+  test('never over a reading of the question, nor on a passage', async () => {
+    const c: ConvState = { last: null }
+    env.nav = 'en'
+    const read = await readQuestion('What is the weather?', { slots: { intent: 'article', term: 'weather', lang: 'en' } as any, raw: '', ms: 0 }, c, null)
+    expect(read.inScope).toBe('read by the reader')
+    const unread = await readQuestion('What is the weather?', { slots: { intent: 'unknown', lang: 'en' } as any, raw: '', ms: 0 }, c, null)
+    expect(unread.inScope).toBeUndefined()
+    await turn(c, { q: 'Ruth 2:3' }, 'en')
+    expect((await readQuestion('how much is an ephah?', { slots: null, raw: '', ms: 0 }, c, null)).inScope).toBe('the conversation is on a passage')
+  }, 120_000)
+})
+
+// Drift, [New conversation] (main.ts moveToNew, pipeline.ts moveOut): the question and its answer leave the conversation, which
+// goes on from the point before; the new conversation starts at that point; a path goes with it only when the answer started it.
+describe('a new conversation for a drift', () => {
+  beforeAll(fullPhone)
+  type M = { who: 'me' | 'bot'; text?: string; node?: string; pathLine?: string; pathMark?: string; back?: Follow; pathBack?: Follow; drift?: boolean; follow?: Follow[] }
+  type C = ConvState & { msgs: M[] }
+  async function say(c: C, q: string, lang: string) {
+    const r = await turn(c, { q }, lang)
+    c.msgs.push({ who: 'me', text: q }, { who: 'bot', ...r.reply, node: r.node ?? undefined } as M)
+    const n = c.graph?.nodes.find((x) => x.id === r.node)
+    if (n) n.msg = c.msgs.length - 1
+    return r
+  }
+  /** A conversation as main.ts keeps it: its state and its messages. */
+  async function talk(qs: string[], lang = 'en'): Promise<C> {
+    const c: C = { last: null, msgs: [] }
+    for (const q of qs) await say(c, q, lang)
+    return c
+  }
+  test('the drifting answer moves; the old conversation goes on from the point before', async () => {
+    const c = await talk(DRIFTS.en!.slice(0, 5))
+    const m = c.msgs[c.msgs.length - 1]!
+    expect(m.drift).toBe(true)
+    const before = c.graph!.nodes.length
+    const out = moveOut(c, m, 'en')!
+    expect(c.msgs.length).toBe(8)
+    expect(c.graph!.nodes.length).toBe(before - 1)
+    expect(c.graph!.nodes.find((n) => n.id === c.graph!.cur)!.sheet.ref).toBe('rut 2:5')
+    expect(c.last?.ref).toBe('rut 2:5')
+    expect(out.title).toBe('Show me Mark 1:1')
+    expect(out.msgs.map((x) => x.who)).toEqual(['me', 'bot'])
+    expect(out.msgs[1]!.back).toBeUndefined() // its way back led into the old conversation
+    expect(out.graph.nodes).toHaveLength(1)
+    expect(out.graph.nodes[0]).toMatchObject({ edge: 'start', parent: null, drift: 'moved', msg: 1, sheet: { ref: 'mrk 1:1' } })
+    // the new conversation goes on from Mark 1:1
+    const nc: ConvState = { last: null, graph: out.graph }
+    returnTo(nc, out.graph.cur!, 'en')
+    expect((await turn(nc, { q: 'And the next verse?' }, 'en')).ref).toBe('mrk 1:2')
+  }, 120_000)
+  test('a path moves only with the answer that started it; the path it replaced comes back', async () => {
+    const c = await talk(['Voy a traducir Rut'], 'es')
+    const r2 = await press(c, c.msgs[1]!.follow![0]!, 'es')
+    c.msgs.push({ who: 'me', text: 'x' }, { who: 'bot', ...r2.reply, node: r2.node ?? undefined } as M)
+    for (const q of ['Rut 1:2', 'Rut 1:3', 'Rut 1:4']) await say(c, q, 'es')
+    const ruth = c.graph!.path!
+    const r = await say(c, 'Estoy revisando Jonás 2', 'es')
+    expect([r.reply.drift, !!r.reply.pathLine]).toEqual([true, true])
+    expect(c.graph!.pathBefore).toEqual(ruth)
+    const out = moveOut(c, c.msgs[c.msgs.length - 1]!, 'es')!
+    expect(out.graph.path).toMatchObject({ book: 'jon', ch: 2, step: 1 })
+    expect(c.graph!.path).toEqual(ruth)
+    expect(c.graph!.pathBefore).toBeUndefined()
+    // an answer that is only a step of a path (no pathLine): the path stays
+    const d = await talk(DRIFTS.en!.slice(0, 5))
+    d.graph!.path = { book: 'mrk', ch: 1, step: 2, sec: [1, 8], lang: 'en', task: 'translate' }
+    const last = d.msgs[d.msgs.length - 1]!
+    last.pathMark = 'Mark 1:1–8 · step 2 of 5: sections'
+    const moved = moveOut(d, last, 'en')!
+    expect(moved.graph.path).toBeUndefined()
+    expect(d.graph!.path).toMatchObject({ book: 'mrk' })
+  }, 180_000)
+  test('3 conversations: no room for a new one (main.ts says so and offers to continue here)', () => {
+    expect([roomForNew(0), roomForNew(2), roomForNew(MAX_CONVS)]).toEqual([true, true, false])
+  })
 })
