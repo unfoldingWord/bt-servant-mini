@@ -9,7 +9,7 @@ import type { ConvState } from '../src/pipeline'
 import {
   addSaved, allTags, editSaved, eraseSaved, groupSaved, isSaved, itemTitle, KINDS, MAX_ITEMS, NOTE_MAX, noteFor, noteShareText, notes,
   notesAbout, parseTags, personal, type Query, queryOfAnswer, removeNote, removeSaved, reopen, resetSaved, SAVED_KEY, SAVED_LANGS, savedItems,
-  searchNotes, searchSaved, setNote, ST,
+  searchNotes, searchSaved, setNote, ST, cleanSheet, planLabel, missingText, upgradeSaved,
 } from '../src/saved'
 import { plainContext } from '../src/context'
 
@@ -53,7 +53,17 @@ test('the query of an answer: a passage, an article, the typed question, a butto
   expect(queryOfAnswer({ sheet: sheet({ intent: 'search' }), ref: 'jon 1:17', q: '⁨Where was Jonah swallowed?⁩' }))
     .toEqual({ k: 'search', q: 'Where was Jonah swallowed?', lang: 'en' })
   // a button: its passage, else its sheet under its label
-  expect(queryOfAnswer({ sheet: sheet({ intent: 'count' }), ref: 'rut 1', label: 'Ruth 1' })).toEqual({ k: 'passage', ref: 'rut 1', lang: 'en' })
+  // a button of another kind keeps its call sheet (advice on a figure in Ruth 1:16 opens as that advice, not as the verse)
+  const adv = queryOfAnswer({ sheet: sheet({ intent: 'advice', ref: 'rut 1:16', phrase: 'your God', what: 'x' }), ref: 'rut 1:16', label: 'How to translate «your God»' })!
+  expect(adv.k).toBe('search')
+  if (adv.k === 'search') {
+    expect(adv.sheet).toMatchObject({ intent: 'advice', ref: 'rut 1:16', phrase: 'your God', what: [] })
+    expect(adv.q).toBe('How to translate «your God»')
+  }
+  const cnt = queryOfAnswer({ sheet: sheet({ intent: 'count', ref: 'rut 1' }), ref: 'rut 1', label: 'Ruth 1' })!
+  expect(cnt.k === 'search' && cnt.sheet?.intent).toBe('count')
+  // a button with no sheet: its passage
+  expect(queryOfAnswer({ ref: 'rut 1', label: 'Ruth 1' })).toEqual({ k: 'passage', ref: 'rut 1', lang: 'en' })
   const s = queryOfAnswer({ sheet: sheet({ intent: 'choose', candidates: ['tw:kt/love'] }), label: 'love' })!
   expect(s.k === 'search' && s.sheet?.intent).toBe('choose')
   expect(queryOfAnswer({})).toBeNull()
@@ -108,24 +118,40 @@ test('after the packs change: another pack that has the book, else said plainly'
   if (ALL_PACKS.includes('id')) {
     // the Indonesian pack has no Genesis (explore.test.ts): English was removed, so it cannot open, and says which pack it needs
     await installPacks(['id'])
-    expect(await reopen(gen, 'Genesis 1:1')).toEqual({ k: 'missing', lang: 'en' })
+    const gone = await reopen(gen, 'Genesis 1:1')
+    expect(gone).toEqual({ k: 'missing', lang: 'en', why: 'pack' })
+    if (gone.k === 'missing') expect(missingText(gone, 'en', (l) => (l === 'en' ? 'English' : l))).toBe('This needs the English language pack, which is no longer on this phone.')
+    // saved from the Indonesian pack, which is here without Genesis: not "no longer on this phone"
+    const here = await reopen({ ...gen, lang: 'id' }, 'Genesis 1:1')
+    expect(here).toEqual({ k: 'missing', lang: 'id', why: 'content' })
+    if (here.k === 'missing') expect(missingText(here, 'es', (l) => l)).toBe(ST('es').notHere)
     // a book Indonesian has opens from it
     const jon: Query = { k: 'passage', ref: 'jon 1:3', lang: 'en' }
     const p = await reopen(jon, 'Jonah 1:3')
-    if (p.k === 'sheet') expect(p.sheet.lang).toBe('id')
+    if (p.k === 'sheet') {
+      expect(p.sheet.lang).toBe('id')
+      // opened from another pack than its own: the chat says which
+      expect(p.from).toBe('id')
+      expect(planLabel(p, 'en', (l) => (l === 'id' ? 'Bahasa Indonesia' : l))).toBe('Jonah 1:3 · from the Bahasa Indonesia pack')
+    }
   }
   if (ALL_PACKS.includes('es-419')) {
     // saved from the Spanish pack, which is gone: English has the verse
     await installPacks(['en'])
     const p = await reopen({ k: 'passage', ref: 'rut 1:16', lang: 'es-419' }, 'Rut 1:16')
     expect(p.k === 'sheet' && p.sheet.lang).toBe('en')
+    expect(p.k === 'sheet' && p.from).toBe('en')
   }
   await installPacks(['en'])
-  expect((await reopen({ k: 'article', id: 'ta:translate/no-such-article', lang: 'en' }, 'x')).k).toBe('missing')
+  expect(await reopen({ k: 'article', id: 'ta:translate/no-such-article', lang: 'en' }, 'x')).toEqual({ k: 'missing', lang: 'en', why: 'content' })
+  // its own pack: no "from"
+  const own = await reopen(METAPHOR, 'Metaphor')
+  expect(own.k === 'sheet' && own.from).toBeUndefined()
+  if (own.k === 'sheet') expect(planLabel(own, 'en', (l) => l)).toBe('Metaphor')
   // no language at all: missing, never a throw
   await installPacks([])
-  expect(await reopen(gen, 'Genesis 1:1')).toEqual({ k: 'missing', lang: 'en' })
-  expect(await reopen(JONAH_Q, 'x')).toEqual({ k: 'missing', lang: null })
+  expect(await reopen(gen, 'Genesis 1:1')).toEqual({ k: 'missing', lang: 'en', why: 'none' })
+  expect(await reopen(JONAH_Q, 'x')).toEqual({ k: 'missing', lang: null, why: 'none' })
   await installPacks(['en'])
 })
 
@@ -287,4 +313,34 @@ test('the words in the six languages', () => {
   }
   expect(ST('es-419').save).toBe('Guardar')
   expect(ST('xx').save).toBe('Save')
+})
+
+test('saved while the online answer was written: the item gets its text, no second item', () => {
+  expect(addSaved({ q: RUTH, label: 'What does Ruth 1:16 mean?', ui: 'en' }).res).toBe('ok')
+  // (main.ts fillAi draws the button again with the answer: savedview.ts saveButton upgrades the item)
+  expect(upgradeSaved(RUTH, { text: 'Ruth commits to Naomi.', model: 'gpt-x' }, 'What does Ruth 1:16 mean?')).toBe('ok')
+  expect(savedItems().length).toBe(1)
+  const x = savedItems()[0]!
+  expect(x.kind).toBe('answer')
+  expect(x.ai).toEqual({ text: 'Ruth commits to Naomi.', model: 'gpt-x' })
+  expect(isSaved(RUTH, true)).toBe(true)
+  // so the ★ takes it out again
+  removeSaved(x.id)
+  expect(savedItems()).toEqual([])
+  // nothing saved: nothing made
+  expect(upgradeSaved(RUTH, { text: 't', model: 'm' })).toBe('ok')
+  expect(savedItems()).toEqual([])
+})
+
+test('a stored call sheet is read with only the fields a sheet has', () => {
+  expect(cleanSheet(null)).toBeUndefined()
+  expect(cleanSheet({ intent: 3, lang: 'en' })).toBeUndefined()
+  const s = cleanSheet({ intent: 'choose', lang: 'en', what: 'notes', candidates: ['tw:kt/love', 4], ref: 7, evil: '<img>' })!
+  expect(s).toMatchObject({ intent: 'choose', lang: 'en', what: [], candidates: ['tw:kt/love'], ref: null })
+  expect('evil' in s).toBe(false)
+  // and so after a reload
+  store.set(SAVED_KEY, JSON.stringify({ v: 1, items: [{ id: 'a', kind: 'search', q: { k: 'search', q: 'love', sheet: { intent: 'choose', lang: 'en', what: 'x', evil: 1 } }, tags: [] }], notes: [] }))
+  reload()
+  const q = savedItems()[0]!.q
+  expect(q.k === 'search' && q.sheet && Array.isArray(q.sheet.what) && !('evil' in q.sheet)).toBe(true)
 })

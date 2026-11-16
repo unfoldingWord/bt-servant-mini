@@ -382,6 +382,8 @@ function ensureSheet() {
   let y0 = 0
   head.addEventListener('touchstart', (e) => { y0 = e.touches[0]!.clientY }, { passive: true })
   head.addEventListener('touchend', (e) => { if (e.changedTouches[0]!.clientY - y0 > 60) closePanel() })
+  // the PIN lock covers the app: the panel (a note, an article, the person's own note on it) closes under it
+  new MutationObserver(() => { if (stack.length && document.querySelector('#lock')) closePanel() }).observe(document.body, { childList: true })
   sheet = { bg, box, title, body, back, foot }
   return sheet
 }

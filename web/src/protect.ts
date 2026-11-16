@@ -3,6 +3,7 @@
 // kept. None of this encrypts anything: it protects from a quick look, not from someone with time and the unlocked phone.
 
 import { LIMITED } from './model'
+import { SAVED_KEY } from './saved'
 
 const DISCREET = 'btsm.discreet'
 const PIN = 'btsm.pin'
@@ -152,7 +153,7 @@ export function setKeepHistory(keep: boolean) {
   if (!keep) {
     // what was kept goes now: the conversations (main.ts KEY), the saved items and notes (saved.ts SAVED_KEY)
     put('btsm.conversations.v1', null)
-    put('btsm.saved.v1', null)
+    put(SAVED_KEY, null)
   }
 }
 

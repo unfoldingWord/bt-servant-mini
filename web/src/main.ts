@@ -241,19 +241,23 @@ function askedFor(m: Msg): string | undefined {
 }
 /**
  * The online answer arrived for a message drawn while it was written: its text in place of "Writing…", the cards untouched,
- * and the share button made again, so it sends the online answer (it was made before it existed, or not at all).
+ * and the share button made again, so it sends the online answer (it was made before it existed, or not at all); ☆ Save too,
+ * so it keeps the online text (an item saved while it was written gets it: savedview.ts).
  */
 function fillAi(node: HTMLElement, m: Msg) {
   if (!m.ai) return
   node.querySelector('.ai.pending')?.replaceWith(aiBlock(m.ai))
   markCited(node, (m.ai.sources ?? []).map((s) => s.id), m.ui ?? nav)
   const sh = shareButton(m, m.ui ?? nav, askedFor(m))
-  const old = node.querySelector(':scope > .share')
-  if (old) old.remove()
+  node.querySelectorAll(':scope > .share, :scope > .keep').forEach((x) => x.remove())
   const rate = node.querySelector(':scope > .rate')
-  if (sh && rate) rate.before(sh)
-  else if (sh) node.appendChild(sh)
+  for (const x of [sh, keepOf(m, true)]) if (x) rate ? rate.before(x) : node.appendChild(x)
 }
+/** What ☆ Save keeps and ✎ Note is tied to: the answer's query, or for an older answer the question it answers. */
+const savedQOf = (m: Msg): Query | null => m.saveQ ?? (m.waiting || m.limits || m.packs ? null : queryOfAnswer({ q: askedFor(m) }))
+/** ☆ Save and ✎ Note under an answer (savedview.ts); `arrived`: its online text has just come. */
+const keepOf = (m: Msg, arrived = false) => !m.waiting && !m.limits && !m.packs && (m.info || m.study || m.helps?.length || m.ai)
+  ? keepButtons({ q: savedQOf(m), label: askedFor(m) ?? m.text ?? '', ai: () => m.ai, question: askedFor(m), arrived }) : null
 /** `pending`: online AI is writing its answer to this message (the helps show as cards already). */
 function renderMsg(m: Msg, pending = false): HTMLElement {
   // going back to an earlier point: a small divider ("Back to Ruth 2:3"), not a bubble
@@ -274,8 +278,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(pm)
   }
   // what the person wrote about this verse, article or question (saved.ts), above the answer
-  const savedQ = m.saveQ ?? (m.waiting || m.limits || m.packs ? null : queryOfAnswer({ q: askedFor(m) }))
-  d.appendChild(yourNotes(savedQ))
+  d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const cv = convs.find((x) => x.msgs.includes(m))
   const asked = askedFor(m)
@@ -347,7 +350,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   const sh = m.waiting ? null : shareButton(m, m.ui ?? nav, asked)
   if (sh) d.appendChild(sh)
   // ☆ Save and ✎ Note (savedview.ts); with an online answer, Save keeps its text too
-  const keep = !m.waiting && !m.limits && !m.packs && (m.info || m.study || m.helps?.length || m.ai) ? keepButtons({ q: savedQ, label: asked ?? m.text ?? '', ai: () => m.ai, question: asked }) : null
+  const keep = keepOf(m)
   if (keep) d.appendChild(keep)
   // thumbs up or down, and with a thumbs down a report (feedback.ts)
   if (!m.waiting && (m.info || m.intro || m.ai || m.text || m.helps)) {

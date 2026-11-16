@@ -58,6 +58,8 @@ export type ST = {
   saveVerses: string; done: string; versesHint: string; online: string; close: string; back: string
   /** removing one with a name or groups asks a second tap */
   sure: string
+  /** opened from another pack than the one it was saved from; the pack has no longer this book or article */
+  fromPack: string; notHere: string
 }
 const STR: Record<string, ST> = {
   en: {
@@ -78,6 +80,7 @@ const STR: Record<string, ST> = {
     saveVerses: '☆ Save verses', done: 'Done', versesHint: 'Tap a verse to save it, or tap it again to remove it.',
     online: 'Online AI · {model}', close: 'Close', back: 'Back',
     sure: 'It has a name or groups: tap again to remove it from Saved.',
+    fromPack: 'from the {pack} pack', notHere: 'The language packs on this phone do not have this book or article.',
   },
   es: {
     save: 'Guardar', saved: 'Guardado', saveTip: 'Guardar esto para abrirlo después', unsaveTip: 'Quitar de Guardados', note: 'Nota',
@@ -97,6 +100,7 @@ const STR: Record<string, ST> = {
     saveVerses: '☆ Guardar versículos', done: 'Listo', versesHint: 'Toca un versículo para guardarlo, o tócalo otra vez para quitarlo.',
     online: 'IA en línea · {model}', close: 'Cerrar', back: 'Atrás',
     sure: 'Tiene nombre o grupos: toca otra vez para quitarlo de Guardados.',
+    fromPack: 'del paquete de {pack}', notHere: 'Los paquetes de idioma de este teléfono no tienen este libro ni este artículo.',
   },
   fr: {
     save: 'Enregistrer', saved: 'Enregistré', saveTip: 'Enregistrer pour le rouvrir plus tard', unsaveTip: 'Retirer des favoris', note: 'Note',
@@ -116,6 +120,7 @@ const STR: Record<string, ST> = {
     saveVerses: '☆ Enregistrer des versets', done: 'Terminé', versesHint: "Touchez un verset pour l'enregistrer, ou touchez-le encore pour le retirer.",
     online: 'IA en ligne · {model}', close: 'Fermer', back: 'Retour',
     sure: 'Il a un nom ou des groupes : touchez encore pour le retirer des favoris.',
+    fromPack: 'du paquet {pack}', notHere: "Les paquets de langue de ce téléphone n'ont pas ce livre ni cet article.",
   },
   id: {
     save: 'Simpan', saved: 'Tersimpan', saveTip: 'Simpan agar bisa dibuka lagi nanti', unsaveTip: 'Hapus dari Tersimpan', note: 'Catatan',
@@ -135,6 +140,7 @@ const STR: Record<string, ST> = {
     saveVerses: '☆ Simpan ayat', done: 'Selesai', versesHint: 'Ketuk ayat untuk menyimpannya, atau ketuk lagi untuk menghapusnya.',
     online: 'AI daring · {model}', close: 'Tutup', back: 'Kembali',
     sure: 'Ini punya nama atau kelompok: ketuk lagi untuk menghapusnya dari Tersimpan.',
+    fromPack: 'dari paket {pack}', notHere: 'Paket bahasa di ponsel ini tidak memuat kitab atau artikel ini.',
   },
   hi: {
     save: 'सहेजें', saved: 'सहेजा गया', saveTip: 'बाद में फिर खोलने के लिए सहेजें', unsaveTip: 'सहेजे गए से हटाएँ', note: 'नोट',
@@ -154,6 +160,7 @@ const STR: Record<string, ST> = {
     saveVerses: '☆ पद सहेजें', done: 'हो गया', versesHint: 'किसी पद को सहेजने के लिए टैप करें, या हटाने के लिए फिर से टैप करें।',
     online: 'ऑनलाइन AI · {model}', close: 'बंद करें', back: 'वापस',
     sure: 'इसका नाम या समूह है: सहेजे गए से हटाने के लिए फिर टैप करें।',
+    fromPack: '{pack} पैकेज से', notHere: 'इस फ़ोन के भाषा पैकेजों में यह पुस्तक या लेख नहीं है।',
   },
   ar: {
     save: 'حفظ', saved: 'محفوظ', saveTip: 'احفظ هذا لتفتحه لاحقًا', unsaveTip: 'إزالة من المحفوظات', note: 'ملاحظة',
@@ -167,12 +174,13 @@ const STR: Record<string, ST> = {
     tags: 'المجموعات، تفصل بينها فواصل (مثل: راعوث، الصور البلاغية)', allTags: 'الكل', askAgain: 'اسأل مرة أخرى',
     missing: 'يحتاج هذا إلى حزمة لغة {lang}، وهي لم تعد على هذا الهاتف.', addLang: 'إضافة لغة',
     noLang: 'لا توجد أي لغة على هذا الهاتف بعد.', full: 'لم تعد في الهاتف مساحة لحفظ هذا.',
-    many: 'بلغت الحد ({n}). احذف بعضها لتحفظ المزيد.', busy: 'هناك إجابة في الطريق: انقر مجددًا عندما تصل.',
+    many: 'بلغت الحد ({n}). احذف بعضها لتحفظ المزيد.', busy: 'هناك إجابة في الطريق: المس مجددًا عندما تصل.',
     notKept: 'لا يُحتفظ بالمحادثات (القائمة > الأمان): تختفي المحفوظات والملاحظات عند إغلاق التطبيق.',
     private: 'تبقى المحفوظات والملاحظات على هذا الهاتف فقط، ولا تُرسَل أبدًا إلى الذكاء الاصطناعي عبر الإنترنت.',
     saveVerses: '☆ حفظ آيات', done: 'تم', versesHint: 'المس آية لحفظها، أو المسها مرة أخرى لإزالتها.',
     online: 'ذكاء اصطناعي عبر الإنترنت · {model}', close: 'إغلاق', back: 'رجوع',
     sure: 'له اسم أو مجموعات: المس مرة أخرى لإزالته من المحفوظات.',
+    fromPack: 'من حزمة {pack}', notHere: 'لا تحتوي حزم اللغات على هذا الهاتف على هذا السفر أو هذه المقالة.',
   },
 }
 export const SAVED_LANGS = Object.keys(STR)
@@ -193,13 +201,23 @@ const keep = (): boolean => {
 }
 const str = (x: unknown, max: number): string => (typeof x === 'string' ? strip(x).slice(0, max) : '')
 const isKind = (k: unknown): k is Kind => KINDS.includes(k as Kind)
+const sOrNull = (x: unknown): string | null => (typeof x === 'string' ? x : null)
+/** A button's call sheet as read from the phone: only the fields a sheet has, of their types (else none). */
+export function cleanSheet(x: any): Sheet | undefined {
+  if (!x || typeof x !== 'object' || typeof x.intent !== 'string' || typeof x.lang !== 'string') return undefined
+  const strs = (a: unknown): string[] => (Array.isArray(a) ? a.filter((w): w is string => typeof w === 'string') : [])
+  return sheetOf(x.lang, {
+    intent: x.intent, ref: sOrNull(x.ref), what: strs(x.what), version: sOrNull(x.version), concept: sOrNull(x.concept),
+    term: sOrNull(x.term), phrase: sOrNull(x.phrase), candidates: Array.isArray(x.candidates) ? strs(x.candidates) : null,
+  })
+}
 function cleanQuery(q: any): Query | null {
   if (!q || typeof q !== 'object') return null
   if (q.k === 'passage' && typeof q.ref === 'string' && /^[0-9a-z]{3}( |$)/.test(q.ref) && typeof q.lang === 'string')
     return { k: 'passage', ref: q.ref, lang: q.lang, ...(Array.isArray(q.what) ? { what: q.what.filter((w: unknown) => typeof w === 'string') } : {}) }
   if (q.k === 'article' && typeof q.id === 'string' && /^t[aw]:/.test(q.id) && typeof q.lang === 'string') return { k: 'article', id: q.id, lang: q.lang }
   if (q.k === 'search' && typeof q.q === 'string' && q.q.trim()) {
-    const s = q.sheet && typeof q.sheet === 'object' && typeof q.sheet.intent === 'string' && typeof q.sheet.lang === 'string' ? q.sheet as Sheet : undefined
+    const s = cleanSheet(q.sheet)
     return { k: 'search', q: strip(q.q), ...(typeof q.lang === 'string' ? { lang: q.lang } : {}), ...(s ? { sheet: s } : {}) }
   }
   return null
@@ -301,10 +319,13 @@ export function queryOfAnswer(a: { sheet?: Sheet | null; ref?: string | null; co
   if (intent === 'article') { const x = article(); if (x) return x }
   const typed = strip(a.q ?? '').trim()
   if (typed) return { k: 'search', q: typed, lang }
+  const label = strip(a.label ?? '').trim()
+  // a button of another kind (advice, count, choose…): its own call sheet, so it opens as the same answer, not as a plain passage
+  const sheet = cleanSheet(a.sheet)
+  if (sheet && intent !== 'passage' && intent !== 'article' && label) return { k: 'search', q: label, lang, sheet }
   const p = passage() ?? article()
   if (p) return p
-  const label = strip(a.label ?? '').trim()
-  return label ? { k: 'search', q: label, lang, ...(a.sheet ? { sheet: { ...a.sheet } } : {}) } : null
+  return label ? { k: 'search', q: label, lang, ...(sheet ? { sheet } : {}) } : null
 }
 
 /** "Ruth 1:16", "Ruth: introduction" kept short: a passage named in the app's language. */
@@ -340,6 +361,21 @@ export function addSaved(o: { q: Query; label: string; ui: string; ai?: { text: 
     s.items.push(item)
   })
   return res === 'ok' ? { res, item } : { res }
+}
+/**
+ * The online answer arrived after its query was saved (while it was written): the item keeps the answer's text too, as one
+ * saved with it would, instead of a second item. Nothing to do when there is no such item, or one with the answer already.
+ */
+export function upgradeSaved(q: Query, ai: { text: string; model: string }, question?: string): Result {
+  const plain = findSaved(q, false)
+  if (!plain || findSaved(q, true)) return 'ok'
+  return change((s) => {
+    const x = s.items.find((i) => i.id === plain.id)
+    if (!x) return
+    x.kind = 'answer'
+    x.ai = { text: ai.text.slice(0, AI_MAX), model: strip(ai.model).slice(0, 80) }
+    if (question) x.question = strip(question).trim().slice(0, 500)
+  })
 }
 export function removeSaved(id: string): Result {
   return change((s) => { s.items = s.items.filter((x) => x.id !== id) })
@@ -447,12 +483,17 @@ export const noteShareText = (n: Note, ui: string): string => strip([noteTitle(n
 // ---------------------------------------------------------------------------------------------------------- opening again
 
 export type Plan =
-  | { k: 'sheet'; label: string; sheet: Sheet }
+  /** `from`: the pack it opens from, when not the one it was saved from */
+  | { k: 'sheet'; label: string; sheet: Sheet; from?: string }
   | { k: 'ask'; q: string }
-  /** the pack it needs is no longer on the phone (null: no language at all) */
-  | { k: 'missing'; lang: string | null }
-const sheetOf = (lang: string, o: Partial<Sheet>): Sheet =>
-  ({ id: `v${Date.now()}`, intent: 'passage', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang, ...o })
+  /**
+   * it cannot open: 'pack', the pack it was saved from is no longer on the phone (and no other has it); 'content', that pack is
+   * here but has not this book or article (nor does another); 'none', there is no language on the phone
+   */
+  | { k: 'missing'; lang: string | null; why: 'pack' | 'content' | 'none' }
+function sheetOf(lang: string, o: Partial<Sheet>): Sheet {
+  return { id: `v${Date.now()}`, intent: 'passage', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang, ...o }
+}
 
 /**
  * How a saved query opens again with the packs on the phone now: a passage from its pack, else from another pack that has the
@@ -461,27 +502,39 @@ const sheetOf = (lang: string, o: Partial<Sheet>): Sheet =>
 export async function reopen(q: Query, label: string): Promise<Plan> {
   try {
     const langs = await installedLangs().catch(() => [] as string[])
-    if (!langs.length) return { k: 'missing', lang: q.k === 'search' ? null : q.lang }
+    if (!langs.length) return { k: 'missing', lang: q.k === 'search' ? null : q.lang, why: 'none' }
+    const from = (l: string, saved: string) => (l !== saved ? { from: l } : {})
+    // what cannot open says why: its pack is gone, or its pack is here without it
+    const missing = (lang: string): Plan => ({ k: 'missing', lang, why: langs.includes(lang) ? 'content' : 'pack' })
     if (q.k === 'passage') {
       const code = q.ref.split(' ')[0]!
       for (const l of [q.lang, ...langs.filter((x) => x !== q.lang)]) {
         if (!langs.includes(l)) continue
         try {
-          if ((await openLang(l)).installed(`book:${code}`)) return { k: 'sheet', label, sheet: sheetOf(l, { intent: 'passage', ref: q.ref, what: q.what?.length ? [...q.what] : ['text', 'notes'] }) }
+          if ((await openLang(l)).installed(`book:${code}`))
+            return { k: 'sheet', label, sheet: sheetOf(l, { intent: 'passage', ref: q.ref, what: q.what?.length ? [...q.what] : ['text', 'notes'] }), ...from(l, q.lang) }
         } catch {}
       }
-      return { k: 'missing', lang: q.lang }
+      return missing(q.lang)
     }
     if (q.k === 'article') {
       const a = await articleView(langs.includes(q.lang) ? q.lang : langs[0]!, q.id).catch(() => null)
-      return a ? { k: 'sheet', label, sheet: sheetOf(a.lang, { intent: 'article', concept: q.id }) } : { k: 'missing', lang: q.lang }
+      return a ? { k: 'sheet', label, sheet: sheetOf(a.lang, { intent: 'article', concept: q.id }), ...from(a.lang, q.lang) } : missing(q.lang)
     }
     if (q.sheet) {
-      const l = langs.includes(q.sheet.lang) ? q.sheet.lang : langs.includes('en') ? 'en' : langs[0]!
-      return { k: 'sheet', label: q.q, sheet: { ...q.sheet, id: `v${Date.now()}`, lang: l } }
+      const s = cleanSheet(q.sheet)!
+      const l = langs.includes(s.lang) ? s.lang : langs.includes('en') ? 'en' : langs[0]!
+      return { k: 'sheet', label: q.q, sheet: { ...s, lang: l }, ...from(l, s.lang) }
     }
     return { k: 'ask', q: q.q }
   } catch {
-    return { k: 'missing', lang: null }
+    return { k: 'missing', lang: null, why: 'none' }
   }
 }
+
+/** The chat's words for an item opened again: from another pack than its own, it says which ("Ruth 1:16 · from the English pack"). */
+export const planLabel = (p: Extract<Plan, { k: 'sheet' }>, ui: string, packName: (l: string) => string): string =>
+  p.from ? `${p.label} · ${fill(ST(ui).fromPack, { pack: packName(p.from) })}` : p.label
+/** Why an item cannot open: its pack is gone, its pack has not this book or article, or there is no language at all. */
+export const missingText = (p: Extract<Plan, { k: 'missing' }>, ui: string, packName: (l: string) => string): string =>
+  p.why === 'content' ? ST(ui).notHere : p.why === 'pack' && p.lang ? fill(ST(ui).missing, { lang: packName(p.lang) }) : ST(ui).noLang

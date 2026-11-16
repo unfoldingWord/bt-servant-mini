@@ -7,7 +7,7 @@ import { bidiLabel, dirOf, rtlLang } from './bidi'
 import { md, mdDir } from './md'
 import { shareNow, shareText } from './share'
 import {
-  addSaved, allTags, keyOf, personal, editSaved, fill, findSaved, groupSaved, itemTitle, type Note, noteFor, noteShareText, notesAbout, noteTitle,
+  addSaved, allTags, keyOf, personal, missingText, planLabel, resetSaved, SAVED_KEY, upgradeSaved, editSaved, fill, findSaved, groupSaved, itemTitle, type Note, noteFor, noteShareText, notesAbout, noteTitle,
   type Query, removeNote, removeSaved, reopen, type Result, type Saved, searchNotes, searchSaved, setNote, ST, MAX_ITEMS, MAX_NOTES,
   notes as allNotes, savedItems,
 } from './saved'
@@ -27,8 +27,18 @@ export type SavedHooks = {
   closeOthers: () => void
 }
 let hooks: SavedHooks | null = null
+let listening = false
 export function setSavedHooks(h: SavedHooks) {
   hooks = h
+  // changed in another tab of the app (the web app): read again, and what shows it follows
+  if (!listening && typeof window !== 'undefined') {
+    listening = true
+    window.addEventListener('storage', (e) => {
+      if (e.key !== SAVED_KEY && e.key !== null) return
+      resetSaved()
+      redrawNotes()
+    })
+  }
 }
 const ui = () => hooks?.ui() ?? 'en'
 
@@ -45,6 +55,12 @@ function button(cls: string, text: string, on: () => void): HTMLButtonElement {
   return b
 }
 const dirUi = (l: string) => (rtlLang(l) ? 'rtl' : 'ltr')
+/** A box the person types in: empty, the app's direction (its placeholder reads right); with text, the text's own. */
+function typedDir(i: HTMLInputElement | HTMLTextAreaElement, l: string) {
+  const set = () => { i.dir = i.value ? 'auto' : dirUi(l) }
+  set()
+  i.addEventListener('input', set)
+}
 /** What a refused change says (the phone is full, or the most there may be). */
 const why = (r: Result, l: string, max: number) => (r === 'full' ? ST(l).full : fill(ST(l).many, { n: max }))
 /** A delete that asks once more, inside the page (Android's WebView shows no confirm()). */
@@ -75,7 +91,7 @@ export function noteEditor(q: Query, label: string, l: string, done: () => void)
   const box = el('div', 'sv-editor')
   box.dir = dirUi(l)
   const ta = el('textarea', 'sv-ta')
-  ta.dir = 'auto'
+  typedDir(ta, l)
   ta.rows = 4
   ta.placeholder = s.notePh
   ta.setAttribute('aria-label', s.yourNote)
@@ -148,8 +164,11 @@ const STAR = '☆', STARRED = '★'
  * ☆ Save / ★ Saved for one query; `ai()`: the online answer to keep with it, when there is one by the time it is tapped (it
  * may arrive after the button is drawn). A tap on ★ takes it out of Saved.
  */
-export function saveButton(o: { q: Query; label: string; ai?: () => { text: string; model: string } | undefined; question?: string; cls?: string }): HTMLElement {
+export function saveButton(o: { q: Query; label: string; ai?: () => { text: string; model: string } | undefined; question?: string; cls?: string; arrived?: boolean }): HTMLElement {
   const l = ui()
+  // the online answer has just arrived (main.ts fillAi): saved while it was written, the item keeps its text now
+  const now = o.arrived ? o.ai?.() : undefined
+  if (now) upgradeSaved(o.q, now, o.question ?? o.label)
   const s = ST(l)
   const b = el('button', o.cls ?? 'keep-btn')
   b.type = 'button'
@@ -195,7 +214,7 @@ export function saveButton(o: { q: Query; label: string; ai?: () => { text: stri
  * Under an answer, next to Share: ☆ Save and ✎ Note (its box opens below them). Null when there is nothing to open again
  * (an answer that could not answer).
  */
-export function keepButtons(o: { q: Query | null | undefined; label: string; ai?: () => { text: string; model: string } | undefined; question?: string }): HTMLElement | null {
+export function keepButtons(o: { q: Query | null | undefined; label: string; ai?: () => { text: string; model: string } | undefined; question?: string; arrived?: boolean }): HTMLElement | null {
   if (!o.q) return null
   const q = o.q
   const l = ui()
@@ -209,7 +228,7 @@ export function keepButtons(o: { q: Query | null | undefined; label: string; ai?
     note.disabled = true
     row.after(noteEditor(q, o.label, l, () => { note.disabled = false }))
   }
-  row.append(saveButton({ q, label: o.label, ai: o.ai, question: o.question }), note)
+  row.append(saveButton({ q, label: o.label, ai: o.ai, question: o.question, arrived: o.arrived }), note)
   return row
 }
 
@@ -291,14 +310,15 @@ async function openQuery(q: Query, label: string, status: HTMLElement) {
   if (!hooks || hooks.busy()) return void (status.textContent = ST(l).busy)
   const p = await reopen(q, label)
   if (p.k === 'missing') {
-    status.appendChild(el('span', '', p.lang ? fill(ST(l).missing, { lang: hooks.packName(p.lang) }) : ST(l).noLang))
+    status.appendChild(el('span', '', missingText(p, l, hooks.packName)))
+    // (a pack that is here without this book: adding a language may still help, the languages view says what each has)
     status.appendChild(button('sv-act', ST(l).addLang, () => { closeSaved(false); hooks?.addLang() }))
     return
   }
   if (hooks.busy()) return void (status.textContent = ST(l).busy)
   closeSaved(false)
   hooks.closeOthers()
-  if (p.k === 'sheet') hooks.run(p.label, p.sheet)
+  if (p.k === 'sheet') hooks.run(planLabel(p, l, hooks.packName), p.sheet)
   else hooks.ask(p.q)
 }
 
@@ -322,6 +342,7 @@ function draw() {
   b.body.innerHTML = ''
   if (detail) return drawAnswer(b.body, detail)
   b.title.textContent = s.title
+  b.title.dir = dirUi(l) // (an answer's title before had its own direction)
   const tabs = el('div', 'ex-tabs')
   tabs.setAttribute('role', 'tablist')
   for (const [k, label] of [['saved', `${s.title} (${savedItems().length})`], ['notes', `${s.notesTab} (${allNotes().length})`]] as const) {
@@ -335,7 +356,7 @@ function draw() {
   b.body.appendChild(el('p', 'ex-note sv-private', kept ? s.private : `${s.private} ${s.notKept}`))
   const find = el('input', 'sv-find')
   find.type = 'search'
-  find.dir = 'auto'
+  typedDir(find, l)
   find.placeholder = tab === 'saved' ? s.search : s.searchNotes
   find.setAttribute('aria-label', find.placeholder)
   find.value = text
@@ -422,12 +443,12 @@ function editForm(x: Saved, done: () => void): HTMLElement {
   const f = el('div', 'sv-editor')
   f.dir = dirUi(l)
   const name = el('input', 'sv-in')
-  name.dir = 'auto'
+  typedDir(name, l)
   name.placeholder = s.name
   name.setAttribute('aria-label', s.name)
   name.value = x.name ?? ''
   const tags = el('input', 'sv-in')
-  tags.dir = 'auto'
+  typedDir(tags, l)
   tags.placeholder = s.tags
   tags.setAttribute('aria-label', s.tags)
   tags.value = x.tags.join(', ')
