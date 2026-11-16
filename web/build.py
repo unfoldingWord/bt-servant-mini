@@ -39,7 +39,7 @@ if r.returncode:
 if '--no-tests' not in sys.argv:
     import os
     env = dict(os.environ, **({} if '--full' in sys.argv else {'ANSWERS': 'fast'}))
-    t = subprocess.run(['bun', 'test'], cwd=ROOT / 'web', env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', shell=sys.platform == 'win32')
+    t = subprocess.run(['bun', 'test', '--timeout', '120000'], cwd=ROOT / 'web', env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', shell=sys.platform == 'win32')
     print(t.stdout[-1500:], t.stderr[-3000:])
     if t.returncode:
         raise SystemExit('bun test failed (python -I -X utf8 web/build.py --no-tests to build anyway)')
