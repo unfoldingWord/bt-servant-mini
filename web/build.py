@@ -1,5 +1,5 @@
 """Builds the page into app/src/main/assets/www: the JS bundle, index.html and the language packs (with ids.json and index.json).
-   python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none; --dev also puts web/src/data/dev beside the page, for ?dev=)"""
+   python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none; --dev also puts web/src/data/dev in web/desktop/dev, for ?dev=)"""
 import json, re, shutil, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,11 +34,13 @@ r = subprocess.run(['bun', 'build', 'src/main.ts', '--outdir', str(WWW), '--targ
 print(r.stdout[-800:], r.stderr[-2000:])
 if r.returncode:
     raise SystemExit('bun build failed')
-# web/src/data/dev/ (the dev fixtures) is read with fetch, never imported, so the bundle has none of it; it goes beside the page
-# only with --dev (served as dev/<file>, for ?dev=obs5m), never into a release build
-assert 'obs5m-story1' not in (WWW / 'main.js').read_text(encoding='utf-8'), 'a dev fixture got into the bundle'
-if '--dev' in sys.argv:
-    shutil.copytree(ROOT / 'web' / 'src' / 'data' / 'dev', WWW / 'dev')
+# web/src/data/dev/ (the dev fixtures) is read with fetch, never imported, so no bundle has any of it (they are checked by their
+# content, not by the file name, which dev.ts names); it goes only into web/desktop with --dev (see below)
+DEV_TEXT = 'Where did everything in the universe come from?'
+def no_dev(out):
+    assert DEV_TEXT not in (out / 'main.js').read_text(encoding='utf-8'), f'a dev fixture got into {out}/main.js'
+    assert not any('obs5m' in f.name for f in out.rglob('*') if f.is_file()), f'a dev fixture file is in {out}'
+no_dev(WWW)
 # the answer tests (web/tests) on every build: a fast part by default (under a minute), all of them with --full (about 4
 # minutes, with the scores against web/tests/baseline.json); --no-tests skips them
 if '--no-tests' not in sys.argv:
@@ -73,6 +75,9 @@ DESK = ROOT / 'web' / 'desktop'
 shutil.rmtree(DESK, ignore_errors=True)
 shutil.copytree(WWW, DESK)
 shutil.copytree(FULL, DESK / 'packs')
+# the dev fixtures (--dev) go only here, the local preview outside the APK and iOS assets; a build without --dev leaves none
+if '--dev' in sys.argv:
+    shutil.copytree(ROOT / 'web' / 'src' / 'data' / 'dev', DESK / 'dev')
 print('packs', langs, 'www', sum(f.stat().st_size for f in WWW.rglob('*') if f.is_file()) // 1024, 'KB')
 
 # The iOS app (ios/): the same page as the Android app, without packs (they are added from the app, like the light build).
@@ -95,6 +100,7 @@ r = subprocess.run(['bun', 'build', 'src/main.ts', '--outdir', str(APP), '--targ
 if r.returncode:
     print(r.stdout[-800:], r.stderr[-2000:])
     raise SystemExit('bun build (web app) failed')
+no_dev(APP)
 va = hashlib.sha256((APP / 'main.js').read_bytes()).hexdigest()[:10]
 head = """<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#262624">
