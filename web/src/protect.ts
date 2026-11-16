@@ -2,6 +2,7 @@
 // home screen, the screen hidden in recent apps, no screenshots), a PIN to open the app, and conversations that are not
 // kept. None of this encrypts anything: it protects from a quick look, not from someone with time and the unlocked phone.
 
+import { rtlLang } from './bidi'
 import { LIMITED } from './model'
 
 const DISCREET = 'btsm.discreet'
@@ -200,7 +201,7 @@ export function lock(lang: string) {
   const wrap = el('div', '')
   wrap.id = 'lock'
   const box = el('form', 'card') as HTMLFormElement
-  box.dir = /^(ar|he|fa|ur|ps|sd|ug|yi|dv|ckb)(-|$)/i.test(lang) ? 'rtl' : 'auto' // bidi.ts rtlLang, written out: one line here
+  box.dir = rtlLang(lang) ? 'rtl' : 'auto'
   box.appendChild(el('h2', '', discreetOn() ? s.name : 'BT Servant Mini'))
   const i = pinInput(s.enter)
   const msg = el('p', 'note', '')

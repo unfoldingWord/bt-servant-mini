@@ -59,8 +59,12 @@
   .info p { margin: 0 0 10px; }
   .info ul, .info ol { margin: 0 0 10px; padding-inline-start: 22px; }
   .info li { margin: 0 0 8px; }
-  /* an English item in an Arabic list (or the other way round, md.ts): its bullet would sit on the bubble's edge, where the list has no padding */
-  :is(ul, ol)[dir="rtl"] > li[dir="ltr"], :is(ul, ol)[dir="ltr"] > li[dir="rtl"] { list-style-position: inside; }
+  /* an English item in an Arabic list (or the other way round, md.ts): its bullet would sit on the bubble's edge, where the list has no padding.
+     By the resolved direction, so a nested list without its own dir and a dir="auto" item count too; by the attributes where :dir() is missing */
+  :is(ul, ol):dir(rtl) > li:dir(ltr), :is(ul, ol):dir(ltr) > li:dir(rtl) { list-style-position: inside; }
+  @supports not selector(:dir(rtl)) {
+    :is(ul, ol)[dir="rtl"] > li[dir="ltr"], :is(ul, ol)[dir="ltr"] > li[dir="rtl"] { list-style-position: inside; }
+  }
   .info li::marker { color: var(--faint); }
   .info strong { font-weight: 650; }
   .info em { color: var(--muted); }

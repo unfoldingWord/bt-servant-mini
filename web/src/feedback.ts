@@ -4,7 +4,7 @@
 // Nothing identifies the person or the phone. A thumb alone stays on the phone (it only adds to the usage counts, if on).
 import { isOnline, onlineKey, onlineUrl } from './online'
 import { appSnapshot } from './usage'
-import { rtlLang } from './bidi'
+import { rtlLang, strip } from './bidi'
 
 const QUEUE = 'btsm.feedback.queue'
 const MAX_FIELD = 4000 // characters per piece of the conversation
@@ -75,7 +75,7 @@ export function buildReport(msgs: ReportMsg[], reasons: Reason[], comment: strin
   const last = msgs.slice(-MAX_MSGS).map((m) => ({ who: m.who, text: cut(m.text), intro: cut(m.intro), info: cut(m.info), ai: cut(m.ai), details: cut(m.details) }))
   const conversation = include ? last : last.slice(-1) // without the conversation, only the answer itself
   for (const m of conversation) for (const k of Object.keys(m) as (keyof ReportMsg)[]) if (m[k] === undefined) delete m[k]
-  return { ...appSnapshot(), v: 1, at: new Date().toISOString(), reasons, comment: comment.trim().slice(0, 2000), conversation, reported: conversation.length - 1 }
+  return { ...appSnapshot(), v: 1, at: new Date().toISOString(), reasons, comment: strip(comment).trim().slice(0, 2000), conversation, reported: conversation.length - 1 }
 }
 
 function queue(): Report[] {
