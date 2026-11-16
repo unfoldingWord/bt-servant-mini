@@ -6,6 +6,7 @@ import { focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { type Card, cardsT, firstLine } from './helpcards'
 import { linkTarget } from './links'
 import { md } from './md'
+import { bidiLabel, dirOf } from './bidi'
 import { count } from './usage'
 
 type Ui = { back: string; close: string; inChat: string; notes: string; terms: string; noHelps: string; loading: string; missing: string; texts: string; failed: string; retry: string }
@@ -18,9 +19,14 @@ const UI: Record<string, Ui> = {
   ar: { back: 'رجوع', close: 'إغلاق', inChat: 'افتح في المحادثة', notes: 'ملاحظات الترجمة', terms: 'الكلمات الرئيسية', noHelps: 'لا توجد ملاحظة أو كلمة رئيسية لهذه الكلمة.', loading: 'جارٍ الفتح…', missing: 'هذه المقالة ليست في الحزم المثبّتة.', texts: 'ترجمات أخرى', failed: 'تعذّر فتح هذا.', retry: 'حاول مرة أخرى' },
 }
 let ui: Ui = UI.en!
+/** The app's language (its direction decides which runs of a label are isolated, bidi.ts). */
+let uiLang = 'en'
 export function setViewLang(lang: string) {
   ui = UI[lang.split('-')[0]!] ?? UI.en!
+  uiLang = lang
 }
+/** A label built in the app's language, the runs of the other direction isolated (bidi.ts). */
+const lbl = (s: string) => bidiLabel(s, uiLang)
 
 export type Hooks = {
   /** A Bible reference was tapped: ask for it in the chat. */
@@ -49,6 +55,7 @@ const first = (t: string, n = 140): string => {
 /** Markdown with its links made tappable and the titles of `[[id]]` links filled in. */
 export function richText(src: string, lang: string, ctx = ''): HTMLElement {
   const box = el('div', 'rich')
+  box.dir = dirOf(src) // an English article in an Arabic app reads left to right (and the other way round)
   box.innerHTML = md(src, ctx) // md() escapes everything first
   fillTitles(box, lang)
   return box
@@ -71,14 +78,15 @@ export function renderHelps(groups: { head: string; items: HelpItem[] }[]): HTML
   const box = el('div', 'info helps')
   for (const g of groups) {
     if (!g.items.length) continue
-    box.appendChild(el('h4', '', g.head))
+    box.appendChild(el('h4', '', lbl(g.head)))
     const list = el('ol', 'nl')
     for (const h of g.items) {
       const li = el('li')
       const b = el('button', 'nrow')
       b.type = 'button'
-      b.appendChild(el('strong', '', `${h.ref} `))
-      b.appendChild(document.createTextNode(h.snippet))
+      b.dir = dirOf(h.snippet) // the snippet's own direction; the reference isolated in it
+      b.appendChild(el('strong', '', h.ref)).dir = 'auto'
+      b.append(' ', h.snippet)
       b.onclick = () => openPanel({ kind: 'help', lang: h.lang, book: h.book, id: h.id, which: h.kind, label: h.ref })
       li.appendChild(b)
       list.appendChild(li)
@@ -107,7 +115,8 @@ export function renderHelpCards(cards: Card[], o: {
     const meta = el('span', 'hc-meta')
     const title = el('span', 'hc-title', c.title)
     const line = el('span', 'hc-line', c.line)
-    title.dir = line.dir = 'auto' // a title or line in Arabic reads right to left in any app language
+    title.dir = dirOf(c.title) // a title or line in Arabic reads right to left in any app language, English left to right
+    line.dir = dirOf(c.line)
     b.append(meta, title, line)
     if (c.kind === 'article') {
       const lang = o.study?.terms.some((t) => t.id === c.id) ? o.study.lang : o.lang
@@ -118,20 +127,21 @@ export function renderHelpCards(cards: Card[], o: {
       const waits = [1500, 4000, 10000, 20000]
       const read = (n: number) => articleView(lang, c.id).then((a) => {
         if (!a) throw 0
-        if (title.textContent === c.id.split('/').pop()!.replace(/[-_]/g, ' ')) title.textContent = a.title
+        if (title.textContent === c.id.split('/').pop()!.replace(/[-_]/g, ' ')) { title.textContent = a.title; title.dir = dirOf(a.title) }
         line.textContent = firstLine(a.md)
+        line.dir = dirOf(line.textContent)
       }).catch(() => { if (n < waits.length && b.isConnected) setTimeout(() => read(n + 1), waits[n]) })
       if (!c.line) setTimeout(() => read(0), 0)
       b.onclick = () => openPanel({ kind: 'article', id: c.id, lang })
     } else if (c.kind === 'note' && o.study) {
-      meta.textContent = o.study.long ? `${L.note} · ${c.ref}` : L.note
+      meta.textContent = o.study.long ? lbl(`${L.note} · ${c.ref}`) : L.note
       b.onclick = () => openPanel({ kind: 'note', study: o.study!, i: c.i, root: box })
     } else if (c.kind === 'help') {
       meta.textContent = c.head
       const h = o.helps?.[c.g]?.items[c.i]
       if (h) b.onclick = () => openPanel({ kind: 'help', lang: h.lang, book: h.book, id: h.id, which: h.kind, label: h.ref })
     } else if (c.kind === 'text') {
-      meta.textContent = `${L.text} · ${c.label}`
+      meta.textContent = lbl(`${L.text} · ${c.label}`)
       b.onclick = () => o.reveal('text')
     } else b.onclick = () => o.reveal('answer')
     list.appendChild(b)
@@ -142,7 +152,7 @@ export function renderHelpCards(cards: Card[], o: {
 function setCited(b: HTMLElement, cited: boolean, L: ReturnType<typeof cardsT>) {
   b.classList.toggle('cited', cited)
   const meta = b.querySelector('.hc-meta')
-  if (meta) meta.textContent = cited ? `${L.cited} · ${b.dataset.kind}` : b.dataset.kind ?? ''
+  if (meta) meta.textContent = lbl(cited ? `${L.cited} · ${b.dataset.kind}` : b.dataset.kind ?? '')
 }
 /** The online answer arrived: its articles' cards say so, where they stand (no card moves). */
 export function markCited(root: HTMLElement, ids: string[], ui: string) {
@@ -155,12 +165,10 @@ export function markCited(root: HTMLElement, ids: string[], ui: string) {
  */
 export function renderStudy(s: Study, question?: string): HTMLElement {
   const box = el('div', 'info study')
-  box.appendChild(el('h3', '', s.head))
-  if (s.source) {
-    const src = box.appendChild(el('p', 'src', s.source))
-    src.dir = 'auto' // Latin resource names in an Arabic bubble keep their order
-  }
-  if (s.summary) box.appendChild(el('p', 'summary', s.summary))
+  box.appendChild(el('h3', '', lbl(s.head)))
+  // Latin resource names in an Arabic bubble keep their order, isolated: the line reads in the app's direction
+  if (s.source) box.appendChild(el('p', 'src', lbl(s.source)))
+  if (s.summary) box.appendChild(el('p', 'summary', s.summary)).dir = dirOf(s.summary)
   const fill = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ''))
   const heads = {
     focus: s.heads.focus ?? `${ui.notes}: {words}`, more: s.heads.more ?? `${ui.notes} (+{n})`, verse: s.heads.verse ?? '{ref} · {n}',
@@ -179,6 +187,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     const wrap = el('div', 'tx')
     wrap.appendChild(el('div', 'tx-label', t.label))
     const p = el('p', 'vv')
+    p.dir = dirOf(t.verses.map((v) => v.p.map((x) => x[0]).join('')).join(' ')) // the version's own direction
     for (const v of t.verses) {
       if (many) p.appendChild(el('sup', '', v.v))
       for (const [text, keys] of v.p) {
@@ -201,7 +210,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     for (const t of shown) drawText(t, box)
     if (rest.length) {
       const d = el('details', 'more-tx fold')
-      d.appendChild(el('summary', '', `${ui.texts} (${rest.map((t) => t.label).join(', ')})`))
+      d.appendChild(el('summary', '', lbl(`${ui.texts} (${rest.map((t) => t.label).join(', ')})`)))
       for (const t of rest) drawText(t, d)
       box.appendChild(d)
     }
@@ -211,6 +220,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     for (const t of s.terms) {
       const b = el('button', 'chip', t.title)
       b.type = 'button'
+      b.dir = 'auto' // an English key term in an Arabic app keeps its own order
       b.onclick = () => {
         mark(box, null, [`t${s.terms.indexOf(t)}`])
         openPanel({ kind: 'article', id: t.id, lang: s.lang })
@@ -224,11 +234,11 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     // a chapter's many key terms behind a button; a verse's few stay in sight
     if (s.long && s.first !== 'terms') {
       const d = el('details', 'fold')
-      d.appendChild(el('summary', '', fill(heads.termsN, { n: s.terms.length })))
+      d.appendChild(el('summary', '', lbl(fill(heads.termsN, { n: s.terms.length }))))
       drawTerms(d)
       box.appendChild(d)
     } else {
-      box.appendChild(el('h4', '', s.heads.terms))
+      box.appendChild(el('h4', '', lbl(s.heads.terms)))
       drawTerms(box)
     }
   }
@@ -240,9 +250,12 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
       const li = el('li')
       const b = el('button', 'nrow')
       b.type = 'button'
-      if (withRef) b.appendChild(el('span', 'nref', `${n.ref} `))
-      if (n.said) b.appendChild(el('strong', '', `«${n.said}» `))
-      b.appendChild(document.createTextNode(first(n.note)))
+      // the row reads in the note's own direction (English notes in an Arabic pack); the reference and the quote isolated
+      const text = first(n.note)
+      b.dir = dirOf(text || n.said || '')
+      if (withRef) { b.appendChild(el('span', 'nref', n.ref)).dir = 'auto'; b.append(' ') }
+      if (n.said) { b.appendChild(el('strong', '', `«${n.said}»`)).dir = 'auto'; b.append(' ') }
+      b.appendChild(document.createTextNode(text))
       b.onclick = () => {
         mark(box, null, [`n${i}`])
         openPanel({ kind: 'note', study: s, i, root: box })
@@ -258,9 +271,9 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     if (s.long) {
       const host = focused ? el('details', 'fold') : box
       if (focused) {
-        host.appendChild(el('summary', '', fill(heads.more, { n: idx.length })))
+        host.appendChild(el('summary', '', lbl(fill(heads.more, { n: idx.length }))))
         box.appendChild(host)
-      } else box.appendChild(el('h4', '', s.heads.notes))
+      } else box.appendChild(el('h4', '', lbl(s.heads.notes)))
       const byRef = new Map<string, number[]>()
       for (const i of idx) {
         const v = s.notes[i]!.ref.split('-')[0]!
@@ -268,18 +281,18 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
       }
       for (const [ref, list] of byRef) {
         const d = el('details', 'fold verse')
-        d.appendChild(el('summary', '', fill(heads.verse, { ref, n: list.length })))
+        d.appendChild(el('summary', '', lbl(fill(heads.verse, { ref, n: list.length }))))
         noteList(list, d, false)
         host.appendChild(d)
       }
       return
     }
     const few = focused ? 0 : idx.length > SHOWN + 2 ? SHOWN : idx.length
-    if (!focused) box.appendChild(el('h4', '', s.heads.notes))
+    if (!focused) box.appendChild(el('h4', '', lbl(s.heads.notes)))
     if (few) noteList(idx.slice(0, few), box, false)
     if (idx.length > few) {
       const d = el('details', 'fold')
-      d.appendChild(el('summary', '', fill(heads.more, { n: idx.length - few })))
+      d.appendChild(el('summary', '', lbl(fill(heads.more, { n: idx.length - few }))))
       noteList(idx.slice(few), d, false)
       box.appendChild(d)
     }
@@ -288,7 +301,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   if (order.first.length) {
     // the question names a word: its notes first, then the passage, then the rest behind buttons
     const words = wordsOf(order.used, asked).map((w) => `«${w}»`).join(', ')
-    box.appendChild(el('h4', 'focus', fill(heads.focus, { words, n: order.first.length, all: s.notes.length })))
+    box.appendChild(el('h4', 'focus', lbl(fill(heads.focus, { words, n: order.first.length, all: s.notes.length }))))
     noteList(order.first, box, !!s.long)
     drawTexts()
     notes(order.rest, true)
@@ -308,9 +321,10 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   }
   if (s.questions.length) {
     const d = el('details', 'qs fold')
-    d.appendChild(el('summary', '', fill(heads.questionsN, { n: s.questions.length })))
+    d.appendChild(el('summary', '', lbl(fill(heads.questionsN, { n: s.questions.length }))))
     for (const q of s.questions) {
       const p = el('p')
+      p.dir = dirOf(`${q.q} ${q.a}`) // an English question in an Arabic app: its "?" at its end
       p.appendChild(el('strong', '', q.q))
       p.appendChild(el('br'))
       p.appendChild(document.createTextNode(q.a))
@@ -399,7 +413,7 @@ function noteBlock(s: Study, i: number): HTMLElement {
   const n = s.notes[i]!
   const d = el('div', 'pnote')
   const head = [n.said ? `«${n.said}»` : '', n.orig && n.orig !== n.said ? `(${n.orig})` : ''].filter(Boolean).join(' ')
-  if (head) d.appendChild(el('div', 'pnote-head', head))
+  if (head) d.appendChild(el('div', 'pnote-head', head)).dir = dirOf(head)
   d.appendChild(richText(n.note, s.lang))
   if (n.concept && !n.note.includes(n.concept)) {
     const a = el('a', 'lk chip-link', n.concept.split('/').pop()!.replace(/-/g, ' '))
@@ -409,6 +423,12 @@ function noteBlock(s: Study, i: number): HTMLElement {
     fillTitles(d, s.lang)
   }
   return d
+}
+
+/** The panel's title, in its own direction (an English quote or title in an Arabic app reads left to right). */
+function title(sh: NonNullable<typeof sheet>, text: string) {
+  sh.title.textContent = text
+  sh.title.dir = dirOf(text)
 }
 
 /** The pack could not be read (it failed to open, say): say so, with a button that tries again, never "Opening…" for good. */
@@ -433,14 +453,14 @@ async function draw() {
   sh.body.scrollTop = 0
   sh.body.dataset.lang = v.kind === 'article' || v.kind === 'help' ? v.lang : v.study.lang
   if (v.kind === 'word') {
-    sh.title.textContent = `«${v.word}»`
+    title(sh, `«${v.word}»`)
     const notes = v.keys.filter((k) => k[0] === 'n').map((k) => Number(k.slice(1)))
     const terms = v.keys.filter((k) => k[0] === 't').map((k) => v.study.terms[Number(k.slice(1))]!).filter(Boolean)
     if (terms.length) {
       sh.body.appendChild(el('h4', '', ui.terms))
       const chips = el('div', 'chips')
       for (const t of terms) {
-        const b = el('button', 'chip', t.title + (t.orig ? ` · ${t.orig}` : ''))
+        const b = el('button', 'chip', lbl(t.title + (t.orig ? ` · ${t.orig}` : '')))
         b.type = 'button'
         b.onclick = () => openPanel({ kind: 'article', id: t.id, lang: v.study.lang })
         chips.appendChild(b)
@@ -455,7 +475,7 @@ async function draw() {
     return
   }
   if (v.kind === 'help') {
-    sh.title.textContent = v.label
+    title(sh, v.label)
     const h = await helpView(v.lang, v.book, v.id, v.which).catch(() => undefined)
     if (stack[stack.length - 1] !== v) return
     if (h === undefined) return failed(sh)
@@ -463,7 +483,7 @@ async function draw() {
       sh.body.appendChild(el('p', 'muted', ui.missing))
       return
     }
-    sh.title.textContent = h.title
+    title(sh, h.title)
     sh.body.appendChild(richText(h.md, v.lang))
     const b = el('button', 'sheet-chat', ui.inChat)
     b.type = 'button'
@@ -476,23 +496,23 @@ async function draw() {
   }
   if (v.kind === 'note') {
     const n = v.study.notes[v.i]!
-    sh.title.textContent = n.said ? `«${n.said}»` : ui.notes
+    title(sh, n.said ? `«${n.said}»` : ui.notes)
     sh.body.appendChild(noteBlock(v.study, v.i))
     return
   }
-  sh.title.textContent = ui.loading
+  title(sh, ui.loading)
   const a = await articleView(v.lang, v.id).catch(() => undefined)
   if (stack[stack.length - 1] !== v) return // the reader moved on
   if (a === undefined) {
-    sh.title.textContent = v.id.split('/').pop()!.replace(/[-_]/g, ' ')
+    title(sh, v.id.split('/').pop()!.replace(/[-_]/g, ' '))
     return failed(sh)
   }
   if (!a) {
-    sh.title.textContent = v.id.split('/').pop()!
+    title(sh, v.id.split('/').pop()!)
     sh.body.appendChild(el('p', 'muted', ui.missing))
     return
   }
-  sh.title.textContent = a.title
+  title(sh, a.title)
   sh.body.appendChild(richText(a.md, a.lang, v.id))
   const b = el('button', 'sheet-chat', ui.inChat)
   b.type = 'button'

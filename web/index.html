@@ -65,7 +65,7 @@
   .info > :last-child { margin-bottom: 0; }
   .follow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .follow button, .examples button { font: 14px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
-    border-radius: 10px; padding: 7px 11px; text-align: left; }
+    border-radius: 10px; padding: 7px 11px; text-align: start; }
   .follow button:active, .examples button:active { background: var(--line); }
   details { margin-top: 8px; font: 12px system-ui, sans-serif; color: var(--faint); }
   details pre { white-space: pre-wrap; font-size: 11px; max-height: 240px; overflow: auto; }
@@ -125,7 +125,7 @@
   #panel.show { display: block; }
   #panel h2 { font: 600 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin: 10px 0 8px; }
   #panel .row { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
-  #panel .open { flex: 1; text-align: left; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 10px;
+  #panel .open { flex: 1; text-align: start; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 10px;
     font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #panel .row.on .open { background: var(--me); border-color: transparent; }
   #panel .del { border: 0; color: #b4432f; background: transparent; padding: 9px 6px; font: inherit; font-size: 14px; }
