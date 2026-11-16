@@ -1,7 +1,7 @@
 // The decisions between the question and the answer, without the page: what a question asks for once its slots are known,
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
 import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQuestion, setUiLang, type Sheet, type Study, studyOf } from './answer'
-import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
+import { bookCode, bookExact, buildSheet, endsLongName, fold, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
@@ -628,9 +628,10 @@ export function refInText(slots: Slots, q: string): Slots {
       }
     }
     // a name of several words, exactly as a table has it, longest first: the pattern takes one word before the number, so
-    // "प्रेरितों के काम 1:8" was "काम", "رؤيا يوحنا 1:1" was John and "Kisah Para Rasul 1:1" nothing
+    // "प्रेरितों के काम 1:8" was "काम", "رؤيا يوحنا 1:1" was John and "Kisah Para Rasul 1:1" nothing. Only when that word ends
+    // such a name: this runs on every keystroke (the composer), and most references are one word
     const before = t.slice(0, m.index + m[1]!.length).split(/\s+/).filter(Boolean)
-    for (let k = Math.min(BOOK_WORDS, before.length); k >= 2 && !code; k--) {
+    for (let k = endsLongName(before[before.length - 1] ?? '') ? Math.min(BOOK_WORDS, before.length) : 0; k >= 2 && !code; k--) {
       const n = before.slice(-k).join(' ')
       if (bookExact(n)) {
         name = n
