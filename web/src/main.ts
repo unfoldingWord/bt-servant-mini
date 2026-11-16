@@ -9,6 +9,7 @@ import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, mo
 import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
+import { renderMacula } from './syntaxview'
 import { has } from './commands'
 import { resetSearch } from './search'
 import { md, mdDir } from './md'
@@ -316,6 +317,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   }
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.study) host.appendChild(renderStudy(m.study, asked))
+  // who is who, the sentence's structure (macula.ts): drawn, its text kept for sharing and reports
+  else if (m.macula) host.appendChild(renderMacula(m.macula))
   else if (m.info) {
     const box = el('div', m.intro ? 'info' : 'plain md')
     box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
@@ -1151,7 +1154,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
   // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
-  const asking = m.who === 'bot' && !!(m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()
+  const asking = m.who === 'bot' && !m.macula && !!(m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()
   // while it is written, the phone's answer shows as it will under it (its helps as cards), so nothing moves when it arrives
   let node = renderMsg(m, asking)
   wait.replaceWith(node)
