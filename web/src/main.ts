@@ -6,7 +6,7 @@ import { chooseCards, moreLabel, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
-import { installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
+import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
 import { has } from './commands'
@@ -19,7 +19,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, codeReads, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { answer, codeReads, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, newGraph, nodeOf } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton } from './share'
@@ -431,6 +431,14 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
           input.value = x.again.q
           form.requestSubmit()
         }
+      } else if (x.add) {
+        // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
+        if (busy || b.disabled) return
+        b.disabled = true
+        addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
+          b.disabled = false
+          b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
+        })
       } else if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav)
     }
     f.appendChild(b)
@@ -1113,7 +1121,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     answered = r.answered
     m = { who: 'bot', ...r.reply, saveQ: queryOfAnswer({ sheet: made.sheet, ref: r.ref, concept: r.concept, q: made.q, label, lang: r.reply.lang }) ?? undefined }
     point = r.node
-    if (r.sheet && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(r.sheet).catch(() => '')
+    const cs = contextSheet(c, r) // (a branch on a story of Open Bible Stories: the story)
+    if (cs && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(cs).catch(() => '')
   } catch (err: any) {
     // an error: the same question again, or Browse (no dead end)
     m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}`, ui: nav, follow: [...againStep(nav, again), browseStep(nav)] }

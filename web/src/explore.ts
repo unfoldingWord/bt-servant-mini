@@ -8,6 +8,8 @@ import { bookShown } from './firstuse'
 import { count } from './usage'
 import taSections from './data/ta-sections.json'
 import { addSaved, findSaved, MAX_ITEMS, personal, removeSaved, savedSummary, ST as SVT } from './saved'
+import { bibleLabel, obsLabel, obsPack, OW, type StoryEntry, storyList } from './obs'
+import { rtlLang } from './bidi'
 
 // ------------------------------------------------------------------------------------------------------------------ data
 
@@ -254,6 +256,7 @@ type View =
   | { k: 'book'; code: string; lang: string }
   | { k: 'chapter'; code: string; lang: string; ch: number }
   | { k: 'manual'; m: Manual; lang: string }
+  | { k: 'obs'; lang: string }
 // kept while the app is open: Browse opens again where the person left it (the next verse is one tap away)
 const stack: View[] = []
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
@@ -329,8 +332,11 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
   draw()
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
-export function openExploreAt(at: { book?: string; manual?: string; lang?: string }) {
-  if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
+export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean }) {
+  if (at.lang && at.obs) {
+    stack.length = 0
+    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang })
+  } else if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
     stack.length = 0
     stack.push({ k: 'home', tab: at.book ? 'bible' : 'academy' })
     stack.push(at.book ? { k: 'book', code: at.book, lang: at.lang } : { k: 'manual', m: at.manual as Manual, lang: at.lang })
@@ -416,7 +422,7 @@ async function draw() {
       b.body.appendChild(button('ex-pill', s.addLang, () => { closeExplore(); hooks?.addLang() }))
       return
     }
-    const [books, manuals] = await Promise.all([bibleBooks(packs), academyManuals(packs)])
+    const [books, manuals, stories] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null)])
     if (!done()) return
     // the two halves as tabs; one alone needs none
     if (books.length && manuals.length) {
@@ -432,6 +438,14 @@ async function draw() {
     }
     const tab = !manuals.length ? 'bible' : !books.length ? 'academy' : v.tab
     if (tab === 'bible') {
+      // Open Bible Stories, when a pack on the phone has them: the 50 stories, one tap each (obs.ts)
+      if (stories) {
+        const rows = el('div', 'ex-rows ex-obs')
+        const row = button('ex-row', '', () => { stack.push({ k: 'obs', lang: stories.lang }); draw() })
+        row.append(el('span', 'ex-row-t', OW(ui).browse), el('span', 'ex-row-s', OW(ui).browseSub), chevron('ex-row-c'))
+        rows.appendChild(row)
+        b.body.appendChild(rows)
+      }
       // books from more than one pack: those in the first pack's language first, then the others by pack, each said
       const langs = [...new Set(books.map((x) => x.lang))].sort((a, c) => packs.indexOf(a) - packs.indexOf(c))
       for (const lang of langs) {
@@ -459,6 +473,33 @@ async function draw() {
       }
       b.body.appendChild(list)
     }
+    return
+  }
+
+  if (v.k === 'obs') {
+    // the stories in order: the title in the pack's language (its own direction), the Bible passages it is told from
+    b.title.textContent = OW(ui).browse
+    let list: StoryEntry[] = []
+    try {
+      list = await storyList(await openLang(v.lang))
+    } catch { /* drawn as not readable below */ }
+    if (!done()) return
+    if (!list.length) {
+      b.body.appendChild(el('p', 'ex-note', s.failed))
+      return
+    }
+    const rows = el('div', 'ex-rows')
+    rows.dataset.lang = v.lang
+    for (const e of list) {
+      const label = e.title ? `${obsLabel(e.n)}: ${e.title}` : obsLabel(e.n)
+      const row = button('ex-row', '', () => ask(label, { lang: v.lang, intent: 'passage', ref: `obs ${e.n}`, what: ['text', 'notes'] }))
+      const t = row.appendChild(el('span', 'ex-row-t', label))
+      t.dir = rtlLang(v.lang) ? 'rtl' : 'ltr'
+      if (e.refs.length) row.appendChild(el('span', 'ex-row-s', e.refs.slice(0, 3).map((r) => bibleLabel(ui, r)).join(' · ') + (e.refs.length > 3 ? ' …' : ''))).dir = rtlLang(ui) ? 'rtl' : 'ltr'
+      row.appendChild(chevron('ex-row-c'))
+      rows.appendChild(row)
+    }
+    b.body.appendChild(rows)
     return
   }
 

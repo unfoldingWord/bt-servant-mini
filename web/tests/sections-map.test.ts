@@ -3,7 +3,8 @@
 // (../lp3-ta-packs) predate the map (their common catalog is revision 2, without the `chunks` table), so the map here is the
 // one Mini's packs server had on Nov 16 for Ruth, Esther and Titus (fixtures/packs-2026-11-16/sections.json), served through
 // the English reader; without it, Mini falls back to the headings, the outline and 5-verse blocks as before.
-// Also here: the client of bt-synergy 569b88a6 adds `obs` to its default units (#86), and Mini's download must not change.
+// Also here: the client of bt-synergy 569b88a6 adds `obs` to its default units (#86); Mini installs it too since Fase 2c (the
+// unit is small: it comes with the language), and a language whose catalog has no obs downloads as before.
 import { afterAll, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -56,14 +57,24 @@ describe('the client bump keeps the download as it was', () => {
     expect(plan.steps.map((s) => s.key)).toContain('en/obs')
   })
 
-  test('Mini plans the same units, segments and bytes as with the client of c68e3622, without obs', async () => {
+  // Fase 2c (Abel, Nov 16): Open Bible Stories come with the language (the unit is 3 MB or less: 223,292 bytes for en): the
+  // download is the one of c68e3622 plus the obs unit, right after the maps, where the client's defaults put it
+  const OBS = 223_292
+  const obsIds = async () => {
     const plan = planInstall(await catalogs(), emptyState(), installWant(await books()), new Set())
-    const segs = plan.steps.flatMap((s) => s.segments.map((x) => x.id))
-    expect(plan.steps.map((s) => s.key)).toEqual(before.steps)
-    expect(plan.steps.map((s) => s.key)).not.toContain('en/obs')
+    return new Set(plan.steps.find((s) => s.key === 'en/obs')!.segments.map((x) => x.id))
+  }
+  test('Mini plans the units, segments and bytes of c68e3622, and the obs unit after the maps', async () => {
+    const plan = planInstall(await catalogs(), emptyState(), installWant(await books()), new Set())
+    const keys = plan.steps.map((s) => s.key)
+    expect(keys.filter((k) => k !== 'en/obs')).toEqual(before.steps)
+    expect(keys.indexOf('en/obs')).toBe(keys.indexOf('en/topics') + 1)
+    const obs = await obsIds()
+    expect(plan.steps.find((s) => s.key === 'en/obs')!.segments.reduce((n, x) => n + x.size, 0)).toBe(OBS)
+    const segs = plan.steps.flatMap((s) => s.segments.map((x) => x.id)).filter((id) => !obs.has(id))
     expect(segs.length).toBe(before.segments)
     expect(createHash('sha256').update(segs.join('\n')).digest('hex')).toBe(before.sha256)
-    expect(plan.bytes).toBe(before.bytes)
+    expect(plan.bytes).toBe(before.bytes + OBS)
   })
 
   test('the offer (the size shown, the segments fetched) is that plan', async () => {
@@ -72,8 +83,18 @@ describe('the client bump keeps the download as it was', () => {
       segment: async () => { throw new Error('no segments here') },
     }
     const offer = (await offerOf('en', source))!
-    expect(offer.bytes).toBe(before.bytes)
-    expect(createHash('sha256').update(offer.segments.join('\n')).digest('hex')).toBe(before.sha256)
+    expect(offer.bytes).toBe(before.bytes + OBS)
+    const obs = await obsIds()
+    expect(createHash('sha256').update(offer.segments.filter((id) => !obs.has(id)).join('\n')).digest('hex')).toBe(before.sha256)
+  })
+
+  test('a catalog without obs (es-419, hi, ar, id on Nov 16) plans the same download as before', async () => {
+    const cats = await catalogs()
+    // the English catalog without its obs unit, as the other languages' catalogs are
+    const noObs = { ...cats[0]!, catalog: { ...cats[0]!.catalog, units: cats[0]!.catalog.units.filter((u) => u.id !== 'obs') } }
+    const plan = planInstall([noObs as any, cats[1]!], emptyState(), installWant(await books()), new Set())
+    expect(plan.steps.map((s) => s.key)).toEqual(before.steps)
+    expect(plan.bytes).toBe(before.bytes)
   })
 })
 

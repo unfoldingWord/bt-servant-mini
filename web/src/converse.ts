@@ -138,7 +138,9 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
  * A next step under an answer: a ready call sheet (no model call), or Browse opened at a book or a Translation Academy manual
  * (`browse`), or the same question asked again (`again`, after an error).
  */
-export type Browse = { book?: string; manual?: string; lang?: string }
+export type Browse = { book?: string; manual?: string; lang?: string
+  /** the list of Open Bible Stories (obs.ts) */
+  obs?: boolean }
 /** What "Try again" asks again: the question as the person typed it, or the button's sheet (with its label) */
 export type Again = { q?: string; sheet?: Sheet; label?: string }
 /**
@@ -149,7 +151,9 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   /** "← Back to the path: …" (pipeline.ts pathStep): drawn like the way back */
   toPath?: boolean
   /** "Next: Ruth 1:2 · notes", the light path's next step (first under the answer, marked) */
-  pathNext?: boolean }
+  pathNext?: boolean
+  /** a unit to add to a language on a tap ("Add Open Bible Stories (218 KB)"), then `sheet` is asked again (main.ts) */
+  add?: { lang: string; unit: string } }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
 

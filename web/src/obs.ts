@@ -1,0 +1,614 @@
+// Open Bible Stories (Fase 2c, Abel Nov 15): the 50 stories of a language's `obs` unit, read through the pinned client
+// (`reader.stories()`, `reader.stories(ref)`, `reader.story(n)`). A story is told from Bible passages: the ranges come from the
+// common `xtopics` (every language has them, with or without the obs unit), the frames, the title, the source line and the
+// story's notes, questions and key terms from the `obs` unit. This module is DOM-free and reads no answer or pipeline state:
+// answer.ts writes the answer from `obsAnswer`, pipeline.ts adds the buttons (`obsSteps`, `storyStep`) and reads questions
+// (`obsAsked`, `namedStory`), explore.ts lists the stories (`storyList`), the search finds frames (`searchObs`), and online AI
+// gets the story's plain text (`storyText`).
+//
+// Where OBS comes from: the question's pack, else English, else any pack on the phone that has the unit. A pack that lists the
+// unit and does not have it (installed before OBS came with a language) says so with its size and offers to add it; one
+// that does not list it says plainly that its packs have no Open Bible Stories yet. Nothing here throws for a missing unit.
+import { parseRef as v3Ref, verseId } from '@bt-synergy/language-pack-v3'
+import type { PackReader } from '@bt-synergy/language-pack-client'
+import { installedLangs, openLang, origin, PACK_NAMES } from './packs'
+import { FOLD } from './focus'
+import { bidiLabel } from './bidi'
+import { keywords } from './search'
+import { fold } from './sheet'
+import booknames from './data/booknames.json'
+import versification from './data/versification.json'
+
+type L = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
+const UIS: L[] = ['en', 'es', 'fr', 'id', 'hi', 'ar']
+const ui6 = (ui: string): L => ((UIS as string[]).includes(ui) ? (ui as L) : ui.startsWith('es') ? 'es' : 'en')
+const fill = (t: string, v: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''))
+
+// ------------------------------------------------------------------------------------------------------------------ words
+
+type Words = {
+  /** Browse's entry and its subtitle */
+  browse: string; browseSub: string
+  /** the sentence before an answer */
+  found: string; foundStory: string
+  /** headings and folds */
+  notes: string; questions: string; terms: string; notesFold: string; questionsFold: string
+  noNotes: string; noQuestions: string
+  /** the buttons */
+  next: string; nextStory: string; whole: string; first: string; bible: string; toldIn: string; add: string
+  /** not there */
+  missing: string; missingAdd: string; missingLater: string; none: string; fromOther: string; noStory: string; noFrame: string
+  /** the search's part and its button */
+  inStories: string
+}
+const W: Record<L, Words> = {
+  en: {
+    browse: 'Bible stories (OBS)', browseSub: 'Open Bible Stories: the 50 stories',
+    found: 'Here is {ref} of Open Bible Stories ({title}).', foundStory: 'Here is the story {ref}: {title}.',
+    notes: 'Translation notes for {ref}', questions: 'Comprehension questions for {ref}', terms: 'Key terms', notesFold: 'Notes for {ref} ({n})', questionsFold: 'Questions ({n})',
+    noNotes: 'There are no translation notes for {ref}.', noQuestions: 'There are no comprehension questions for {ref}.',
+    next: 'Next: {ref}', nextStory: 'Next story: {name}', whole: 'The whole story: {ref}', first: 'Start the story: {ref}', bible: 'Bible: {ref}',
+    toldIn: 'This part is told in {ref}: {title}', add: 'Add Open Bible Stories ({size})',
+    missing: 'Open Bible Stories are not on this phone yet ({pack}, {size}).', missingAdd: 'Tap below to add them (internet needed once).',
+    missingLater: 'They will come with the next update of this pack.',
+    none: 'The language packs on this phone have no Open Bible Stories yet, so I cannot show {ref}.',
+    fromOther: 'From the {lang} pack (the {mine} pack has no Open Bible Stories yet).',
+    noStory: 'Open Bible Stories has 50 stories, numbered 1 to 50: there is no story {n}.', noFrame: 'Story {n} has frames 1 to {last}: there is no frame {f}.',
+    inStories: 'In Open Bible Stories',
+  },
+  es: {
+    browse: 'Historias de la Biblia (OBS)', browseSub: 'Open Bible Stories: las 50 historias',
+    found: 'Aquí está {ref} de las Historias de la Biblia ({title}).', foundStory: 'Aquí está la historia {ref}: {title}.',
+    notes: 'Notas de traducción de {ref}', questions: 'Preguntas de comprensión de {ref}', terms: 'Palabras clave', notesFold: 'Notas de {ref} ({n})', questionsFold: 'Preguntas ({n})',
+    noNotes: 'No hay notas de traducción para {ref}.', noQuestions: 'No hay preguntas de comprensión para {ref}.',
+    next: 'Siguiente: {ref}', nextStory: 'Siguiente historia: {name}', whole: 'Toda la historia: {ref}', first: 'Empezar la historia: {ref}', bible: 'Biblia: {ref}',
+    toldIn: 'Esta parte se cuenta en {ref}: {title}', add: 'Agregar Historias de la Biblia ({size})',
+    missing: 'Las Historias de la Biblia todavía no están en este teléfono ({pack}, {size}).', missingAdd: 'Toca abajo para agregarlas (hace falta internet una vez).',
+    missingLater: 'Llegarán con la próxima actualización de este paquete.',
+    none: 'Los paquetes de idioma de este teléfono todavía no traen Historias de la Biblia (OBS), así que no puedo mostrar {ref}.',
+    fromOther: 'Del paquete {lang} (el paquete {mine} todavía no trae Historias de la Biblia).',
+    noStory: 'Las Historias de la Biblia son 50, numeradas del 1 al 50: no hay historia {n}.', noFrame: 'La historia {n} tiene los cuadros 1 a {last}: no hay cuadro {f}.',
+    inStories: 'En las Historias de la Biblia',
+  },
+  fr: {
+    browse: 'Histoires bibliques (OBS)', browseSub: 'Open Bible Stories : les 50 histoires',
+    found: 'Voici {ref} des Open Bible Stories ({title}).', foundStory: 'Voici l’histoire {ref} : {title}.',
+    notes: 'Notes de traduction pour {ref}', questions: 'Questions de compréhension pour {ref}', terms: 'Mots clés', notesFold: 'Notes pour {ref} ({n})', questionsFold: 'Questions ({n})',
+    noNotes: 'Il n’y a pas de notes de traduction pour {ref}.', noQuestions: 'Il n’y a pas de questions de compréhension pour {ref}.',
+    next: 'Suite : {ref}', nextStory: 'Histoire suivante : {name}', whole: 'Toute l’histoire : {ref}', first: 'Commencer l’histoire : {ref}', bible: 'Bible : {ref}',
+    toldIn: 'Ce passage est raconté dans {ref} : {title}', add: 'Ajouter les Open Bible Stories ({size})',
+    missing: 'Les Open Bible Stories ne sont pas encore sur ce téléphone ({pack}, {size}).', missingAdd: 'Touchez ci-dessous pour les ajouter (internet nécessaire une fois).',
+    missingLater: 'Elles viendront avec la prochaine mise à jour de ce paquet.',
+    none: 'Les paquets de langue de ce téléphone n’ont pas encore d’Open Bible Stories (OBS), donc je ne peux pas afficher {ref}.',
+    fromOther: 'Du paquet {lang} (le paquet {mine} n’a pas encore d’Open Bible Stories).',
+    noStory: 'Les Open Bible Stories ont 50 histoires, numérotées de 1 à 50 : il n’y a pas d’histoire {n}.', noFrame: 'L’histoire {n} a les images 1 à {last} : il n’y a pas d’image {f}.',
+    inStories: 'Dans les Open Bible Stories',
+  },
+  id: {
+    browse: 'Cerita Alkitab (OBS)', browseSub: 'Open Bible Stories: 50 cerita',
+    found: 'Ini {ref} dari Open Bible Stories ({title}).', foundStory: 'Ini cerita {ref}: {title}.',
+    notes: 'Catatan terjemahan untuk {ref}', questions: 'Pertanyaan pemahaman untuk {ref}', terms: 'Istilah kunci', notesFold: 'Catatan untuk {ref} ({n})', questionsFold: 'Pertanyaan ({n})',
+    noNotes: 'Tidak ada catatan terjemahan untuk {ref}.', noQuestions: 'Tidak ada pertanyaan pemahaman untuk {ref}.',
+    next: 'Berikutnya: {ref}', nextStory: 'Cerita berikutnya: {name}', whole: 'Seluruh cerita: {ref}', first: 'Mulai cerita: {ref}', bible: 'Alkitab: {ref}',
+    toldIn: 'Bagian ini diceritakan dalam {ref}: {title}', add: 'Tambahkan Open Bible Stories ({size})',
+    missing: 'Open Bible Stories belum ada di ponsel ini ({pack}, {size}).', missingAdd: 'Ketuk di bawah untuk menambahkannya (perlu internet sekali).',
+    missingLater: 'Akan datang bersama pembaruan berikutnya dari paket ini.',
+    none: 'Paket bahasa di ponsel ini belum memuat Open Bible Stories (OBS), jadi saya tidak dapat menampilkan {ref}.',
+    fromOther: 'Dari paket {lang} (paket {mine} belum memuat Open Bible Stories).',
+    noStory: 'Open Bible Stories punya 50 cerita, bernomor 1 sampai 50: tidak ada cerita {n}.', noFrame: 'Cerita {n} punya bingkai 1 sampai {last}: tidak ada bingkai {f}.',
+    inStories: 'Dalam Open Bible Stories',
+  },
+  hi: {
+    browse: 'बाइबल की कहानियाँ (OBS)', browseSub: 'Open Bible Stories: 50 कहानियाँ',
+    found: 'यह Open Bible Stories का {ref} है ({title})।', foundStory: 'यह कहानी {ref} है: {title}।',
+    notes: '{ref} के लिए अनुवाद टिप्पणियाँ', questions: '{ref} के लिए समझ के प्रश्न', terms: 'मुख्य शब्द', notesFold: '{ref} की टिप्पणियाँ ({n})', questionsFold: 'प्रश्न ({n})',
+    noNotes: '{ref} के लिए कोई अनुवाद टिप्पणी नहीं है।', noQuestions: '{ref} के लिए समझ का कोई प्रश्न नहीं है।',
+    next: 'आगे: {ref}', nextStory: 'अगली कहानी: {name}', whole: 'पूरी कहानी: {ref}', first: 'कहानी शुरू करें: {ref}', bible: 'बाइबल: {ref}',
+    toldIn: 'यह भाग {ref} में बताया गया है: {title}', add: 'Open Bible Stories जोड़ें ({size})',
+    missing: 'Open Bible Stories अभी इस फ़ोन पर नहीं हैं ({pack}, {size})।', missingAdd: 'उन्हें जोड़ने के लिए नीचे टैप करें (एक बार इंटरनेट चाहिए)।',
+    missingLater: 'वे इस पैक के अगले अपडेट के साथ आएँगी।',
+    none: 'इस फ़ोन के भाषा-पैकों में अभी Open Bible Stories (OBS) नहीं हैं, इसलिए मैं {ref} नहीं दिखा सकता।',
+    fromOther: '{lang} पैक से ({mine} पैक में अभी Open Bible Stories नहीं हैं)।',
+    noStory: 'Open Bible Stories में 1 से 50 तक 50 कहानियाँ हैं: कहानी {n} नहीं है।', noFrame: 'कहानी {n} में फ़्रेम 1 से {last} तक हैं: फ़्रेम {f} नहीं है।',
+    inStories: 'Open Bible Stories में',
+  },
+  ar: {
+    browse: 'قصص الكتاب المقدس (OBS)', browseSub: 'Open Bible Stories: القصص الخمسون',
+    found: 'هذا {ref} من Open Bible Stories ({title}).', foundStory: 'هذه القصة {ref}: {title}.',
+    notes: 'ملاحظات الترجمة لـ{ref}', questions: 'أسئلة الفهم لـ{ref}', terms: 'الكلمات الرئيسية', notesFold: 'ملاحظات {ref} ({n})', questionsFold: 'الأسئلة ({n})',
+    noNotes: 'لا توجد ملاحظات ترجمة لـ{ref}.', noQuestions: 'لا توجد أسئلة فهم لـ{ref}.',
+    next: 'التالي: {ref}', nextStory: 'القصة التالية: {name}', whole: 'القصة كاملة: {ref}', first: 'ابدأ القصة: {ref}', bible: 'الكتاب المقدس: {ref}',
+    toldIn: 'هذا الجزء مروي في {ref}: {title}', add: 'إضافة Open Bible Stories ({size})',
+    missing: 'قصص Open Bible Stories ليست على هذا الهاتف بعد ({pack}، {size}).', missingAdd: 'اضغط أدناه لإضافتها (يلزم الإنترنت مرة واحدة).',
+    missingLater: 'ستأتي مع التحديث القادم لهذه الحزمة.',
+    none: 'حزم اللغات على هذا الهاتف لا تحتوي بعد على قصص الكتاب المقدس المفتوحة (OBS)، فلا أستطيع عرض {ref}.',
+    fromOther: 'من حزمة {lang} (حزمة {mine} لا تحتوي بعد على Open Bible Stories).',
+    noStory: 'في Open Bible Stories خمسون قصة مرقّمة من 1 إلى 50: لا توجد قصة {n}.', noFrame: 'القصة {n} فيها الإطارات من 1 إلى {last}: لا يوجد إطار {f}.',
+    inStories: 'في Open Bible Stories',
+  },
+}
+export const OW = (ui: string): Words => W[ui6(ui)]
+
+// --------------------------------------------------------------------------------------------------------------- references
+
+/** A story and, for one frame, the frame: "obs 3:5" is story 3, frame 5; "obs 34" the whole story. */
+export type ObsRef = { n: number; f: number | null }
+export function parseObsRef(ref: string | null | undefined): ObsRef | null {
+  const m = /^obs\s+(\d{1,3})(?::(\d{1,3}))?$/.exec((ref ?? '').trim().toLowerCase())
+  return m ? { n: +m[1]!, f: m[2] ? +m[2] : null } : null
+}
+export const isObsRef = (ref: string | null | undefined): boolean => /^obs(\s|$)/.test(ref ?? '')
+export const obsRef = (n: number, f?: number | null): string => (f ? `obs ${n}:${f}` : `obs ${n}`)
+/** "OBS 3:5", the same in every language (the product's name, as the app says "Translation Academy"). */
+export const obsLabel = (n: number, f?: number | null): string => (f ? `OBS ${n}:${f}` : `OBS ${n}`)
+/** "3. The Flood" -> "The Flood" (the packs keep the number in the title). */
+export const cleanTitle = (t: string | undefined): string => String(t ?? '').replace(/^\s*\d{1,2}\s*[.:)\-–]\s*/, '').trim()
+
+const BOOK_EN = (booknames as any).BOOK_EN as Record<string, string>
+const BOOK_ES = (booknames as any).BOOK_ES as Record<string, string>
+const BOOK_AR = (booknames as any).BOOK_AR as Record<string, string>
+const VERSES = versification as Record<string, number[]>
+/** "gen 6:1-8:22" in the app's language: "Genesis 6:1–8:22". */
+export function bibleLabel(ui: string, ref: string): string {
+  const [code, rest] = [ref.slice(0, 3), ref.slice(4)]
+  const t = ui === 'es' ? BOOK_ES : ui === 'ar' ? BOOK_AR : BOOK_EN
+  return `${t[code] ?? BOOK_EN[code] ?? code} ${rest.replace(/-/g, '–')}`.trim()
+}
+
+/** A Mini passage ref ("gen 6", "gen 6:1-3", "gen 6:1-8:22", "gen 6:intro") as verse ids, or null (a book, an obs ref). */
+export function rangeOfRef(ref: string | null | undefined): [number, number] | null {
+  const m = /^([1-3]?[a-z]{2,3})\s+(\d+)(?::(intro|\d+)(?:-(\d+)(?::(\d+))?)?)?$/.exec((ref ?? '').trim().toLowerCase())
+  if (!m || m[1] === 'obs' || !VERSES[m[1]!]) return null
+  const [, b, c, v1, x, y] = m
+  try {
+    if (!v1 || v1 === 'intro') return [verseId(b!, +c!, 0), verseId(b!, +c!, 999)]
+    if (y) return [verseId(b!, +c!, +v1), verseId(b!, +x!, +y)]
+    return [verseId(b!, +c!, +v1), verseId(b!, +c!, x ? +x : +v1)]
+  } catch {
+    return null
+  }
+}
+/** A story's range text ("gen 6:1-8:22", "deu 18:15") as verse ids. */
+function rangeOfStoryRef(r: string): [number, number] | null {
+  const m = /^([1-3]?[a-z]{2,3})\s+(.+)$/.exec(r.trim())
+  if (!m) return null
+  try {
+    return v3Ref(m[1]!, m[2]!) ?? null
+  } catch {
+    return null
+  }
+}
+/** How many verses a range holds (by the versification), for where a verse sits in a story. */
+function versesIn(from: number, to: number): number {
+  const book = Object.keys(VERSES)[Math.floor(from / 1_000_000) - 1]
+  const ch = (id: number) => Math.floor(id / 1000) % 1000
+  const v = (id: number) => id % 1000
+  const counts = book ? VERSES[book] : undefined
+  if (!counts) return Math.max(1, to - from + 1)
+  let n = 0
+  for (let c = ch(from); c <= ch(to); c++) {
+    const last = counts[c - 1] ?? 0
+    const a = c === ch(from) ? Math.max(1, v(from)) : 1
+    const z = c === ch(to) ? Math.min(last, v(to)) : last
+    if (z >= a) n += z - a + 1
+  }
+  return Math.max(1, n)
+}
+
+// ------------------------------------------------------------------------------------------------------------------- packs
+
+const read = async (l: string): Promise<PackReader | null> => {
+  try {
+    return await openLang(l)
+  } catch {
+    return null
+  }
+}
+/** The packs to look in, in order: the question's, English, the others on the phone. */
+async function order(lang: string): Promise<string[]> {
+  const have = await installedLangs().catch(() => [] as string[])
+  return [...new Set([lang, 'en', ...have])].filter((l) => have.includes(l))
+}
+/** The first pack with the obs unit installed, the question's first. */
+export async function obsPack(lang: string): Promise<{ lang: string; r: PackReader } | null> {
+  for (const l of await order(lang)) {
+    const r = await read(l)
+    if (r?.installed('obs')) return { lang: l, r }
+  }
+  return null
+}
+/** A pack that lists the obs unit and does not have it: its size, and whether this phone can add it (a pack it downloaded). */
+export type ObsMissing = { lang: string; bytes: number; canAdd: boolean }
+export async function obsMissing(lang: string): Promise<ObsMissing | null> {
+  for (const l of await order(lang)) {
+    const r = await read(l)
+    if (r && r.listed('obs') && !r.installed('obs')) return { lang: l, bytes: r.size('obs'), canAdd: (await origin(l).catch(() => null)) === 'added' }
+  }
+  return null
+}
+/** Whether any pack on the phone has Open Bible Stories (Browse offers them only then). */
+export const hasObs = async (lang: string): Promise<boolean> => !!(await obsPack(lang))
+export const sizeText = (bytes: number): string =>
+  bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+const packName = (l: string): string => PACK_NAMES[l] ?? l
+
+// ---------------------------------------------------------------------------------------------------------- the stories list
+
+/** A story as Browse and the buttons name it: its title (without its number) and the Bible ranges it is told from. */
+export type StoryEntry = { n: number; title: string; refs: string[] }
+const lists = new WeakMap<PackReader, Promise<StoryEntry[]>>()
+/**
+ * The 50 stories of a pack in order. The titles come from the language's topics; a pack whose topics lack them takes them from
+ * its obs unit (when installed), else none (the label says "OBS N" alone).
+ */
+export function storyList(r: PackReader): Promise<StoryEntry[]> {
+  let p = lists.get(r)
+  if (!p) {
+    p = (async () => {
+      const ans = await r.stories()
+      const model = r.installed('obs') ? await r.obs().catch(() => undefined) : undefined
+      const own = new Map((model?.stories ?? []).map((s) => [s.n, cleanTitle(s.title)]))
+      return (ans.data?.stories ?? []).map((s) => {
+        const t = /^Story \d+$/.test(s.title) ? '' : cleanTitle(s.title)
+        return { n: s.n, title: t || own.get(s.n) || '', refs: s.refs }
+      })
+    })()
+    lists.set(r, p)
+    p.catch(() => { if (lists.get(r) === p) lists.delete(r) })
+  }
+  return p
+}
+/** A story's entry from the first pack that knows it (its obs pack first: the title in that language). */
+async function entryOf(lang: string, n: number): Promise<StoryEntry | null> {
+  const at = await obsPack(lang)
+  for (const l of [...new Set([...(at ? [at.lang] : []), ...(await order(lang))])]) {
+    const r = await read(l)
+    const e = r ? (await storyList(r).catch(() => [])).find((x) => x.n === n) : undefined
+    if (e) return e
+  }
+  return null
+}
+/** "OBS 3: The Flood", "OBS 3" without a title. */
+export const storyName = (e: { n: number; title: string }, f?: number | null): string => (e.title ? `${obsLabel(e.n, f)}: ${e.title}` : obsLabel(e.n, f))
+
+// -------------------------------------------------------------------------------------------------- passages -> stories
+
+/**
+ * The story a passage is told in, with the frame nearest to it: of the stories whose ranges meet the passage, the one most
+ * about it (the fewest verses over the fewest ranges: "The Flood" for Genesis 7, not "Jesus Is the Promised Messiah", which
+ * runs over half the Old Testament). The frame: the frame whose words share the most rare words with the passage's text
+ * (`text`, when the story is in that language); else where the passage sits in the story's ranges; else none (the story).
+ */
+export type Told = { n: number; f: number | null; title: string; lang: string; ref: string }
+export async function storyAt(ref: string, lang: string, text = ''): Promise<Told | null> {
+  const range = rangeOfRef(ref)
+  if (!range) return null
+  const at = await obsPack(lang)
+  // a phone without the unit: only when it can add it here (the button then offers to); a shipped pack gets it with the app
+  const miss = at ? null : await obsMissing(lang)
+  const where = at?.lang ?? (miss?.canAdd ? miss.lang : undefined)
+  if (!where) return null
+  const r = await read(where)
+  if (!r) return null
+  const list = await storyList(r).catch(() => [] as StoryEntry[])
+  let best: { e: StoryEntry; ranges: [number, number][]; cost: number } | null = null
+  for (const e of list) {
+    const ranges = e.refs.map(rangeOfStoryRef).filter((x): x is [number, number] => !!x)
+    if (!ranges.some(([a, z]) => a <= range[1] && z >= range[0])) continue
+    const cost = ranges.reduce((s, [a, z]) => s + versesIn(a, z), 0) * ranges.length
+    if (!best || cost < best.cost) best = { e, ranges, cost }
+  }
+  if (!best) return null
+  let f: number | null = null
+  if (at) {
+    const story = (await at.r.story(best.e.n).catch(() => null))?.data
+    const frames = (story?.frames ?? []).filter((x) => x.text.trim())
+    if (frames.length) f = nearestFrame(frames, best.ranges, range, text, at.lang === lang)
+  }
+  const title = best.e.title
+  return { n: best.e.n, f, title, lang: where, ref: obsRef(best.e.n, f) }
+}
+const GOSPELS = new Set([40, 41, 42, 43])
+/** See storyAt. */
+function nearestFrame(frames: { ref: string; text: string }[], ranges: [number, number][], range: [number, number], text: string, sameLang: boolean): number {
+  const num = (fr: { ref: string }) => +fr.ref.split(':')[1]!
+  // 1. the words: rare words of the passage in a frame (the story in the passage's language)
+  const words = (s: string) => new Set(fold(s).split(/[^\p{L}]+/u).filter((w) => w.length >= 4))
+  if (sameLang && text.trim()) {
+    const want = words(text)
+    const sets = frames.map((fr) => words(fr.text))
+    const df = new Map<string, number>()
+    for (const s of sets) for (const w of s) df.set(w, (df.get(w) ?? 0) + 1)
+    let top = -1
+    let score = 0
+    sets.forEach((s, i) => {
+      let x = 0
+      for (const w of s) if (want.has(w)) x += 1 / df.get(w)!
+      if (x > score) { score = x; top = i }
+    })
+    if (top >= 0 && score >= 1.5) return num(frames[top]!)
+  }
+  // 2. where the passage sits: in its own range when the ranges are the same story told by several Gospels, else over the
+  // ranges in order (Exodus 16, then Numbers 10–14, …)
+  const i = ranges.findIndex(([a, z]) => a <= range[1] && z >= range[0])
+  const parallel = new Set(ranges.map(([a]) => Math.floor(a / 1_000_000)).filter((b) => GOSPELS.has(b))).size > 1
+  const used = parallel ? [ranges[i]!] : ranges
+  const before = parallel ? 0 : ranges.slice(0, i).reduce((s, [a, z]) => s + versesIn(a, z), 0)
+  const [a, z] = ranges[i]!
+  const start = Math.max(a, range[0])
+  const within = start > a ? versesIn(a, start) - 1 : 0
+  const total = used.reduce((s, [x, y]) => s + versesIn(x, y), 0) || 1
+  const k = Math.min(frames.length - 1, Math.max(0, Math.floor(((before + within) / total) * frames.length)))
+  return num(frames[k]!)
+}
+
+// ------------------------------------------------------------------------------------------------------------------ answer
+
+/** What an OBS answer found, for the buttons under it (pipeline.ts obsSteps). */
+export type ObsFacts = {
+  kind: 'obs'; n: number; f: number | null; title: string; refs: string[]
+  state: 'ok' | 'missing' | 'none' | 'nostory' | 'noframe'
+  /** the pack the story came from (ok, noframe), the pack that can add the unit (missing) */
+  pack: string | null; frames: number; add?: { lang: string; bytes: number }; terms: string[]
+}
+/** "A Bible story from: Genesis 6-8" without what the packs sometimes put around it. */
+const plainLine = (s: string) => s.replace(/^[_*\s]+|[_*\s]+$/g, '')
+/** A note as plain text: no headings, no "(See: rc://…)" a reader cannot follow. */
+const tidyNote = (s: unknown) => String(s ?? '').replace(/^#+\s*/gm, '').replace(/\((?:ver|see):\s*rc:\/\/[^)\s]+\)/gi, '').replace(/\s+/g, ' ').trim()
+
+/**
+ * The answer to "obs N" (a story) or "obs N:F" (a frame): the frames' text, the notes and questions asked for (the others one
+ * tap away, folded), the frame's key terms as links, and where it comes from. `what` as a passage's ("text", "notes"…).
+ */
+export async function obsAnswer(s: { ref: string | null; what: string[]; lang: string }, ui: string): Promise<{ answer: string; cites: string[]; facts: ObsFacts }> {
+  const w = OW(ui)
+  const p = parseObsRef(s.ref)
+  const facts: ObsFacts = { kind: 'obs', n: p?.n ?? 0, f: p?.f ?? null, title: '', refs: [], state: 'none', pack: null, frames: 0, terms: [] }
+  const label = p ? obsLabel(p.n, p.f) : String(s.ref ?? 'OBS')
+  if (!p || p.n < 1 || p.n > 50) {
+    facts.state = 'nostory'
+    return { answer: fill(w.noStory, { n: p?.n ?? '?' }), cites: [], facts }
+  }
+  const entry = await entryOf(s.lang, p.n)
+  if (entry) Object.assign(facts, { title: entry.title, refs: entry.refs })
+  const at = await obsPack(s.lang)
+  if (!at) {
+    const miss = await obsMissing(s.lang)
+    const told = entry?.refs.length ? `\n\n${entry.title ? `**${storyName(entry)}** — ` : ''}${entry.refs.map((r) => bibleLabel(ui, r)).join('; ')}` : ''
+    if (miss) {
+      facts.state = 'missing'
+      facts.pack = miss.lang
+      if (miss.canAdd) facts.add = { lang: miss.lang, bytes: miss.bytes }
+      return { answer: `${fill(w.missing, { pack: packName(miss.lang), size: sizeText(miss.bytes) })} ${miss.canAdd ? w.missingAdd : w.missingLater}${told}`, cites: [], facts }
+    }
+    return { answer: fill(w.none, { ref: label }) + told, cites: [], facts }
+  }
+  facts.pack = at.lang
+  const ans = await at.r.story(p.n)
+  const data = ans.data
+  const frames = (data?.frames ?? []).filter((x) => x.text.trim())
+  facts.frames = frames.length
+  if (data) Object.assign(facts, { title: cleanTitle(data.title) || facts.title, refs: data.refs.length ? data.refs : facts.refs })
+  if (!data || !frames.length) {
+    facts.state = 'none'
+    return { answer: fill(w.none, { ref: label }), cites: [], facts }
+  }
+  const frameN = (x: { ref: string }) => +x.ref.split(':')[1]!
+  const shown = p.f ? frames.filter((x) => frameN(x) === p.f) : frames
+  if (p.f && !shown.length) {
+    facts.state = 'noframe'
+    return { answer: fill(w.noFrame, { n: p.n, f: p.f, last: frameN(frames[frames.length - 1]!) }), cites: [], facts }
+  }
+  facts.state = 'ok'
+  const cites: string[] = []
+  const rel = (res: string) => ans.cites.find((c) => c.res === res)?.release ?? ''
+  const what = s.what.length ? s.what : ['text', 'notes', 'questions', 'terms']
+  const all = !p.f // a whole story: its frames, the helps folded per frame
+  const out: string[] = []
+  const name = facts.title ? `${label} · ${facts.title}` : label
+  out.push(`## ${name}`)
+  // where it comes from, at the top: the resources and releases, and the story's own source line
+  const used = new Set<string>([data.frames ? ans.cites.find((c) => c.id === `obs:${p.n}`)?.res ?? '' : ''])
+  for (const fr of shown) for (const k of ['notes', 'questions'] as const) for (const row of fr[k]) used.add(ans.cites.find((c) => c.id === row.id)?.res ?? '')
+  const top = [...used].filter(Boolean).map((res) => `${resName(res)} ${rel(res)}`.trim())
+  const line = [top.join(' · '), data.reference ? plainLine(data.reference) : ''].filter(Boolean).join(' — ')
+  if (line) out[0] += `\n*${line}*`
+  const storyRes = ans.cites.find((c) => c.id === `obs:${p.n}`)
+  if (storyRes) cites.push(`${storyRes.res} ${storyRes.release} (obs ${p.n}${p.f ? ':' + p.f : ''})`)
+  for (const fr of shown) out.push(`**${p.n}:${frameN(fr)}** ${fr.text.replace(/\s+/g, ' ').trim()}`)
+  const noteLines = (fr: (typeof frames)[number]) => fr.notes.filter((x) => tidyNote(x.cols.note)).map((x, i) => {
+    const c = ans.cites.find((y) => y.id === x.id)
+    if (c) cites.push(`${c.res} ${c.release} (obs ${x.ref}, note ${x.id})`)
+    const q = String(x.cols.quote ?? '').trim()
+    return `${i + 1}. ${q ? `**«${q}»**: ` : ''}${tidyNote(x.cols.note)}`
+  })
+  const qLines = (fr: (typeof frames)[number]) => fr.questions.map((x) => {
+    const c = ans.cites.find((y) => y.id === x.id)
+    if (c) cites.push(`${c.res} ${c.release} (obs ${x.ref}, question ${x.id})`)
+    return `- **${String(x.cols.question ?? '').trim()}** ${String(x.cols.response ?? '').trim()}`
+  })
+  const wantNotes = what.includes('notes'), wantQs = what.includes('questions'), wantTerms = what.includes('terms') || what.length > 1
+  if (!all) {
+    const fr = shown[0]!
+    const lab = obsLabel(p.n, p.f)
+    const notes = noteLines(fr)
+    const qs = qLines(fr)
+    if (wantNotes) out.push(...(notes.length ? [`### ${fill(w.notes, { ref: lab })}`, notes.join('\n')] : [fill(w.noNotes, { ref: lab })]))
+    if (wantQs) out.push(...(qs.length ? [`### ${fill(w.questions, { ref: lab })}`, ...qs] : [fill(w.noQuestions, { ref: lab })]))
+    // the key terms of the frame, each a link to its article (the panel opens it)
+    const terms = [...new Map(fr.links.filter((x) => x.concept).map((x) => [x.concept!, String(x.cols.origWords ?? '').trim() || x.concept!.split('/').pop()!])).entries()]
+    facts.terms = terms.map(([id]) => id)
+    if (terms.length && wantTerms) out.push(`*${w.terms}:* ${terms.map(([id, t]) => `[${t}](${id})`).join(' · ')}`)
+    for (const [id] of terms) cites.push(`id:${id}`)
+    // what was not asked for, one tap away
+    if (!wantNotes && notes.length) out.push(FOLD + fill(w.notesFold, { ref: lab, n: notes.length }), notes.join('\n'))
+    if (!wantQs && qs.length) out.push(FOLD + fill(w.questionsFold, { n: qs.length }), ...qs)
+  } else {
+    // a whole story: the notes of each frame behind its own button, then the questions
+    if (wantNotes || what.includes('text'))
+      for (const fr of shown) {
+        const notes = noteLines(fr)
+        if (notes.length) out.push(FOLD + fill(w.notesFold, { ref: obsLabel(p.n, frameN(fr)), n: notes.length }), notes.join('\n'))
+      }
+    const qs = shown.flatMap((fr) => qLines(fr).map((l) => l.replace(/^- /, `- ${p.n}:${frameN(fr)} `)))
+    if (qs.length) out.push(FOLD + fill(w.questionsFold, { n: qs.length }), ...qs)
+  }
+  return { answer: out.join('\n\n'), cites, facts }
+}
+const RES_NAMES: Record<string, string> = { obs: 'Open Bible Stories', 'obs-tn': 'OBS Translation Notes', 'obs-tq': 'OBS Translation Questions', 'obs-twl': 'OBS Translation Words Links', 'obs-sn': 'OBS Study Notes', 'obs-sq': 'OBS Study Questions' }
+const resName = (res: string): string => RES_NAMES[res.split('/').pop()!] ?? res.split('/').pop()!.toUpperCase()
+
+/** The sentence before an answer: "Here is OBS 3:5 of Open Bible Stories (The Flood)." (runs of the other direction isolated). */
+export const introLine = (f: ObsFacts, ui: string): string | null =>
+  f.state !== 'ok' ? null : bidiLabel(f.f ? fill(OW(ui).found, { ref: obsLabel(f.n, f.f), title: f.title || obsLabel(f.n) }) : fill(OW(ui).foundStory, { ref: obsLabel(f.n), title: f.title || obsLabel(f.n) }), ui)
+/** Said when the story came from another pack than the question's. */
+export const fromOtherLine = (f: ObsFacts, lang: string, ui: string): string | null =>
+  f.pack && f.pack !== lang && (f.state === 'ok' || f.state === 'noframe') ? bidiLabel(fill(OW(ui).fromOther, { lang: packName(f.pack), mine: packName(lang) }), ui) : null
+
+// ------------------------------------------------------------------------------------------------------------------ buttons
+
+/** A next step of an OBS answer, as data (pipeline.ts makes the buttons' sheets). */
+export type ObsStep =
+  | { k: 'obs'; label: string; ref: string; what: string[] }
+  | { k: 'bible'; label: string; ref: string }
+  | { k: 'add'; label: string; lang: string }
+  | { k: 'browse'; label: string }
+/**
+ * The buttons under an OBS answer: the next frame (or the next story at the last frame), the whole story (under a frame) or
+ * its first frame (under the story), its Bible passages (up to 3), the way to add the unit when it is missing, the list of
+ * stories. The key terms are added by pipeline.ts (twStep), from `facts.terms`.
+ */
+export async function obsSteps(f: ObsFacts, lang: string, ui: string): Promise<ObsStep[]> {
+  const w = OW(ui)
+  const out: ObsStep[] = []
+  if (f.state === 'missing' && f.add) out.push({ k: 'add', label: fill(w.add, { size: sizeText(f.add.bytes) }), lang: f.add.lang })
+  if (f.state === 'ok' || f.state === 'noframe') {
+    const nextName = async (n: number) => storyName({ n, title: (await entryOf(f.pack ?? lang, n))?.title ?? '' })
+    if (f.f && f.state === 'ok') {
+      if (f.f < f.frames) out.push({ k: 'obs', label: fill(w.next, { ref: obsLabel(f.n, f.f + 1) }), ref: obsRef(f.n, f.f + 1), what: ['text', 'notes', 'questions', 'terms'] })
+      else if (f.n < 50) out.push({ k: 'obs', label: fill(w.nextStory, { name: await nextName(f.n + 1) }), ref: obsRef(f.n + 1), what: ['text', 'notes'] })
+    }
+    if (f.f) out.push({ k: 'obs', label: fill(w.whole, { ref: obsLabel(f.n) }), ref: obsRef(f.n), what: ['text', 'notes'] })
+    else if (f.state === 'ok') out.push({ k: 'obs', label: fill(w.first, { ref: obsLabel(f.n, 1) }), ref: obsRef(f.n, 1), what: ['text', 'notes', 'questions', 'terms'] })
+  }
+  for (const r of f.refs.slice(0, 3)) out.push({ k: 'bible', label: fill(w.bible, { ref: bibleLabel(ui, r) }), ref: r })
+  if (f.state === 'ok' && !f.f && f.n < 50) {
+    const t = (await entryOf(f.pack ?? lang, f.n + 1))?.title ?? ''
+    out.push({ k: 'obs', label: fill(w.nextStory, { name: storyName({ n: f.n + 1, title: t }) }), ref: obsRef(f.n + 1), what: ['text', 'notes'] })
+  }
+  if (f.state !== 'missing' && (await obsPack(lang))) out.push({ k: 'browse', label: w.browse })
+  return out
+}
+/** The button under a passage: "This part is told in OBS 3: The Flood" (to the nearest frame when there is one). */
+export async function storyStep(ref: string, lang: string, ui: string, text = ''): Promise<{ label: string; ref: string; lang: string } | null> {
+  const t = await storyAt(ref, lang, text).catch(() => null)
+  if (!t) return null
+  return { label: fill(OW(ui).toldIn, { ref: obsLabel(t.n, t.f), title: t.title || obsLabel(t.n) }).replace(/: OBS \d+$/, ''), ref: t.ref, lang: t.lang }
+}
+
+// ---------------------------------------------------------------------------------------------------------------- questions
+
+const DIGITS = (q: string) => q.replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+/** The names of OBS, in the six languages: then a number is a story ("OBS 34", "Historias de la Biblia 3:5"). */
+const NAME = String.raw`(?:obs|open\s+bible\s+stor(?:y|ies)|historias?\s+(?:de\s+la\s+)?biblia|histoires?\s+bibliques?|cerita(?:-cerita)?\s+alkitab|बाइबल\s+(?:की\s+)?कहानि(?:याँ|यां|यों)|قصص\s+الكتاب\s+المقدس)`
+/** The word "story" (then a number is a story: "story 34", "historia 34", "कहानी 34", "القصة 34"). */
+const STORY = String.raw`(?:story|historia|histoire|cerita|कहानी|(?:ال)?قصة)`
+const FRAME = String.raw`(?:frame|marco|cuadro|image|cadre|bingkai|गद्यांश|फ़्रेम|फ्रेम|(?:ال)?إطار|(?:ال)?مشهد)`
+const NUM = String.raw`(?:no\.?\s*|n[º°o]\.?\s*|#\s*|nomor\s+|संख्या\s+|رقم\s+)?(\d{1,3})`
+const BY_NAME = new RegExp(String.raw`(?<![\p{L}\p{M}])${NAME}\s*${NUM}(?:\s*[:.,]\s*(\d{1,3})(?!\d))?`, 'iu')
+const BY_STORY = new RegExp(String.raw`(?<![\p{L}\p{M}])${STORY}\s*${NUM}(?:\s*[:.]\s*(\d{1,3})(?!\d))?`, 'iu')
+const FRAME_N = new RegExp(String.raw`(?<![\p{L}\p{M}])${FRAME}\s*${NUM}`, 'iu')
+const NOTES = /(?<![\p{L}])(?:notes?|notas?|catatan|टिप्पणि|ملاحظ)/iu
+const QUESTIONS = /(?<![\p{L}])(?:questions?|preguntas?|pertanyaan|प्रश्न|سؤال|أسئلة|الأسئلة)/iu
+/**
+ * A question that names a story by its number: "¿qué dice OBS 3:5?", "historia 34", "Open Bible Stories 3", "story 3, frame 4",
+ * "القصة 34". Its ref ("obs 3:5") and what to show (the notes when it asks for notes, …), or null.
+ */
+export function obsAsked(q0: string): { ref: string; what: string[] } | null {
+  const q = DIGITS(q0)
+  const m = BY_NAME.exec(q) ?? BY_STORY.exec(q)
+  if (!m) return null
+  const n = +m[1]!
+  const f = m[2] ? +m[2] : FRAME_N.exec(q) ? +FRAME_N.exec(q)![1]! : null
+  // (a year, a page: no story is 0 or above 50; "OBS 0" is said to have no story, as a number of OBS)
+  if (!m[0].match(new RegExp(NAME, 'iu')) && (n < 1 || n > 50)) return null
+  const asks = [NOTES.test(q) ? 'notes' : '', QUESTIONS.test(q) ? 'questions' : ''].filter(Boolean)
+  return { ref: obsRef(n, f), what: asks.length ? asks : f ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'] }
+}
+/** "the story of Noah", "la historia de José", "l'histoire de …", "cerita tentang …", "… की कहानी", "قصة …": what it names. */
+const NAMED = [
+  /(?:^|\s)(?:the\s+)?story\s+(?:of|about)\s+(.+)$/i,
+  /(?:^|\s)(?:la\s+)?historia\s+(?:de|del|sobre)\s+(.+)$/i,
+  /(?:^|\s)(?:l['’]\s*)?histoire\s+(?:de|du|d['’]|sur)\s*(.+)$/i,
+  /(?:^|\s)cerita\s+(?:tentang\s+)?(.+)$/i,
+  /^(.+?)\s+की\s+कहानी/,
+  /(?:^|\s)(?:ال)?قصة\s+(.+)$/,
+]
+/**
+ * A story named by what it is about ("the story of Noah", "la historia de José"), when Open Bible Stories are on the phone and
+ * one story clearly is it: its title has every word, or its frames name them far more than any other story's. Null otherwise
+ * (then the question goes on as before: "la historia de Jonás" finds Jonah's verses, OBS has no story of Jonah).
+ */
+export async function namedStory(q: string, lang: string): Promise<{ ref: string; what: string[] } | null> {
+  const t = q.replace(/[¿?!¡.,;:«»"“”؟،()]/g, ' ').replace(/\s+/g, ' ').trim()
+  const hit = NAMED.map((re) => re.exec(t)).find((m) => m?.[1])
+  if (!hit) return null
+  const at = await obsPack(lang)
+  if (!at) return null
+  const want = keywords(hit[1]!).map((x) => fold(x)).filter((x) => x.length >= 3)
+  if (!want.length) return null
+  const has = (s: string) => { const toks = fold(s).split(/[^\p{L}\p{N}]+/u); return want.filter((w) => toks.some((x) => x === w || (w.length >= 5 && x.startsWith(w.slice(0, w.length - 1))))).length }
+  const list = await storyList(at.r).catch(() => [] as StoryEntry[])
+  const byTitle = list.filter((e) => e.title && has(e.title) === want.length)
+  if (byTitle.length === 1) return { ref: obsRef(byTitle[0]!.n), what: ['text', 'notes'] }
+  const model = await at.r.obs().catch(() => undefined)
+  const counts = (model?.stories ?? []).map((s) => ({ n: s.n, c: s.frames.filter((fr) => has(fr.text) === want.length).length })).sort((a, b) => b.c - a.c)
+  const [a, b] = counts
+  if (a && a.c >= 3 && a.c >= 2 * (b?.c ?? 0)) return { ref: obsRef(a.n), what: ['text', 'notes'] }
+  return null
+}
+
+// ------------------------------------------------------------------------------------------------------------------- search
+
+export type ObsHit = { ref: string; label: string; snippet: string; lang: string }
+/**
+ * The frames and titles of Open Bible Stories that hold every content word of a question (the question's pack, else the
+ * first one with the unit): titles first, then frames, at most `limit`. Nothing when no pack has the unit.
+ */
+export async function searchObs(q: string, lang: string, limit = 3): Promise<ObsHit[]> {
+  const at = await obsPack(lang)
+  if (!at) return []
+  const want = keywords(q).map((w) => fold(w)).filter((w) => w.length >= 3)
+  if (!want.length) return []
+  const model = await at.r.obs().catch(() => undefined)
+  if (!model) return []
+  const list = await storyList(at.r).catch(() => [] as StoryEntry[])
+  const holds = (s: string) => { const toks = fold(s).split(/[^\p{L}\p{N}]+/u); return want.every((w) => toks.some((x) => x === w || (w.length >= 4 && x.startsWith(w)))) }
+  const out: ObsHit[] = []
+  for (const e of list) if (e.title && holds(e.title)) out.push({ ref: obsRef(e.n), label: storyName(e), snippet: e.title, lang: at.lang })
+  for (const s of model.stories) {
+    for (const fr of s.frames) {
+      if (out.length >= limit * 3) break
+      if (!holds(fr.text)) continue
+      const title = list.find((e) => e.n === s.n)?.title ?? cleanTitle(s.title)
+      out.push({ ref: obsRef(s.n, fr.n), label: storyName({ n: s.n, title }, fr.n), snippet: fr.text.replace(/\s+/g, ' ').trim(), lang: at.lang })
+    }
+  }
+  return out.slice(0, limit)
+}
+
+// ------------------------------------------------------------------------------------------------------------- online AI
+
+/** The plain text of a story (its title, source line and frames), for online AI as the context of a branch on a story. */
+export async function storyText(ref: string, lang: string, max = 4000): Promise<string> {
+  const p = parseObsRef(ref)
+  const at = p ? await obsPack(lang) : null
+  if (!p || !at) return ''
+  const data = (await at.r.story(p.n).catch(() => null))?.data
+  const frames = (data?.frames ?? []).filter((x) => x.text.trim())
+  if (!data || !frames.length) return ''
+  const head = `## Open Bible Stories ${p.n}: ${cleanTitle(data.title)}${data.reference ? ` (${plainLine(data.reference)})` : ''}`
+  const body = frames.map((fr) => `${fr.ref.replace(/^0/, '').replace(/:0/, ':')} ${fr.text.replace(/\s+/g, ' ').trim()}`).join('\n')
+  const t = `${head}\n${body}`
+  return t.length > max ? t.slice(0, max).replace(/\s+\S*$/, '') + ' …' : t
+}

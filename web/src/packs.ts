@@ -375,17 +375,24 @@ export const STALL_MS = 60000
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 /**
  * The map units a language installs with its books: the client's default units as they were up to bt-synergy c68e3622. Since
- * #86 the client's defaults also bring `obs` (Open Bible Stories), and it has no way to leave one out, so Mini names its units
- * itself (`defaults: false`). OBS waits for Mini's stories view: then it comes with the language when it is 3 MB or less, else as
- * an add-on, never by itself over mobile data (Abel), and in the full APK.
+ * #86 the client's defaults also bring `obs` (Open Bible Stories); Mini names its units itself (`defaults: false`).
  */
 export const MAP_UNITS = ['xmap', 'map', 'xtopics', 'topics']
 /**
+ * Open Bible Stories (Abel, Nov 15–16): with the language when the unit is 3 MB or less (the obs units are 60–281 KB, Nov 2026),
+ * never downloaded by itself over mobile data, and in the full APK. A language that does not list it installs as before (the
+ * client skips a unit its catalog does not have).
+ * TODO(obs): a phone that installed a language before this gets `obs` through the daily update of `updateLangs`, which must
+ * skip metered connections first (branch ms/xtopics-update adds Android.metered() and that check): add `OBS_UNIT` to the units
+ * it brings there, not here. Until then, the OBS answer offers to add it on a tap (`addUnit`).
+ */
+export const OBS_UNIT = 'obs'
+/**
  * What `offerOf` plans and `downloadLang` installs: the map units, the books, the shared articles, in the order the client's
- * defaults gave them (defaults, then books, then units), so the download is the same as before the client knew OBS.
+ * defaults gave them (defaults, then books, then units); Open Bible Stories with the defaults, where the client puts them.
  */
 export function installWant(books: readonly string[]): { defaults: false; units: string[] } {
-  return { defaults: false, units: [...MAP_UNITS, ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
+  return { defaults: false, units: [...MAP_UNITS, OBS_UNIT, ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
 }
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
 /**
@@ -619,6 +626,24 @@ export async function exportPack(lang: string): Promise<Uint8Array> {
   const books = CANON.filter((b) => r.installed(`book:${b}`))
   // only what this language has: a language installed before a unit was added to SHARED_UNITS lacks it, and asking for it fails
   return client.exportTransfer({ lang, mode: 'full', books, units: SHARED_UNITS.filter((u) => r.installed(u)) })
+}
+
+/**
+ * One unit the person asked for with a tap (Open Bible Stories under an answer that says they are missing), into a language
+ * this phone downloaded: the catalog read again, the unit and what it needs installed, verified as a download is. A shipped
+ * language cannot take it (its store is the app's): it comes with the next app.
+ */
+export async function addUnit(lang: string, unit: string, signal?: AbortSignal): Promise<void> {
+  if ((await origin(lang)) !== 'added') throw new Error(`${lang} came with the app: ${unit} comes with its next version`)
+  try {
+    await serial(async () => {
+      const client = await addedClient()
+      await client.refresh(lang, signal ? { signal } : {})
+      await client.install(lang, { units: [unit], defaults: false }, { concurrency: 1, ...(signal ? { signal } : {}) })
+    })
+  } finally {
+    changed()
+  }
 }
 
 /** Removes an added language (the shipped ones stay). */

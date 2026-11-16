@@ -26,7 +26,6 @@ def ref_of(book, ch=None, v1=None, v2=None, what=()):
     return f'{book} {ch}:{v1}' + (f'-{v2}' if v2 and v2 > v1 else '')
 
 
-R_OBS = 'no Open Bible Stories in the packs on disk'
 R_TU = 'translate-unknown route takes a "how do I translate" question about a quoted phrase: a word of the verse names an article'
 R_OPEN = 'isOpen: a kind word ("question", "notes") plus 2+ keywords turns it into a free search, over the reader intent'
 R_HI = 'hi pack has the book but not its notes/intro/questions, and the answer does not fall back to English helps'
@@ -36,7 +35,7 @@ R_MEANING = 'the meaning route is not taken for this wording or language'
 R_ISA = 'Isaiah is not in the packs on disk'
 # Expected to fail today, by case id: why. Reported apart, never fail the build; flagged when they start passing.
 KNOWN = {
-    'obs-3-5-text': R_OBS, 'obs-notes-3-4': R_OBS, 'ta-rhetorical-question': R_OPEN,
+    'ta-rhetorical-question': R_OPEN,
     **{i: R_TU for i in ['advice-rut-1-13-hand-of-yahweh', 'advice-jon-2-10-vomited-nonote', 'advice-tit-3-5-lavamiento',
                          'advice-rut-1-14-alzaron-voces', 'advice-tit-1-12-malas-bestias', 'evl-id-04', 'evl-hi-04', 'evl-hi-27',
                          'evl-hi-28', 'evl-fr-04', 'evl-fr-10', 'evl-fr-27', 'evl-fr-28', 'evl-ar-04']},
