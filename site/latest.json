@@ -1,15 +1,15 @@
 {
-  "version": "0.11.0",
-  "versionCode": 28,
-  "notes_url": "https://github.com/unfoldingWord/bt-servant-mini/releases/tag/v0.11.0-alpha",
+  "version": "0.12.0",
+  "versionCode": 29,
+  "notes_url": "https://github.com/unfoldingWord/bt-servant-mini/releases/tag/v0.12.0-alpha",
   "full": {
-    "url": "https://github.com/unfoldingWord/bt-servant-mini/releases/download/v0.11.0-alpha/bt-servant-mini-0.11.0-alpha.apk",
-    "sha256": "56d8b1d50852182268902ebaf4433e15b062435e1e5bb11e1fffb18a68336270",
-    "bytes": 374826820
+    "url": "https://github.com/unfoldingWord/bt-servant-mini/releases/download/v0.12.0-alpha/bt-servant-mini-0.12.0-alpha.apk",
+    "sha256": "cca6f52d3fc9c4decd381d0626c7cb7e350acc7b15fd19779b52df60e9daf096",
+    "bytes": 374858380
   },
   "lite": {
-    "url": "https://github.com/unfoldingWord/bt-servant-mini/releases/download/v0.11.0-alpha/bt-servant-mini-0.11.0-alpha-lite.apk",
-    "sha256": "9552230ad7e883a448a6f1db13da0e76ea2a6c594789b574b6c7472c6857ab10",
-    "bytes": 18089229
+    "url": "https://github.com/unfoldingWord/bt-servant-mini/releases/download/v0.12.0-alpha/bt-servant-mini-0.12.0-alpha-lite.apk",
+    "sha256": "0ee6500621efe556e6ef87334e5f6639f11c51da72ee041e3a98a2ef42ae4dd4",
+    "bytes": 18120789
   }
 }
