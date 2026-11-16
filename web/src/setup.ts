@@ -82,12 +82,14 @@ const STR: Record<string, S> = {
     addLangs: 'Ajouter des langues', online: 'Chercher sur le serveur (internet)', offline: "Pas d'internet, ou le serveur n'a pas répondu.",
     noneNew: "Le serveur n'a pas encore d'autres langues.", loadPack: 'Charger un fichier .tcpack', working: 'En cours…', failed: 'Échec :',
   },
+  // the Indonesian pack has Colossians to Philemon, 2 Peter and 3 John (no Ruth, no Jonah): its examples are Titus and
+  // Philemon, and each one finds something on a phone with only that pack (tests/examples-find.test.ts)
   id: {
     about: 'Tentang BT Servant Mini', title: 'BT Servant Mini',
     body: [
       "BT Servant Mini adalah BT Servant di ponsel Anda, **tanpa internet**. Ia menjawab dari alat bantu penerjemahan unfoldingWord yang ada di paket bahasa di ponsel: teks Alkitab harfiah dan sederhana, catatan terjemahan, pertanyaan pemahaman, istilah kunci (Translation Words) dan keempat buku panduan Translation Academy.",
-      "**Yang bisa Anda tanyakan**\n• Sebuah ayat atau pasal (Rut 1:1, Yunus 1): teks-teksnya dengan catatannya. Ketuk sebuah kata untuk melihat catatan dan istilah kunci tentang kata itu.\n• Sebuah kata atau nama (anugerah, Yohanes Pembaptis): artikelnya dan ayat-ayat yang menyebutnya.\n• Pertanyaan bebas tentang sebuah kisah (Di mana Yunus ditelan ikan?) atau beberapa kata (Yunus ikan): ayat-ayat yang menceritakannya.\n• Bantuan menerjemahkan (bantu saya menerjemahkan Yunus 1:3): catatan dan versi yang lebih sederhana.",
-      "**Perintah singkat (tetap bekerja tanpa model)**\nYunus 1:3 · Yunus 1:3 catatan · Yunus 1:3 pertanyaan · Yunus intro · Yunus 2 intro · kasih karunia · Yunus ikan",
+      "**Yang bisa Anda tanyakan**\n• Sebuah ayat atau pasal (Titus 2:11, Filemon 1): teks-teksnya dengan catatannya. Ketuk sebuah kata untuk melihat catatan dan istilah kunci tentang kata itu.\n• Sebuah kata atau nama (anugerah, Yohanes Pembaptis): artikelnya dan ayat-ayat yang menyebutnya.\n• Pertanyaan bebas tentang sebuah kisah (Mengapa Paulus meninggalkan Titus di Kreta?) atau beberapa kata (Titus Kreta): ayat-ayat yang menceritakannya.\n• Bantuan menerjemahkan (bantu saya menerjemahkan Titus 2:11): catatan dan versi yang lebih sederhana.",
+      "**Perintah singkat (tetap bekerja tanpa model)**\nTitus 2:11 · Titus 2:11 catatan · Titus 2:11 pertanyaan · Titus intro · Titus 2 intro · kasih karunia · Titus Kreta",
       "**Bertanya atau mengetuk.** Tulis dengan kata-kata Anda sendiri, atau ketuk. **Jelajahi** (tombol di samping kotak ketik) membuka Alkitab per kitab, pasal dan ayat, serta buku panduan Translation Academy per bagian. Saat Anda mengetik, saran muncul di atas kotak; ✓ mengirim apa yang Anda tulis (matikan di menu: Saran saat mengetik). Di bawah setiap jawaban, ada tombol untuk langkah berikutnya. Tautan di catatan dan artikel terbuka di panel bawah.",
       "**Percakapan yang mengikuti Anda.** Lanjutkan dari jawaban terakhir: «dan catatannya?», «dan ayat berikutnya?». **Peta** menampilkan seluruh percakapan: ketuk titik mana pun untuk kembali ke sana dan melanjutkan dari situ; tombol «← Kembali ke …» membawa Anda kembali ke tempat tadi. Jika Anda menyebut apa yang sedang Anda kerjakan («Saya akan menerjemahkan Rut»), aplikasi menawarkan jalur ringan: pengantar → bagian → istilah kunci → catatan → pertanyaan. Anda boleh bertanya apa saja di sepanjang jalan. Jika topiknya sudah jauh berubah, aplikasi menawarkan percakapan baru.",
       "**AI daring (pilihan, di Android dan web).** Aktifkan di menu. Saat ada internet, model yang lebih besar di server menulis penjelasan dari alat bantu yang ditemukan aplikasi. Penjelasan itu diberi tanda «AI daring», dan alat bantunya tetap ada di bawahnya sebagai kartu, dengan sumber yang dikutipnya, supaya Anda bisa memeriksanya.",
@@ -106,7 +108,7 @@ const STR: Record<string, S> = {
     noneNew: 'Server belum punya bahasa lain.', loadPack: 'Muat berkas .tcpack', working: 'Sedang bekerja…', failed: 'Gagal:',
   },
   // the Hindi pack has translation notes only for Acts and no questions: its examples are Acts (not Jonah) and key terms, and
-  // each one finds something (tests/hindi-examples.test.ts)
+  // each one finds something (tests/examples-find.test.ts)
   hi: {
     about: 'BT Servant Mini के बारे में', title: 'BT Servant Mini',
     body: [
