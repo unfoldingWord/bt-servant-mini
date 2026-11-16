@@ -4,6 +4,7 @@
 // Nothing identifies the person or the phone. A thumb alone stays on the phone (it only adds to the usage counts, if on).
 import { isOnline, onlineKey, onlineUrl } from './online'
 import { appSnapshot } from './usage'
+import { rtlLang } from './bidi'
 
 const QUEUE = 'btsm.feedback.queue'
 const MAX_FIELD = 4000 // characters per piece of the conversation
@@ -170,7 +171,7 @@ export function askReport(lang: string, msgs: ReportMsg[], done: (r: Report | nu
   const wrap = el('div', '')
   wrap.id = 'report'
   const card = el('div', 'card')
-  card.dir = lang === 'ar' ? 'rtl' : 'auto' // a Latin name first must not turn an Arabic card left to right
+  card.dir = rtlLang(lang) ? 'rtl' : 'auto' // a Latin name first must not turn an Arabic card left to right
   card.appendChild(el('h2', '', s.title))
   const picked = new Set<Reason>()
   const chips = el('div', 'langs')

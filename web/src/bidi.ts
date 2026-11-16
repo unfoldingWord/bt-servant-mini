@@ -11,18 +11,22 @@
 // possible); Android BidiFormatter.unicodeWrap (wrap every inserted string); Closure's goog.i18n.bidi.estimateDirection (a
 // text is right to left when over 40% of its words are).
 
-export const LRI = '⁦', RLI = '⁧', FSI = '⁨', PDI = '⁩'
-const ISOLATES = /[⁦-⁩]/g
+export const LRI = '\u2066', RLI = '\u2067', FSI = '\u2068', PDI = '\u2069'
+const ISOLATES = /[\u2066-\u2069]/
+// what strip() removes: the isolates, and the marks and embeddings that come in text pasted from WhatsApp and other apps
+// (LRM, RLM, ALM, LRE…RLO)
+const MARKS = /[\u2066-\u2069\u200E\u200F\u061C\u202A-\u202E]/g
 
 // strong right-to-left: Hebrew, Arabic (with its punctuation ، ؛ ؟), Syriac, Thaana, NKo, Samaritan, Mandaic, and the Hebrew
 // and Arabic presentation forms
-const RTL_CHAR = /[֐-ࣿיִ-﷿ﹰ-ﻼ]/
+const RTL_CHAR = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFC]/
 const LETTER = /\p{L}/u
 const MARK = /\p{M}/u
 const DIGIT = /[0-9٠-٩۰-۹]/
 
 type Side = 'R' | 'L' | null
-const side = (ch: string): Side => (RTL_CHAR.test(ch) ? 'R' : LETTER.test(ch) ? 'L' : null)
+// digits first: the Arabic-Indic ones are in the Arabic block, but they are numbers, not letters of a direction
+const side = (ch: string): Side => (DIGIT.test(ch) ? null : RTL_CHAR.test(ch) ? 'R' : LETTER.test(ch) ? 'L' : null)
 
 /** A language written right to left (the app's languages: only Arabic; the others for packs and what people type). */
 export const rtlLang = (lang: string | null | undefined): boolean => /^(ar|he|fa|ur|ps|sd|ug|yi|dv|ckb)(-|$)/i.test(lang ?? '')
@@ -30,8 +34,8 @@ export const rtlLang = (lang: string | null | undefined): boolean => /^(ar|he|fa
 /** Has right-to-left letters. */
 export const hasRtl = (s: string): boolean => RTL_CHAR.test(s)
 
-/** The text without isolate marks (for what is shared, compared, searched or sent). */
-export const strip = (s: string): string => s.replace(ISOLATES, '')
+/** The text without bidi marks (isolates, LRM/RLM/ALM, embeddings): for what is asked, shared, compared or sent. */
+export const strip = (s: string): string => s.replace(MARKS, '')
 
 /** `s` isolated from the text around it, in the direction of its first strong letter (like <bdi>). */
 export const isolate = (s: string): string => (s && !(s.startsWith(FSI) && s.endsWith(PDI)) ? FSI + s + PDI : s)
@@ -69,7 +73,7 @@ const OPEN = '([{«“', CLOSE = ')]}»”'
  * app gets no marks), or when it is isolated already.
  */
 export function bidiLabel(s: string, ui: string): string {
-  if (!s || /[⁦-⁩]/.test(s)) return s
+  if (!s || ISOLATES.test(s)) return s
   const own: Side = rtlLang(ui) ? 'R' : 'L'
   const other: Side = own === 'R' ? 'L' : 'R'
   // nothing of the other direction: nothing to do (the common case, checked cheaply)
@@ -91,8 +95,8 @@ export function bidiLabel(s: string, ui: string): string {
       const opened = run.split(OPEN[k]!).length - run.split(CLOSE[k]!).length
       if (opened > 0 && cs[end] === CLOSE[k]) { end++; run += CLOSE[k] }
     }
-    // a number just before it ("5.4 s"), unless it follows a word of the label's direction ("راعوث 1 Ruth")
-    const m = /(\d[\d.,:]*\s+)$/.exec(out)
+    // a number just before it ("5.4 s", "0.12.0-beta"), unless it follows a word of the label's direction ("راعوث 1 Ruth")
+    const m = /(\d[\d.,:-]*\s*)$/.exec(out)
     if (m) {
       const before = [...out.slice(0, out.length - m[1]!.length).trimEnd()].pop()
       if (!before || side(before) !== own) {

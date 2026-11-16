@@ -25,13 +25,19 @@ function inline(s: string): string {
     .replace(/(^|[\s(«“])_([^_\n]+?)_(?=[\s).,;:!?»”]|$)/g, '$1<em>$2</em>')
 }
 
+/** The words a reader sees, for its direction: no [[id]] targets, a link's text without its address ("rc://…" made Arabic lines
+ *  left to right). */
+const seen = (s: string): string => s.replace(/\[\[[^\]\n]+\]\]/g, '').replace(/\[([^\]\n]+)\]\([^)\n]*\)/g, '$1')
+/** The direction of Markdown text by the words it shows (bidi.ts dirOf), for the element it is drawn in. */
+export const mdDir = (src: string): 'rtl' | 'ltr' | 'auto' => dirOf(seen(src))
+
 /** `ctx`: the article id the text belongs to, for its relative links. */
 export function md(src: string, ctx = ''): string {
   CTX = ctx
   // with right-to-left letters anywhere, each block gets the direction of its own words (bidi.ts textDir): an English note
   // in an Arabic answer reads left to right, an Arabic verse in an English one right to left. Without, nothing changes.
   const mixed = hasRtl(src)
-  const D = (t: string | string[]) => (mixed ? ` dir="${dirOf(Array.isArray(t) ? t.join(' ') : t)}"` : '')
+  const D = (t: string | string[]) => (mixed ? ` dir="${mdDir(Array.isArray(t) ? t.join(' ') : t)}"` : '')
   const out: string[] = []
   let folded = false
   const close = () => {

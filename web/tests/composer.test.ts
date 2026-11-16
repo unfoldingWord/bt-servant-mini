@@ -323,3 +323,10 @@ describe('the box and the keyboard', () => {
     expect(k.row.items[0]!.label).toBe('✓ Rut 2:3')
   })
 })
+
+// text copied from the app (isolates around a reference) or pasted from WhatsApp (RLM, embeddings) reads as if typed
+test('bidi marks in the box do not change the row', async () => {
+  const c = (n: number) => String.fromCodePoint(n)
+  expect(await kinds('es', c(0x2068) + 'Rut 2:3' + c(0x2069))).toEqual(await kinds('es', 'Rut 2:3'))
+  expect(await kinds('ar', c(0x200f) + 'يونان 1:3' + c(0x200e))).toEqual(await kinds('ar', 'يونان 1:3'))
+})

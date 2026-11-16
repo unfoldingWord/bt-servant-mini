@@ -10,6 +10,7 @@
 //   F  the book is not on this phone: said on the button, which never sends ("no está en este teléfono"); or it is answered from
 //      another installed pack ("· en inglés"), exactly as buildSheet does
 import { bookCandidates, bookCode, type Slots } from './sheet'
+import { strip as unmarked } from './bidi'
 import { type ConvState, directSheet, env } from './pipeline'
 import { has, replyLang } from './commands'
 import { bookShown } from './firstuse'
@@ -269,7 +270,7 @@ const lastNumber = (t: string) => {
 
 /** The row for the text in the box (states B, D, E, F). Pure and quick: no pack is opened here. */
 export function suggest(text: string, ctx: Ctx): Row {
-  const t = text.replace(/^\s+/, '')
+  const t = unmarked(text).replace(/^\s+/, '') // no bidi marks (text copied from the app or pasted from WhatsApp)
   if (!t.trim() || t.length > 120 || !ctx.books || replyLang(t) || has('help', t)) return { items: [] }
   const ok = understood(t, ctx)
   if (ok?.needs) return { items: [], needs: ok.needs }

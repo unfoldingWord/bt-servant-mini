@@ -3,12 +3,13 @@
 import { describe, expect, test } from 'bun:test'
 import { bidiLabel, dirOf, FSI, hasRtl, isolate, PDI, rtlLang, strip, textDir } from '../src/bidi'
 import { followups, nextWords } from '../src/converse'
-import { md } from '../src/md'
+import { md, mdDir } from '../src/md'
+import { directRef, env } from '../src/pipeline'
 import { shareText } from '../src/share'
 import type { Sheet } from '../src/answer'
 
 const I = (s: string) => FSI + s + PDI
-const MARKS = /[⁦-⁩‎‏‪-‮]/
+const MARKS = /[\u2066-\u2069\u200E\u200F\u202A-\u202E]/
 
 describe('bidiLabel', () => {
   test('Arabic app: Latin runs isolated, Arabic references left as they are', () => {
@@ -96,5 +97,42 @@ describe('share: no marks', () => {
     const t = shareText({ who: 'bot', info: `${I('Translation Academy')}: الاستعارة` }, 'ar', `ما معنى ${I('GLT')}؟`)!
     expect(t).not.toMatch(MARKS)
     expect(t).toContain('Translation Academy: الاستعارة')
+  })
+})
+
+const C = (n: number) => String.fromCodePoint(n)
+
+describe('strip: what is typed, pasted or copied back', () => {
+  test('every bidi mark goes: isolates, LRM, RLM, ALM, embeddings and overrides', () => {
+    for (const n of [0x200e, 0x200f, 0x061c, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]) expect(strip(`a${C(n)}b`)).toBe('ab')
+  })
+  test('a reference copied from the app or pasted from WhatsApp is read as a reference once stripped', () => {
+    env.nav = 'en'
+    const copied = I('Ruth 2:3')
+    expect(directRef(copied)).toBe(false) // why the box is stripped at submit (main.ts) and in the composer (suggest.ts)
+    expect(directRef(strip(copied))).toBe(true)
+    const pasted = C(0x200f) + 'يونان 1:3' + C(0x200e) + ' ' + C(0x202b) + 'ملاحظات' + C(0x202c) + C(0x061c)
+    expect(strip(pasted)).toBe('يونان 1:3 ملاحظات')
+    expect(directRef(strip(pasted))).toBe(true)
+  })
+})
+
+describe('numbers', () => {
+  test('a version with "-beta" and a size stay whole in Arabic', () => {
+    expect(bidiLabel('يتوفر إصدار جديد: 0.12.0-beta · 18 MB', 'ar')).toBe(`يتوفر إصدار جديد: ${I('0.12.0-beta · 18 MB')}`)
+    expect(bidiLabel('يتوفر إصدار جديد: 0.12.0 · 18 MB', 'ar')).toBe(`يتوفر إصدار جديد: 0.12.0 · ${I('18 MB')}`)
+  })
+  test('Arabic-Indic digits are numbers, not right-to-left letters', () => {
+    expect(textDir('٣:١٦')).toBe('')
+    expect(bidiLabel('Notes ٣:١٦', 'en')).toBe('Notes ٣:١٦')
+    expect(bidiLabel('Notes (يوحنا ٣:١٦)', 'en')).toBe(`Notes (${I('يوحنا ٣:١٦')})`)
+  })
+})
+
+describe('link addresses do not decide a direction', () => {
+  test('an Arabic line with rc:// links and [[id]] targets reads right to left', () => {
+    const src = 'انظر [الاستعارة](rc://*/ta/man/translate/figs-metaphor) و [[rc://*/ta/man/translate/figs-simile]] هنا في النص'
+    expect(mdDir(src)).toBe('rtl')
+    expect(md(['## راعوث', '', src].join(String.fromCodePoint(10)))).toContain('<p dir="rtl">')
   })
 })

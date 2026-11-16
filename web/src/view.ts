@@ -5,7 +5,7 @@ import { articleView, helpView, type Study, titleFor } from './answer'
 import { focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { type Card, cardsT, firstLine } from './helpcards'
 import { linkTarget } from './links'
-import { md } from './md'
+import { md, mdDir } from './md'
 import { bidiLabel, dirOf } from './bidi'
 import { count } from './usage'
 
@@ -55,7 +55,7 @@ const first = (t: string, n = 140): string => {
 /** Markdown with its links made tappable and the titles of `[[id]]` links filled in. */
 export function richText(src: string, lang: string, ctx = ''): HTMLElement {
   const box = el('div', 'rich')
-  box.dir = dirOf(src) // an English article in an Arabic app reads left to right (and the other way round)
+  box.dir = mdDir(src) // an English article in an Arabic app reads left to right (and the other way round)
   box.innerHTML = md(src, ctx) // md() escapes everything first
   fillTitles(box, lang)
   return box

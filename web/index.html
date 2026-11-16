@@ -59,6 +59,8 @@
   .info p { margin: 0 0 10px; }
   .info ul, .info ol { margin: 0 0 10px; padding-inline-start: 22px; }
   .info li { margin: 0 0 8px; }
+  /* an English item in an Arabic list (or the other way round, md.ts): its bullet would sit on the bubble's edge, where the list has no padding */
+  :is(ul, ol)[dir="rtl"] > li[dir="ltr"], :is(ul, ol)[dir="ltr"] > li[dir="rtl"] { list-style-position: inside; }
   .info li::marker { color: var(--faint); }
   .info strong { font-weight: 650; }
   .info em { color: var(--muted); }
@@ -255,8 +257,9 @@
   :is(.info, .md) details.fold > summary::-webkit-details-marker { display: none; }
   :is(.info, .md) details.fold > summary::before { content: "▸"; display: inline-block; margin-inline-end: 8px; transition: transform .15s; }
   /* right to left: the bubble's own direction (dir="auto" on an Arabic answer in any app language), not only the app's */
-  [dir="rtl"] details.fold > summary::before { transform: scaleX(-1); }
-  details.fold:dir(rtl) > summary::before { transform: scaleX(-1); }
+  /* the summary's own direction: an English summary (dir="ltr", md.ts) inside an Arabic bubble keeps its arrow */
+  details.fold > summary:dir(rtl)::before { transform: scaleX(-1); }
+  @supports not selector(:dir(rtl)) { [dir="rtl"] details.fold > summary:not([dir="ltr"])::before { transform: scaleX(-1); } }
   :is(.info, .md) details.fold[open] > summary::before { transform: rotate(90deg); }
   :is(.info, .md) details.fold[open] > summary { margin-bottom: 10px; }
   :is(.info, .md) details.fold.verse { margin: 4px 0; }

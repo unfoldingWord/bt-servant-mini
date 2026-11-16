@@ -11,6 +11,7 @@ import { booksOf, type Ctx, loadHelps, resetHelps, type Row, ST, type Strip, sug
 import { buildSheet } from './sheet'
 import { type ConvState, env } from './pipeline'
 import type { Sheet } from './answer'
+import { strip as unmarked } from './bidi'
 
 const KEY = 'btsm.suggest'
 /** Whether "Typing suggestions" is on (on unless turned off in the menu). */
@@ -128,7 +129,7 @@ export class Composer {
   refresh() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    if (!composerOn() || !this.box.value.trim()) {
+    if (!composerOn() || !unmarked(this.box.value).trim()) {
       this.row = { items: [] }
       this.madeFor = this.box.value
     } else {

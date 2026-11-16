@@ -5,6 +5,7 @@ import { CANDIDATES, CANON, downloadLang, offers, openLang, PACK_NAMES, type Off
 import { bookLabel } from './converse'
 import books from './data/books.json'
 import shapes from './data/shapes.json'
+import { rtlLang } from './bidi'
 
 type F = {
   title: string; lead: string; looking: string; download: string; cancel: string; retry: string; offline: string
@@ -177,7 +178,7 @@ function paint() {
 function build(): HTMLElement {
   const s = FU(st.ui)
   const box = el('div', 'fu')
-  box.dir = st.ui === 'ar' ? 'rtl' : 'auto' // in the app's direction (a Latin pack name first must not turn it)
+  box.dir = rtlLang(st.ui) ? 'rtl' : 'auto' // in the app's direction (a Latin pack name first must not turn it)
   box.appendChild(el('h3', '', s.title))
   box.appendChild(el('p', 'fu-lead', s.lead))
   const sel = st.offers.find((o) => o.lang === st.sel)
