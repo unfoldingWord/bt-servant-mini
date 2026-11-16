@@ -1048,5 +1048,26 @@
       "اعرض",
       "أرني"
     ]
+  },
+  "obs5m": {
+    "en": [
+      "(?<!\\d)5M",
+      "five movements"
+    ],
+    "es": [
+      "cinco movimientos"
+    ],
+    "fr": [
+      "cinq mouvements"
+    ],
+    "id": [
+      "lima gerakan"
+    ],
+    "hi": [
+      "पाँच आंदोलन"
+    ],
+    "ar": [
+      "الحركات الخمس"
+    ]
   }
 }
