@@ -638,16 +638,20 @@ export function refInText(slots: Slots, q: string): Slots {
     .replace(new RegExp(`${ch}\\s*(\\d+)\\s+(?:of|de|del|du|dari|का|من)\\s+((?:[123]\\s*)?[\\p{L}][\\p{L}\\p{M}]+)`, 'iu'), '$2 $1')
     .replace(new RegExp(`\\s+${ch}\\s*(\\d+)`, 'iu'), ' $1')
     .replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    // "Salmos 23, versículo 4", "Psalm 23 verse 4": the chapter, then the verse
+    .replace(new RegExp(`(\\d+)\\s*,?\\s+(?:${pattern('verse').source})\\s*(\\d+)`, 'iu'), '$1:$2')
   // every reference-like match, in order, until one names a book: "Notas de 1 Juan 3:2" first matches "de 1", whose number
   // starts a numbered book, so the reading starts again at that digit ("1 Juan 3:2"); the word before it ("Catatan") is never
-  // read as a misspelled book (it was Lamentations, "Ratapan")
-  const re = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/gu
+  // read as a misspelled book (it was Lamentations, "Ratapan"). Chapter and verse as "2:3" or "2.3", and as "2,3" (the
+  // citation of Spanish and French, a report of Nov 17: the 3 was dropped) or "2 3": a comma with a space after it is a list
+  // ("Rut 1, 2 y 3"), and a verse past the chapter's last one is no verse (the chapter alone)
+  const re = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:(\s*[:.]\s*|[,،](?=\d)|\s+(?=\d))(\d+)(?:\s*[-–]\s*(\d+))?)?/gu
   const lang = slots.lang ?? env.nav
   let m: RegExpExecArray | null
   let code: string | null = null
   let name = ''
   while (!code && (m = re.exec(t))) {
-    if (!m[3] && /^[123]$/.test(m[2]!)) {
+    if (!m[4] && /^[123]$/.test(m[2]!)) {
       const after = t.slice(m.index + m[0].length).match(/^\s+([\p{L}][\p{L}\p{M}]*)(?:\s+([\p{L}][\p{L}\p{M}]*))?/u)
       if (after && (bookExact(`${m[2]} ${after[1]}`) || (after[2] && bookExact(`${m[2]} ${after[1]} ${after[2]}`)))) {
         re.lastIndex = m.index + m[0].length - m[2]!.length
@@ -672,7 +676,16 @@ export function refInText(slots: Slots, q: string): Slots {
     }
     if (!code) continue
     const what = kindOf(q) ?? slots.what ?? []
-    return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
+    const chap = +m[2]!
+    let v1 = m[4] ? +m[4] : null
+    let v2 = m[5] ? +m[5] : null
+    // "2,3" or "2 3": a verse only when the chapter has it (data/versification.json); "2:30" is said to be past the end later
+    if (v1 !== null && !/[:.]/.test(m[3]!)) {
+      const last = (versification as Record<string, number[]>)[code]?.[chap - 1]
+      if (last !== undefined && v1 > last) v1 = v2 = null
+      else if (last !== undefined && v2 !== null && v2 > last) v2 = last
+    }
+    return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: chap, verse_start: v1, verse_end: v2, what }
   }
   return slots
 }
