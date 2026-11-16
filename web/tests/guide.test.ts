@@ -181,8 +181,8 @@ describe('in a conversation', () => {
     es: ['Voy a traducir Rut', /^Rut 1:1–5 · paso 2 de 5: secciones$/],
     fr: ['Je vais traduire Ruth', /^Ruth 1:1–5 · étape 2 sur 5 : sections$/],
     id: ['Saya akan menerjemahkan Rut', /^Ruth 1:1–5 · langkah 2 dari 5: bagian$/],
-    // (the Hindi pack has key terms for Ruth but no notes or questions: its path has 3 steps, each answered from it)
-    hi: ['मैं रूत का अनुवाद करने जा रहा हूँ', /^Ruth 1:1–5 · चरण 2\/3: खंड$/],
+    // (the Hindi pack has no notes or questions for Ruth: its path takes them from another pack, English first, and says so)
+    hi: ['मैं रूत का अनुवाद करने जा रहा हूँ', /^Ruth 1:1–5 · चरण 2\/5: खंड$/],
     ar: ['سأترجم راعوث', /^راعوث 1:1–5 · الخطوة 2 من 5: المقاطع$/],
   }
   for (const [lang, [q, step2]] of Object.entries(PATH))

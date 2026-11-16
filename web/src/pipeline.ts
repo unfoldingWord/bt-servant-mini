@@ -454,6 +454,7 @@ export function resetBooks() {
   boundsCache.clear()
   headsCache.clear()
   mapCache.clear()
+  HAS.clear()
 }
 /**
  * A follow-up's numbers checked against the book: "the next verse" at a chapter's end is the first of the next chapter, "the
@@ -794,6 +795,9 @@ export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
   note?: { text: string; fromText: boolean }
   /** the helps were asked for in a language that is not on the phone, or lacks this: said before the answer (helpsIn) */
   langNote?: string
+  /** the question named the language of its helps ("…in Hindi", "repeat it in English"): their pack, which a missing kind of
+   * help is never silently taken from another pack for (helps-elsewhere offers it as a button instead) */
+  wanted?: string
   /** the last search again in another language: these verses, not a new search (ROUTES 'found-again') */
   keep?: Found }
 /**
@@ -850,14 +854,15 @@ const HELPS_IN: Record<string, { absent: string; lacks: string }> = {
   ar: { absent: 'لا توجد مساعدات باللغة {lang} على هذا الهاتف، لذا هذا باللغة {have}.', lacks: 'المساعدات باللغة {lang} على هذا الهاتف ليس فيها هذا، لذا هذا باللغة {have}.' },
 }
 /** The helps asked in a language (`target`, an app language) that the sheet could not be answered from: what to say first. */
-async function helpsIn(target: string | null, sheet: Sheet, ui: string): Promise<{ langNote?: string }> {
+async function helpsIn(target: string | null, sheet: Sheet, ui: string): Promise<{ langNote?: string; wanted?: string }> {
   const want = target ? packCode(target) : null
-  if (!want || sheet.lang === want) return {}
+  if (!want) return {}
+  if (sheet.lang === want) return { wanted: want }
   const names = LANG_NAMES[ui] ?? LANG_NAMES.en!
   const name = (l: string) => names[l.startsWith('es') ? 'es' : l] ?? env.packName(l)
   const t = HELPS_IN[ui] ?? HELPS_IN.en!
   const text = ((await hasLang(want).catch(() => false)) ? t.lacks : t.absent).replace('{lang}', name(want)).replace('{have}', name(sheet.lang))
-  return { langNote: text }
+  return { langNote: text, wanted: want }
 }
 
 /**
@@ -1400,18 +1405,141 @@ const LANG_NAMES: Record<string, Record<string, string>> = {
   hi: { en: 'अंग्रेज़ी', es: 'स्पेनिश', fr: 'फ़्रेंच', id: 'इंडोनेशियाई', hi: 'हिंदी', ar: 'अरबी' },
   ar: { en: 'الإنجليزية', es: 'الإسبانية', fr: 'الفرنسية', id: 'الإندونيسية', hi: 'الهندية', ar: 'العربية' },
 }
+// ("Questions in English, from the English pack.": a step of a path, or a question, answered by another pack: helpsElsewhere)
 const FROM_T: Record<string, string> = {
-  en: 'Notes in {notes}, from the {pack} pack.', es: 'Notas en {notes}, del paquete de {pack}.', fr: 'Notes en {notes}, du paquet {pack}.',
-  id: 'Catatan dalam bahasa {notes}, dari paket bahasa {pack}.', hi: '{notes} में टिप्पणियाँ, {pack} पैकेज से।', ar: 'ملاحظات باللغة {notes}، من حزمة اللغة {pack}.',
+  en: '{what} in {notes}, from the {pack} pack.', es: '{what} en {notes}, del paquete de {pack}.', fr: '{what} en {notes}, du paquet {pack}.',
+  id: '{what} dalam bahasa {notes}, dari paket bahasa {pack}.', hi: '{notes} में {what}, {pack} पैकेज से।', ar: '{what} باللغة {notes}، من حزمة اللغة {pack}.',
 }
-function fromPack(ui: string, pack: string, text: string): string {
+export type HelpKind = 'notes' | 'questions' | 'terms'
+const FROM_WHAT: Record<string, Record<HelpKind, string>> = {
+  en: { notes: 'Notes', questions: 'Questions', terms: 'Key terms' }, es: { notes: 'Notas', questions: 'Preguntas', terms: 'Palabras clave' },
+  fr: { notes: 'Notes', questions: 'Questions', terms: 'Mots clés' }, id: { notes: 'Catatan', questions: 'Pertanyaan', terms: 'Istilah kunci' },
+  hi: { notes: 'टिप्पणियाँ', questions: 'प्रश्न', terms: 'मुख्य शब्द' }, ar: { notes: 'ملاحظات', questions: 'أسئلة', terms: 'كلمات رئيسية' },
+}
+function fromPack(ui: string, pack: string, text: string, kind?: HelpKind, said?: string): string {
   const names = LANG_NAMES[ui] ?? LANG_NAMES.en!
   const base = (l: string) => (l.startsWith('es') ? 'es' : l.startsWith('pt') ? 'pt' : l)
   const name = (l: string) => names[base(l)] ?? env.packName(l)
   // the notes' own language: by their script, else by their words (the Arabic pack's notes of Numbers are English)
+  // (helps from another pack: the language their own rows are written in, helpKinds; an introduction: read from the answer)
   const body = text.replace(/^[#*].*$/gm, ' ')
-  const notes = /[؀-ۿ]{3}/.test(body) ? 'ar' : /[ऀ-ॿ]{3}/.test(body) ? 'hi' : guessLang(body.slice(0, 600))
-  return (FROM_T[ui] ?? FROM_T.en!).replace('{notes}', name(notes)).replace('{pack}', name(pack))
+  const notes = said ?? (/[؀-ۿ]{3}/.test(body) ? 'ar' : /[ऀ-ॿ]{3}/.test(body) ? 'hi' : guessLang(body.slice(0, 600)))
+  return (FROM_T[ui] ?? FROM_T.en!).replace('{what}', (FROM_WHAT[ui] ?? FROM_WHAT.en!)[kind ?? 'notes']).replace('{notes}', name(notes)).replace('{pack}', name(pack))
+}
+
+// ----------------------------------------------------------------------------------------- helps from another pack
+// The Hindi pack has notes for Acts only and no questions at all. A step of a path ("Ruth 1:1–5 · notes") or a question asking
+// for one kind of help ("notes Ruth 2:3") is answered by the pack it is asked in when that pack has that kind of help for the
+// book; else by another installed pack that has it (English first), and the answer says so ("Notes in English, from the
+// English pack."). One function decides it, for the steps a path counts (stepsHad) and for the answer (the helps-elsewhere
+// route), so a counted step is always one that is answered.
+type Kinds = Record<HelpKind, boolean> & { said: Record<'notes' | 'questions', string> }
+const HAS = new Map<string, Promise<Kinds | null>>()
+/** The base language of a pack ("es-419" -> "es"). */
+const baseOf = (pack: string) => (pack.startsWith('es') ? 'es' : pack.startsWith('pt') ? 'pt' : pack.split('-')[0]!)
+/**
+ * The language a pack's notes or questions are written in, from their own text (`sample`): the Arabic pack's notes of Numbers
+ * are English. The quotes in the original languages (Hebrew, Greek, and the parentheses around them) and the links are left out;
+ * then the script (Arabic, Devanagari); then the common words, on 200 letters at least; else the pack's own language.
+ */
+export function helpsLangOf(sample: string, pack: string): string {
+  const t = sample
+    .replace(/\[\[[^\]]*\]\]|\[[^\]]*\]\([^)]*\)|\[[^\]]*\]|rc:\/\/\S+/g, ' ')
+    .replace(/\([^)]*[\u0590-\u05ff\u0370-\u03ff\u1f00-\u1fff][^)]*\)/g, ' ')
+    .replace(/[\u0590-\u05ff\u0370-\u03ff\u1f00-\u1fff\u2060]+/g, ' ')
+  if (/[\u0600-\u06ff]{3}/.test(t)) return 'ar'
+  if (/[\u0900-\u097f]{3}/.test(t)) return 'hi'
+  const own = baseOf(pack)
+  if (t.replace(/[^\p{L}]+/gu, '').length < 200) return own
+  let best = own
+  let most = COMMON[own] ? (t.match(COMMON[own]!)?.length ?? 0) : 0
+  for (const [l, re] of Object.entries(COMMON)) {
+    const n = t.match(re)?.length ?? 0
+    if (n > most) { most = n; best = l }
+  }
+  return best
+}
+/**
+ * What kinds of helps a pack has for a book (not its introductions), and the language its notes and questions are written in;
+ * read once. Null: the pack does not have the book. A read that fails is not kept (the next one tries again).
+ */
+function helpKinds(lang: string, book: string): Promise<Kinds | null> {
+  const key = `${lang}|${book}`
+  let p = HAS.get(key)
+  if (!p) {
+    const read: Promise<Kinds | null> = (async () => {
+      const r = await openLang(lang)
+      if (!r.installed(`book:${book}`)) return null
+      const m: any = await r.book(book)
+      const rows = (t: any) => ((t?.rows ?? []) as any[]).filter((x) => !(x.cols?.isIntro === true || x.cols?.isIntro === 'true'))
+      const notes = rows(m?.notes), questions = rows(m?.questions)
+      const sample = (xs: any[], cols: string[]) => xs.slice(0, 40).map((x) => cols.map((c) => String(x.cols?.[c] ?? '')).join(' ')).join(' ')
+      return {
+        terms: rows(m?.links).some((x) => x.concept), notes: notes.length > 0, questions: questions.length > 0,
+        said: { notes: helpsLangOf(sample(notes, ['note']), lang), questions: helpsLangOf(sample(questions, ['question', 'response']), lang) },
+      }
+    })()
+    p = read.catch(() => {
+      if (HAS.get(key) === p) HAS.delete(key)
+      return null
+    })
+    HAS.set(key, p)
+  }
+  return p
+}
+/** The pack of each app language (the app's own language is the second place a missing kind of help is taken from). */
+const UI_PACKS: Record<string, string> = { en: 'en', es: 'es-419', fr: 'fr', id: 'id', hi: 'hi', ar: 'ar' }
+/**
+ * The pack that answers a book's notes, questions or key terms asked in `lang`: that pack when it has them for the book, else
+ * the English pack, else the pack of the app's language (`ui`), when installed and they have them; null when none does. Not any
+ * other pack: someone reading in Hindi with Spanish on the phone does not get Spanish notes.
+ */
+export async function helpsPack(book: string, kind: HelpKind, lang: string, ui: string): Promise<string | null> {
+  const installed = await installedLangs().catch(() => [] as string[])
+  for (const l of new Set([lang, ...['en', UI_PACKS[ui] ?? ''].filter((x) => installed.includes(x))])) {
+    if ((await helpKinds(l, book))?.[kind]) return l
+  }
+  return null
+}
+/** The one kind of help a passage sheet asks for (a path's step, "notes Ruth 2:3"), or null (its text, or several kinds). */
+export function helpKindOf(sheet: Sheet): HelpKind | null {
+  if (sheet.intent !== 'passage' || !sheet.ref || /:intro$/.test(sheet.ref) || sheet.what.length !== 1) return null
+  const k = sheet.what[0]
+  return k === 'notes' || k === 'questions' || k === 'terms' ? k : null
+}
+/**
+ * The pack other than the sheet's that answers its one kind of help (helpsPack), with the language those helps are written in;
+ * or null: the sheet's own, none, or a sheet in a language not on the phone.
+ */
+export async function helpsElsewhere(sheet: Sheet, ui: string): Promise<{ lang: string; kind: HelpKind; said: string } | null> {
+  const kind = helpKindOf(sheet)
+  // (asked in a language that is not on the phone, "Dímelo en francés": the answer says so, as before; never another pack)
+  if (!kind || !(await installedLangs().catch(() => [] as string[])).includes(sheet.lang)) return null
+  const book = sheet.ref!.slice(0, 3)
+  const l = await helpsPack(book, kind, sheet.lang, ui)
+  if (!l || l === sheet.lang) return null
+  const k = await helpKinds(l, book)
+  return { lang: l, kind, said: kind === 'terms' ? baseOf(l) : k?.said[kind] ?? baseOf(l) }
+}
+// The question named the language of its helps and that pack lacks this kind for the book: said plainly, and the other
+// pack's offered as a button ("Ver las notas en inglés"), never taken silently
+const NONE_T: Record<string, { none: string; see: string; what: Record<HelpKind, string>; whatSee?: Record<HelpKind, string> }> = {
+  en: { none: 'The {lang} helps on this phone have no {what} for {book}.', see: 'See the {what} in {other}', what: { notes: 'notes', questions: 'questions', terms: 'key terms' } },
+  es: { none: 'Las ayudas en {lang} de este teléfono no tienen {what} para {book}.', see: 'Ver las {what} en {other}', what: { notes: 'notas', questions: 'preguntas', terms: 'palabras clave' } },
+  fr: { none: "Les aides en {lang} de ce téléphone n'ont pas de {what} pour {book}.", see: 'Voir les {what} en {other}', what: { notes: 'notes', questions: 'questions', terms: 'mots clés' } },
+  id: { none: 'Bahan bantu dalam bahasa {lang} di ponsel ini tidak memuat {what} untuk {book}.', see: 'Lihat {what} dalam bahasa {other}', what: { notes: 'catatan', questions: 'pertanyaan', terms: 'istilah kunci' } },
+  hi: { none: 'इस फ़ोन पर {lang} की सहायता में {book} के लिए {what} नहीं हैं।', see: '{other} में {what} देखें', what: { notes: 'टिप्पणियाँ', questions: 'प्रश्न', terms: 'मुख्य शब्द' } },
+  ar: { none: 'المساعدات باللغة {lang} على هذا الهاتف ليس فيها {what} لسفر {book}.', see: 'عرض {what} باللغة {other}', what: { notes: 'ملاحظات', questions: 'أسئلة', terms: 'كلمات رئيسية' },
+    whatSee: { notes: 'الملاحظات', questions: 'الأسئلة', terms: 'الكلمات الرئيسية' } },
+}
+const langName = (ui: string, l: string) => (LANG_NAMES[ui] ?? LANG_NAMES.en!)[baseOf(l)] ?? env.packName(l)
+/** "Las ayudas en hindi de este teléfono no tienen notas para Rut." and its button "Ver las notas en inglés". */
+export function noneInWords(ui: string, sheetLang: string, other: string, kind: HelpKind, book: string): { none: string; see: string } {
+  const t = NONE_T[ui] ?? NONE_T.en!
+  return {
+    none: t.none.replace('{lang}', langName(ui, sheetLang)).replace('{what}', t.what[kind]).replace('{book}', book),
+    see: t.see.replace('{what}', (t.whatSee ?? t.what)[kind]).replace('{other}', langName(ui, other)),
+  }
 }
 /** An introduction the sheet's pack does not have, from another installed pack that has it (null: none has it). */
 export async function introElsewhere(sheet: Sheet): Promise<string | null> {
@@ -1685,6 +1813,8 @@ type Ctx = Made & {
   r?: Result
   /** where the answer's notes come from when another pack had them ("Notes in English, from the Arabic pack.") */
   from?: string
+  /** `from` says it all: the answer's own "nothing found" sentence is left out (the other pack has them; a button offers them) */
+  fromOnly?: boolean
 }
 type Done = Omit<Answered, 'route' | 'sheet' | 'node'>
 /** A step of the answer: when it applies, and what it does. A step returns the answer, or null to let the next step go on. */
@@ -2295,6 +2425,34 @@ ${x.meta}` },
     },
   },
   {
+    // one kind of help the sheet's pack lacks for the book and another installed pack has (helpsPack: English first): from that
+    // one, saying so. A path's "questions" step in Hindi, "notes Ruth 2:3" on a phone with the Hindi and English packs
+    name: 'helps-elsewhere',
+    when: (x) => !!helpKindOf(x.sheet),
+    run: async (x) => {
+      // (the app's language, not the reply's: an English question in the Arabic app still tries the Arabic pack; on a path's
+      // book, the app language the path started with, so its answers match the steps it counted)
+      const path = x.c.graph?.path
+      const app = (path && x.sheet.ref?.startsWith(`${path.book} `) ? path.app : undefined) ?? env.nav
+      const e = await helpsElsewhere(x.sheet, app).catch(() => null)
+      if (!e) return null
+      // the question named the language ("रूत 2:3 के नोट्स हिंदी में"): never taken silently from another pack; said, and offered
+      if (x.wanted) {
+        const w = noneInWords(x.ui, x.sheet.lang, e.lang, e.kind, bookLabel(x.ui, x.sheet.ref!.slice(0, 3)))
+        x.from = w.none
+        x.fromOnly = true
+        x.others.unshift({ label: w.see, sheet: { ...x.sheet, id: `f${Date.now()}`, lang: e.lang } })
+        return null
+      }
+      // only the helps come from there: the sheet (and every button under the answer) stays in the person's pack
+      const r = await answerSheet({ ...x.sheet, lang: e.lang })
+      if (!r.cites.length) return null
+      x.r = r
+      x.from = fromPack(x.ui, e.lang, r.answer, e.kind, e.said)
+      return null
+    },
+  },
+  {
     // Only a name ("John the Baptist"): the article, and also the verses that mention him (each opens its text and notes)
     name: 'name-verses',
     when: ({ q, sheet }) => q !== undefined && sheet.intent === 'article' && !!sheet.concept && !asksAbout(q),
@@ -2330,7 +2488,7 @@ ${x.meta}` },
       // an introduction the helps do not have: say so, and offer what there is (the passage before this one among it)
       const none = sheet.intent === 'passage' && !found.intro ? await noIntro(sheet, ui, x.c.last).catch(() => null) : null
       if (none) said = none.said
-      if (x.from) said = [said, x.from].filter(Boolean).join(' ')
+      if (x.from) said = x.fromOnly ? x.from : [said, x.from].filter(Boolean).join(' ')
       const study = await studyOf(sheet).catch(() => null)
       const steps = await packSteps(sheet, study, ui).catch(() => [])
       const bounds = sheet.intent === 'passage' && sheet.ref ? await boundsOf(sheet.ref.slice(0, 3)).catch(() => null) : null
@@ -2538,21 +2696,15 @@ export function moveOut<M extends Moved>(c: ConvState & { msgs: M[] }, m: M, ui:
 
 // ------------------------------------------------------------------------------------------------- the path, per answer
 /**
- * The steps of a path through a book that its pack (`lang`, the path's language: each step is answered from it) can answer: the
- * introduction and the sections always; its key terms, its notes, its questions when the pack has them for the book. The Hindi
- * pack has no questions: a path through Acts in Hindi has four steps, with or without English on the phone.
+ * The steps of a path through a book that the packs can answer, as the answer will (helpsPack): the introduction and the
+ * sections always; its key terms, its notes, its questions when the path's pack (`lang`) has them for the book, else another
+ * the English pack or the app language's pack does (its answer then says so). A Hindi-only phone's path through Acts has four
+ * steps; with English too, five.
  */
-export async function stepsHad(book: string, lang: string): Promise<number[]> {
-  const out = new Set([1, 2])
-  const rows = (t: any) => ((t?.rows ?? []) as any[]).filter((x) => !(x.cols?.isIntro === true || x.cols?.isIntro === 'true'))
-  const r = await openLang(lang).catch(() => null)
-  if (r?.installed(`book:${book}`)) {
-    const m: any = await r.book(book).catch(() => null)
-    if (rows(m?.links).some((x) => x.concept)) out.add(3)
-    if (rows(m?.notes).length) out.add(4)
-    if (rows(m?.questions).length) out.add(5)
-  }
-  return [...out].sort((a, b) => a - b)
+export async function stepsHad(book: string, lang: string, ui: string): Promise<number[]> {
+  const out = [1, 2]
+  for (const [step, kind] of [[3, 'terms'], [4, 'notes'], [5, 'questions']] as const) if (await helpsPack(book, kind, lang, ui)) out.push(step)
+  return out
 }
 /** The sections of a book's chapter (none when it has no such chapter or no text on the phone). */
 const secsOf = (p: Path, ch: number | null): Promise<Sec[]> => (ch ? sectionsOf(p.book, ch, p.lang).catch(() => []) : Promise.resolve([]))
@@ -2580,10 +2732,12 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   delete g.pathBefore
   let at: Path | null = null
   if (made.path && P?.book === made.path.book) {
-    const has = await stepsHad(made.path.book, x.sheet.lang)
+    // (the app's language now, kept with the path: its steps and their answers use the same one)
+    const app = env.nav
+    const has = await stepsHad(made.path.book, x.sheet.lang, app)
     // (a book's path replaces the lessons: its steps are not "away from the lessons")
     delete g.learn
-    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, has }
+    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, has, app }
     reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book), has)
     if (reply.drift && g.path) g.pathBefore = g.path
   } else if (g.path) at = stepOf(g.path, ref, x.sheet.what ?? [], await secsOf(g.path, P?.ch ?? null))
