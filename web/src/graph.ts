@@ -236,7 +236,9 @@ export type Path = { book: string; ch: number | null; step: number; sec: Sec | n
    * notes, the questions only when a pack has them for it (the Hindi pack has no questions for Acts). None: all five (a path
    * kept from before this was known).
    */
-  has?: number[] }
+  has?: number[]
+  /** the app's language when the path started: where its steps take a missing kind of help from, after English (helpsPack) */
+  app?: string }
 /** The five steps of a path, in order; `pathSteps`: those the packs can answer for its book. */
 export const ALL_STEPS = [1, 2, 3, 4, 5]
 export const pathSteps = (p: Path): number[] => (p.has?.length ? p.has : ALL_STEPS)
