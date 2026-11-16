@@ -326,10 +326,13 @@ const noNetwork = { fetch: async () => { throw new Error('offline') } } as any
 const open = new Map<string, Promise<PackReader>>()
 export function openLang(lang: string): Promise<PackReader> {
   if (!open.has(lang)) {
-    open.set(lang, (async () => {
+    const p = (async () => {
       if ((await addedLangs()).includes(lang)) return (await addedClient()).open(lang)
       return createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
-    })())
+    })()
+    open.set(lang, p)
+    // a failed open is not kept: one failure (at the app's start, say) must not break every later read of the language
+    p.catch(() => { if (open.get(lang) === p) open.delete(lang) })
   }
   return open.get(lang)!
 }
