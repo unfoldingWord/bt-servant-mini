@@ -512,7 +512,8 @@ export function missingUnits(r: { listed(u: string): boolean; installed(u: strin
 }
 /**
  * Whether the connection costs the person (mobile data, a metered hotspot) or they asked to save data: true or false, null when
- * the app cannot tell (iOS, a browser without the Network Information API). On Android, from the app (Android.metered()).
+ * the app cannot tell (a browser without the Network Information API). From the Android and iOS apps (Android.metered(); the
+ * iOS app's says metered until its first look at the connection).
  */
 export function meteredNow(): boolean | null {
   const g = globalThis as any
@@ -528,7 +529,7 @@ export function meteredNow(): boolean | null {
 const COMMON_UPDATES = ['xtopics', 'xmap']
 export const COMMON_UPDATE_MAX = 1024 * 1024
 type Updater = {
-  refresh(lang: string, o?: { signal?: AbortSignal }): Promise<{ updates?: { key: string; bytes: number }[] } | void>
+  refresh(lang: string, o?: { signal?: AbortSignal }): Promise<{ updates?: { key: string; from: number; to: number; bytes: number }[] } | void>
   open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean }>
   install(lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal; concurrency?: number }): Promise<unknown>
 }
@@ -547,7 +548,8 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
   const common: string[] = []
   let bytes = 0
   for (const id of metered === true ? [] : COMMON_UPDATES) {
-    const u = report?.updates?.find((x) => x.key.slice(x.key.indexOf('/') + 1) === id)
+    // (a real upgrade only: a language built against an older common lists the installed newer one as `from: 3, to: 2`)
+    const u = report?.updates?.find((x) => x.key.slice(x.key.indexOf('/') + 1) === id && x.to > x.from)
     if (u && bytes + u.bytes <= COMMON_UPDATE_MAX) {
       common.push(u.key)
       bytes += u.bytes

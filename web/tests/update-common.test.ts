@@ -6,13 +6,13 @@ import { COMMON_UPDATE_MAX, meteredNow, updateLang } from '../src/packs'
 
 const ARTICLES = ['art:tw:kt', 'art:ta:intro']
 /** A client whose refresh lists `updates`, with every article installed unless `lacks` says otherwise. */
-function fake(updates: { key: string; bytes: number }[] | undefined, lacks: string[] = []) {
+function fake(updates: { key: string; bytes: number; from?: number; to?: number }[] | undefined, lacks: string[] = []) {
   const calls: string[] = []
   const signals: (AbortSignal | undefined)[] = []
   const client = {
     refresh: async (lang: string) => {
       calls.push(`refresh ${lang}`)
-      return updates === undefined ? undefined : { updates: updates.map((u) => ({ ...u, from: 2, to: 3 })) }
+      return updates === undefined ? undefined : { updates: updates.map((u) => ({ from: 2, to: 3, ...u })) }
     },
     open: async () => ({ listed: () => true, installed: (u: string) => !lacks.includes(u) }),
     install: async (lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal; concurrency?: number }) => {
@@ -67,6 +67,14 @@ test('nothing newer, or a refresh with no report: nothing is installed', async (
   }
 })
 
+test('a downgrade the refresh lists (a language built against an older common) is no update', async () => {
+  // es-419's catalog requires common r2 while the phone has common/xtopics r3 (from another language): the client lists it
+  // as from 3 to 2, which activate would refuse after downloading it
+  const { client, calls } = fake([{ key: 'common/xtopics', bytes: 220000, from: 3, to: 2 }, { key: 'common/xmap', bytes: 1000, from: 3, to: 3 }])
+  expect(await updateLang(client, 'es-419', ARTICLES, undefined, false)).toEqual([])
+  expect(calls).toEqual(['refresh es-419'])
+})
+
 // ---------------------------------------------------------------------------------------------------- meteredNow
 const g = globalThis as any
 const nav = g.navigator
@@ -85,7 +93,9 @@ test('metered: from the Android app, from the Network Information API, else unkn
   expect(meteredNow()).toBe(true)
   g.Android = { metered: () => false }
   expect(meteredNow()).toBe(false)
-  // the iOS app's window.Android has no metered(): unknown
+  // the iOS app's own answer (from NWPathMonitor); an older iOS app without metered(): unknown
+  g.Android = { platform: () => 'ios', metered: () => true }
+  expect(meteredNow()).toBe(true)
   g.Android = { platform: () => 'ios' }
   expect(meteredNow()).toBeNull()
   delete g.Android
