@@ -28,6 +28,7 @@ import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, se
 import { composerSwitch, mountComposer } from './composer'
 import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
+import { initDev } from './dev'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
 import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
@@ -1613,4 +1614,5 @@ function firstSafety() {
 try {
   if (!localStorage.getItem('btsm.onboarded')) localStorage.setItem('btsm.onboarded', '1')
 } catch {}
+initDev()
 firstSafety()

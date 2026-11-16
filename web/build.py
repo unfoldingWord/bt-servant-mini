@@ -1,5 +1,5 @@
 """Builds the page into app/src/main/assets/www: the JS bundle, index.html and the language packs (with ids.json and index.json).
-   python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none)"""
+   python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none; --dev also puts web/src/data/dev beside the page, for ?dev=)"""
 import json, re, shutil, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +34,11 @@ r = subprocess.run(['bun', 'build', 'src/main.ts', '--outdir', str(WWW), '--targ
 print(r.stdout[-800:], r.stderr[-2000:])
 if r.returncode:
     raise SystemExit('bun build failed')
+# web/src/data/dev/ (the dev fixtures) is read with fetch, never imported, so the bundle has none of it; it goes beside the page
+# only with --dev (served as dev/<file>, for ?dev=obs5m), never into a release build
+assert 'obs5m-story1' not in (WWW / 'main.js').read_text(encoding='utf-8'), 'a dev fixture got into the bundle'
+if '--dev' in sys.argv:
+    shutil.copytree(ROOT / 'web' / 'src' / 'data' / 'dev', WWW / 'dev')
 # the answer tests (web/tests) on every build: a fast part by default (under a minute), all of them with --full (about 4
 # minutes, with the scores against web/tests/baseline.json); --no-tests skips them
 if '--no-tests' not in sys.argv:
