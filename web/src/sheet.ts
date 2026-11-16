@@ -29,12 +29,36 @@ function normBook(s: string): string {
   s = s.replace(/\s+/g, ' ').trim().replace(/^(kitab |injil |le livre de |livre de |l'evangile selon |l'evangile de |evangile selon |evangile de |سفر |انجيل |رساله )/, '')
   return s.replace(/\s+/g, ' ').trim()
 }
+const exactMemo = new Map<string, string | null>()
 /** A book named exactly (any language's table), without guessing from a prefix or a misspelling: for scanning a sentence word by word. */
 export function bookExact(name: string): string | null {
+  if (exactMemo.has(name)) return exactMemo.get(name)!
+  if (exactMemo.size > 4000) exactMemo.clear()
   const k = normBook(name)
-  for (const t of Object.values(books as Record<string, Record<string, string>>)) if (t[k]) return t[k]!
-  return null
+  let c: string | null = null
+  for (const t of Object.values(books as Record<string, Record<string, string>>)) if (t[k]) { c = t[k]!; break }
+  exactMemo.set(name, c)
+  return c
 }
+let LAST_WORDS: Set<string> | undefined
+/**
+ * Whether a word is the last of a book name of several words ("काम" of "प्रेरितों के काम", "الأولى", "rasul", "cantiques"), so
+ * the words before it may belong to the name. A number and one word ("1 juan") is left out: the reading takes that digit anyway.
+ */
+export function endsLongName(word: string): boolean {
+  LAST_WORDS ??= new Set(
+    Object.values(books as Record<string, Record<string, string>>).flatMap((t) => Object.keys(t)).map(normBook)
+      .filter((n) => n.includes(' ') && !/^[1-3] \S+$/.test(n)).map((n) => n.slice(n.lastIndexOf(' ') + 1)),
+  )
+  let v = lastMemo.get(word)
+  if (v === undefined) {
+    if (lastMemo.size > 4000) lastMemo.clear()
+    v = LAST_WORDS.has(normBook(word))
+    lastMemo.set(word, v)
+  }
+  return v
+}
+const lastMemo = new Map<string, boolean>()
 let CODES: Set<string> | undefined
 const codeMemo = new Map<string, string | null>()
 /** A book's code from its name in any language: exact, else a prefix, else one or two letters off ("Mathew"). Remembered (pure). */
