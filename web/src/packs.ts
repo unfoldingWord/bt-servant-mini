@@ -510,17 +510,51 @@ export async function downloadLang(
 export function missingUnits(r: { listed(u: string): boolean; installed(u: string): boolean }, units: readonly string[] = SHARED_UNITS): string[] {
   return units.filter((u) => r.listed(u) && !r.installed(u))
 }
+/**
+ * Whether the connection costs the person (mobile data, a metered hotspot) or they asked to save data: true or false, null when
+ * the app cannot tell (iOS, a browser without the Network Information API). On Android, from the app (Android.metered()).
+ */
+export function meteredNow(): boolean | null {
+  const g = globalThis as any
+  try {
+    if (g.navigator?.connection?.saveData) return true
+    if (typeof g.Android?.metered === 'function') return !!g.Android.metered()
+  } catch {}
+  const type = g.navigator?.connection?.type
+  if (type === 'cellular') return true
+  return typeof type === 'string' && type !== 'unknown' ? false : null
+}
+/** The common units the daily update brings to their newer revision (the section map is in xtopics), and the most it fetches for them. */
+const COMMON_UPDATES = ['xtopics', 'xmap']
+export const COMMON_UPDATE_MAX = 1024 * 1024
 type Updater = {
-  refresh(lang: string, o?: { signal?: AbortSignal }): Promise<unknown>
+  refresh(lang: string, o?: { signal?: AbortSignal }): Promise<{ updates?: { key: string; bytes: number }[] } | void>
   open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean }>
   install(lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal; concurrency?: number }): Promise<unknown>
 }
-/** Brings one language's shared units up to SHARED_UNITS: reads its catalog again, installs only what is missing. The units installed. */
-export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal): Promise<string[]> {
-  await client.refresh(lang, signal ? { signal } : {})
+/**
+ * Brings one language up to date: reads its catalog again and installs the shared units (SHARED_UNITS) it lacks; then, when the
+ * refresh lists a newer common `xtopics` or `xmap` (a few hundred KB: the section map came that way), those too, up to
+ * COMMON_UPDATE_MAX together, and never on a metered connection (`metered`: true; null, unknown, updates as if not). The units
+ * installed.
+ */
+export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal,
+  metered: boolean | null = meteredNow()): Promise<string[]> {
+  const report = await client.refresh(lang, signal ? { signal } : {})
   const missing = missingUnits(await client.open(lang), units)
-  if (missing.length) await client.install(lang, { units: missing, defaults: false }, { concurrency: 1, ...(signal ? { signal } : {}) })
-  return missing
+  const opts = { concurrency: 1, ...(signal ? { signal } : {}) }
+  if (missing.length) await client.install(lang, { units: missing, defaults: false }, opts)
+  const common: string[] = []
+  let bytes = 0
+  for (const id of metered === true ? [] : COMMON_UPDATES) {
+    const u = report?.updates?.find((x) => x.key.slice(x.key.indexOf('/') + 1) === id)
+    if (u && bytes + u.bytes <= COMMON_UPDATE_MAX) {
+      common.push(u.key)
+      bytes += u.bytes
+    }
+  }
+  if (common.length) await client.install(lang, { units: common, defaults: false }, opts)
+  return [...missing, ...common]
 }
 const CHECKED = 'btsm.packs.checked'
 /**
