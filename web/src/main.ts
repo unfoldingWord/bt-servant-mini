@@ -34,7 +34,7 @@ const UI: Record<string, UiText> = {
   en: {
     ph: 'Ask about a verse or a word…', send: 'Send', loading: 'Starting the offline model…', ready: 'Works without internet',
     thinking: 'Looking in the translation helps…', failed: 'Something went wrong:', details: 'details',
-    hello: "Hello! On this phone I work as a search assistant, not a chat: I find what you need in the translation helps (Bible texts, notes, key terms, questions, Academy), without internet. Ask for a verse, a word or a topic. With online AI turned on and internet, a larger model also explains what I find.",
+    hello: "Hello! I find what you need in the translation helps on this phone (Bible texts, notes, key terms, questions, Translation Academy), without internet. Ask in your own words, tap Browse, or start typing and pick a suggestion. Ask follow-ups to go on, and go back to any point with the Map. On Android and the web, with online AI (optional) and internet, a larger model also explains what I find.",
     ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'Where was Jonah swallowed by the fish?', 'What do the notes say about Ruth 1:16?'],
     chats: 'Conversations', newChat: 'New conversation', max: 'You can keep up to 3 conversations. Delete one to start another.',
     del: 'Delete', confirmDel: 'Delete this conversation?', untitled: 'New conversation',
@@ -43,7 +43,7 @@ const UI: Record<string, UiText> = {
   es: {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
     ready: 'Funciona sin internet', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
-    hello: "¡Hola! En este teléfono funciono como un buscador asistido, no como un chat: encuentro lo que necesitas en las ayudas de traducción (textos bíblicos, notas, palabras clave, preguntas, Academia), sin internet. Pide un versículo, una palabra o un tema. Con la IA en línea activada y con internet, un modelo más grande además explica lo que encuentro.",
+    hello: "¡Hola! Encuentro lo que necesitas en las ayudas de traducción de este teléfono (textos bíblicos, notas, palabras clave, preguntas, Translation Academy), sin internet. Pregunta con tus palabras, toca Explorar, o empieza a escribir y elige una sugerencia. Sigue la conversación con más preguntas y vuelve a cualquier punto con el Mapa. En Android y en la web, con la IA en línea (opcional) e internet, un modelo más grande además explica lo que encuentro.",
     ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Dónde fue tragado Jonás por un pez?', '¿Qué dice Jonás 3:9?'],
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
     del: 'Borrar', confirmDel: '¿Borrar esta conversación?', untitled: 'Conversación nueva',
@@ -52,7 +52,7 @@ const UI: Record<string, UiText> = {
   fr: {
     ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Fonctionne sans internet',
     thinking: 'Je cherche dans les aides à la traduction…', failed: 'Une erreur est survenue :', details: 'détails',
-    hello: "Bonjour ! Sur ce téléphone, je fonctionne comme un assistant de recherche, pas comme une messagerie : je trouve ce dont vous avez besoin dans les aides à la traduction (textes bibliques, notes, termes clés, questions, Academy), sans internet. Demandez un verset, un mot ou un sujet. Avec l'IA en ligne activée et internet, un modèle plus grand explique aussi ce que je trouve.",
+    hello: "Bonjour ! Je trouve ce dont vous avez besoin dans les aides à la traduction de ce téléphone (textes bibliques, notes, termes clés, questions, Translation Academy), sans internet. Demandez avec vos mots, touchez Parcourir, ou commencez à écrire et choisissez une suggestion. Poursuivez la conversation par d'autres questions et revenez à n'importe quel point avec la Carte. Sur Android et sur le web, avec l'IA en ligne (facultative) et internet, un modèle plus grand explique aussi ce que je trouve.",
     ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?', 'Où Jonas a-t-il été avalé par le poisson ?'],
     chats: 'Conversations', newChat: 'Nouvelle conversation', max: "Vous pouvez garder 3 conversations. Supprimez-en une pour en commencer une autre.",
     del: 'Supprimer', confirmDel: 'Supprimer cette conversation ?', untitled: 'Nouvelle conversation',
@@ -61,7 +61,7 @@ const UI: Record<string, UiText> = {
   id: {
     ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Bisa tanpa internet',
     thinking: 'Mencari di bahan bantu penerjemahan…', failed: 'Terjadi kesalahan:', details: 'detail',
-    hello: "Halo! Di ponsel ini saya bekerja sebagai asisten pencari, bukan obrolan: saya menemukan yang Anda perlukan di bahan bantu penerjemahan (teks Alkitab, catatan, istilah kunci, pertanyaan, Academy), tanpa internet. Mintalah sebuah ayat, kata, atau topik. Dengan AI daring aktif dan ada internet, model yang lebih besar juga menjelaskan apa yang saya temukan.",
+    hello: "Halo! Saya menemukan yang Anda perlukan di bahan bantu penerjemahan di ponsel ini (teks Alkitab, catatan, istilah kunci, pertanyaan, Translation Academy), tanpa internet. Bertanyalah dengan kata-kata Anda sendiri, ketuk Jelajahi, atau mulai mengetik dan pilih saran. Lanjutkan percakapan dengan pertanyaan berikutnya, dan kembali ke titik mana pun lewat Peta. Di Android dan web, dengan AI daring (pilihan) dan internet, model yang lebih besar juga menjelaskan apa yang saya temukan.",
     ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?', 'Di mana Yunus ditelan ikan?'],
     chats: 'Percakapan', newChat: 'Percakapan baru', max: 'Anda bisa menyimpan 3 percakapan. Hapus satu untuk memulai yang lain.',
     del: 'Hapus', confirmDel: 'Hapus percakapan ini?', untitled: 'Percakapan baru',
@@ -70,7 +70,7 @@ const UI: Record<string, UiText> = {
   hi: {
     ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'बिना इंटरनेट चलता है',
     thinking: 'अनुवाद सहायता में खोज रहा हूँ…', failed: 'कुछ गलत हो गया:', details: 'विवरण',
-    hello: "नमस्ते! इस फ़ोन पर मैं एक खोज सहायक की तरह काम करता हूँ, चैट की तरह नहीं: मैं अनुवाद सहायताओं (बाइबल पाठ, नोट्स, मुख्य शब्द, प्रश्न, Academy) में आपकी ज़रूरत की जानकारी ढूँढता हूँ, बिना इंटरनेट के। कोई पद, शब्द या विषय पूछें। ऑनलाइन AI चालू हो और इंटरनेट हो, तो एक बड़ा मॉडल मेरी ढूँढी हुई जानकारी को समझाता भी है।",
+    hello: "नमस्ते! मैं इस फ़ोन की अनुवाद सहायताओं (बाइबल पाठ, नोट्स, मुख्य शब्द, प्रश्न, Translation Academy) में आपकी ज़रूरत की जानकारी ढूँढता हूँ, बिना इंटरनेट के। अपने शब्दों में पूछें, «ब्राउज़ करें» पर टैप करें, या लिखना शुरू करें और कोई सुझाव चुनें। आगे के प्रश्नों से बातचीत जारी रखें, और नक्शे से किसी भी पिछले बिंदु पर लौटें। Android और वेब पर, ऑनलाइन AI (वैकल्पिक) और इंटरनेट हो, तो एक बड़ा मॉडल मेरी ढूँढी जानकारी समझाता भी है।",
     ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?', 'योना को मछली ने कहाँ निगल लिया?'],
     chats: 'बातचीत', newChat: 'नई बातचीत', max: 'आप 3 बातचीत रख सकते हैं। नई शुरू करने के लिए एक हटाएँ।',
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
@@ -79,7 +79,7 @@ const UI: Record<string, UiText> = {
   ar: {
     ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'يعمل دون إنترنت',
     thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
-    hello: "مرحبًا! أعمل على هذا الهاتف كمساعد بحث، لا كمحادثة: أجد ما تحتاج إليه في مساعدات الترجمة (نصوص الكتاب المقدس، الملاحظات، المصطلحات الرئيسية، الأسئلة، الأكاديمية)، دون إنترنت. اطلب آية أو كلمة أو موضوعًا. وعند تفعيل الذكاء الاصطناعي عبر الإنترنت وتوفر الاتصال، يشرح نموذج أكبر أيضًا ما أجده.",
+    hello: "مرحبًا! أجد ما تحتاج إليه في مساعدات الترجمة على هذا الهاتف (نصوص الكتاب المقدس، الملاحظات، الكلمات الرئيسية، الأسئلة، Translation Academy)، دون إنترنت. اسأل بكلماتك، أو المس «تصفّح»، أو ابدأ الكتابة واختر اقتراحًا. تابع المحادثة بأسئلة أخرى، وعُد إلى أي نقطة سابقة من الخريطة. وعلى أندرويد والويب، مع الذكاء الاصطناعي عبر الإنترنت (اختياري) وتوفر الاتصال، يشرح نموذج أكبر أيضًا ما أجده.",
     ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'أين ابتلع الحوت يونان؟', 'ساعدني في ترجمة يونان ١'],
     chats: 'المحادثات', newChat: 'محادثة جديدة', max: 'يمكنك الاحتفاظ بثلاث محادثات. احذف واحدة لتبدأ أخرى.',
     del: 'حذف', confirmDel: 'حذف هذه المحادثة؟', untitled: 'محادثة جديدة',
@@ -1003,12 +1003,12 @@ function bookIn(q: string, lang: string): string | null {
   return null
 }
 const HELP_T: Record<string, { intro: string; notes: string; terms: string; questions: string }> = {
-  en: { intro: "On this phone BT Servant Mini works as a search assistant, not a chat: it finds things in the translation helps instead of holding a conversation like BT Servant online (with online AI turned on, a larger model also explains them). This is what you can ask:", notes: 'notes', terms: 'key terms', questions: 'questions' },
-  es: { intro: "En este teléfono, BT Servant Mini funciona como un buscador asistido, no como un chat: encuentra cosas en las ayudas de traducción en lugar de conversar como BT Servant en línea (con la IA en línea activada, un modelo más grande además las explica). Esto es lo que puedes preguntar:", notes: 'notas', terms: 'palabras clave', questions: 'preguntas' },
-  fr: { intro: "Sur ce téléphone, BT Servant Mini fonctionne comme un assistant de recherche, pas comme une messagerie : il trouve des choses dans les aides à la traduction au lieu de converser comme BT Servant en ligne (avec l'IA en ligne activée, un modèle plus grand les explique aussi). Voici ce que vous pouvez demander :", notes: 'notes', terms: 'termes clés', questions: 'questions' },
-  id: { intro: "Di ponsel ini, BT Servant Mini bekerja sebagai asisten pencari, bukan obrolan: ia menemukan hal-hal di bahan bantu penerjemahan, bukan bercakap-cakap seperti BT Servant daring (dengan AI daring aktif, model yang lebih besar juga menjelaskannya). Inilah yang dapat Anda tanyakan:", notes: 'catatan', terms: 'istilah kunci', questions: 'pertanyaan' },
-  hi: { intro: "इस फ़ोन पर BT Servant Mini एक खोज सहायक की तरह काम करता है, चैट की तरह नहीं: यह अनुवाद सहायताओं में चीज़ें ढूँढता है, ऑनलाइन BT Servant की तरह बातचीत नहीं करता (ऑनलाइन AI चालू हो तो एक बड़ा मॉडल उन्हें समझाता भी है)। आप यह पूछ सकते हैं:", notes: 'नोट्स', terms: 'मुख्य शब्द', questions: 'प्रश्न' },
-  ar: { intro: "يعمل BT Servant Mini على هذا الهاتف كمساعد بحث، لا كمحادثة: يجد الأشياء في مساعدات الترجمة بدلًا من أن يحاورك مثل BT Servant عبر الإنترنت (وعند تفعيل الذكاء الاصطناعي عبر الإنترنت يشرحها نموذج أكبر أيضًا). هذا ما يمكنك أن تسأل عنه:", notes: 'ملاحظات', terms: 'المصطلحات الرئيسية', questions: 'أسئلة' },
+  en: { intro: "BT Servant Mini finds what you need in the translation helps on this phone, without internet, and follows the conversation: ask follow-ups, tap the buttons under each answer, or go back to any point with the Map (on Android and the web, with online AI turned on, a larger model also explains what it finds). This is what you can ask:", notes: 'notes', terms: 'key terms', questions: 'questions' },
+  es: { intro: "BT Servant Mini encuentra lo que necesitas en las ayudas de traducción de este teléfono, sin internet, y sigue la conversación: haz más preguntas, toca los botones bajo cada respuesta o vuelve a cualquier punto con el Mapa (en Android y en la web, con la IA en línea activada, un modelo más grande además explica lo que encuentra). Esto es lo que puedes preguntar:", notes: 'notas', terms: 'palabras clave', questions: 'preguntas' },
+  fr: { intro: "BT Servant Mini trouve ce dont vous avez besoin dans les aides à la traduction de ce téléphone, sans internet, et suit la conversation : posez d'autres questions, touchez les boutons sous chaque réponse ou revenez à n'importe quel point avec la Carte (sur Android et sur le web, avec l'IA en ligne activée, un modèle plus grand explique aussi ce qu'il trouve). Voici ce que vous pouvez demander :", notes: 'notes', terms: 'termes clés', questions: 'questions' },
+  id: { intro: "BT Servant Mini menemukan yang Anda perlukan di bahan bantu penerjemahan di ponsel ini, tanpa internet, dan mengikuti percakapan: ajukan pertanyaan lanjutan, ketuk tombol di bawah setiap jawaban, atau kembali ke titik mana pun lewat Peta (di Android dan web, dengan AI daring aktif, model yang lebih besar juga menjelaskan apa yang ditemukannya). Inilah yang dapat Anda tanyakan:", notes: 'catatan', terms: 'istilah kunci', questions: 'pertanyaan' },
+  hi: { intro: "BT Servant Mini इस फ़ोन की अनुवाद सहायताओं में आपकी ज़रूरत की जानकारी ढूँढता है, बिना इंटरनेट के, और बातचीत को आगे बढ़ाता है: आगे के प्रश्न पूछें, हर उत्तर के नीचे के बटन टैप करें, या नक्शे से किसी भी बिंदु पर लौटें (Android और वेब पर, ऑनलाइन AI चालू हो तो एक बड़ा मॉडल ढूँढी गई जानकारी समझाता भी है)। आप यह पूछ सकते हैं:", notes: 'नोट्स', terms: 'मुख्य शब्द', questions: 'प्रश्न' },
+  ar: { intro: "يجد BT Servant Mini ما تحتاج إليه في مساعدات الترجمة على هذا الهاتف، دون إنترنت، ويتابع المحادثة معك: اطرح أسئلة أخرى، أو المس الأزرار تحت كل إجابة، أو عُد إلى أي نقطة من الخريطة (وعلى أندرويد والويب، عند تفعيل الذكاء الاصطناعي عبر الإنترنت يشرح نموذج أكبر أيضًا ما يجده). هذا ما يمكنك أن تسأل عنه:", notes: 'ملاحظات', terms: 'المصطلحات الرئيسية', questions: 'أسئلة' },
 }
 /** "What can you do?": what to ask (from About), and for a book it names, buttons to its introduction, chapter 1, notes, key terms. */
 async function helpAnswer(q: string, ui: string): Promise<Msg> {
