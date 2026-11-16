@@ -36,7 +36,9 @@ describe('questions that name a story or a frame', () => {
     for (const q of ['la historia de Rut 2', 'Ruth 3:4', 'the story of Jonah', 'story 75', 'historia de José']) expect(obsAsked(q), q).toBeNull()
     // a numbered book after the word is the book, not a story; a number of four digits is no story number
     for (const q of ['cerita Alkitab 1 Samuel 17', 'histoire biblique 2 Rois 5', 'historias de la Biblia 1 Reyes 18', 'la historia 1 Samuel 17',
-      'story 2 Kings 5', 'story 1 John 3', 'historia 1 Corintios 13', 'कहानी 1 शमूएल 17', 'obs 2000', 'story 2000'])
+      'story 2 Kings 5', 'story 1 John 3', 'historia 1 Corintios 13', 'कहानी 1 शमूएल 17', 'obs 2000', 'story 2000',
+      // abbreviations, as the passage reader knows them
+      'story 1 Cor 13', 'story 1 jn 3', 'story 1Jn 3', 'story 1 Thess 4', 'historia 2 Re 5'])
       expect(obsAsked(q), q).toBeNull()
     // (a story of 1 to 3 that a book does not follow is still a story)
     expect(obsAsked('story 2 frame 3')?.ref).toBe('obs 2:3')
@@ -110,6 +112,8 @@ describe('questions that name a story or a frame', () => {
   test('no such story, no such frame: said plainly, with ways on', async () => {
     const r: any = await ask('OBS 60', 'en')
     expect(r.reply.info).toBe('Open Bible Stories has 50 stories, numbered 1 to 50: there is no story 60.')
+    // a number too long for a story (the router reads «obs 2000» as obs 2000): said with its number
+    expect((await ask('obs 2000', 'en')).reply.info).toBe('Open Bible Stories has 50 stories, numbered 1 to 50: there is no story 2000.')
     expect(targets(r)).toEqual(['browse'])
     const f: any = await ask('historia 3:40', 'es')
     expect(f.reply.info).toBe('La historia 3 tiene los cuadros 1 a 16: no hay cuadro 40.')

@@ -15,7 +15,7 @@ import { installedLangs, openLang, origin, PACK_NAMES } from './packs'
 import { FOLD } from './focus'
 import { bidiLabel } from './bidi'
 import { keywords } from './search'
-import { bookExact, fold } from './sheet'
+import { bookCandidates, bookExact, fold } from './sheet'
 import booknames from './data/booknames.json'
 import versification from './data/versification.json'
 
@@ -134,7 +134,7 @@ export const OW = (ui: string): Words => W[ui6(ui)]
 /** A story and, for one frame, the frame: "obs 3:5" is story 3, frame 5; "obs 34" the whole story. */
 export type ObsRef = { n: number; f: number | null }
 export function parseObsRef(ref: string | null | undefined): ObsRef | null {
-  const m = /^obs\s+(\d{1,3})(?::(\d{1,3}))?$/.exec((ref ?? '').trim().toLowerCase())
+  const m = /^obs\s+(\d+)(?::(\d+))?$/.exec((ref ?? '').trim().toLowerCase())
   return m ? { n: +m[1]!, f: m[2] ? +m[2] : null } : null
 }
 export const isObsRef = (ref: string | null | undefined): boolean => /^obs(\s|$)/.test(ref ?? '')
@@ -540,6 +540,8 @@ const FRAME = String.raw`(?:frame|marco|cuadro|image|cadre|bingkai|गद्य�
 const NUM = String.raw`(?:no\.?\s*|n[º°o]\.?\s*|#\s*|nomor\s+|संख्या\s+|رقم\s+)?(\d{1,3})(?!\d)`
 const BY_NAME = new RegExp(String.raw`(?<![\p{L}\p{M}])${NAME}\s*${NUM}(?:\s*[:.,]\s*(\d{1,3})(?!\d))?`, 'iu')
 const BY_STORY = new RegExp(String.raw`(?<![\p{L}\p{M}])${STORY}\s*${NUM}(?:\s*[:.]\s*(\d{1,3})(?!\d))?`, 'iu')
+/** A frame word alone ("frame", "cuadro", "إطار"…): "story 2 frame 3" is a story. */
+const FRAME_WORD = new RegExp(String.raw`^${FRAME}$`, 'iu')
 const FRAME_N = new RegExp(String.raw`(?<![\p{L}\p{M}])${FRAME}\s*${NUM}`, 'iu')
 const NOTES = /(?<![\p{L}])(?:notes?|notas?|catatan|टिप्पणि|ملاحظ)/iu
 const QUESTIONS = /(?<![\p{L}])(?:questions?|preguntas?|pertanyaan|प्रश्न|سؤال|أسئلة|الأسئلة)/iu
@@ -552,11 +554,18 @@ export function obsAsked(q0: string): { ref: string; what: string[] } | null {
   const m = BY_NAME.exec(q) ?? BY_STORY.exec(q)
   if (!m) return null
   const n = +m[1]!
-  // a numbered book is no story: "cerita Alkitab 1 Samuel 17", "histoire biblique 2 Rois 5", "story 2 Kings 5"
+  // a numbered book is no story: "cerita Alkitab 1 Samuel 17", "histoire biblique 2 Rois 5", "story 2 Kings 5", and its
+  // abbreviations ("story 1 Cor 13", "story 1Jn 3", "story 1 Thess 4"): a book's name or code as the passage reader knows
+  // it, or any word but a frame's followed by a chapter number
   if (n >= 1 && n <= 3) {
     const end = m.index + (m[0].match(new RegExp(String.raw`^[\s\S]*?(?<!\d)${m[1]}(?!\d)`))?.[0].length ?? m[0].length)
     const next = q.slice(end).trim().split(/[\s.,;:!?¿¡؟()]+/).filter(Boolean)
-    if (next[0] && /^\p{L}/u.test(next[0]) && (bookExact(`${n} ${next[0]}`) || (next[1] && bookExact(`${n} ${next[0]} ${next[1]}`)))) return null
+    const w = next[0]
+    if (w && /^\p{L}/u.test(w)) {
+      const exact = (name: string) => !!bookExact(name) || bookCandidates('en', name).some((c) => c.how === 'exact')
+      if (exact(`${n} ${w}`) || (next[1] && exact(`${n} ${w} ${next[1]}`))) return null
+      if (next[1] && /^\d+$/.test(next[1]) && !FRAME_WORD.test(w)) return null
+    }
   }
   const f = m[2] ? +m[2] : FRAME_N.exec(q) ? +FRAME_N.exec(q)![1]! : null
   // (a year, a page: no story is 0 or above 50; "OBS 0" is said to have no story, as a number of OBS)
