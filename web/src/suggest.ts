@@ -210,10 +210,12 @@ export function fillName(ui: string, code: string): string {
 
 /**
  * Where a way of asking is not offered: typed with no model, it does not give its button's sheet (tests/shapes.test.ts, Nov 15
- * 2026). The words ones go to the search in these languages ("What does grace mean?" finds verses, not the article); phase 2
- * offers words by their article, not by these phrases, until they read.
+ * 2026). The words ones go to the search in these languages, or to "which one?"; phase 2 offers words by their article, not by
+ * these phrases, until they read. "What does grace mean?" and "¿Qué significa fe?" read since Nov 16 (search.ts ASKS); in Hindi
+ * and Arabic the meaning shape reads too, but «अनुग्रह», «विश्वास» and «نعمة» name several articles there (grace and favor;
+ * faith, trust and believe): the answer asks which one, as "अनुग्रह क्या है?" does.
  */
-export const SHAPES_OFF: Record<string, string[]> = { meaning: ['en', 'es', 'hi', 'ar'], howTranslate: ['es', 'hi', 'ar'] }
+export const SHAPES_OFF: Record<string, string[]> = { meaning: ['hi', 'ar'], howTranslate: ['es', 'hi', 'ar'] }
 type ShapeData = Record<string, { label: Record<string, string>; text: Record<string, string> }>
 const SHAPES = shapes as unknown as ShapeData
 /** Whether a shape is offered in this language (with a numbered book too since refInText reads "Notas de 1 Juan 3:2"). */

@@ -128,6 +128,9 @@ function names(): Promise<Map<string, string[]>> {
 async function readNames(): Promise<Map<string, string[]>> {
   const m = new Map<string, string[]>()
   const put = (k: string, id: string) => {
+    // a two-letter key term ("fe", faith) only for a question that asks about it (articleForQuestion), under "2:": never a
+    // word of a search (conceptOf reads the plain keys)
+    if (k.length === 2 && id.startsWith('tw:kt/')) k = `2:${k}`
     if (k.length >= 3 && !m.get(k)?.includes(id)) m.set(k, [...(m.get(k) ?? []), id])
   }
   // "John (the Baptist)": both "john" and "john the baptist"
@@ -549,6 +552,15 @@ export async function searchHelps(question: string, packLang: string, limit = 4)
  * Translation Words article, the article (or the articles that share the name) instead of a verse search.
  */
 const ASKS: RegExp[] = [
+  // "What does grace mean?" (the welcome's own example), "¿Qué quiere decir fe?", "Que veut dire grâce ?", "Apa makna iman?",
+  // "प्रेम का क्या अर्थ है?", "ما معنى المحبة؟": the meaning asked of a word (before the shapes below, which would take "does grace mean")
+  /^what does\s+(?:the\s+word\s+)?(.+?)\s+mean$/i,
+  /^what is the meaning of\s+(?:the\s+word\s+)?(.+)$/i,
+  /^(?:qu[eé]\s+(?:quiere\s+decir|se\s+entiende\s+por)|cu[aá]l\s+es\s+el\s+significado\s+de)\s+(?:la\s+palabra\s+)?(?:el\s+|la\s+|los\s+|las\s+)?(.+)$/i,
+  /^(?:que\s+veut\s+dire|quel\s+est\s+le\s+sens\s+de)\s+(?:le\s+mot\s+)?(?:le\s+|la\s+|les\s+|l'|l’)?(.+)$/i,
+  /^apa\s+(?:maksud|makna|artinya)\s+(?:dari\s+)?(?:kata\s+)?(.+)$/i,
+  /^(.+?)\s+का\s+(?:क्या\s+)?(?:अर्थ|मतलब)\s+(?:क्या\s+)?है$/,
+  /^ما\s+(?:هو\s+)?معنى\s+(?:كلمة\s+)?(.+)$/,
   /^(?:who|what)(?:'s| is| was| were| are)?\s+(?:the\s+|a\s+|an\s+)?(.+)$/i,
   /^(?:tell me about|explain)\s+(?:the\s+)?(.+)$/i,
   /^(?:qui[eé]n(?:es)?|qu[eé]|cu[aá]l)\s+(?:es|era|fue|son|eran|fueron|significa)\s+(?:el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.+)$/i,
@@ -575,6 +587,7 @@ export async function articleForQuestion(q: string): Promise<string[] | null> {
     if (!hit?.[1]) continue
     const k = fold(hit[1]).replace(/[«»"“”']/g, '').replace(/\s+/g, ' ').trim()
     const ids = m.get(k) ?? m.get(k.replace(/^(el|la|los|las|the|le|les|l)\s+/, '')) ?? m.get(k.replace(/^ال/, ''))
+      ?? (k.length === 2 ? m.get(`2:${k}`) : null) // "¿Qué significa fe?"
       ?? (!k.includes(' ') ? conceptOf(k, m) : null) // one name with a close spelling: Moïse ~ Moses
     if (ids?.length) return ids.filter((id) => id.startsWith('tw:'))
   }

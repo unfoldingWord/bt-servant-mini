@@ -222,7 +222,10 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
   let lang = 'en'
   for (const c of [prefer, UI_PACK[ui], 'en']) if (c && (await hasLang(c))) { lang = c; break }
   if (!(await hasLang(lang))) lang = (await installedLangs())[0] ?? 'en'
-  const packLangs = lang === 'en' ? ['en'] : [lang, 'en']
+  // a term is named in the question's language even when the helps come from another pack ("¿Qué es la paz?" with the
+  // helps in English: «paz» is tw:kt/peace)
+  const own = UI_PACK[ui] && UI_PACK[ui] !== lang && (await hasLang(UI_PACK[ui]!)) ? [UI_PACK[ui]!] : []
+  const packLangs = [...new Set([lang, ...own, 'en'])]
   const sheet: Sheet = {
     id: qid, intent: d.intent ?? 'unknown', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang,
   }
