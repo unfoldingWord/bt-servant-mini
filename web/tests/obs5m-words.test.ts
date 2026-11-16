@@ -48,6 +48,6 @@ describe("has('obs5m')", () => {
   const yes = ['5M OBS 1', 'five movements story 1', 'cinco movimientos OBS 1', 'cinq mouvements histoire 1', 'lima gerakan OBS 1',
     'पाँच आंदोलन OBS 1', 'الحركات الخمس OBS 1', 'start a 5M session on OBS 1']
   for (const q of yes) test(`true: ${q}`, () => expect(has('obs5m', q)).toBe(true))
-  for (const q of ['OBS 1', 'story 1', 'I need 15M of rope', 'a 5mm bolt', 'frame 1:5', 'five stories 1'])
+  for (const q of ['OBS 1', 'story 1', 'I need 15M of rope', 'a 5mm bolt', 'frame 1:5', 'five stories 1', '1.5M users OBS 1'])
     test(`false: ${q}`, () => expect(has('obs5m', q)).toBe(false))
 })
