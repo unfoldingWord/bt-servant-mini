@@ -177,7 +177,7 @@ function paint() {
 function build(): HTMLElement {
   const s = FU(st.ui)
   const box = el('div', 'fu')
-  box.dir = 'auto'
+  box.dir = st.ui === 'ar' ? 'rtl' : 'auto' // in the app's direction (a Latin pack name first must not turn it)
   box.appendChild(el('h3', '', s.title))
   box.appendChild(el('p', 'fu-lead', s.lead))
   const sel = st.offers.find((o) => o.lang === st.sel)

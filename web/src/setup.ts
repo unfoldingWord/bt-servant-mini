@@ -299,7 +299,7 @@ export function showAbout(lang: string, refresh: () => void) {
   const wrap = el('div', '')
   wrap.id = 'about'
   const card = el('div', 'card')
-  card.dir = 'auto'
+  card.dir = lang === 'ar' ? 'rtl' : 'auto' // the Latin name in the title must not turn an Arabic card left to right
   card.appendChild(el('h2', '', s.title))
   for (const p of s.body) {
     const para = el('p', '')
