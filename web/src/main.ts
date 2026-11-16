@@ -583,8 +583,8 @@ function renderConv() {
     if (noPacks) w.appendChild(pickerFor([]))
     else {
       w.appendChild(el('p', '', T.hello))
-      // someone new: one line to the guide (howto.ts), until it is opened or dismissed
-      const inv = offerAfterFirstUse(nav)
+      // someone new: one line to the guide (howto.ts), on a few empty conversations; only once the languages are known
+      const inv = INSTALLED.length ? offerAfterFirstUse(nav, c.id) : null
       if (inv) w.appendChild(inv)
       const ex = el('div', 'examples')
       w.appendChild(ex)
@@ -1208,7 +1208,7 @@ setHowtoHooks({
     const typed = input.value
     input.value = q
     form.requestSubmit()
-    if (input.value === q) input.value = typed // not sent (an answer on its way): the box as it was
+    input.value = typed // what the person was writing stays in the box (as reaskWaiting)
   },
   busy: () => busy,
   type: (text) => {

@@ -1,10 +1,10 @@
 // How to ask (howto.ts): every card's example, in every app language, is read by the router to what its card says (a passage
 // read by code alone, a verse's notes, a chapter's questions, a word's article, a translation topic, a follow-up of the
-// passage) and gets a non-empty answer with the packs there are; the invitation shows once; no online AI card where it is not.
+// passage) and gets a non-empty answer with the packs there are; the invitation shows on at most 3 occasions and ends when tapped or dismissed; no online AI card where it is not.
 import { test, expect, beforeAll, afterAll } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { turn } from './harness'
-import { cardsFor, examplesOf, type Examples, forgetHowto, HT, inviteDue, markSeen } from '../src/howto'
+import { cardsFor, endInvite, examplesOf, type Examples, forgetHowto, HT, INVITE_MAX, inviteDue, inviteShown } from '../src/howto'
 import { type ConvState, directSheet } from '../src/pipeline'
 import { bookCode } from '../src/sheet'
 
@@ -72,7 +72,7 @@ for (const [ui, pack] of PHONES) {
     // a word and a topic: their articles
     expect(ex.term).not.toBeNull()
     const t = await ask([ex.term!], ui)
-    expect([t.answered, t.concept?.slice(0, 3)], ex.term!).toEqual(['article', 'tw:'])
+    expect([t.answered, t.concept?.slice(0, 3)], ex.term!).toEqual(['article', 'tw:']) // one article, never "which one?"
     expect(HT(ui).terms.find(([x]) => x === ex.term)![1]).toBe(t.concept!)
     expect(ex.topic).not.toBeNull()
     const k = await ask([ex.topic!], ui)
@@ -126,16 +126,63 @@ test('the examples parse in every app language, with or without a pack for it', 
   }
 })
 
-test('the invitation shows once, and not again after it is dismissed or the guide opened', () => {
+test('the invitation shows on at most 3 occasions, and ends at once when tapped or dismissed', () => {
   store.clear()
-  expect(inviteDue()).toBe(true)
-  expect(inviteDue()).toBe(true) // showing it does not use it up
-  markSeen()
-  expect(inviteDue()).toBe(false)
-  expect(inviteDue()).toBe(false)
-  forgetHowto() // erase everything
-  expect(inviteDue()).toBe(true)
-  markSeen()
+  forgetHowto()
+  expect(INVITE_MAX).toBe(3)
+  expect(inviteDue('c1')).toBe(true)
+  inviteShown('c1')
+  inviteShown('c1') // the same conversation drawn again: the same occasion
+  expect(store.get('btsm.howto')).toBe('1')
+  inviteShown('c2')
+  inviteShown('c3')
+  expect(inviteDue('c3')).toBe(true) // the third stays while it is on screen
+  expect(inviteDue('c4')).toBe(false) // a fourth occasion: gone by itself
+  expect(inviteDue('c4')).toBe(false)
+  // tapped or dismissed: at once, even on its first occasion
+  forgetHowto() // erase everything: shown again
+  expect(inviteDue('c1')).toBe(true)
+  inviteShown('c1')
+  endInvite()
+  expect(inviteDue('c1')).toBe(false)
+  expect(store.get('btsm.howto')).toBe('done')
+  // a storage that cannot be written: dismissed stays dismissed in this run
+  forgetHowto()
+  const ls = (globalThis as any).localStorage
+  const set = ls.setItem
+  ls.setItem = () => { throw new Error('full') }
+  try {
+    expect(inviteDue('c1')).toBe(true)
+    endInvite()
+    expect(inviteDue('c1')).toBe(false)
+  } finally {
+    ls.setItem = set
+  }
+  // no storage at all: never shown (better than every time)
+  ;(globalThis as any).localStorage = { getItem: () => { throw new Error('denied') } }
+  forgetHowto()
+  expect(inviteDue('c1')).toBe(false)
+  ;(globalThis as any).localStorage = ls
+  endInvite()
+})
+
+test('the examples are read once per app language, packs and helps language', async () => {
+  if (!ALL_PACKS.includes('en')) return
+  await installPacks(['en'])
+  expect(examplesOf('en', ['en'], null)).toBe(examplesOf('en', ['en'], null))
+  expect(examplesOf('es', ['en'], null)).not.toBe(examplesOf('en', ['en'], null))
+})
+
+test('typing suggestions off: the card says how to turn them on, and Try it opens Browse', () => {
+  for (const ui of UIS) {
+    const on = cardsFor(ui, null, false, true).find((c) => c.id === 'browse')!
+    const off = cardsFor(ui, null, false, false).find((c) => c.id === 'browse')!
+    expect(off.body).not.toBe(on.body)
+    expect(off.body).not.toContain('✓')
+    expect(off.tryBrowse).toBe(true)
+    expect(off.fill).toBeUndefined()
+    expect(on.body).toContain('✓')
+  }
 })
 
 test('the online AI card only where online AI is available', () => {
