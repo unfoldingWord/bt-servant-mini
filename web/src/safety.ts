@@ -123,7 +123,7 @@ export function askSafety(lang: string, which: Choice[], done: (a: Partial<Recor
   const wrap = el('div', '')
   wrap.id = 'safety'
   const card = el('div', 'card')
-  card.dir = 'auto'
+  card.dir = lang === 'ar' ? 'rtl' : 'auto' // a Latin name first must not turn an Arabic card left to right
   card.appendChild(el('h2', '', first ? s.title : s.confirm))
   // the long intro names online AI, usage counts and discreet mode: only when all three are asked (the Android app)
   if (first) card.appendChild(el('p', '', which.length === 3 ? s.intro : s.brief))

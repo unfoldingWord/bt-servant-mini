@@ -170,7 +170,7 @@ export function askReport(lang: string, msgs: ReportMsg[], done: (r: Report | nu
   const wrap = el('div', '')
   wrap.id = 'report'
   const card = el('div', 'card')
-  card.dir = 'auto'
+  card.dir = lang === 'ar' ? 'rtl' : 'auto' // a Latin name first must not turn an Arabic card left to right
   card.appendChild(el('h2', '', s.title))
   const picked = new Set<Reason>()
   const chips = el('div', 'langs')

@@ -154,7 +154,7 @@ export function showUpdateNote(lang: string, ignoreDismissed = false) {
   const box = document.createElement('div')
   box.id = 'updnote'
   box.setAttribute('role', 'status')
-  box.dir = 'auto'
+  box.dir = lang === 'ar' ? 'rtl' : 'auto' // a Latin name first must not turn an Arabic notice left to right
   const text = document.createElement('span')
   text.textContent = s.found.replace('{v}', o.version).replace('{size}', sizeText(o.bytes))
   const go = document.createElement('button')

@@ -196,7 +196,7 @@ export function lock(lang: string) {
   const wrap = el('div', '')
   wrap.id = 'lock'
   const box = el('form', 'card') as HTMLFormElement
-  box.dir = 'auto'
+  box.dir = lang === 'ar' ? 'rtl' : 'auto' // the Latin name in the title must not turn an Arabic card left to right
   box.appendChild(el('h2', '', discreetOn() ? s.name : 'BT Servant Mini'))
   const i = pinInput(s.enter)
   const msg = el('p', 'note', '')
