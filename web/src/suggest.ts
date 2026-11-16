@@ -131,7 +131,7 @@ export function resetHelps() {
 }
 
 /** The pack buildSheet starts from: the helps language, else the pack of the question's language, else English, else the first. */
-function firstPack(slots: Slots, ctx: Ctx): string {
+export function firstPack(slots: Slots, ctx: Ctx): string {
   const ui = UI_LANGS.includes(slots.lang ?? '') ? slots.lang! : 'en'
   let lang = 'en'
   for (const c of [ctx.helpsLang, UI_PACK[ui], 'en']) if (c && ctx.packs.includes(c)) { lang = c; break }

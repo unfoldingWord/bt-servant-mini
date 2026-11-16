@@ -26,6 +26,7 @@ import { shareButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
+import { closeHowto, forgetHowto, howtoLabel, offerAfterFirstUse, openHowTo, setHowtoHooks } from './howto'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -582,6 +583,9 @@ function renderConv() {
     if (noPacks) w.appendChild(pickerFor([]))
     else {
       w.appendChild(el('p', '', T.hello))
+      // someone new: one line to the guide (howto.ts), on a few empty conversations; only once the languages are known
+      const inv = INSTALLED.length ? offerAfterFirstUse(nav, c.id) : null
+      if (inv) w.appendChild(inv)
       const ex = el('div', 'examples')
       w.appendChild(ex)
       fillExamples(ex)
@@ -704,6 +708,10 @@ function renderPanel() {
   }
   list.appendChild(composerSwitch(nav, MT().on, MT().off))
   row(PT(nav).title, protectSummary(nav, MT().off), go('safety'))
+  row(howtoLabel(nav), '', () => {
+    closePanel()
+    openHowTo(nav)
+  })
   const aboutRow = el('button', 'mrow') as HTMLButtonElement
   aboutRow.type = 'button'
   aboutRow.append(el('span', 'mrow-t', aboutLabel(nav)), el('span', 'mrow-c', '›'))
@@ -921,6 +929,7 @@ function eraseAll() {
   convs = []
   current = ''
   try { localStorage.removeItem(KEY) } catch {}
+  forgetHowto()
   newConv()
   renderConv()
 }
@@ -930,6 +939,7 @@ const closePanel = () => panel.classList.remove('show')
   if (locked()) return false // the back button leaves the app; it never opens it
   if (closeSafety()) return true
   if (closeReport()) return true
+  if (closeHowto()) return true
   if (backPanel()) return true
   if (backExplore()) return true
   if (mapIsOpen()) { closeMap(); return true }
@@ -1191,6 +1201,30 @@ function runSheet(label: string, sheet: Sheet, ui: string) {
   if (busy) return
   respond(conv(), label, async () => ({ sheet: { ...sheet, id: `f${Date.now()}` }, ui, meta: '(follow-up: no model call)' }), { sheet, label })
 }
+
+// How to ask (howto.ts): its "Try it" sends through the form, as if typed; its example for the composer is typed in the box
+setHowtoHooks({
+  ask: (q) => {
+    const typed = input.value
+    input.value = q
+    form.requestSubmit()
+    input.value = typed // what the person was writing stays in the box (as reaskWaiting)
+  },
+  busy: () => busy,
+  type: (text) => {
+    input.value = text
+    input.focus()
+    input.dispatchEvent(new Event('input'))
+  },
+  browse: () => openExplore('menu'),
+  onlineSettings: () => {
+    panelView = 'online'
+    panel.classList.add('show')
+    renderPanel()
+  },
+  packs: () => INSTALLED,
+  helpsLang: () => helpsLang,
+})
 
 /**
  * Back to a point of the conversation (the "← Back to …" button, a tap in the Map): a divider in the chat, the conversation's
