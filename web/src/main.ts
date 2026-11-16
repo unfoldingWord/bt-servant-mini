@@ -19,7 +19,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, type ConvState, directRef, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { answer, codeReads, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, newGraph, nodeOf } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton } from './share'
@@ -29,6 +29,8 @@ import { composerSwitch, mountComposer } from './composer'
 import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
 import { learnLabel, learnSheet, resetLearn } from './learn'
+import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
+import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -138,6 +140,8 @@ type Msg = Reply & {
   waiting?: boolean
   /** an answer: its point in the conversation's graph (graph.ts); the person's: `mark`, where they went back to a point */
   node?: string; mark?: boolean
+  /** an answer: what ☆ Save keeps and where ✎ Note is tied (saved.ts: its passage, article or question) */
+  saveQ?: Query
 }
 type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
@@ -240,19 +244,29 @@ function askedFor(m: Msg): string | undefined {
 }
 /**
  * The online answer arrived for a message drawn while it was written: its text in place of "Writing…", the cards untouched,
- * and the share button made again, so it sends the online answer (it was made before it existed, or not at all).
+ * and the share button made again, so it sends the online answer (it was made before it existed, or not at all); ☆ Save too,
+ * so it keeps the online text (an item saved while it was written gets it: savedview.ts).
  */
 function fillAi(node: HTMLElement, m: Msg) {
   if (!m.ai) return
   node.querySelector('.ai.pending')?.replaceWith(aiBlock(m.ai))
   markCited(node, (m.ai.sources ?? []).map((s) => s.id), m.ui ?? nav)
   const sh = shareButton(m, m.ui ?? nav, askedFor(m))
-  const old = node.querySelector(':scope > .share')
-  if (old) old.remove()
+  node.querySelectorAll(':scope > .share, :scope > .keep').forEach((x) => x.remove())
   const rate = node.querySelector(':scope > .rate')
-  if (sh && rate) rate.before(sh)
-  else if (sh) node.appendChild(sh)
+  for (const x of [sh, keepOf(m, true)]) if (x) rate ? rate.before(x) : node.appendChild(x)
 }
+/** What ☆ Save keeps and ✎ Note is tied to: the answer's query, or for an older answer the question it answers. */
+const savedQOf = (m: Msg): Query | null => m.saveQ ?? (m.waiting || m.limits || m.packs ? null : queryOfAnswer({ q: askedFor(m) }))
+/** ☆ Save and ✎ Note under an answer (savedview.ts); `arrived`: its online text has just come. */
+const keepOf = (m: Msg, arrived = false) => !m.waiting && !m.limits && !m.packs && (m.info || m.study || m.helps?.length || m.ai)
+  ? keepButtons({ q: savedQOf(m), label: askedFor(m) ?? m.text ?? '', ai: () => m.ai, question: askedFor(m), arrived, pending: pendingOf(m) }) : null
+/** The item an answer's ☆ saved while its online answer was written (only that one gets the text when it comes). */
+const savedWhilePending = new WeakMap<Msg, string>()
+const pendingOf = (m: Msg) => ({
+  get saved() { return savedWhilePending.get(m) },
+  set: (id: string | undefined) => { if (id && !m.ai) savedWhilePending.set(m, id); else savedWhilePending.delete(m) },
+})
 /** `pending`: online AI is writing its answer to this message (the helps show as cards already). */
 function renderMsg(m: Msg, pending = false): HTMLElement {
   // going back to an earlier point: a small divider ("Back to Ruth 2:3"), not a bubble
@@ -272,6 +286,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pm)
   }
+  // what the person wrote about this verse, article or question (saved.ts), above the answer
+  d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const cv = convs.find((x) => x.msgs.includes(m))
   const asked = askedFor(m)
@@ -342,6 +358,9 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
   const sh = m.waiting ? null : shareButton(m, m.ui ?? nav, asked)
   if (sh) d.appendChild(sh)
+  // ☆ Save and ✎ Note (savedview.ts); with an online answer, Save keeps its text too
+  const keep = keepOf(m)
+  if (keep) d.appendChild(keep)
   // thumbs up or down, and with a thumbs down a report (feedback.ts)
   if (!m.waiting && (m.info || m.intro || m.ai || m.text || m.helps)) {
     let bar = el('div', 'rate')
@@ -690,6 +709,7 @@ function renderPanel() {
     closePanel()
     openExplore('menu')
   })
+  row(SVT(nav).title, savedSummary(nav), () => { closePanel(); openSaved() })
   // the Map of the conversation open now: how many points, and where it is
   if (points() >= MAP_MIN) {
     const c = conv()
@@ -938,6 +958,7 @@ function eraseAll() {
   try { localStorage.removeItem(KEY) } catch {}
   forgetHowto()
   forgetWelcome()
+  eraseSaved() // and the saved items and notes
   newConv()
   renderConv()
 }
@@ -950,6 +971,7 @@ const closePanel = () => panel.classList.remove('show')
   if (closeHowto()) return true
   if (closeWelcome()) return true
   if (backPanel()) return true
+  if (backSaved()) return true
   if (backExplore()) return true
   if (mapIsOpen()) { closeMap(); return true }
   const about = document.querySelector('#about')
@@ -961,6 +983,7 @@ const closePanel = () => panel.classList.remove('show')
 browse.onclick = () => {
   closePanel()
   closeMap(false)
+  closeSaved(false)
   openExplore('bar')
 }
 menu.onclick = () => {
@@ -1088,7 +1111,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // what the answer is: pipeline.ts decides (and keeps the conversation's last passage and search results)
     const r = await answer(c, made, t0)
     answered = r.answered
-    m = { who: 'bot', ...r.reply }
+    m = { who: 'bot', ...r.reply, saveQ: queryOfAnswer({ sheet: made.sheet, ref: r.ref, concept: r.concept, q: made.q, label, lang: r.reply.lang }) ?? undefined }
     point = r.node
     if (r.sheet && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(r.sheet).catch(() => '')
   } catch (err: any) {
@@ -1115,6 +1138,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   updateMapBtn()
   c.updated = Date.now()
   save()
+  // the row of suggestions shows where the conversation is now (and builds its word index at idle after the first answer)
+  cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
   // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
   const asking = m.who === 'bot' && !!(m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()
@@ -1197,10 +1222,19 @@ setExploreHooks({
     panel.classList.add('show')
     renderPanel()
   },
+  saved: () => { closeExplore(false); openSaved() },
+})
+// Saved items and notes (savedview.ts): what opening one asks the chat
+setSavedHooks({
+  ui: () => nav, busy: () => busy || locked(), packName: (l) => PACK_NAMES[l] ?? l,
+  run: (label, sheet) => runSheet(label, sheet, nav),
+  ask: (q) => { const typed = input.value; input.value = q; form.requestSubmit(); input.value = typed },
+  addLang: () => { panelView = 'packs'; panel.classList.add('show'); renderPanel() },
+  closeOthers: () => { closePanel(); closeExplore(false); closeMap(false) },
 })
 
 // Typing suggestions above the box (composer.ts, menu > Typing suggestions): its "✓" sends the box's text, which the submit
-// below reads as a direct question (directRef → readQuestion with no reader: the reading the "✓" showed)
+// below reads by code (codeReads → readQuestion with no reader: the reading the "✓" showed)
 const cmp = mountComposer(form, input, {
   ui: () => nav, conv: () => conv(), packs: () => INSTALLED, busy: () => busy || locked(),
   send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
@@ -1463,14 +1497,15 @@ form.addEventListener('submit', (e) => {
   input.value = ''
   cmp.clear()
   const c = conv()
-  // only a reference ("Rut 2:3", "Jonás 1:3 notas"): code reads it, so neither reader runs (saves about 4 s on a phone)
-  const direct = !has('help', q) && directRef(q)
+  // only a reference ("Rut 2:3", "Jonás 1:3 notas") or a follow-up code reads ("¿y las notas?" after one): neither reader runs
+  // (saves about 4 s on a phone), and the answer is what the composer's "✓" showed
+  const direct = !has('help', q) && codeReads(q, c)
   count('asked')
   count(direct ? 'model.skipped' : modelReady() && !modelOff() ? 'model.used' : 'model.none')
   respond(c, q0, async () => {
     // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
-    if (direct) return readQuestion(q, { slots: null, raw: 'model skipped (reference)', ms: 0 }, c, target)
+    if (direct) return readQuestion(q, { slots: null, raw: 'read by code (no reader)', ms: 0 }, c, target)
     // with the online helper on and a connection, the online model reads the question; otherwise (or if it fails) the phone's
     // a follow-up ("and the notes?", "and verse 5?") is read with the previous question's compact state; the phone model
     // gets it only when trained for it (followUps)

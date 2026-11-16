@@ -2,36 +2,54 @@
 // the text being typed. No DOM here (composer.ts draws it), no pack or book opened while typing: only tables in memory (the
 // books' names, data/versification.json, which books each installed pack has, read once by `booksOf`).
 //
-// The states of the row (phase 1):
+// The states of the row:
+//   A  the box empty, with the focus: where the conversation is first (the light path's next step, "Siguiente: Rut 1:6–18 ·
+//      notas", or the passage, "Rut 2:3 ▸"), then the ways of asking (passage, notes, meaning, how to translate) offered in
+//      the app's language; "Passage" (and a shape's start, "Notas de ") lists the books there are
 //   B  a book being typed: the books it may be ("ro" → Romanos), then the chapter strip, then the verse strip
 //   D  understood: "✓ Rut 2:3 · notas", read by code with the very reading the answer uses (pipeline.ts directSheet); its tap
 //      sends the box's text, which main.ts answers with that same reading (no model, no online reader)
+//   C  a word or topic: the Translation Words and Translation Academy articles whose names start so (termindex.ts), alone
+//      ("gra") or after the words of a meaning question ("¿Qué significa gra"), each a ready question for that article. Only
+//      once the index is built (at idle after the first answer)
+//   D+ a follow-up of the conversation ("notas", "siguiente", "5" after Rut 2:3): its "✓ Rut 2:3 · notas", read with
+//      pipeline.ts followUpPreview, the reading the send uses (codeReads)
 //   E  free text: nothing (the row takes no room; the question goes the usual way)
 //   F  the book is not on this phone: said on the button, which never sends ("no está en este teléfono"); or it is answered from
 //      another installed pack ("· en inglés"), exactly as buildSheet does
-import { bookCandidates, bookCode, type Slots } from './sheet'
-import { strip as unmarked } from './bidi'
-import { type ConvState, directSheet, env } from './pipeline'
+import { bookCandidates, bookCode, fold, type Slots } from './sheet'
+import { rtlLang, strip as unmarked } from './bidi'
+import { type ConvState, directSheet, env, followUpPreview, pathLabel, pathSheet, previewable } from './pipeline'
 import { has, replyLang } from './commands'
 import { bookShown } from './firstuse'
-import { introLabel, whatWord } from './converse'
-import { CANON, openLang } from './packs'
+import { academyLabel, introLabel, whatWord } from './converse'
+import { CANON, onPacksChanged, openLang } from './packs'
+import { nodeOf, passageAt, place, stepTarget } from './graph'
+import type { Sheet } from './answer'
+import { glossaryLookup, lookup, resetTermIndex, type TermHit, type TermKind } from './termindex'
 import books from './data/books.json'
 import shapes from './data/shapes.json'
 import versification from './data/versification.json'
 
-export type Kind = 'ok' | 'book' | 'help' | 'intro' | 'missing'
+export type Kind = 'ok' | 'book' | 'help' | 'intro' | 'missing' | 'shape' | 'place' | 'next' | 'term'
 /**
  * One button of the row. `send`: it sends the box's text as it is (the "✓"). `fill`: it writes this text in the box. `slots`: it
- * asks this ready question (a book's introduction). `missing`: nothing is sent; the composer offers Browse.
+ * asks this ready question (a book's introduction). `sheet`: it asks this ready sheet (an article, the path's next step), as a
+ * button under an answer does, with `ask` as the question shown. `choose`: it lists the books (Passage). `missing`: nothing is
+ * sent; the composer offers Browse.
  */
-export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true; slots?: Slots; book?: string }
+export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true; slots?: Slots; book?: string; sheet?: Sheet; ask?: string; choose?: true }
 /** The chapter or verse strip: numbers 1…max; a tap writes `base + sep + n` in the box. */
 export type Strip = { unit: 'chapter' | 'verse'; max: number; base: string; sep: string; at?: number }
 /** `needs`: books to read before the row can say what they have (loadHelps); the composer reads them and makes the row again. */
-export type Row = { items: Suggestion[]; strip?: Strip; understood?: Understood; needs?: [string, string][] }
-/** What a "✓" stands for: the slots the answer is built from, the pack it is read from, and the words it shows. */
-export type Understood = { label: string; ui: string; slots: Slots; code: string; pack: string; has: boolean; other: boolean; needs?: [string, string][] }
+export type Row = { items: Suggestion[]; strip?: Strip; understood?: Understood; needs?: [string, string][]
+  /** the books to pick from (state A's Passage, a shape's start): each writes its name in the box */
+  pick?: Suggestion[] }
+/**
+ * What a "✓" stands for: the slots the answer is built from, the pack it is read from, and the words it shows. `fu`: a
+ * follow-up of the conversation ("notas" after Rut 2:3), read by followUpPreview.
+ */
+export type Understood = { label: string; ui: string; slots: Slots; code: string; pack: string; has: boolean; other: boolean; needs?: [string, string][]; fu?: true }
 export type Ctx = {
   /** the app's language */
   ui: string
@@ -42,6 +60,8 @@ export type Ctx = {
   packs: string[]
   /** the books each installed pack has (booksOf); null while not read: then no "✓" and no book is offered as there */
   books: Record<string, Set<string>> | null
+  /** state A's Passage was tapped: the empty box lists the books */
+  choosing?: boolean
 }
 
 const UI_LANGS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
@@ -51,19 +71,26 @@ const VERSES = versification as Record<string, number[]>
 const TABLES = books as Record<string, Record<string, string>>
 const MAX = 6
 
-type W = { none: string; inLang: string; notHere: string; browse: string; row: string; chapter: string; verse: string; toggle: string; langs: Record<string, string> }
+type W = { none: string; inLang: string; notHere: string; browse: string; row: string; chapter: string; verse: string; toggle: string; books: string
+  kinds: Record<TermKind, string>; langs: Record<string, string> }
 const STR: Record<string, W> = {
-  en: { none: 'no {what} on this phone', inLang: 'in {lang}', notHere: 'not on this phone', browse: 'See the books there are', row: 'Suggestions', chapter: 'Chapter', verse: 'Verse', toggle: 'Typing suggestions',
+  en: { none: 'no {what} on this phone', inLang: 'in {lang}', notHere: 'not on this phone', browse: 'See the books there are', row: 'Suggestions', chapter: 'Chapter', verse: 'Verse', toggle: 'Typing suggestions', books: 'Books',
+    kinds: { kt: 'key term', names: 'name', other: 'word', ta: 'Academy' },
     langs: { en: 'English', 'es-419': 'Spanish', fr: 'French', id: 'Indonesian', hi: 'Hindi', ar: 'Arabic' } },
-  es: { none: 'sin {what} en este teléfono', inLang: 'en {lang}', notHere: 'no está en este teléfono', browse: 'Ver los libros que sí hay', row: 'Sugerencias', chapter: 'Capítulo', verse: 'Versículo', toggle: 'Sugerencias al escribir',
+  es: { none: 'sin {what} en este teléfono', inLang: 'en {lang}', notHere: 'no está en este teléfono', browse: 'Ver los libros que sí hay', row: 'Sugerencias', chapter: 'Capítulo', verse: 'Versículo', toggle: 'Sugerencias al escribir', books: 'Libros',
+    kinds: { kt: 'palabra clave', names: 'nombre', other: 'palabra', ta: 'Academia' },
     langs: { en: 'inglés', 'es-419': 'español', fr: 'francés', id: 'indonesio', hi: 'hindi', ar: 'árabe' } },
-  fr: { none: 'pas de {what} sur ce téléphone', inLang: 'en {lang}', notHere: "n'est pas sur ce téléphone", browse: 'Voir les livres disponibles', row: 'Suggestions', chapter: 'Chapitre', verse: 'Verset', toggle: 'Suggestions pendant la saisie',
+  fr: { none: 'pas de {what} sur ce téléphone', inLang: 'en {lang}', notHere: "n'est pas sur ce téléphone", browse: 'Voir les livres disponibles', row: 'Suggestions', chapter: 'Chapitre', verse: 'Verset', toggle: 'Suggestions pendant la saisie', books: 'Livres',
+    kinds: { kt: 'mot clé', names: 'nom', other: 'mot', ta: 'Académie' },
     langs: { en: 'anglais', 'es-419': 'espagnol', fr: 'français', id: 'indonésien', hi: 'hindi', ar: 'arabe' } },
-  id: { none: 'tidak ada {what} di ponsel ini', inLang: 'dalam {lang}', notHere: 'tidak ada di ponsel ini', browse: 'Lihat kitab yang ada', row: 'Saran', chapter: 'Pasal', verse: 'Ayat', toggle: 'Saran saat mengetik',
+  id: { none: 'tidak ada {what} di ponsel ini', inLang: 'dalam {lang}', notHere: 'tidak ada di ponsel ini', browse: 'Lihat kitab yang ada', row: 'Saran', chapter: 'Pasal', verse: 'Ayat', toggle: 'Saran saat mengetik', books: 'Kitab',
+    kinds: { kt: 'istilah kunci', names: 'nama', other: 'kata', ta: 'Akademi' },
     langs: { en: 'bahasa Inggris', 'es-419': 'bahasa Spanyol', fr: 'bahasa Prancis', id: 'bahasa Indonesia', hi: 'bahasa Hindi', ar: 'bahasa Arab' } },
-  hi: { none: 'इस फ़ोन पर {what} नहीं', inLang: '{lang} में', notHere: 'इस फ़ोन पर नहीं है', browse: 'जो पुस्तकें हैं वे देखें', row: 'सुझाव', chapter: 'अध्याय', verse: 'पद', toggle: 'लिखते समय सुझाव',
+  hi: { none: 'इस फ़ोन पर {what} नहीं', inLang: '{lang} में', notHere: 'इस फ़ोन पर नहीं है', browse: 'जो पुस्तकें हैं वे देखें', row: 'सुझाव', chapter: 'अध्याय', verse: 'पद', toggle: 'लिखते समय सुझाव', books: 'पुस्तकें',
+    kinds: { kt: 'मुख्य शब्द', names: 'नाम', other: 'शब्द', ta: 'अकादमी' },
     langs: { en: 'अंग्रेज़ी', 'es-419': 'स्पेनिश', fr: 'फ़्रेंच', id: 'इंडोनेशियाई', hi: 'हिंदी', ar: 'अरबी' } },
-  ar: { none: 'لا {what} على هذا الهاتف', inLang: 'بـ{lang}', notHere: 'ليس على هذا الهاتف', browse: 'عرض الأسفار الموجودة', row: 'اقتراحات', chapter: 'الأصحاح', verse: 'الآية', toggle: 'اقتراحات أثناء الكتابة',
+  ar: { none: 'لا {what} على هذا الهاتف', inLang: 'بـ{lang}', notHere: 'ليس على هذا الهاتف', browse: 'عرض الأسفار الموجودة', row: 'اقتراحات', chapter: 'الأصحاح', verse: 'الآية', toggle: 'اقتراحات أثناء الكتابة', books: 'الأسفار',
+    kinds: { kt: 'كلمة رئيسية', names: 'اسم', other: 'كلمة', ta: 'الأكاديمية' },
     langs: { en: 'الإنجليزية', 'es-419': 'الإسبانية', fr: 'الفرنسية', id: 'الإندونيسية', hi: 'الهندية', ar: 'العربية' } },
 }
 export const ST = (ui: string): W => STR[ui] ?? STR.en!
@@ -129,6 +156,12 @@ export function resetHelps() {
   HELPS.clear()
   reading.clear()
 }
+/** The packs changed (onPacksChanged): what the row knows of them is dropped, the word index too (built again after an answer). */
+export function resetSuggest() {
+  resetHelps()
+  resetTermIndex()
+}
+onPacksChanged(resetSuggest)
 
 /** The pack buildSheet starts from: the helps language, else the pack of the question's language, else English, else the first. */
 export function firstPack(slots: Slots, ctx: Ctx): string {
@@ -216,6 +249,7 @@ export function fillName(ui: string, code: string): string {
 export const SHAPES_OFF: Record<string, string[]> = { meaning: ['en', 'es', 'hi', 'ar'], howTranslate: ['es', 'hi', 'ar'] }
 type ShapeData = Record<string, { label: Record<string, string>; text: Record<string, string> }>
 const SHAPES = shapes as unknown as ShapeData
+const SHAPES_ORDER = (shapes as unknown as { order: string[] }).order
 /** Whether a shape is offered in this language (with a numbered book too since refInText reads "Notas de 1 Juan 3:2"). */
 export function shapeOffered(shape: string, ui: string, _code?: string): boolean {
   return !SHAPES_OFF[shape]?.includes(ui) && !!SHAPES[shape]?.text[ui]
@@ -248,18 +282,25 @@ function refShown(ui: string, code: string, s: Slots): string {
 export function understood(text: string, ctx: Ctx): Understood | null {
   const q = text.trim()
   if (!q || q.length > 120 || !ctx.books || replyLang(q) || has('help', q)) return null
-  const slots = directSheet(q, ctx.conv)
-  const code = slots?.book ? bookCode(slots.lang ?? ctx.ui, slots.book) : null
+  let slots = directSheet(q, ctx.conv)
+  let code = slots?.book ? bookCode(slots.lang ?? ctx.ui, slots.book) : null
+  // a follow-up of the conversation ("notas", "siguiente", "5"), as the send reads it (pipeline.ts codeReads: the same test)
+  const fu = slots ? null : followUpPreview(q, ctx.conv)
+  if (fu && previewable(fu)) {
+    slots = fu.slots
+    code = fu.slots.book!
+  }
   if (!slots || !code) return null
+  const more = fu && slots === fu.slots ? { fu: true as const } : {}
   const where = packOf(slots, code, ctx)
-  if (where.needs) return { label: '', ui: ctx.ui, slots, code, ...where }
+  if (where.needs) return { label: '', ui: ctx.ui, slots, code, ...where, ...more }
   const what = slots.what ?? []
   const ref = refShown(ctx.ui, code, slots)
   let label = what.length === 1 && what[0] === 'intro' ? introLabel(ctx.ui, ref) : ref
   const w = what.length === 1 ? whatWord(ctx.ui, what[0]!) : null
   if (w) label += ` · ${w.toLocaleLowerCase(ctx.ui)}`
   if (where.other) label += ` · ${fillT(ST(ctx.ui).inLang, { lang: ST(ctx.ui).langs[where.pack] ?? where.pack })}`
-  return { label, ui: ctx.ui, slots, code, ...where }
+  return { label, ui: ctx.ui, slots, code, ...where, ...more }
 }
 
 const endsWithNumber = (t: string) => /[\d०-९٠-٩]\s*:?\s*$/.test(t)
@@ -271,14 +312,148 @@ const lastNumber = (t: string) => {
 /** The row for the text in the box (states B, D, E, F). Pure and quick: no pack is opened here. */
 export function suggest(text: string, ctx: Ctx): Row {
   const t = unmarked(text).replace(/^\s+/, '') // no bidi marks (text copied from the app or pasted from WhatsApp)
-  if (!t.trim() || t.length > 120 || !ctx.books || replyLang(t) || has('help', t)) return { items: [] }
+  // (the empty box: the composer shows startRow while the box has the focus)
+  if (!t.trim()) return { items: [] }
+  if (t.length > 120 || !ctx.books || replyLang(t) || has('help', t)) return { items: [] }
   const ok = understood(t, ctx)
   if (ok?.needs) return { items: [], needs: ok.needs }
+  // "Notas de ": the start of a shape, then which book (after the "✓" of the passage the conversation is on, if any)
+  const start = /\s$/.test(t) && shapeStart(t, ctx.ui)
   if (ok) {
     const row = rowOf(t, ok, ctx)
-    return row.needs ? { items: [], needs: row.needs } : { ...row, understood: ok }
+    return row.needs ? { items: [], needs: row.needs } : { ...row, understood: ok, ...(start ? { pick: bookList(t, ctx) } : {}) }
   }
-  return bookRow(t, ctx)
+  if (start) return { items: [], pick: bookList(t, ctx) }
+  const b = bookRow(t, ctx)
+  if (b.strip || b.items.some((x) => x.kind === 'missing')) return b
+  const terms = termRow(t, ctx, MAX - b.items.length)
+  return terms.length ? { items: [...b.items, ...terms] } : b
+}
+
+// ------------------------------------------------------------------------------------------------- A: the box is empty
+
+const REF_RE = /^([0-9a-z]{3}) (front|\d+)(?::(intro|\d+)(?:-(\d+))?)?$/
+/** The passage the conversation is on, as the box would write it ("Rut 2:3", "Introducción a Rut 2") and as the row shows it. */
+function placeOf(ctx: Ctx): Suggestion | null {
+  const c = ctx.conv
+  const g = c.graph
+  const ref = (g ? passageAt(g, g.cur)?.sheet.ref : null) ?? (c.last?.intent === 'passage' ? c.last.ref : null)
+  const m = REF_RE.exec(ref ?? '')
+  if (!m) return null
+  const code = m[1]!
+  const ch = m[2] === 'front' ? null : +m[2]!
+  const ui = ctx.ui
+  let label: string, fill: string
+  if (m[3] === 'intro') {
+    label = introLabel(ui, ch ? `${bookShown(ui, code)} ${ch}` : bookShown(ui, code))
+    fill = introText(ui, code, ch)
+  } else {
+    if (!ch) return null
+    const v = m[3] ? +m[3] : null, end = m[4] ? +m[4] : null
+    label = refShown(ui, code, { chapter: ch, verse_start: v, verse_end: end })
+    fill = `${fillName(ui, code)} ${ch}${v ? `:${v}${end ? `-${end}` : ''}` : ''}`
+  }
+  // only what code reads back as that very place (the "✓" comes once it is in the box)
+  const s = directSheet(fill)
+  if (!s?.book || bookCode(s.lang ?? ui, s.book) !== code || (s.chapter ?? null) !== ch) return null
+  return { kind: 'place', label: `${label} ${rtlLang(ui) ? '◂' : '▸'}`, fill, book: code }
+}
+/**
+ * The light path's step (graph.ts Path), one button: its next step when the conversation stands on the path (the same
+ * "Next: …" as under the answer); the way back to it when it left the path for another book or an article.
+ */
+function pathOf(ctx: Ctx): Suggestion | null {
+  const g = ctx.conv.graph
+  const p = g?.path
+  if (!g || !p) return null
+  const cur = nodeOf(g, g.cur)
+  const t = stepTarget(p)
+  const onStep = !!cur && !!t && cur.sheet.ref === t.ref && t.what.every((w) => cur.sheet.what.includes(w))
+  if (onStep) {
+    const sheet = g.pathNext ? pathSheet(g.pathNext) : null
+    return sheet ? { kind: 'next', label: pathLabel(ctx.ui, g.pathNext!, 'next'), sheet } : null
+  }
+  // (near it, in the path's book: the place instead, as no way back is offered under such an answer)
+  if (!cur || place(cur.sheet.ref)?.book === p.book) return null
+  const sheet = pathSheet(p)
+  return sheet ? { kind: 'next', label: pathLabel(ctx.ui, p, 'toPath'), sheet } : null
+}
+/** The start of a shape in this language ("Notas de ", "Que signifie "), empty when the shape puts its words after ("{ref} की टिप्पणियाँ"). */
+const headOf = (shape: string, ui: string) => (SHAPES[shape]?.text[ui] ?? '').split(/\{(?:ref|term|what)\}/)[0] ?? ''
+/** Whether the text is only the start of the notes shape ("Notas de ", typed or written by its button): then which book. */
+function shapeStart(t: string, ui: string): boolean {
+  const h = headOf('notes', ui).trim()
+  return !!h && fold(t).trim() === fold(h)
+}
+/** A: where the conversation is (one button), then the ways of asking this language offers. */
+export function startRow(ctx: Ctx): Row {
+  if (ctx.choosing) return ctx.books ? { items: [], pick: bookList('', ctx) } : { items: [] }
+  const ui = ctx.ui
+  const items: Suggestion[] = []
+  const first = pathOf(ctx) ?? placeOf(ctx)
+  if (first) items.push(first)
+  for (const shape of SHAPES_ORDER) {
+    if (!shapeOffered(shape, ui)) continue
+    const head = headOf(shape, ui)
+    const label = SHAPES[shape]!.label[ui] ?? SHAPES[shape]!.label.en!
+    // a passage, or a shape whose words come after the passage: which book first
+    items.push(shape === 'passage' || (shape === 'notes' && !head.trim()) ? { kind: 'shape', label, choose: true } : { kind: 'shape', label, fill: head })
+  }
+  return { items }
+}
+/** The books there are, in the Bible's order, each writing its name after `lead` (only the books code reads there). */
+function bookList(lead: string, ctx: Ctx): Suggestion[] {
+  const ui = ctx.ui
+  const out: Suggestion[] = []
+  for (const code of CANON) {
+    if (!packOf({ lang: ui }, code, ctx, true).has) continue
+    const name = fillName(ui, code)
+    if (!readsAs(`${lead}${name}`, code, ui)) continue
+    out.push({ kind: 'book', label: bookShown(ui, code), fill: `${lead}${name} `, book: code })
+  }
+  return out
+}
+
+// ------------------------------------------------------------------------------------------------- C: words and topics
+
+/** The words before a word a meaning or translating question asks about, in the six languages (folded): its start only. */
+const LEADS: string[] = (() => {
+  const own = ['meaning', 'howTranslate'].flatMap((k) => UI_LANGS.map((l) => headOf(k, l)))
+  const more = [
+    'what does', 'what do', 'what is', 'what are', 'meaning of', 'how do i translate', 'how do we translate', 'how to translate', 'how to say', 'how do i say',
+    'que significa', 'que significan', 'que quiere decir', 'que es', 'que son', 'significado de', 'como traducir', 'como traduzco', 'como traducimos', 'como se dice', 'como se traduce', 'como digo',
+    'que signifie', 'que veut dire', "qu'est-ce que", 'sens de', 'comment traduire', 'comment dire',
+    'apa arti', 'apa maksud', 'apa itu', 'arti kata', 'arti dari', 'bagaimana menerjemahkan', 'bagaimana cara menerjemahkan', 'bagaimana mengatakan',
+    'ما معنى', 'ماذا يعني', 'ماذا تعني', 'ما هو', 'ما هي', 'كيف أترجم', 'كيف نترجم', 'كيف أقول',
+  ]
+  return [...new Set([...own, ...more].map((h) => fold(h).replace(/[¿¡]/g, '').trim()).filter(Boolean))].sort((a, b) => b.length - a.length)
+})()
+/** How many syllables a Devanagari text has: its letters, a consonant joined by a virama to the one before not counted. */
+const syllables = (s: string) => [...s.matchAll(/(?<!\u094D)\p{L}/gu)].length
+/** C: the articles a word being typed names (alone, or after the words of a meaning question), from the pack in its language. */
+function termRow(t: string, ctx: Ctx, room: number): Suggestion[] {
+  if (room <= 0) return []
+  const ui = ctx.ui
+  const f = fold(t).replace(/^[\s¿¡]+/, '')
+  const lead = LEADS.find((h) => f.startsWith(h + ' '))
+  const rest = (lead ? f.slice(lead.length) : f).replace(/[¿?¡!؟.,;:«»"“”]/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!rest || /\d/.test(rest) || rest.split(' ').length > 4) return []
+  const enough = /[ऀ-ॿ]/.test(rest) ? syllables(rest) >= 2 : /[؀-ۿ]/.test(rest) ? rest.replace(/\s/g, '').length >= 2 : rest.replace(/\s/g, '').length >= (lead ? 2 : 3)
+  if (!enough) return []
+  const own = UI_PACK[ui] ?? 'en'
+  let hits: TermHit[] = []
+  if (ctx.packs.includes(own)) hits = lookup(own, rest, room)
+  // a language with no pack here (French with English): its glossary names, and English names, shown from the English pack
+  if (!hits.length && own !== 'en' && !ctx.packs.includes(own) && ctx.packs.includes('en')) {
+    const seen = new Set<string>()
+    hits = [...glossaryLookup(ui, 'en', rest, room), ...lookup('en', rest, room)].filter((h) => !seen.has(h.id) && !!seen.add(h.id)).slice(0, room)
+  }
+  const s = ST(ui)
+  return hits.map((h): Suggestion => {
+    const other = h.pack !== own ? ` · ${fillT(s.inLang, { lang: s.langs[h.pack] ?? h.pack })}` : ''
+    const sheet: Sheet = { id: `c${Date.now()}`, intent: 'article', ref: null, what: [], version: null, concept: h.id, term: null, phrase: null, candidates: null, lang: h.pack }
+    return { kind: 'term', label: `${h.name} · ${s.kinds[h.kind]}${other}`, sheet, ask: h.kind === 'ta' ? academyLabel(ui, h.name) : h.name }
+  })
 }
 
 /** D and F: the "✓" (or the book that is not here), then the verse strip or the helps. */
@@ -307,7 +482,9 @@ function rowOf(t: string, u: Understood, ctx: Ctx): Row {
   } else if (!(h.text || h.notes || h.questions || h.terms)) return lacks('text')
   const items: Suggestion[] = [{ kind: 'ok', label: `✓ ${okLabel}`, send: true }]
   let strip: Strip | undefined
-  if (u.slots.chapter && !u.slots.verse_start && plain && endsWithNumber(t) && lastNumber(t) === u.slots.chapter) {
+  if (u.fu) {
+    // (a follow-up: the "✓" alone; "5 Notas" is no way to write it)
+  } else if (u.slots.chapter && !u.slots.verse_start && plain && endsWithNumber(t) && lastNumber(t) === u.slots.chapter) {
     const max = VERSES[u.code]?.[u.slots.chapter - 1] ?? 0
     if (max) strip = { unit: 'verse', max, base: t.replace(/\s*:?\s*$/, ''), sep: ':' }
     const i = introIn(u.pack, u.code, u.slots.chapter, ctx)

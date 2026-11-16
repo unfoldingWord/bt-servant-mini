@@ -466,8 +466,8 @@ async function drawSuggest(ui: string, body: HTMLElement, kind: LearnKind, withB
 // ----------------------------------------------------------------------------------------------------- the welcome's slot
 
 let pending = false
-/** The other screens the welcome waits for: the PIN, the first questions, About, a report, How to ask, Browse, the Map, the menu. */
-const BUSY = '#lock, #safety, #about, #report, #howto, #welcome, #explore.open, #gmap.open, #panel.show'
+/** The other screens the welcome waits for: the PIN, the first questions, About, a report, How to ask, Browse, the Map, Saved, the menu. */
+const BUSY = '#lock, #safety, #about, #report, #howto, #welcome, #explore.open, #gmap.open, #saved.open, #panel.show'
 /**
  * What the welcome offers once a language is on the phone, in the one slot main.ts renderConv has for it (`occasion`: the empty
  * conversation it shows in; `fresh`: nothing asked yet on this phone): the first time, this screen, opened over the empty

@@ -37,6 +37,8 @@ export type GNode = {
  * replaced, while the answer that started the new one offers a new conversation (moved there, the old one comes back)
  */
 export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path
+  /** the step after `path`, when the last answer was on it (the button "Next: …" under it; the composer offers it too) */
+  pathNext?: Path
   /** the learning path through Translation Academy the person started from the welcome (learn.ts), and where it is */
   learn?: Learn }
 

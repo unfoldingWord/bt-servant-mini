@@ -2,7 +2,9 @@
 // home screen, the screen hidden in recent apps, no screenshots), a PIN to open the app, and conversations that are not
 // kept. None of this encrypts anything: it protects from a quick look, not from someone with time and the unlocked phone.
 
+import { rtlLang } from './bidi'
 import { LIMITED } from './model'
+import { SAVED_KEY } from './saved'
 
 const DISCREET = 'btsm.discreet'
 const PIN = 'btsm.pin'
@@ -27,8 +29,8 @@ const T: Record<string, P> = {
     removePin: 'Remove the PIN', current: 'Current PIN', wrong: 'Wrong PIN.', wait: 'Too many tries. Wait {s} seconds.', open: 'Open', enter: 'Enter your PIN',
     forgot: 'Forgot it? Clear the app\'s data in Android settings (conversations and added languages are lost).', pinOn: 'PIN',
     histH: 'Conversations', keep: 'Keep them', dontKeep: 'Don\'t keep them',
-    histNote: 'Not kept: nothing is written on the phone, and the conversations are gone when the app closes.',
-    erase: 'Erase all conversations now', confirmErase: 'Tap again to erase everything',
+    histNote: 'Not kept: nothing is written on the phone, and the conversations, saved items and notes are gone when the app closes.',
+    erase: 'Erase all conversations, saved items and notes now', confirmErase: 'Tap again to erase everything',
   },
   es: {
     name: 'Notas de estudio', title: 'Seguridad',
@@ -40,8 +42,8 @@ const T: Record<string, P> = {
     removePin: 'Quitar el PIN', current: 'PIN actual', wrong: 'PIN incorrecto.', wait: 'Demasiados intentos. Espera {s} segundos.', open: 'Abrir', enter: 'Escribe tu PIN',
     forgot: '¿Lo olvidaste? Borra los datos de la app en los ajustes de Android (se pierden las conversaciones y los idiomas agregados).', pinOn: 'PIN',
     histH: 'Conversaciones', keep: 'Guardarlas', dontKeep: 'No guardarlas',
-    histNote: 'Sin guardar: no se escribe nada en el teléfono y las conversaciones desaparecen al cerrar la app.',
-    erase: 'Borrar todas las conversaciones ahora', confirmErase: 'Toca otra vez para borrar todo',
+    histNote: 'Sin guardar: no se escribe nada en el teléfono, y las conversaciones, los guardados y las notas desaparecen al cerrar la app.',
+    erase: 'Borrar ahora todas las conversaciones, guardados y notas', confirmErase: 'Toca otra vez para borrar todo',
   },
   fr: {
     name: 'Notes d’étude', title: 'Sécurité',
@@ -53,8 +55,8 @@ const T: Record<string, P> = {
     removePin: 'Retirer le code PIN', current: 'Code actuel', wrong: 'Code incorrect.', wait: 'Trop d\'essais. Attendez {s} secondes.', open: 'Ouvrir', enter: 'Entrez votre code PIN',
     forgot: 'Oublié ? Effacez les données de l\'application dans les paramètres d\'Android (les conversations et les langues ajoutées sont perdues).', pinOn: 'PIN',
     histH: 'Conversations', keep: 'Les garder', dontKeep: 'Ne pas les garder',
-    histNote: 'Non gardées : rien n\'est écrit sur le téléphone, et les conversations disparaissent à la fermeture de l\'application.',
-    erase: 'Effacer toutes les conversations maintenant', confirmErase: 'Touchez encore pour tout effacer',
+    histNote: 'Non gardées : rien n\'est écrit sur le téléphone, et les conversations, les favoris et les notes disparaissent à la fermeture de l\'application.',
+    erase: 'Effacer maintenant les conversations, les favoris et les notes', confirmErase: 'Touchez encore pour tout effacer',
   },
   id: {
     name: 'Catatan belajar', title: 'Keamanan',
@@ -66,8 +68,8 @@ const T: Record<string, P> = {
     removePin: 'Hapus PIN', current: 'PIN saat ini', wrong: 'PIN salah.', wait: 'Terlalu banyak percobaan. Tunggu {s} detik.', open: 'Buka', enter: 'Masukkan PIN Anda',
     forgot: 'Lupa? Hapus data aplikasi di setelan Android (percakapan dan bahasa yang ditambahkan akan hilang).', pinOn: 'PIN',
     histH: 'Percakapan', keep: 'Simpan', dontKeep: 'Jangan simpan',
-    histNote: 'Tidak disimpan: tidak ada yang ditulis di ponsel, dan percakapan hilang saat aplikasi ditutup.',
-    erase: 'Hapus semua percakapan sekarang', confirmErase: 'Ketuk lagi untuk menghapus semua',
+    histNote: 'Tidak disimpan: tidak ada yang ditulis di ponsel, dan percakapan, yang tersimpan, serta catatan hilang saat aplikasi ditutup.',
+    erase: 'Hapus semua percakapan, yang tersimpan, dan catatan sekarang', confirmErase: 'Ketuk lagi untuk menghapus semua',
   },
   hi: {
     name: 'अध्ययन नोट्स', title: 'सुरक्षा',
@@ -79,8 +81,8 @@ const T: Record<string, P> = {
     removePin: 'PIN हटाएँ', current: 'मौजूदा PIN', wrong: 'गलत PIN।', wait: 'बहुत अधिक प्रयास। {s} सेकंड रुकें।', open: 'खोलें', enter: 'अपना PIN लिखें',
     forgot: 'भूल गए? Android सेटिंग्स में ऐप का डेटा मिटाएँ (बातचीत और जोड़ी गई भाषाएँ मिट जाएँगी)।', pinOn: 'PIN',
     histH: 'बातचीत', keep: 'रखें', dontKeep: 'न रखें',
-    histNote: 'न रखने पर: फ़ोन पर कुछ नहीं लिखा जाता, और ऐप बंद होने पर बातचीत मिट जाती है।',
-    erase: 'सारी बातचीत अभी मिटाएँ', confirmErase: 'सब मिटाने के लिए फिर टैप करें',
+    histNote: 'न रखने पर: फ़ोन पर कुछ नहीं लिखा जाता, और ऐप बंद होने पर बातचीत, सहेजी गई चीज़ें और नोट मिट जाते हैं।',
+    erase: 'सारी बातचीत, सहेजी गई चीज़ें और नोट अभी मिटाएँ', confirmErase: 'सब मिटाने के लिए फिर टैप करें',
   },
   ar: {
     name: 'ملاحظات دراسية', title: 'الأمان',
@@ -92,8 +94,8 @@ const T: Record<string, P> = {
     removePin: 'إزالة رمز PIN', current: 'الرمز الحالي', wrong: 'رمز خاطئ.', wait: 'محاولات كثيرة. انتظر {s} ثانية.', open: 'فتح', enter: 'أدخل رمز PIN',
     forgot: 'نسيته؟ امسح بيانات التطبيق من إعدادات Android (تضيع المحادثات واللغات المضافة).', pinOn: 'PIN',
     histH: 'المحادثات', keep: 'الاحتفاظ بها', dontKeep: 'عدم الاحتفاظ بها',
-    histNote: 'من دون احتفاظ: لا يُكتب شيء على الهاتف، وتختفي المحادثات عند إغلاق التطبيق.',
-    erase: 'حذف كل المحادثات الآن', confirmErase: 'المس مرة أخرى لحذف كل شيء',
+    histNote: 'من دون احتفاظ: لا يُكتب شيء على الهاتف، وتختفي المحادثات والمحفوظات والملاحظات عند إغلاق التطبيق.',
+    erase: 'حذف كل المحادثات والمحفوظات والملاحظات الآن', confirmErase: 'المس مرة أخرى لحذف كل شيء',
   },
 }
 export const PT = (lang: string): P => T[lang] ?? T.en!
@@ -149,7 +151,11 @@ export function setDiscreet(on: boolean, lang: string) {
 export const keepHistory = (): boolean => get(HISTORY) !== 'none'
 export function setKeepHistory(keep: boolean) {
   put(HISTORY, keep ? 'keep' : 'none')
-  if (!keep) put('btsm.conversations.v1', null) // what was kept goes now (main.ts KEY)
+  if (!keep) {
+    // what was kept goes now: the conversations (main.ts KEY), the saved items and notes (saved.ts SAVED_KEY)
+    put('btsm.conversations.v1', null)
+    put(SAVED_KEY, null)
+  }
 }
 
 // ----------------------------------------------------------------------------------------------------------------- PIN
@@ -200,7 +206,7 @@ export function lock(lang: string) {
   const wrap = el('div', '')
   wrap.id = 'lock'
   const box = el('form', 'card') as HTMLFormElement
-  box.dir = /^(ar|he|fa|ur|ps|sd|ug|yi|dv|ckb)(-|$)/i.test(lang) ? 'rtl' : 'auto' // bidi.ts rtlLang, written out: one line here
+  box.dir = rtlLang(lang) ? 'rtl' : 'auto'
   box.appendChild(el('h2', '', discreetOn() ? s.name : 'BT Servant Mini'))
   const i = pinInput(s.enter)
   const msg = el('p', 'note', '')
