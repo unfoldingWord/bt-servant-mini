@@ -1551,7 +1551,7 @@ ${JSON.stringify(on.slots)}`, ms: on.ms } : await slotsOf(q, local).then((r) => 
   }, { q: q0 })
 })
 input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault()
     form.requestSubmit()
   }

@@ -130,12 +130,15 @@ export class Composer {
   }
   /** Typing: the row is made after a short pause (100 ms), never while the keyboard composes. */
   onInput() {
-    // (the first edit after a button wrote in the box: deleting into what it wrote undoes it; a trailing space does not count)
+    // (after a button wrote in the box: deleting into what it wrote undoes it, once. Deleting only its trailing space keeps
+    // watching, as the first backspace after "Romanos " does; any other edit ends the watch)
     if (this.filled !== null) {
       const w = this.filled.trimEnd()
       const v = this.box.value
-      if (v.length < w.length && w.startsWith(v)) count('cmp.undo')
-      this.filled = null
+      if (v.length < w.length && w.startsWith(v)) {
+        count('cmp.undo')
+        this.filled = null
+      } else if (!(v.length >= w.length && this.filled.startsWith(v))) this.filled = null
     }
     this.missing = null
     this.choosing = false
@@ -256,6 +259,8 @@ export class Composer {
     }
     if (s.slots) {
       const { sheet, ui } = await buildSheet(`c${Date.now()}`, s.slots, env.helpsLang)
+      // (a question may have been sent, or the app locked, while the sheet was built: then nothing is asked, nothing counted)
+      if (!composerOn() || this.hooks.busy()) return
       this.hooks.ask(s.label, sheet, ui)
       this.chipSent()
       return this.clear()

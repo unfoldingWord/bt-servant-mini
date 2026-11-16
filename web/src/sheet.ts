@@ -40,6 +40,12 @@ export function bookExact(name: string): string | null {
   exactMemo.set(name, c)
   return c
 }
+/** Every language whose table names a book exactly so, with that book and the table's key ("est": en → est; "why": id → rev). */
+export function bookNamesExact(name: string): { lang: string; key: string; code: string }[] {
+  const k = normBook(name)
+  if (!k) return []
+  return Object.entries(books as Record<string, Record<string, string>>).filter(([, t]) => t[k]).map(([lang, t]) => ({ lang, key: k, code: t[k]! }))
+}
 const NAME_WORDS = new Map<string, Set<string>>()
 /** Every word of every name a book has in any language's table, folded ("cantar", "de", "los", "cantares", "song", "kidung"…). */
 export function bookNameWords(code: string): Set<string> {

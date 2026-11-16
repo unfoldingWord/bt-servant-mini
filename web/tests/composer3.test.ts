@@ -199,6 +199,22 @@ describe('«didn\'t find»: the ways of asking that work', () => {
     const es = { 'es-419': all!['es-419']! }
     expect(shapesFor('Isaías zzq qqx', ctx('es', ['es-419'], es)).some((x) => /^(Notas de )?Isaías $/.test(x.fill ?? ''))).toBe(false)
   }, 120_000)
+  test('the book the question names, not a short word that abbreviates another book in some language', () => {
+    // (review of 6c7fd54: "why" is Wahyu in Indonesian, "est" Esther in English; and the Hindi and Arabic stops)
+    const books = (ui: string, q: string) => {
+      env.nav = ui
+      return shapesFor(q, ctx(ui)).map((x) => x.fill).filter((f) => f && !/[?؟]/.test(f))
+    }
+    expect(books('en', 'why did Naomi change her name in Ruth')).toEqual(['Ruth ', 'Notes on Ruth '])
+    expect(books('fr', 'quelle est la grâce de Dieu dans Jean')).toEqual(['Jean ', 'Notes sur Jean '])
+    expect(books('hi', 'नाओमी ने रूत में अपना नाम क्यों बदला।')).toEqual(['रूत '])
+    expect(books('ar', 'لماذا غيرت نعمي اسمها في راعوث؟')).toEqual(['راعوث ', 'ملاحظات راعوث '])
+    expect(books('es', 'por qué Noemí cambió su nombre en Rut')).toEqual(['Rut ', 'Notas de Rut '])
+    expect(books('en', 'what does 1 John say about love')).toEqual(['1 John ', 'Notes on 1 John '])
+    // only short words: no book (the start shapes); an abbreviation of the app's own language when nothing else matched
+    expect(books('en', 'why is the sky blue').some((f) => /Revelation/.test(f!))).toBe(false)
+    expect(books('id', 'why zorblax')).toEqual(['Wahyu ', 'Catatan Wahyu '])
+  })
   test('answers that found something, or say why, get none', async () => {
     for (const [q, ui] of [['Ruth 2:3', 'en'], ['what is the weather', 'en'], ['por qué Noemí se cambió el nombre', 'es']] as const)
       expect(`${q} ${foundNothing((await asked(q, ui)).r)}`).toBe(`${q} false`)
@@ -336,6 +352,33 @@ describe('usage counts: sent.typed, sent.chip, sent.code, sent.free, cmp.fill, c
       await typeIn(k, box, 'Rut 2') // (a later edit: not right after the button)
     })
     expect(c).toEqual({ 'cmp.fill': 3, 'cmp.undo': 1 })
+  }, 60_000)
+  test('an introduction tapped while a question is being answered: not asked, not counted', async () => {
+    setUsageOn(true)
+    store.delete('btsm.usage.days')
+    const log: Log = []
+    let busy = false
+    const k = new Composer(boxOf(), hooksOf(log, 'es', { busy: () => busy }), () => {}, 0)
+    k.books = all
+    const intro: Suggestion = { kind: 'intro', label: 'Introducción a Rut', slots: { intent: 'passage', book: 'rut', chapter: null, verse_start: null, verse_end: null, what: ['intro'], lang: 'es' } }
+    const tap = k.tap(intro)
+    busy = true // (the send arrow, while the sheet is built)
+    await tap
+    expect(log).toEqual([])
+    expect(todayCounts()).toEqual({})
+    setUsageOn(false)
+  }, 60_000)
+  test('cmp.undo deleting one character at a time: the trailing space first, then into the name (once)', async () => {
+    const c = await counted(true, async (k, box) => {
+      await typeIn(k, box, 'ro')
+      await k.tap(k.row.items.find((x) => x.kind === 'book')!) // "Romanos "
+      for (const v of ['Romanos', 'Romano', 'Roman', 'Roma', 'Rom']) await typeIn(k, box, v)
+      // a fill, a space typed after it, then a letter: going on, never an undo
+      await typeIn(k, box, 'ru')
+      await k.tap(k.row.items.find((x) => x.kind === 'book' && /Rut/.test(x.label))!) // "Rut "
+      for (const v of ['Rut', 'Rut ', 'Rut 2', 'Rut ', 'Rut']) await typeIn(k, box, v)
+    })
+    expect(c).toEqual({ 'cmp.fill': 2, 'cmp.undo': 1 })
   }, 60_000)
   test('a book that is not on this phone, tapped: cmp.missing; a help a book lacks is not counted so', async () => {
     const es = { 'es-419': all!['es-419']! }
