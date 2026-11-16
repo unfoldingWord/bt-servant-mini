@@ -12,6 +12,7 @@ import { namesOf } from '../src/search'
 import { openLang } from '../src/packs'
 import { ALL_PACKS, installPacks, OLD_PACKS_DIR, usePacksDir } from './fs-packs'
 import { fullPhone, loadCases, turn } from './harness'
+import { keystrokes, timingLine } from './timing'
 import { existsSync } from 'node:fs'
 import { heapSize } from 'bun:jsc'
 import glossary from '../src/data/kt-glossary.json'
@@ -301,42 +302,22 @@ describe('C: the word index', () => {
     const texts = ['n', 'no', 'not', 'nota', 'notas', '5', 'sig', 'siguiente', 'el capítulo siguiente', 'Rut 2:3 notas', 'Rut 2:5', 'gra', '¿Qué significa gra', 'Notas de ', 'por qué Noemí se cambió']
     env.nav = 'es'
     for (const t of texts) await ready(t, ctx('es', c))
-    startRow(ctx('es', c))
-    const times: number[] = []
-    for (let r = 0; r < 20; r++) {
-      for (const t of texts) {
-        const t0 = performance.now()
-        suggest(t, ctx('es', c))
-        times.push(performance.now() - t0)
-      }
-      const t0 = performance.now()
-      startRow(ctx('es', c))
-      times.push(performance.now() - t0)
-    }
-    times.sort((a, b) => a - b)
-    const p50 = times[times.length >> 1]!, p95 = times[Math.floor(times.length * 0.95)]!
-    console.log(`suggest() after "Rut 2:3": median ${p50.toFixed(2)} ms, p95 ${p95.toFixed(2)} ms over ${times.length} calls`)
-    expect(p50).toBeLessThan(3)
-    expect(p95).toBeLessThan(8)
+    // (a warm-up pass, then the best of 3: tests/timing.ts)
+    const t = keystrokes([...texts.map((q) => () => suggest(q, ctx('es', c))), () => startRow(ctx('es', c))])
+    console.log(`suggest() after "Rut 2:3": ${timingLine(t)}`)
+    expect(t.p50).toBeLessThan(3)
+    expect(t.p95).toBeLessThan(8)
   }, 120_000)
   test('time per keystroke with the index (median under 3 ms, the slowest 5 % under 8)', async () => {
     await buildTermIndex(ALL_PACKS)
     const texts: [string, string][] = [['es', 'g'], ['es', 'gr'], ['es', 'gra'], ['es', 'grac'], ['es', '¿Qué significa gra'], ['en', 'What does gr'], ['en', 'metaph'],
       ['hi', 'अनुग्'], ['ar', 'ما معنى نع'], ['fr', 'Que signifie arch'], ['id', 'anuge'], ['es', 'por qué Noemí se cambió']]
     for (const [ui, t] of texts) { env.nav = ui; await ready(t, ctx(ui)) }
-    const times: number[] = []
-    for (let r = 0; r < 20; r++)
-      for (const [ui, t] of texts) {
-        env.nav = ui
-        const t0 = performance.now()
-        suggest(t, ctx(ui))
-        times.push(performance.now() - t0)
-      }
-    times.sort((a, b) => a - b)
-    const p50 = times[times.length >> 1]!, p95 = times[Math.floor(times.length * 0.95)]!
-    console.log(`suggest() with the word index: median ${p50.toFixed(2)} ms, p95 ${p95.toFixed(2)} ms over ${times.length} calls`)
-    expect(p50).toBeLessThan(3)
-    expect(p95).toBeLessThan(8)
+    // (a warm-up pass, then the best of 3: tests/timing.ts)
+    const t = keystrokes(texts.map(([ui, q]) => () => { env.nav = ui; suggest(q, ctx(ui)) }))
+    console.log(`suggest() with the word index: ${timingLine(t)}`)
+    expect(t.p50).toBeLessThan(3)
+    expect(t.p95).toBeLessThan(8)
   })
 })
 

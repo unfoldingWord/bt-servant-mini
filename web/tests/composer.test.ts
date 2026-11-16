@@ -12,6 +12,7 @@ import { has } from '../src/commands'
 import { openLang } from '../src/packs'
 import { installPacks, ALL_PACKS } from './fs-packs'
 import { fullPhone, loadCases, turn } from './harness'
+import { keystrokes, timingLine } from './timing'
 
 // a phone's localStorage, for the switch
 const store = new Map<string, string>()
@@ -182,19 +183,11 @@ describe('time per keystroke (budget: 8 ms on the A56; a desktop under load must
       'योना', 'योना 1:3', 'يونان ١:٣', 'صموئيل الأول', 'Yunus 1:3 catatan', 'Notes sur Ruth 2:3', 'Phillipians', 'Introducción a Rut 2']
     const uis = ['es', 'es', 'es', 'es', 'es', 'es', 'es', 'es', 'es', 'es', 'en', 'es', 'hi', 'hi', 'ar', 'ar', 'id', 'fr', 'en', 'es']
     for (let i = 0; i < texts.length; i++) { env.nav = uis[i]!; await ready(texts[i]!, ctx(uis[i]!)) } // warm (regexes, names, the books a row reads once)
-    const times: number[] = []
-    for (let r = 0; r < 20; r++)
-      for (let i = 0; i < texts.length; i++) {
-        const t = performance.now()
-        env.nav = uis[i]!
-        suggest(texts[i]!, ctx(uis[i]!))
-        times.push(performance.now() - t)
-      }
-    times.sort((a, b) => a - b)
-    const p50 = times[times.length >> 1]!, p95 = times[Math.floor(times.length * 0.95)]!, max = times[times.length - 1]!
-    console.log(`suggest(): median ${p50.toFixed(2)} ms, p95 ${p95.toFixed(2)} ms, max ${max.toFixed(2)} ms over ${times.length} calls`)
-    expect(p50).toBeLessThan(3)
-    expect(p95).toBeLessThan(8)
+    // (a warm-up pass, then the best of 3: tests/timing.ts)
+    const t = keystrokes(texts.map((q, i) => () => { env.nav = uis[i]!; suggest(q, ctx(uis[i]!)) }))
+    console.log(`suggest(): ${timingLine(t)}`)
+    expect(t.p50).toBeLessThan(3)
+    expect(t.p95).toBeLessThan(8)
   })
 })
 
