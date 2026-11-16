@@ -3,13 +3,14 @@
 // what it means for someone in a place where Bible translation work is risky. Turning either off needs no question.
 
 import { PT } from './protect'
+import { updateSupported } from './update'
 
 export type Choice = 'online' | 'usage' | 'discreet'
 const DONE = 'btsm.safety'
 
 type S = {
   title: string; intro: string; brief: string; confirm: string
-  onlineH: string; onlineP: string; usageH: string; usageP: string
+  onlineH: string; onlineP: string; usageH: string; usageP: string; update: string
   yes: string; no: string; go: string; on: string; cancel: string; later: string
 }
 const T: Record<string, S> = {
@@ -22,6 +23,7 @@ const T: Record<string, S> = {
     onlineP: 'Your question and the helps found are sent to a server of unfoldingWord, and a larger AI writes the answer. Whoever watches the network (the internet provider, the owner of the Wi‑Fi, a government) cannot read them, but can see that this phone talks to unfoldingWord. Do not turn this on if, where you are, it is risky for people to know that you work on Bible translation.',
     usageH: 'Share usage counts',
     usageP: 'Once a day, totals of how the app is used (how many questions, of what kind, how many found nothing), never what you asked. They go to the same server, so the same caution applies.',
+    update: "If you allow either one, the app also checks once a day for a new version on unfoldingWord's site. If not, you can check yourself in the menu.",
     yes: 'Yes, turn on', no: 'No', go: 'Continue', on: 'Turn on', cancel: 'Cancel', later: 'You can change this later in the menu.',
   },
   es: {
@@ -33,6 +35,7 @@ const T: Record<string, S> = {
     onlineP: 'Tu pregunta y las ayudas encontradas se envían a un servidor de unfoldingWord, y una IA más grande escribe la respuesta. Quien vigile la red (el proveedor de internet, el dueño del wifi, un gobierno) no puede leerlas, pero sí puede ver que este teléfono se comunica con unfoldingWord. No lo actives si en tu lugar es riesgoso que se sepa que trabajas en traducción bíblica.',
     usageH: 'Compartir el conteo de uso',
     usageP: 'Una vez al día, totales de cómo se usa la app (cuántas preguntas, de qué tipo, cuántas no encontraron nada), nunca lo que preguntaste. Va al mismo servidor, así que vale la misma precaución.',
+    update: 'Si permites alguna de las dos, la app también busca una vez al día si hay una versión nueva en el sitio de unfoldingWord. Si no, puedes buscarla tú en el menú.',
     yes: 'Sí, activar', no: 'No', go: 'Continuar', on: 'Activar', cancel: 'Cancelar', later: 'Puedes cambiarlo después en el menú.',
   },
   fr: {
@@ -44,6 +47,7 @@ const T: Record<string, S> = {
     onlineP: 'Votre question et les aides trouvées sont envoyées à un serveur d\'unfoldingWord, et une IA plus grande rédige la réponse. Quiconque surveille le réseau (le fournisseur d\'accès, le propriétaire du wifi, un gouvernement) ne peut pas les lire, mais peut voir que ce téléphone communique avec unfoldingWord. Ne l\'activez pas si, là où vous êtes, il est risqué que l\'on sache que vous travaillez à la traduction de la Bible.',
     usageH: 'Partager les statistiques d\'usage',
     usageP: 'Une fois par jour, des totaux sur l\'usage de l\'application (combien de questions, de quel type, combien n\'ont rien trouvé), jamais ce que vous avez demandé. Elles vont au même serveur, la même prudence s\'applique donc.',
+    update: "Si vous autorisez l'une des deux, l'application cherche aussi une fois par jour s'il y a une nouvelle version sur le site d'unfoldingWord. Sinon, vous pouvez chercher vous-même dans le menu.",
     yes: 'Oui, activer', no: 'Non', go: 'Continuer', on: 'Activer', cancel: 'Annuler', later: 'Vous pourrez le changer plus tard dans le menu.',
   },
   id: {
@@ -55,6 +59,7 @@ const T: Record<string, S> = {
     onlineP: 'Pertanyaan Anda dan bantuan yang ditemukan dikirim ke server unfoldingWord, lalu AI yang lebih besar menulis jawabannya. Siapa pun yang mengawasi jaringan (penyedia internet, pemilik wifi, pemerintah) tidak dapat membacanya, tetapi dapat melihat bahwa ponsel ini berhubungan dengan unfoldingWord. Jangan aktifkan jika di tempat Anda berisiko bila orang tahu Anda bekerja dalam penerjemahan Alkitab.',
     usageH: 'Bagikan hitungan penggunaan',
     usageP: 'Sekali sehari, jumlah total cara aplikasi dipakai (berapa pertanyaan, jenisnya, berapa yang tidak menemukan apa pun), tidak pernah isi pertanyaan Anda. Dikirim ke server yang sama, jadi kehati-hatian yang sama berlaku.',
+    update: 'Jika Anda mengizinkan salah satunya, aplikasi juga memeriksa sekali sehari apakah ada versi baru di situs unfoldingWord. Jika tidak, Anda dapat memeriksanya sendiri di menu.',
     yes: 'Ya, aktifkan', no: 'Tidak', go: 'Lanjut', on: 'Aktifkan', cancel: 'Batal', later: 'Anda bisa mengubahnya nanti di menu.',
   },
   hi: {
@@ -66,6 +71,7 @@ const T: Record<string, S> = {
     onlineP: 'आपका प्रश्न और मिली हुई सहायताएँ unfoldingWord के एक सर्वर पर भेजी जाती हैं, और एक बड़ा AI उत्तर लिखता है। नेटवर्क पर नज़र रखने वाला कोई भी (इंटरनेट प्रदाता, वाई‑फ़ाई का मालिक, कोई सरकार) उन्हें पढ़ नहीं सकता, पर यह देख सकता है कि यह फ़ोन unfoldingWord से बात करता है। इसे चालू न करें यदि आपकी जगह पर लोगों का यह जानना जोखिम भरा है कि आप बाइबल अनुवाद का काम करते हैं।',
     usageH: 'उपयोग की गिनती साझा करें',
     usageP: 'दिन में एक बार, ऐप के उपयोग की कुल संख्याएँ (कितने प्रश्न, किस प्रकार के, कितनों में कुछ नहीं मिला), आपने क्या पूछा यह कभी नहीं। यह उसी सर्वर पर जाती है, इसलिए वही सावधानी लागू होती है।',
+    update: 'यदि आप इनमें से किसी एक की अनुमति देते हैं, तो ऐप दिन में एक बार unfoldingWord की साइट पर नया संस्करण भी देखता है। अन्यथा आप मेनू में ख़ुद देख सकते हैं।',
     yes: 'हाँ, चालू करें', no: 'नहीं', go: 'आगे', on: 'चालू करें', cancel: 'रद्द करें', later: 'आप इसे बाद में मेनू में बदल सकते हैं।',
   },
   ar: {
@@ -77,6 +83,7 @@ const T: Record<string, S> = {
     onlineP: 'يُرسل سؤالك والمساعدات التي وُجدت إلى خادم تابع لـ unfoldingWord، ويكتب ذكاء اصطناعي أكبر الإجابة. من يراقب الشبكة (مزوّد الإنترنت، صاحب شبكة الواي فاي، حكومة) لا يستطيع قراءتها، لكنه يستطيع أن يرى أن هذا الهاتف يتصل بـ unfoldingWord. لا تفعّله إذا كان من الخطر في مكانك أن يُعرف أنك تعمل في ترجمة الكتاب المقدس.',
     usageH: 'مشاركة إحصاءات الاستخدام',
     usageP: 'مرة في اليوم، مجاميع عن استخدام التطبيق (كم سؤالًا، ومن أي نوع، وكم منها لم يجد شيئًا)، ولا يُرسل أبدًا ما سألته. تذهب إلى الخادم نفسه، فالحذر نفسه ينطبق.',
+    update: 'إذا سمحت بأحدهما، يتحقق التطبيق أيضًا مرة في اليوم من وجود إصدار جديد على موقع unfoldingWord. وإلا يمكنك التحقق بنفسك من القائمة.',
     yes: 'نعم، فعّل', no: 'لا', go: 'متابعة', on: 'تفعيل', cancel: 'إلغاء', later: 'يمكنك تغيير ذلك لاحقًا من القائمة.',
   },
 }
@@ -152,6 +159,8 @@ export function askSafety(lang: string, which: Choice[], done: (a: Partial<Recor
     } else answers[w] = true
     card.appendChild(sec)
   }
+  // the daily check for a new version (update.ts, Android app only) runs only when one of these is allowed
+  if (first && updateSupported() && (which.includes('online') || which.includes('usage'))) card.appendChild(el('p', 'meta', s.update))
   card.appendChild(el('p', 'meta', s.later))
   card.appendChild(go)
   if (!first) card.appendChild(button(s.cancel, 'secondary', () => { wrap.remove(); done(null) }))

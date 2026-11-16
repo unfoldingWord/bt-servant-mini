@@ -2,3 +2,8 @@
 /app/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
+
+# The Android app reads this from its own page (https://appassets.androidplatform.net): a cross-origin GET, no credentials.
+/latest.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-cache

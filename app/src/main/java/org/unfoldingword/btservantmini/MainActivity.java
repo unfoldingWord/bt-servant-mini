@@ -70,6 +70,10 @@ public class MainActivity extends Activity {
     private static final int PORT = 8080;
     private static final int PICK_PAGE_FILE = 1;
     private static final int PICK_MODEL = 2;
+    /** The page's own host (WebViewAssetLoader): the WebView never leaves it. */
+    private static final String PAGE_HOST = "appassets.androidplatform.net";
+    /** The only links the app opens in the browser: this app's GitHub releases (a new version's APK). */
+    private static final String RELEASES = "/unfoldingWord/bt-servant-mini/releases/";
 
     private WebView web;
     private static Process server;
@@ -100,6 +104,17 @@ public class MainActivity extends Activity {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
                 return loader.shouldInterceptRequest(req.getUrl());
+            }
+            // the page never navigates away (no other page gets the Android bridge): a web link the person taps (one in an
+            // article, a release) opens in the browser; any other scheme (intent:, file:, content:, javascript:) is blocked
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
+                Uri u = req.getUrl();
+                String scheme = u.getScheme();
+                if ("https".equalsIgnoreCase(scheme) && PAGE_HOST.equalsIgnoreCase(u.getHost())) return false;
+                if (("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)) && u.getHost() != null) openInBrowser(u);
+                else Log.w(TAG, "blocked navigation");
+                return true;
             }
         });
         // JS dialogs, and <input type=file> (a .tcpack from the SD card, the phone memory or a chat app)
@@ -525,6 +540,23 @@ public class MainActivity extends Activity {
             try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
         }
 
+        /** The build number, to compare with the newest release listed on the landing site (web/src/update.ts). */
+        @JavascriptInterface
+        public int versionCode() { return BuildConfig.VERSION_CODE; }
+
+        /**
+         * Opens a link in the browser: only https links to this app's GitHub releases (a new version's APK, which the
+         * browser downloads and the person taps to install; the app itself installs nothing). False when not allowed.
+         */
+        @JavascriptInterface
+        public boolean openUrl(String url) {
+            final Uri u;
+            try { u = Uri.parse(url); } catch (Exception e) { return false; }
+            if (!releaseLink(u)) return false;
+            runOnUiThread(() -> openInBrowser(u));
+            return true;
+        }
+
         @JavascriptInterface
         public void downloadModel(String url, String sha, String size) {
             if (state.equals("downloading") || state.equals("importing")) return;
@@ -596,6 +628,20 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> web.evaluateJavascript(js, null));
             });
         }
+    }
+
+    /** https://github.com/unfoldingWord/bt-servant-mini/releases/… with no user, port or ".." (web/src/update.ts checks the same). */
+    private static boolean releaseLink(Uri u) {
+        if (u == null) return false;
+        String path = u.getPath();
+        return "https".equalsIgnoreCase(u.getScheme()) && "github.com".equalsIgnoreCase(u.getHost())
+                && u.getUserInfo() == null && u.getPort() == -1 && path != null && path.startsWith(RELEASES) && !path.contains("..");
+    }
+
+    private void openInBrowser(Uri u) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, u).addCategory(Intent.CATEGORY_BROWSABLE));
+        } catch (Exception e) { Log.w(TAG, "openUrl: " + e); }
     }
 
     private void signInReply(String idToken, String name, String error) {
