@@ -1,7 +1,7 @@
 // The decisions between the question and the answer, without the page: what a question asks for once its slots are known,
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
 import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQuestion, setUiLang, type Sheet, type Study, studyOf } from './answer'
-import { bookCode, bookExact, bookNameWords, buildSheet, fold, idsOf, NAME_MAX, type Slots } from './sheet'
+import { bookCode, bookExact, bookNameWords, buildSheet, endsLongName, fold, idsOf, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
@@ -608,8 +608,11 @@ export function introAsked(q: string, lang: string): Slots | null {
   for (let i = 0; i < words.length; i++) {
     const w = fold(words[i]!)
     if (!/^\d+$/.test(w) && !content.has(w) && !(w.length >= 3 && own[w])) continue
-    for (let k = 3; k >= 1; k--) {
-      const code = bookCode(lang, words.slice(i, i + k).join(' '))
+    // a name of several words exactly as a table has it, longest first (as refInText reads one: "Introducción a Hechos de los
+    // apóstoles", "प्रेरितों के काम का परिचय"), then up to three words read loosely
+    for (let k = Math.min(BOOK_WORDS, words.length - i); k >= 1; k--) {
+      const name = words.slice(i, i + k).join(' ')
+      const code = k > 3 ? (endsLongName(words[i + k - 1]!) ? bookExact(name) : null) : bookCode(lang, name)
       if (!code) continue
       const ch = /^\d+$/.test(words[i + k] ?? '') ? Number(words[i + k]) : chFirst
       return { intent: 'passage', book: code, chapter: ch, verse_start: null, verse_end: null, what: ['intro'], lang } as Slots
@@ -618,6 +621,8 @@ export function introAsked(q: string, lang: string): Slots | null {
   return null
 }
 
+/** The most words a book's name has in the tables ("cantar de los cantares"), and room for a "le livre de" before it. */
+const BOOK_WORDS = Math.max(...Object.values(bookTables as Record<string, Record<string, string>>).flatMap((t) => Object.keys(t).map((n) => n.split(' ').length))) + 3
 /** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
 export function refInText(slots: Slots, q: string): Slots {
   if (slots.book && bookCode(slots.lang ?? env.nav, slots.book) && slots.chapter)
@@ -641,6 +646,17 @@ export function refInText(slots: Slots, q: string): Slots {
       if (after && (bookExact(`${m[2]} ${after[1]}`) || (after[2] && bookExact(`${m[2]} ${after[1]} ${after[2]}`)))) {
         re.lastIndex = m.index + m[0].length - m[2]!.length
         continue
+      }
+    }
+    // a name of several words, exactly as a table has it, longest first: the pattern takes one word before the number, so
+    // "प्रेरितों के काम 1:8" was "काम", "رؤيا يوحنا 1:1" was John and "Kisah Para Rasul 1:1" nothing. Only when that word ends
+    // such a name: this runs on every keystroke (the composer), and most references are one word
+    const before = t.slice(0, m.index + m[1]!.length).split(/\s+/).filter(Boolean)
+    for (let k = endsLongName(before[before.length - 1] ?? '') ? Math.min(BOOK_WORDS, before.length) : 0; k >= 2 && !code; k--) {
+      const n = before.slice(-k).join(' ')
+      if (bookExact(n)) {
+        name = n
+        code = bookCode(lang, n)
       }
     }
     const words = m[1]!.trim().split(/\s+/)
@@ -687,8 +703,10 @@ export function storyWords(q: string, code?: string): string[] {
   const own = code ? bookNameWords(code) : new Set<string>()
   const book = words.map((w) => own.has(fold(w)) || own.has(fold(w).replace(/^ال/, '')))
   for (let i = 0; i < words.length; i++)
-    for (let k = Math.min(NAME_MAX, words.length - i); k >= 1; k--)
-      if (bookExact(words.slice(i, i + k).join(' '))) { for (let j = i; j < i + k; j++) book[j] = true; break }
+    // (a name of several words only when its last word ends one: the longest-name reading of refInText)
+    for (let k = Math.min(BOOK_WORDS, words.length - i); k >= 1; k--)
+      if (k === 1 || endsLongName(words[i + k - 1]!))
+        if (bookExact(words.slice(i, i + k).join(' '))) { for (let j = i; j < i + k; j++) book[j] = true; break }
   const rest = strip(words.filter((_, i) => !book[i]).join(' '), STORY_STRIP)
   return keywords(rest).filter((w) => !isFiller(w) && !/^\d+$/.test(w))
 }
