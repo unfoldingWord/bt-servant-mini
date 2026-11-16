@@ -25,7 +25,7 @@ export const env = { nav: 'en', helpsLang: null as string | null, details: 'deta
 export type Hit = { book: string; ch: number; v: number }
 /** What a conversation keeps for the next question (main.ts adds its messages and title). */
 /** The verses a free search found, and the words it says it found them by: "say it in English" keeps them (repeatOf). */
-export type Found = { hits: Hit[]; how: string; used: string[] }
+export type Found = { hits: Hit[]; how: string; used: string[]; words?: string[] }
 export type ConvState = { last: Sheet | null; found?: Hit[]
   /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
   state?: { s: Record<string, unknown>; at: number }
@@ -505,8 +505,8 @@ const COMMON: Record<string, RegExp> = {
   // with no reader (no model yet, offline), these words alone tell the language: also a translator's own words ("Voy a
   // empezar a traducir Jonás" was answered in English on a phone in English)
   en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says|translate|translating|want|start|on|of)\b/gi,
-  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice|traducir|traduzco|traduce|voy|vamos|empezar|empiezo|quiero|necesito|libro|puedo|debo|puedes|podr[ií]as|dime|d[ií]melo|decir(?:lo|me)?|mu[eé]strame|mostrar|significa|del|dios|y|con|por)\b/gi,
-  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|verset|notes?|dit|traduire|traduis|livre|je|veux|dois|peux|commencer|signifie|veut|dire|du|des|et|dieu)\b/gi,
+  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice|traducir|traduzco|traduce|voy|vamos|empezar|empiezo|quiero|necesito|libro|puedo|debo|puedes|podr[ií]as|dime|d[ií]melo|decir(?:lo|me)?|mu[eé]strame|mostrar|significa|del|dios|y(?!\s+a\b)|con|por)\b/gi,
+  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|versets?|notes?|dit|traduire|traduis|traduit|livre|je|veux|dois|peux|commencer|signifie|veut|dire|du|des|et|dieu|il|dans|combien|pourquoi|sur|avec)\b/gi,
   id: /\b(apa|siapa|bagaimana|di mana|yang|adalah|tolong|ayat|catatan|kata|dalam|itu|terjemahkan|menerjemahkan|saya|mau|ingin|kitab|mulai)\b/gi,
 }
 export function guessLang(q: string): string {
@@ -1845,7 +1845,8 @@ async function outOfScope(x: Ctx): Promise<Done> {
 export const ROUTES: Route[] = [
   {
     // "¿Me lo puedes decir en inglés?" after a free search: the verses it found, from the pack asked for (a new search there
-    // found others: Esther 2:14 became 2:17), each a button as before; the notes found are not searched again
+    // found others: Esther 2:14 became 2:17), each a button as before; the notes and questions with the question's words, and
+    // the articles they name ("Ester", "Concubina"), from that pack
     name: 'found-again',
     when: (x) => !!x.keep?.hits.length,
     run: async (x) => {
@@ -1859,9 +1860,19 @@ export const ROUTES: Route[] = [
       const at = (h: Hit, what: string[]) => passageSheet(x.sheet, `${h.book} ${h.ch}:${h.v}`, what)
       const follow: Follow[] = hits.slice(0, 4).map((h) => ({ label: hitLabel(ui, h), sheet: at(h, ['text', 'notes']) }))
       follow.splice(1, 0, ...(await placeSteps(follow[0]!.sheet!, hits[0]!, ui)))
+      const words = k.words ?? k.used
+      for (const id of [...(await articlesNamed(words).catch(() => new Set<string>()))].filter((i) => i.startsWith('tw:')).slice(0, 2)) {
+        const f = await twStep(x.sheet, id).catch(() => null)
+        if (f) follow.push(f)
+      }
+      const helps = x.q ? await searchHelps(x.q, x.sheet.lang).catch(() => []) : []
+      const groups = (['note', 'question'] as const).map((kd) => ({
+        head: (kd === 'note' ? HT().notes : HT().questions).replace('{w}', words.join(' ')),
+        items: helps.filter((h) => h.kind === kd).map((h) => ({ ...h, snippet: plainSnippet(h.snippet), ref: hitLabel(ui, h) })),
+      })).filter((g) => g.items.length)
       return {
-        answered: 'search', ref: `${hits[0]!.book} ${hits[0]!.ch}:${hits[0]!.v}`, concept: null, found: lines.length,
-        reply: { ui, follow, intro: searchIntro(k.how, k.used, ui), info: lines.join('\n\n'),
+        answered: 'search', ref: `${hits[0]!.book} ${hits[0]!.ch}:${hits[0]!.v}`, concept: null, found: lines.length + helps.length,
+        reply: { ui, follow, intro: searchIntro(k.how, k.used, ui), info: lines.join('\n\n'), helps: groups.length ? groups : undefined,
           meta: `${env.details} · ${secs(x)} s\n${x.meta}\nthe same verses (${hits.map((h) => `${h.book} ${h.ch}:${h.v}`).join(', ')})` },
       }
     },
@@ -2088,7 +2099,7 @@ ${x.meta}` },
       }
       const used = res.how === 'concepts' ? (st?.matched.length ? st.matched : res.concepts) : res.how === 'text' ? (hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
       // "say it in English" after this answer: these verses again, not a search in the other pack (repeatOf)
-      if (hits.length && c.prevResolved && c.prevResolved.q === q) c.prevResolved.found = { hits: hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v })), how: res.how, used }
+      if (hits.length && c.prevResolved && c.prevResolved.q === q) c.prevResolved.found = { hits: hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v })), how: res.how, used, words: res.keywords }
       const follow: Follow[] = []
       for (const h of hits.slice(0, 4)) follow.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
       // the best verse in its place: its section and its chapter, right after it ("Ester concubinas" found Esther 2:14: a report

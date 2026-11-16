@@ -25,6 +25,12 @@ const IN_APP: [string, string, string][] = [
   ['es', 'la grâce de Dieu', 'fr'],
   ['en', 'el amor de Dios y la fe', 'es'],
   ['es', 'Que signifie grâce ?', 'fr'],
+  // French "il y a" is no Spanish "y" (review of b90dad4), and "on" in French is no English "on"
+  ['fr', 'Combien de versets y a-t-il dans Ruth ?', 'fr'],
+  ['fr', 'Il y a combien de chapitres dans Jonas ?', 'fr'],
+  ['es', 'Combien de versets y a-t-il dans Ruth ?', 'fr'],
+  ['es', 'Comment on traduit grâce ?', 'fr'],
+  ['fr', 'Dios y su pueblo', 'es'],
 ]
 for (const [app, q, want] of IN_APP)
   test(`${want} in the ${app} app: ${q}`, () => {
