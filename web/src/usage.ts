@@ -2,6 +2,8 @@
 // questions, of what kind, in which language, how many found nothing) and, once a day has ended and there is internet,
 // sends those totals to BT Servant Mini's online service, with the app version, the languages on the phone and its memory
 // class. Never the text of a question, never an id of the phone or the person. Turning it off deletes what is waiting.
+// The typing suggestions add seven counts (composer.ts; approved by Abel on Nov 16): sent.typed, sent.chip, sent.code, sent.free,
+// cmp.fill, cmp.undo, cmp.missing. The note below says so in each language.
 import { isOnline, onlineKey, onlineUrl } from './online'
 
 const ON = 'btsm.usage'
@@ -115,37 +117,37 @@ export const USAGE_T: Record<string, { title: string; toggle: string; note: stri
   en: {
     title: 'Usage counts',
     toggle: 'Share usage counts (when there is internet)',
-    note: 'They help the team see how the app is used and where it fails. Once a day, when there is internet, the app sends totals: how many questions, of what kind, in which language, how many found nothing; with the app version, its languages and the phone\'s memory. Never what you asked, and nothing that identifies you or this phone. Turning it off deletes what has not been sent.',
+    note: 'They help the team see how the app is used and where it fails. Once a day, when there is internet, the app sends totals: how many questions, of what kind, in which language, how many found nothing; with the app version, its languages and the phone\'s memory. Never what you asked, and nothing that identifies you or this phone. Turning it off deletes what has not been sent. It also counts how questions leave the box (typed, or with a typing suggestion), whether the app read them by itself, and taps on the typing suggestions that fill in the box, are undone, or name a book that is not on this phone: only how many, never the words.',
     next: 'What the next report sends', empty: 'Nothing to send yet: a day\'s totals go out after that day ends.', today: 'Today so far', sent: 'Last sent: {d}',
   },
   es: {
     title: 'Conteo de uso',
     toggle: 'Compartir el conteo de uso (cuando hay internet)',
-    note: 'Ayuda al equipo a ver cómo se usa la app y dónde falla. Una vez al día, cuando hay internet, la app envía totales: cuántas preguntas, de qué tipo, en qué idioma, cuántas no encontraron nada; con la versión de la app, sus idiomas y la memoria del teléfono. Nunca lo que preguntaste, ni nada que te identifique a ti o a este teléfono. Al apagarlo se borra lo que no se ha enviado.',
+    note: 'Ayuda al equipo a ver cómo se usa la app y dónde falla. Una vez al día, cuando hay internet, la app envía totales: cuántas preguntas, de qué tipo, en qué idioma, cuántas no encontraron nada; con la versión de la app, sus idiomas y la memoria del teléfono. Nunca lo que preguntaste, ni nada que te identifique a ti o a este teléfono. Al apagarlo se borra lo que no se ha enviado. También cuenta cómo salen las preguntas de la caja (escritas, o con una sugerencia al escribir), si la app las leyó sola, y los toques en las sugerencias al escribir que completan la caja, que se deshacen o que nombran un libro que no está en este teléfono: solo cuántos, nunca las palabras.',
     next: 'Lo que envía el próximo informe', empty: 'Nada que enviar todavía: los totales de un día salen cuando ese día termina.', today: 'Hoy hasta ahora', sent: 'Último envío: {d}',
   },
   fr: {
     title: 'Statistiques d\'usage',
     toggle: 'Partager les statistiques d\'usage (quand il y a internet)',
-    note: 'Elles aident l\'équipe à voir comment l\'application est utilisée et où elle échoue. Une fois par jour, quand il y a internet, l\'application envoie des totaux : combien de questions, de quel type, dans quelle langue, combien n\'ont rien trouvé ; avec la version de l\'application, ses langues et la mémoire du téléphone. Jamais ce que vous avez demandé, ni rien qui vous identifie, vous ou ce téléphone. Les désactiver efface ce qui n\'a pas été envoyé.',
+    note: 'Elles aident l\'équipe à voir comment l\'application est utilisée et où elle échoue. Une fois par jour, quand il y a internet, l\'application envoie des totaux : combien de questions, de quel type, dans quelle langue, combien n\'ont rien trouvé ; avec la version de l\'application, ses langues et la mémoire du téléphone. Jamais ce que vous avez demandé, ni rien qui vous identifie, vous ou ce téléphone. Les désactiver efface ce qui n\'a pas été envoyé. Elles comptent aussi comment les questions quittent la zone de saisie (tapées, ou avec une suggestion pendant la saisie), si l\'application les a lues seule, et les touches sur les suggestions pendant la saisie qui complètent la zone, qui sont annulées ou qui nomment un livre absent de ce téléphone : seulement combien, jamais les mots.',
     next: 'Ce que le prochain rapport envoie', empty: 'Rien à envoyer pour l\'instant : les totaux d\'un jour partent une fois ce jour terminé.', today: 'Aujourd\'hui jusqu\'ici', sent: 'Dernier envoi : {d}',
   },
   id: {
     title: 'Hitungan penggunaan',
     toggle: 'Bagikan hitungan penggunaan (saat ada internet)',
-    note: 'Ini membantu tim melihat bagaimana aplikasi dipakai dan di mana gagal. Sekali sehari, saat ada internet, aplikasi mengirim jumlah total: berapa pertanyaan, jenisnya, bahasanya, berapa yang tidak menemukan apa pun; beserta versi aplikasi, bahasanya, dan memori ponsel. Tidak pernah isi pertanyaan Anda, dan tidak ada yang mengenali Anda atau ponsel ini. Mematikannya menghapus yang belum terkirim.',
+    note: 'Ini membantu tim melihat bagaimana aplikasi dipakai dan di mana gagal. Sekali sehari, saat ada internet, aplikasi mengirim jumlah total: berapa pertanyaan, jenisnya, bahasanya, berapa yang tidak menemukan apa pun; beserta versi aplikasi, bahasanya, dan memori ponsel. Tidak pernah isi pertanyaan Anda, dan tidak ada yang mengenali Anda atau ponsel ini. Mematikannya menghapus yang belum terkirim. Ini juga menghitung cara pertanyaan dikirim dari kotak (diketik, atau dengan saran saat mengetik), apakah aplikasi membacanya sendiri, dan ketukan pada saran saat mengetik yang mengisi kotak, yang dibatalkan, atau yang menyebut kitab yang tidak ada di ponsel ini: hanya jumlahnya, tidak pernah kata-katanya.',
     next: 'Yang dikirim laporan berikutnya', empty: 'Belum ada yang dikirim: total satu hari dikirim setelah hari itu berakhir.', today: 'Hari ini sejauh ini', sent: 'Terakhir dikirim: {d}',
   },
   hi: {
     title: 'उपयोग की गिनती',
     toggle: 'उपयोग की गिनती साझा करें (जब इंटरनेट हो)',
-    note: 'इससे टीम देख पाती है कि ऐप कैसे इस्तेमाल होता है और कहाँ विफल होता है। दिन में एक बार, इंटरनेट होने पर, ऐप कुल संख्याएँ भेजता है: कितने प्रश्न, किस प्रकार के, किस भाषा में, कितनों में कुछ नहीं मिला; साथ में ऐप का संस्करण, उसकी भाषाएँ और फ़ोन की मेमोरी। आपने क्या पूछा, यह कभी नहीं, और ऐसा कुछ नहीं जिससे आपकी या इस फ़ोन की पहचान हो। इसे बंद करने पर जो नहीं भेजा गया वह मिट जाता है।',
+    note: 'इससे टीम देख पाती है कि ऐप कैसे इस्तेमाल होता है और कहाँ विफल होता है। दिन में एक बार, इंटरनेट होने पर, ऐप कुल संख्याएँ भेजता है: कितने प्रश्न, किस प्रकार के, किस भाषा में, कितनों में कुछ नहीं मिला; साथ में ऐप का संस्करण, उसकी भाषाएँ और फ़ोन की मेमोरी। आपने क्या पूछा, यह कभी नहीं, और ऐसा कुछ नहीं जिससे आपकी या इस फ़ोन की पहचान हो। इसे बंद करने पर जो नहीं भेजा गया वह मिट जाता है। यह भी गिना जाता है कि प्रश्न बॉक्स से कैसे भेजे गए (लिखकर, या लिखते समय सुझाव से), क्या ऐप ने उन्हें खुद पढ़ा, और लिखते समय सुझावों पर कितने टैप बॉक्स भरते हैं, पूर्ववत होते हैं, या ऐसी पुस्तक बताते हैं जो इस फ़ोन पर नहीं है: केवल कितने, शब्द कभी नहीं।',
     next: 'अगली रिपोर्ट में क्या जाएगा', empty: 'अभी भेजने को कुछ नहीं: किसी दिन की गिनती उस दिन के ख़त्म होने के बाद जाती है।', today: 'आज अब तक', sent: 'पिछली बार भेजा: {d}',
   },
   ar: {
     title: 'إحصاءات الاستخدام',
     toggle: 'مشاركة إحصاءات الاستخدام (عند توفر الإنترنت)',
-    note: 'تساعد الفريق على معرفة كيف يُستخدم التطبيق وأين يخفق. مرة في اليوم، عند توفر الإنترنت، يرسل التطبيق مجاميع: كم سؤالًا، ومن أي نوع، وبأي لغة، وكم منها لم يجد شيئًا؛ مع إصدار التطبيق ولغاته وذاكرة الهاتف. لا يُرسل أبدًا ما سألته، ولا أي شيء يدل عليك أو على هذا الهاتف. إيقافها يحذف ما لم يُرسل بعد.',
+    note: 'تساعد الفريق على معرفة كيف يُستخدم التطبيق وأين يخفق. مرة في اليوم، عند توفر الإنترنت، يرسل التطبيق مجاميع: كم سؤالًا، ومن أي نوع، وبأي لغة، وكم منها لم يجد شيئًا؛ مع إصدار التطبيق ولغاته وذاكرة الهاتف. لا يُرسل أبدًا ما سألته، ولا أي شيء يدل عليك أو على هذا الهاتف. إيقافها يحذف ما لم يُرسل بعد. وتعدّ أيضًا كيف تخرج الأسئلة من المربع (مكتوبة، أو باقتراح أثناء الكتابة)، وهل قرأها التطبيق وحده، ولمسات اقتراحات الكتابة التي تملأ المربع أو يُتراجع عنها أو تذكر سفرًا ليس على هذا الهاتف: العدد فقط، لا الكلمات أبدًا.',
     next: 'ما يرسله التقرير التالي', empty: 'لا شيء للإرسال بعد: تُرسل مجاميع اليوم بعد انتهائه.', today: 'اليوم حتى الآن', sent: 'آخر إرسال: {d}',
   },
 }

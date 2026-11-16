@@ -26,6 +26,7 @@ import { shareButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
+import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
 import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
 import { learnLabel, learnSheet, resetLearn } from './learn'
@@ -142,6 +143,8 @@ type Msg = Reply & {
   node?: string; mark?: boolean
   /** an answer: what ☆ Save keeps and where ✎ Note is tied (saved.ts: its passage, article or question) */
   saveQ?: Query
+  /** an answer that found nothing for a typed question: the ways of asking code reads (teach.ts), each writing in the box */
+  shapes?: Shape[]
 }
 type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
@@ -280,6 +283,10 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   if (m.who === 'me') return el('div', 'msg me', m.text)
   const d = el('div', 'msg bot')
   d.dataset.lang = m.lang ?? 'en'
+  // how the app read the person's question, under it ("Understood: Ruth 2:3 · notes", teach.ts): a tap puts it back in the box
+  const cv = convs.find((x) => x.msgs.includes(m))
+  const got = cv ? understoodFor(cv.msgs, cv.graph, m, nav) : null
+  if (got) d.appendChild(understoodLine(got, nav, () => cmp.restore(got.q)))
   // on a light path: where it is ("Ruth 1:6–18 · step 4 of 5: notes"), first
   if (m.pathMark) {
     const pm = el('div', 'path-mark', bidiLabel(m.pathMark, m.ui ?? nav))
@@ -289,7 +296,6 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   // what the person wrote about this verse, article or question (saved.ts), above the answer
   d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
-  const cv = convs.find((x) => x.msgs.includes(m))
   const asked = askedFor(m)
   // with an online answer (or while it is written), it comes first, then the helps the phone found as cards in sight (the
   // articles it was grounded in first), then the whole phone's answer folded behind what it holds ("See all 66 notes…").
@@ -325,6 +331,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   if (m.text) d.appendChild(el('div', 'plain', m.text))
+  // found nothing: the ways of asking code reads, with what it knew of the question written in (a tap writes in the box)
+  if (m.shapes?.length) d.appendChild(shapeRow(m.shapes, m.ui ?? nav, (s) => cmp.offer(s)))
   // the way back to the passage this answer left (and to the path it left), on its own row, then the next steps
   const backs = [m.back, m.pathBack].filter((f): f is Followup => !!f)
   if (backs.length) d.appendChild(followRow(m, backs, 'follow back-row'))
@@ -966,6 +974,7 @@ function eraseAll() {
   try { localStorage.removeItem(KEY) } catch {}
   forgetHowto()
   forgetWelcome()
+  forgetFreeHint() // the composer's grey line for a free question shows again the first three times
   eraseSaved() // and the saved items and notes
   newConv()
   renderConv()
@@ -1121,6 +1130,11 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     answered = r.answered
     m = { who: 'bot', ...r.reply, saveQ: queryOfAnswer({ sheet: made.sheet, ref: r.ref, concept: r.concept, q: made.q, label, lang: r.reply.lang }) ?? undefined }
     point = r.node
+    // a typed question that found nothing: the ways of asking that work, with the book or word it had (teach.ts, §2.3)
+    if (made.q !== undefined && foundNothing(r)) {
+      const shapes = await cmp.shapesFor(made.q).catch(() => [])
+      if (shapes.length) m.shapes = shapes
+    }
     const cs = contextSheet(c, r) // (a branch on a story of Open Bible Stories: the story)
     if (cs && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(cs).catch(() => '')
   } catch (err: any) {
@@ -1247,6 +1261,8 @@ setSavedHooks({
 const cmp = mountComposer(form, input, {
   ui: () => nav, conv: () => conv(), packs: () => INSTALLED, busy: () => busy || locked(),
   send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
+  // (a free question is read by the phone's model or online; with neither, the row's grey line says it is searched)
+  reader: () => (modelReady() && !modelOff()) || (onlineOn() && onlineAvailable() && isOnline() && (!signInAvailable() || !!onlineSession())),
 })
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
@@ -1510,11 +1526,12 @@ form.addEventListener('submit', (e) => {
   // "Reply in Indonesian", "Repeat your last answer in Indonesian"
   const { q, target } = questionOf(q0, conv())
   input.value = ''
-  cmp.clear()
   const c = conv()
   // only a reference ("Rut 2:3", "Jonás 1:3 notas") or a follow-up code reads ("¿y las notas?" after one): neither reader runs
   // (saves about 4 s on a phone), and the answer is what the composer's "✓" showed
   const direct = !has('help', q) && codeReads(q, c)
+  // (the row emptied; typed or its "✓", counted as such: sent.typed, sent.chip, sent.code, sent.free)
+  cmp.sent(direct)
   count('asked')
   count(direct ? 'model.skipped' : modelReady() && !modelOff() ? 'model.used' : 'model.none')
   respond(c, q0, async () => {
