@@ -34,36 +34,57 @@
       "summary",
       "overview",
       "context",
-      "background"
+      "background",
+      "theme",
+      "themes",
+      "author",
+      "outline"
     ],
     "es": [
       "resumen",
       "panorama",
       "contexto",
-      "trasfondo"
+      "trasfondo",
+      "tema",
+      "temas",
+      "autor",
+      "esquema"
     ],
     "fr": [
       "r[ée]sum[ée]",
       "aper[çc]u",
-      "contexte"
+      "contexte",
+      "th[èe]mes?",
+      "auteur",
+      "plan du livre"
     ],
     "id": [
       "ringkasan",
       "gambaran",
       "konteks",
-      "latar belakang"
+      "latar belakang",
+      "tema",
+      "penulis",
+      "garis besar"
     ],
     "hi": [
       "सारांश",
       "संदर्भ",
       "पृष्ठभूमि",
-      "अवलोकन"
+      "अवलोकन",
+      "मुख्य विषय",
+      "लेखक",
+      "रूपरेखा"
     ],
     "ar": [
       "ملخص",
       "سياق",
       "خلفية",
-      "نظرة عامة"
+      "نظرة عامة",
+      "الموضوع الرئيسي",
+      "الكاتب",
+      "كاتب",
+      "مخطط"
     ]
   },
   "about": {

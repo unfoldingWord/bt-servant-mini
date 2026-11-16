@@ -35,6 +35,20 @@ export function bookExact(name: string): string | null {
   for (const t of Object.values(books as Record<string, Record<string, string>>)) if (t[k]) return t[k]!
   return null
 }
+const NAME_WORDS = new Map<string, Set<string>>()
+/** Every word of every name a book has in any language's table, folded ("cantar", "de", "los", "cantares", "song", "kidung"…). */
+export function bookNameWords(code: string): Set<string> {
+  let s = NAME_WORDS.get(code)
+  if (!s) {
+    s = new Set([code])
+    for (const t of Object.values(books as Record<string, Record<string, string>>))
+      for (const [n, c] of Object.entries(t)) if (c === code) for (const w of n.split(/\s+/)) if (w) s.add(fold(w))
+    NAME_WORDS.set(code, s)
+  }
+  return s
+}
+/** The most words a book's name has in the tables ("cantar de los cantares": 4). */
+export const NAME_MAX = Math.max(...Object.values(books as Record<string, Record<string, string>>).flatMap((t) => Object.keys(t).map((n) => n.split(' ').length)))
 let CODES: Set<string> | undefined
 const codeMemo = new Map<string, string | null>()
 /** A book's code from its name in any language: exact, else a prefix, else one or two letters off ("Mathew"). Remembered (pure). */
@@ -180,7 +194,7 @@ for (const [id, byLang] of Object.entries(glossary as Record<string, Record<stri
   }
 
 /** Article ids whose name is the term, in the pack of `lang` and then English (tW first, then tA: all four manuals). */
-async function idsOf(term: string | null, packLangs: string[]): Promise<string[] | null> {
+export async function idsOf(term: string | null, packLangs: string[]): Promise<string[] | null> {
   if (!term) return null
   const f = fold(term).replace(/[«»"“”'?¿!¡.]/g, '').replace(/\s+/g, ' ').trim()
   const fig = (figs as Record<string, string>)[f]

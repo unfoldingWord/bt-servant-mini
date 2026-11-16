@@ -7,7 +7,7 @@ import glossary from './data/kt-glossary.json'
 import booknames from './data/booknames.json'
 import books from './data/books.json'
 import { installedLangs, openLang } from './packs'
-import { bookExact, fold } from './sheet'
+import { bookExact, bookNameWords, fold } from './sheet'
 import storyWords from './data/story-words.json'
 import storyWordsMore from './data/story-words-more.json'
 import { rankVerses, resetIndexes, searchIndex, searchIntros, type RankedVerse, type Ranking, type Term } from './textindex'
@@ -420,7 +420,7 @@ function termsFor(kw: string[], phrases: string[][], pl: string, packLang: strin
  * words it holds (rankVerses). The first pack whose best verse fits well (every word, or GOOD_COVERAGE of their rarity)
  * answers; otherwise the pack whose best verse holds the most. Up to six verses, one per passage, none much weaker than the best.
  */
-async function rankedSearch(kw: string[], phrases: string[][], packLang: string, m: Map<string, string[]>): Promise<{ hits: (Found & { snippet: string })[]; strength: Strength }> {
+async function rankedSearch(kw: string[], phrases: string[][], packLang: string, m: Map<string, string[]>, book?: string): Promise<{ hits: (Found & { snippet: string })[]; strength: Strength }> {
   let best: { pl: string; looked: Looked[]; shown: RankedVerse[]; s: Strength } | null = null
   const texts = new Map<RankedVerse, { text: string; snippet: string }>()
   const textOf = async (h: RankedVerse) => { let t = texts.get(h); if (!t) texts.set(h, (t = await h.more())); return t }
@@ -428,7 +428,7 @@ async function rankedSearch(kw: string[], phrases: string[][], packLang: string,
     const r = await reader(pl)
     const looked = termsFor(kw, phrases, pl, packLang, m)
     if (!looked.length) continue
-    const ranking = await rankVerses(r, looked.map((l) => l.term), { limit: 40, skipRes: SKIP_TEXT, mainRes: MAIN_TEXT })
+    const ranking = await rankVerses(r, looked.map((l) => l.term), { limit: 40, skipRes: SKIP_TEXT, mainRes: MAIN_TEXT, book })
     // the verses that can be shown: found by words their shown text has (hi GST has Jonah's words under Matthew 1:16), and
     // with a text in this pack. How well the pack fits is said by the first of them, not by a verse it cannot show (es-419:
     // "matrimonio" in a verse with no main text stopped the search before English)
@@ -598,8 +598,10 @@ export async function articleForQuestion(q: string): Promise<string[] | null> {
   return null
 }
 
-export async function searchVerses(question: string, term: string | null, packLang: string): Promise<SearchResult> {
-  const kw = keywords(question)
+/** `book`: only that book's verses, the words of its names left out ("Daniel en el foso de los leones": "foso", "leones" in Daniel). */
+export async function searchVerses(question: string, term: string | null, packLang: string, book?: string): Promise<SearchResult> {
+  const own = book ? bookNameWords(book) : null
+  const kw = keywords(question).filter((w) => !own?.has(fold(w)))
   if (term) for (const t of keywords(term)) if (!kw.some((k) => fold(k) === fold(t))) kw.push(t)
   const phrases = quotedPhrases(question)
   const m = await names()
@@ -613,7 +615,7 @@ export async function searchVerses(question: string, term: string | null, packLa
     }
   }
   if (!kw.length && !phrases.length) return { keywords: kw, concepts, hits: [], how: 'none' }
-  const { hits, strength } = await rankedSearch(kw, phrases, packLang, m)
+  const { hits, strength } = await rankedSearch(kw, phrases, packLang, m, book)
   // a word that names an article (a name, a key term): the verses that mention it, whole; else the words in context
   const how = !hits.length ? 'none' : concepts.length && !phrases.length ? 'concepts' : 'text'
   // a list shows the words found in context for a text search, the whole verse for names and key terms
