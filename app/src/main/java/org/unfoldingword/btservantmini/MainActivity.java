@@ -105,13 +105,14 @@ public class MainActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
                 return loader.shouldInterceptRequest(req.getUrl());
             }
-            // the page never navigates away (no other page gets the Android bridge): a release link opens in the browser,
-            // anything else is blocked
+            // the page never navigates away (no other page gets the Android bridge): a web link the person taps (one in an
+            // article, a release) opens in the browser; any other scheme (intent:, file:, content:, javascript:) is blocked
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
                 Uri u = req.getUrl();
-                if ("https".equalsIgnoreCase(u.getScheme()) && PAGE_HOST.equalsIgnoreCase(u.getHost())) return false;
-                if (releaseLink(u)) openInBrowser(u);
+                String scheme = u.getScheme();
+                if ("https".equalsIgnoreCase(scheme) && PAGE_HOST.equalsIgnoreCase(u.getHost())) return false;
+                if (("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)) && u.getHost() != null) openInBrowser(u);
                 else Log.w(TAG, "blocked navigation");
                 return true;
             }
