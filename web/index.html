@@ -174,6 +174,35 @@
   .howto-nav { display: flex; gap: 8px; }
   .howto-x { border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; min-width: 44px; min-height: 44px; cursor: pointer; }
   .howto-invite { display: flex; align-items: center; justify-content: center; gap: 2px; margin: -8px auto 14px; max-width: 34ch; }
+  /* The welcome (welcome.ts): one screen over the chat, like How to ask; under the PIN lock (20) */
+  #welcome { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #welcome .card { background: var(--card); border-radius: 18px; padding: 12px 18px 16px; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 12px 40px rgba(0,0,0,.18); outline: none; }
+  .wl-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
+  .wl-step { font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px; color: var(--faint); }
+  .wl-x { border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; min-width: 44px; min-height: 44px; cursor: pointer; }
+  #welcome h2 { font: 600 22px/1.25 Georgia, "Noto Serif", "Noto Serif Devanagari", serif; margin: 0 0 8px; outline: none; }
+  #welcome h3 { font: 600 16px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; margin: 0 0 6px; }
+  #welcome p { margin: 0 0 12px; line-height: 1.5; font-size: 15px; }
+  #welcome .wl-sub, #welcome .wl-note, #welcome .wl-other { color: var(--muted); font-size: 14px; }
+  .wl-doors, .wl-opts { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px; }
+  .wl-door { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: start; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 14px; padding: 12px 14px; min-height: 56px; font: inherit; cursor: pointer; }
+  .wl-door-t { font-weight: 600; font-size: 16px; line-height: 1.3; }
+  .wl-door-s { color: var(--muted); font-size: 13.5px; line-height: 1.35; }
+  .wl-opt { border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 12px 14px; min-height: 48px; font: inherit; font-weight: 600; text-align: start; cursor: pointer; }
+  .wl-door:hover, .wl-opt:hover, .wl-book:hover { border-color: var(--accent); }
+  .wl-books { margin: 0 0 12px; }
+  .wl-books-h { color: var(--faint); font-size: 12.5px !important; letter-spacing: .4px; text-transform: uppercase; margin: 10px 0 6px !important; }
+  .wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+  .wl-book { border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 10px; padding: 8px 6px; min-height: 44px; font: inherit; font-size: 14px; cursor: pointer; overflow-wrap: anywhere; }
+  .wl-pick { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 0 0 12px; background: var(--bg); }
+  .wl-first { font-weight: 600; }
+  .wl-alts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .wl-alts button { flex: 1 1 140px; }
+  #welcome button.primary { border: 0; background: var(--accent); color: #fff; width: 100%; }
+  #welcome button.primary, #welcome button.secondary { min-height: 44px; border-radius: 12px; font: inherit; font-weight: 600; padding: 10px 12px; cursor: pointer; }
+  #welcome button.secondary { border: 1px solid var(--line); background: transparent; color: var(--fg); }
+  .wl-nav { display: flex; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .wl-nav button { flex: 1 1 0; }
   .howto-go { border: 0; background: transparent; color: var(--accent); font: 14.5px/1.4 system-ui, sans-serif; font-weight: 600; padding: 8px 4px; min-height: 44px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   #report .card { display: grid; gap: 10px; width: 100%; box-sizing: border-box; }
   #report .langs button { font-size: 13.5px; padding: 6px 11px; }

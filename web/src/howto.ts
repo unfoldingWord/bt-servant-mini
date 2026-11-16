@@ -185,6 +185,15 @@ export function inviteShown(occasion: string) {
     localStorage.setItem(KEY, String(Math.max(n + 1, counted.size)))
   } catch {}
 }
+/** Whether the invitation ever showed, or was ended, on this phone (welcome.ts: the welcome takes its slot only before); true when the storage cannot be read. */
+export function inviteUsed(): boolean {
+  if (ended || counted.size) return true
+  try {
+    return localStorage.getItem(KEY) !== null
+  } catch {
+    return true
+  }
+}
 /** Tapped, dismissed, or the guide opened from the menu: never again. */
 export function endInvite() {
   ended = true

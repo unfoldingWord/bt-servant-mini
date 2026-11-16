@@ -20,13 +20,15 @@ import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, 
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { answer, type ConvState, directRef, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
-import { backLine, GD, GT, mapRows, nodeOf } from './graph'
+import { backLine, GD, GT, mapRows, newGraph, nodeOf } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
-import { closeHowto, forgetHowto, howtoLabel, offerAfterFirstUse, openHowTo, setHowtoHooks } from './howto'
+import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
+import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
+import { learnLabel, learnSheet, resetLearn } from './learn'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -583,8 +585,9 @@ function renderConv() {
     if (noPacks) w.appendChild(pickerFor([]))
     else {
       w.appendChild(el('p', '', T.hello))
-      // someone new: one line to the guide (howto.ts), on a few empty conversations; only once the languages are known
-      const inv = INSTALLED.length ? offerAfterFirstUse(nav, c.id) : null
+      // someone new: the welcome "What would you like to do today?" once (welcome.ts), else How to ask's line (howto.ts), on a
+      // few empty conversations; only once the languages are known
+      const inv = INSTALLED.length ? offerFirst(nav, c.id, !convs.some((x) => x.msgs.length)) : null
       if (inv) w.appendChild(inv)
       const ex = el('div', 'examples')
       w.appendChild(ex)
@@ -711,6 +714,10 @@ function renderPanel() {
   row(howtoLabel(nav), '', () => {
     closePanel()
     openHowTo(nav)
+  })
+  row(welcomeLabel(nav), '', () => {
+    closePanel()
+    openWelcome(nav)
   })
   const aboutRow = el('button', 'mrow') as HTMLButtonElement
   aboutRow.type = 'button'
@@ -930,6 +937,7 @@ function eraseAll() {
   current = ''
   try { localStorage.removeItem(KEY) } catch {}
   forgetHowto()
+  forgetWelcome()
   newConv()
   renderConv()
 }
@@ -940,6 +948,7 @@ const closePanel = () => panel.classList.remove('show')
   if (closeSafety()) return true
   if (closeReport()) return true
   if (closeHowto()) return true
+  if (closeWelcome()) return true
   if (backPanel()) return true
   if (backExplore()) return true
   if (mapIsOpen()) { closeMap(); return true }
@@ -1225,6 +1234,23 @@ setHowtoHooks({
   packs: () => INSTALLED,
   helpsLang: () => helpsLang,
 })
+// The welcome (welcome.ts): a book's path starts as if "Voy a traducir Rut" were typed (read by code, no model); a learning path
+// starts in this conversation at its first article; nothing here is counted in the usage counts
+setWelcomeHooks({
+  packs: () => [...new Set([examplesLang(), 'en', ...INSTALLED].filter((l): l is string => !!l && INSTALLED.includes(l)))],
+  start: (label, make) => {
+    if (busy || locked()) return
+    const c = conv()
+    respond(c, label, () => make(c), { q: label })
+  },
+  learn: (l, label, sheet) => {
+    if (busy || locked()) return
+    ;(conv().graph ??= newGraph()).learn = l
+    runSheet(label, sheet, nav)
+  },
+  browse: () => openExplore('welcome'),
+  busy: () => busy,
+})
 
 /**
  * Back to a point of the conversation (the "← Back to …" button, a tap in the Map): a divider in the chat, the conversation's
@@ -1366,6 +1392,26 @@ function drawMap() {
     }
     b.body.appendChild(row)
   }
+  // a learning path (learn.ts): the article it was on, one tap to go on with it
+  if (g?.learn) {
+    const label = learnLabel(nav, g.learn, 'resume')
+    const row = el('button', 'ex-row gm-row gm-path') as HTMLButtonElement
+    row.type = 'button'
+    const ic = el('span', 'gm-ic gm-line')
+    ic.innerHTML = svg('<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>')
+    const txt = el('span', 'gm-txt')
+    const name = el('span', 'ex-row-t', bidiLabel(label, nav))
+    name.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+    txt.appendChild(name)
+    row.append(ic, txt)
+    const sheet = learnSheet(g.learn)
+    row.onclick = () => {
+      if (busy) return
+      closeMap(false)
+      runSheet(g.learn!.title, sheet, nav)
+    }
+    b.body.appendChild(row)
+  }
   const list = el('div', 'ex-rows gm-rows')
   let here: HTMLElement | null = null
   for (const r of g ? mapRows(g, mapOpened) : []) {
@@ -1468,6 +1514,7 @@ onPacksChanged(() => {
   resetLangs()
   resetBooks()
   resetExplore()
+  resetLearn()
   resetSearch()
   refreshInstalled().then(() => cmp.reset())
 })

@@ -3,6 +3,7 @@
 // key term, the Academy article its note cites, its book's or chapter's introduction) or leaves for something else
 // (`branch`). The person creates nothing; they see the graph (Map), and a tap on a point goes back there to go on from it.
 // No DOM here (main.ts draws it), so the decisions are tested under bun.
+import type { Learn } from './learn'
 
 export type Edge = 'start' | 'line' | 'deeper' | 'branch'
 /** The compact sheet of a turn: what re-opens it (`lang`, `what`) and what the next turn is compared with (`ref`, `concept`). */
@@ -35,7 +36,9 @@ export type GNode = {
  * `path`: the light path the person started through a book ("Voy a traducir Rut"), and where it is; `pathBefore`: the path it
  * replaced, while the answer that started the new one offers a new conversation (moved there, the old one comes back)
  */
-export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path }
+export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path
+  /** the learning path through Translation Academy the person started from the welcome (learn.ts), and where it is */
+  learn?: Learn }
 
 export const newGraph = (): Graph => ({ nodes: [], cur: null })
 export const nodeOf = (g: Graph | undefined, id: string | null | undefined): GNode | undefined =>

@@ -6,6 +6,7 @@ import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
+import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
 import { verseId } from '@bt-synergy/language-pack-v3'
@@ -2175,6 +2176,8 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     const node = await graphStep(c, made, done, x, route.name).catch(() => null)
     // on a light path: where it is and its next step first; off it, the way back to it
     await pathStep(c, made, done, x).catch(() => {})
+    // on a learning path (learn.ts): where it is, the next article and a verse to try; off it, the way back to it
+    await learnStep(c, done, x.sheet, x.ui).catch(() => {})
     return { ...done, route: route.name, sheet: x.r ? x.sheet : null, node }
   }
   throw new Error('no route answered') // `reply` always answers
