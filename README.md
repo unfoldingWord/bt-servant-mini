@@ -43,16 +43,16 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
 
 ## Construir e instalar
 ```
-python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun, ../bts-client y ../lp3-ta-packs o ../fase0-mini-servant/packs); corre las pruebas rápidas (--full todas, --no-tests ninguna)
+python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun, ../bts-client2 y ../lp3-ta-packs o ../fase0-mini-servant/packs); corre las pruebas rápidas (--full todas, --no-tests ninguna)
 <gradle 8.14.3> assembleDebug                 # APK en app/build/outputs/apk/debug/app-debug.apk (~315 MB)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 El cliente de paquetes (`language-pack-client` y `language-pack-v3`) sale de bt-synergy (tc-study) en el commit de
-`bt-synergy.ref`, sacado en `../bts-client` (como Servos). `web/tsconfig.json` y `packs-server/tsconfig.json` apuntan ahí;
-`build.py` y `bun test` fallan si `../bts-client` está en otro commit (`build.py` también si tiene cambios locales). Prepararlo:
+`bt-synergy.ref`, sacado en `../bts-client2` (como Servos). `web/tsconfig.json` y `packs-server/tsconfig.json` apuntan ahí;
+`build.py` y `bun test` fallan si `../bts-client2` está en otro commit (`build.py` también si tiene cambios locales). Prepararlo:
 ```
-git -C <clon de bt-synergy> worktree add --detach "$(cd .. && pwd)/bts-client" $(cat bt-synergy.ref)   # desde la raíz de este repo; o: git -C ../bts-client checkout --detach <ref>
-cd ../bts-client && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3
+git -C <clon de bt-synergy> worktree add --detach "$(cd .. && pwd)/bts-client2" $(cat bt-synergy.ref)   # desde la raíz de este repo; o: git -C ../bts-client2 checkout --detach <ref>
+cd ../bts-client2 && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3
 ```
 Para pasar a un bt-synergy más nuevo: correr todas las pruebas contra él y escribir su commit en `bt-synergy.ref`.
 
