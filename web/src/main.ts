@@ -225,11 +225,26 @@ function aiBlock(a: NonNullable<Msg['ai']>): HTMLElement {
   ai.appendChild(body)
   return ai
 }
-/** The online answer arrived for a message drawn while it was written: its text in place of "Writing…", the cards untouched. */
+/** The question an answer answers: the person's message just before it (not a "Back to …" divider). */
+function askedFor(m: Msg): string | undefined {
+  const cv = convs.find((x) => x.msgs.includes(m))
+  const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
+  return prev?.who === 'me' && !prev.mark ? prev.text : undefined
+}
+/**
+ * The online answer arrived for a message drawn while it was written: its text in place of "Writing…", the cards untouched,
+ * and the share button made again, so it sends the online answer (it was made before it existed, or not at all).
+ */
 function fillAi(node: HTMLElement, m: Msg) {
   if (!m.ai) return
   node.querySelector('.ai.pending')?.replaceWith(aiBlock(m.ai))
   markCited(node, (m.ai.sources ?? []).map((s) => s.id), m.ui ?? nav)
+  const sh = shareButton(m, m.ui ?? nav, askedFor(m))
+  const old = node.querySelector(':scope > .share')
+  if (old) old.remove()
+  const rate = node.querySelector(':scope > .rate')
+  if (sh && rate) rate.before(sh)
+  else if (sh) node.appendChild(sh)
 }
 /** `pending`: online AI is writing its answer to this message (the helps show as cards already). */
 function renderMsg(m: Msg, pending = false): HTMLElement {
@@ -251,8 +266,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   }
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const cv = convs.find((x) => x.msgs.includes(m))
-  const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
-  const asked = prev?.who === 'me' && !prev.mark ? prev.text : undefined
+  const asked = askedFor(m)
   // with an online answer (or while it is written), it comes first, then the helps the phone found as cards in sight (the
   // articles it was grounded in first), then the whole phone's answer folded behind what it holds ("See all 66 notes…").
   // The cards are drawn already while the answer is written and stay where they are when it arrives (fillAi).

@@ -6,6 +6,8 @@ import { setQuestion, type Study } from '../src/answer'
 import { type Case, runCase } from './harness'
 import { ALL_PACKS, installPacks, usePacksDir } from './fs-packs'
 import { env, type Reply } from '../src/pipeline'
+import { shareText } from '../src/share'
+import { openLang } from '../src/packs'
 
 const ask = (id: string, lang: string, q: string, slots: Case['slots'] = null): Case => ({ id, set: 'helpcards', lang, q, slots, expect: {} })
 beforeAll(async () => {
@@ -175,4 +177,24 @@ describe('real answers: an online answer always shows what the phone found', () 
       if (cited >= 0) expect(cards.slice(0, cited).every((c) => c.kind === 'article' && c.cited)).toBe(true)
       for (const c of cards) expect(c.title.trim().length, `${k.id} ${c.kind}`).toBeGreaterThan(0)
     }, 120_000)
+})
+
+describe('sharing an online answer', () => {
+  test('sends the online answer, also when the phone had no text of its own', () => {
+    const ai = { text: 'The online answer.', model: 'm' }
+    expect(shareText({ who: 'bot', info: 'The phone answer.', ai } as any, 'en')).toContain('The online answer.')
+    expect(shareText({ who: 'bot', info: 'The phone answer.', ai } as any, 'en')).not.toContain('The phone answer.')
+    expect(shareText({ who: 'bot', study: {} as any, ai } as any, 'en')).toContain('The online answer.')
+    expect(shareText({ who: 'bot', info: 'The phone answer.' } as any, 'en')).toContain('The phone answer.')
+  })
+})
+
+describe('a language pack that failed to open', () => {
+  test('is opened again on the next read (the failure is not kept)', async () => {
+    const first = openLang('zz-none')
+    let failed = false
+    await first.catch(() => { failed = true })
+    expect(failed).toBe(true) // a language not on the phone does not open
+    expect(openLang('zz-none')).not.toBe(first)
+  })
 })
