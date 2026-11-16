@@ -98,7 +98,7 @@ const lang = async (l: string): Promise<{ r: Reader; maps: any }> => {
  * The article names of a pack: the core of its `map` unit alone, not all its maps (the word links of every book, read again
  * by every pack). Same names as `(await r.maps()).map.core.names`, which is still asked when the core does not read.
  */
-async function namesOf(r: Reader): Promise<Record<string, string[]>> {
+export async function namesOf(r: Reader): Promise<Record<string, string[]>> {
   try {
     for (const seg of (await r.segments('map')) ?? []) {
       if ((seg as any).h?.part !== 'core') continue

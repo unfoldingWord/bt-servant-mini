@@ -4,14 +4,19 @@
 // Arabic, swipe typing): a tap then waits for the composition to end. Menu > "Typing suggestions" turns it off (kept on the
 // phone): then the row is never drawn and the app is as before.
 //
-// The "✓" sends the box's text as it is (hooks.send: the form's submit). main.ts answers a question that is only a reference
-// with readQuestion and no reader, which reads it with pipeline.ts directSheet: the very reading the "✓" shows. So the "✓" and
-// the send arrow ask the same thing, and nothing the "✓" promises goes through the model.
-import { booksOf, type Ctx, loadHelps, resetHelps, type Row, ST, type Strip, suggest, type Suggestion } from './suggest'
+// The "✓" sends the box's text as it is (hooks.send: the form's submit). main.ts answers a question code reads (a reference, or
+// a follow-up of the conversation: pipeline.ts codeReads) with readQuestion and no reader, which reads it with directSheet or
+// followUp: the very reading the "✓" shows. So the "✓" and the send arrow ask the same thing, and nothing the "✓" promises goes
+// through the model.
+//
+// Phase 2: with the box empty and the focus in it, the row shows where the conversation is and the ways of asking (state A);
+// the word index (termindex.ts) is built at idle after the first answer (`answered`), and dropped when the packs change.
+import { booksOf, type Ctx, loadHelps, resetSuggest, type Row, ST, startRow, type Strip, suggest, type Suggestion } from './suggest'
+import { scheduleTermIndex } from './termindex'
 import { buildSheet } from './sheet'
 import { type ConvState, env } from './pipeline'
 import type { Sheet } from './answer'
-import { strip as unmarked } from './bidi'
+import { bidiLabel, rtlLang, strip as unmarked } from './bidi'
 
 const KEY = 'btsm.suggest'
 /** Whether "Typing suggestions" is on (on unless turned off in the menu). */
@@ -62,6 +67,10 @@ export class Composer {
   sendText = ''
   /** a book that is not on this phone, tapped: the row says so and offers Browse */
   missing: string | null = null
+  /** the box has the focus (state A shows only then: the keyboard is open) */
+  focused = false
+  /** state A's Passage was tapped: the empty box lists the books */
+  choosing = false
   books: Record<string, Set<string>> | null = null
   private reading: Promise<void> | null = null
   /** the packs the books were read for */
@@ -72,7 +81,7 @@ export class Composer {
     live.add(this)
   }
   ctx(): Ctx {
-    return { ui: this.hooks.ui(), conv: this.hooks.conv(), helpsLang: env.helpsLang, packs: this.hooks.packs(), books: this.books }
+    return { ui: this.hooks.ui(), conv: this.hooks.conv(), helpsLang: env.helpsLang, packs: this.hooks.packs(), books: this.books, choosing: this.choosing }
   }
   /** Reads which books the packs have (once; again after the packs change). */
   readBooks(): Promise<void> {
@@ -89,7 +98,7 @@ export class Composer {
   }
   /** The packs changed: the books are read again, the row made again. */
   reset() {
-    resetHelps()
+    resetSuggest()
     this.books = null
     this.reading = null
     this.missing = null
@@ -98,6 +107,7 @@ export class Composer {
   /** Typing: the row is made after a short pause (100 ms), never while the keyboard composes. */
   onInput() {
     this.missing = null
+    this.choosing = false
     if (this.composing) return
     if (this.timer) clearTimeout(this.timer)
     this.timer = setTimeout(() => this.refresh(), this.delay)
@@ -129,8 +139,13 @@ export class Composer {
   refresh() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    if (!composerOn() || !unmarked(this.box.value).trim()) {
+    if (!composerOn()) {
       this.row = { items: [] }
+      this.madeFor = this.box.value
+    } else if (!unmarked(this.box.value).trim()) {
+      // A: only while the box has the focus (the keyboard is open); the books are read for the list of Passage
+      if (this.choosing && !this.books) void this.readBooks()
+      this.row = this.focused ? startRow(this.ctx()) : { items: [] }
       this.madeFor = this.box.value
     } else {
       if (this.books && this.readFor && this.readFor !== this.hooks.packs().join(' ')) {
@@ -171,8 +186,10 @@ export class Composer {
     }
     this.box.value = text
     this.box.focus()
+    this.focused = true
     this.box.setSelectionRange?.(text.length, text.length)
     this.missing = null
+    this.choosing = false
     this.refresh()
   }
   /** A tap on a button of the row. */
@@ -198,18 +215,44 @@ export class Composer {
       this.hooks.ask(s.label, sheet, ui)
       return this.clear()
     }
+    // an article, the path's next step: asked as the button under an answer asks it
+    if (s.sheet) {
+      this.hooks.ask(s.ask ?? s.label, { ...s.sheet, id: `c${Date.now()}` }, this.hooks.ui())
+      return this.clear()
+    }
+    // Passage: the books, in the row
+    if (s.choose) {
+      this.choosing = true
+      return this.refresh()
+    }
     if (s.fill !== undefined) this.write(s.fill)
   }
   tapNumber(strip: Strip, n: number) {
     if (!composerOn() || this.hooks.busy()) return
     this.write(`${strip.base}${strip.sep}${n}`)
   }
-  /** After a question is sent: an empty row. */
+  /** After a question is sent: an empty row (state A, if the box keeps the focus). */
   clear() {
     if (!this.composing) this.box.value = ''
     this.pending = null
     this.missing = null
+    this.choosing = false
     this.refresh()
+  }
+  /**
+   * An answer arrived (main.ts respond): state A shows where the conversation is now, and the word index is built at idle (the
+   * first time; again after the packs change). Never before: reading the names at the app's start would slow it.
+   */
+  answered() {
+    // (once built, the row for what is being typed is made again: the words show without another key)
+    scheduleTermIndex(() => this.hooks.packs(), () => { if (unmarked(this.box.value).trim() && !this.composing) this.refresh() })
+    if (!unmarked(this.box.value).trim()) this.refresh()
+  }
+  /** The box has the focus, or lost it: state A shows only with the focus. */
+  focusChanged(on: boolean) {
+    this.focused = on
+    if (!on) this.choosing = false
+    if (!unmarked(this.box.value).trim()) this.refresh()
   }
 }
 
@@ -221,11 +264,18 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: stri
   if (text !== undefined) d.textContent = text
   return d
 }
-/** A button that does not take the focus from the box (the keyboard stays open). */
-function chip(cls: string, label: string, on: () => void): HTMLButtonElement {
+/**
+ * A button that does not take the focus from the box (the keyboard stays open). Its label in the app's direction, the runs of the
+ * other direction isolated (bidi.ts bidiLabel: "Ruth · اسم" in Arabic).
+ */
+function chip(cls: string, label: string, on: () => void, ui = ''): HTMLButtonElement {
   const b = el('button', cls)
   b.type = 'button'
   const t = el('bdi')
+  if (ui) {
+    t.dir = rtlLang(ui) ? 'rtl' : 'ltr'
+    label = bidiLabel(label, ui)
+  }
   t.textContent = label
   b.appendChild(t)
   b.addEventListener('pointerdown', (e) => e.preventDefault())
@@ -258,12 +308,20 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
     if (c.missing !== null) {
       const it = row.items.find((x) => x.kind === 'missing' && x.book === c.missing)
       wrap.appendChild(el('span', 'cmp-note', it?.label ?? s.notHere))
-      wrap.appendChild(chip('cmp-chip', s.browse, () => { if (!hooks.busy()) hooks.browse() }))
+      wrap.appendChild(chip('cmp-chip', s.browse, () => { if (!hooks.busy()) hooks.browse() }, ui))
     } else {
       for (const it of row.items) {
-        const b = chip(`cmp-chip cmp-${it.kind}`, it.label, () => void c.tap(it))
+        const b = chip(`cmp-chip cmp-${it.kind}`, it.label, () => void c.tap(it), ui)
         if (it.kind === 'missing') b.setAttribute('aria-disabled', 'true')
         wrap.appendChild(b)
+      }
+      // the books to pick from (Passage, "Notas de ")
+      if (row.pick?.length) {
+        const list = el('span', 'cmp-pick')
+        list.setAttribute('role', 'group')
+        list.setAttribute('aria-label', s.books)
+        for (const it of row.pick) list.appendChild(chip('cmp-chip cmp-book', it.label, () => void c.tap(it), ui))
+        wrap.appendChild(list)
       }
       const st = row.strip
       if (st) {
@@ -271,7 +329,7 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
         nums.setAttribute('role', 'group')
         nums.setAttribute('aria-label', st.unit === 'chapter' ? s.chapter : s.verse)
         for (let n = 1; n <= st.max; n++) {
-          const b = chip('cmp-n', String(n), () => c.tapNumber(st, n))
+          const b = chip('cmp-n', String(n), () => c.tapNumber(st, n), ui)
           b.setAttribute('aria-label', `${st.unit === 'chapter' ? s.chapter : s.verse} ${n}`)
           nums.appendChild(b)
         }
@@ -294,7 +352,11 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
   })
   box.addEventListener('compositionstart', () => c.compositionStart())
   box.addEventListener('compositionend', () => c.compositionEnd())
-  box.addEventListener('focus', () => { if (!c.books && composerOn()) void c.readBooks() })
+  box.addEventListener('focus', () => {
+    if (!c.books && composerOn()) void c.readBooks()
+    c.focusChanged(true)
+  })
+  box.addEventListener('blur', () => c.focusChanged(false))
   return c
 }
 /** The composer on the page, if mounted. */
