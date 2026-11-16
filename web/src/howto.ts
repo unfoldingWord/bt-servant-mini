@@ -158,9 +158,10 @@ export const INVITE_MAX = 3
 let ended = false
 // the occasions counted in this run (a conversation drawn again is the same occasion)
 const counted = new Set<string>()
+// (the occasions of this run count too: a storage that reads but does not write still stops it after INVITE_MAX)
 const shownTimes = (): number => {
   const v = localStorage.getItem(KEY)
-  return v === 'done' ? Infinity : Number(v) || 0
+  return v === 'done' ? Infinity : Math.max(Number(v) || 0, counted.size)
 }
 /** Whether the welcome shows the invitation on this occasion (a conversation's id; a new run counts it again). */
 export function inviteDue(occasion = ''): boolean {
@@ -175,9 +176,13 @@ export function inviteDue(occasion = ''): boolean {
 /** The invitation showed on this occasion: counted once per occasion and run. */
 export function inviteShown(occasion: string) {
   if (counted.has(occasion)) return
+  let n = 0
+  try {
+    n = shownTimes()
+  } catch {}
   counted.add(occasion)
   try {
-    localStorage.setItem(KEY, String(shownTimes() + 1))
+    localStorage.setItem(KEY, String(Math.max(n + 1, counted.size)))
   } catch {}
 }
 /** Tapped, dismissed, or the guide opened from the menu: never again. */
@@ -241,8 +246,11 @@ export function examplesOf(ui: string, packs: string[], helpsLang: string | null
   const key = `${ui}|${packs.join(',')}|${helpsLang ?? ''}`
   let p = EXAMPLES.get(key)
   if (!p) {
-    p = findExamples(ui, packs, helpsLang).catch(() => null)
-    EXAMPLES.set(key, p)
+    // nothing found (no pack yet, one still installing, a failed read) is not kept: the next opening looks again
+    const found = findExamples(ui, packs, helpsLang).catch(() => null)
+    found.then((ex) => { if (!ex && EXAMPLES.get(key) === found) EXAMPLES.delete(key) })
+    EXAMPLES.set(key, found)
+    p = found
   }
   return p
 }
@@ -271,12 +279,10 @@ async function findExamples(ui: string, packs: string[], helpsLang: string | nul
     }
   }
   if (!ref) return null
-  // a chapter with questions (the Hindi pack has none: then the card shows no questions example). The books read so far tell:
-  // when none of them has questions, no other book is read to look for some
-  const read = [...new Set(VERSES.map((v) => v.split(' ')[0]!))].map((c) => helpsKnown(from, c)).filter((h) => !!h)
-  const none = read.length > 0 && read.every((h) => !h!.questions)
+  // a chapter with questions (the Hindi pack has none: then the card shows no questions example); a book already read without
+  // questions is not read again
   let chapter: string | null = null
-  for (const c of none ? [] : [ref.split(':')[0]!, ...CHAPTERS]) {
+  for (const c of [ref.split(':')[0]!, ...CHAPTERS]) {
     if (helpsKnown(from, c.split(' ')[0]!)?.questions === false) continue
     const u = await readAs(fill(s.questions, named(c)), ctx)
     if (u && u.code === c.split(' ')[0] && (await rowsAt(u.pack, u.code, Number(c.split(' ')[1]), null, 'questions'))) {

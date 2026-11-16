@@ -158,6 +158,19 @@ test('the invitation shows on at most 3 occasions, and ends at once when tapped 
   } finally {
     ls.setItem = set
   }
+  // a storage that reads but does not write: the occasions of this run still stop it after 3
+  forgetHowto()
+  ls.setItem = () => { throw new Error('full') }
+  try {
+    for (const o of ['r1', 'r2', 'r3']) {
+      expect(inviteDue(o)).toBe(true)
+      inviteShown(o)
+    }
+    expect(inviteDue('r3')).toBe(true)
+    expect(inviteDue('r4')).toBe(false)
+  } finally {
+    ls.setItem = set
+  }
   // no storage at all: never shown (better than every time)
   ;(globalThis as any).localStorage = { getItem: () => { throw new Error('denied') } }
   forgetHowto()
@@ -171,6 +184,11 @@ test('the examples are read once per app language, packs and helps language', as
   await installPacks(['en'])
   expect(examplesOf('en', ['en'], null)).toBe(examplesOf('en', ['en'], null))
   expect(examplesOf('es', ['en'], null)).not.toBe(examplesOf('en', ['en'], null))
+  // nothing found (no pack yet, a pack still installing) is not kept: it is looked for again
+  const none = examplesOf('en', [], null)
+  expect(await none).toBeNull()
+  await Promise.resolve()
+  expect(examplesOf('en', [], null)).not.toBe(none)
 })
 
 test('typing suggestions off: the card says how to turn them on, and Try it opens Browse', () => {
