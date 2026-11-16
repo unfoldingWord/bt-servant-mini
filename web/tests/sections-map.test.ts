@@ -84,6 +84,7 @@ describe('the client bump keeps the download as it was', () => {
     }
     const offer = (await offerOf('en', source))!
     expect(offer.bytes).toBe(before.bytes + OBS)
+    expect(offer.obs).toBe(true) // 223,292 bytes: under OBS_MAX
     const obs = await obsIds()
     expect(createHash('sha256').update(offer.segments.filter((id) => !obs.has(id)).join('\n')).digest('hex')).toBe(before.sha256)
   })

@@ -5,11 +5,11 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { fullPhone, nextSteps, stepTarget, turn } from './harness'
-import { OBS_BYTES, withObs } from './obs-fixture'
+import { OBS_BYTES, obsBytes, withObs } from './obs-fixture'
 import { answer, type ConvState, contextSheet, type Made } from '../src/pipeline'
 import { newGraph, nodeOf } from '../src/graph'
 import { passageContext, type Sheet } from '../src/answer'
-import { obsAsked, obsPack, obsSteps, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
+import { namedStory, obsAsked, obsPack, obsSteps, OW, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
 import { openLang } from '../src/packs'
 import { strip } from '../src/bidi'
 
@@ -34,6 +34,13 @@ describe('questions that name a story or a frame', () => {
     for (const [q, ref] of cases) expect(obsAsked(q)?.ref, q).toBe(ref)
     // not a story: a book's story, a chapter, a number that is no story
     for (const q of ['la historia de Rut 2', 'Ruth 3:4', 'the story of Jonah', 'story 75', 'historia de José']) expect(obsAsked(q), q).toBeNull()
+    // a numbered book after the word is the book, not a story; a number of four digits is no story number
+    for (const q of ['cerita Alkitab 1 Samuel 17', 'histoire biblique 2 Rois 5', 'historias de la Biblia 1 Reyes 18', 'la historia 1 Samuel 17',
+      'story 2 Kings 5', 'story 1 John 3', 'historia 1 Corintios 13', 'कहानी 1 शमूएल 17', 'obs 2000', 'story 2000'])
+      expect(obsAsked(q), q).toBeNull()
+    // (a story of 1 to 3 that a book does not follow is still a story)
+    expect(obsAsked('story 2 frame 3')?.ref).toBe('obs 2:3')
+    expect(obsAsked('historia 3, ¿qué dice?')?.ref).toBe('obs 3')
     expect(obsAsked('What do the Open Bible Stories translation notes say for story 3, frame 4?')).toEqual({ ref: 'obs 3:4', what: ['notes'] })
   })
 
@@ -46,6 +53,9 @@ describe('questions that name a story or a frame', () => {
     expect(r.reply.info).toContain('eight people')
     expect(r.reply.info).toContain('[Noah](tw:names/noah)')
     expect(r.reply.info).toMatch(/Source: unfoldingWord\/en\/obs v9/)
+    // the sources once (at the end); at the top, the story's own line
+    expect(r.reply.info.match(/unfoldingWord\/en\/obs v9|Open Bible Stories v9/g)).toHaveLength(1)
+    expect(r.reply.info.split('\n')[1]).toBe('*A Bible story from: Genesis 6-8*')
     expect(buttons(r)).toEqual([
       'Next: OBS 3:6 => obs 3:6 text,notes,questions,terms', 'The whole story: OBS 3 => obs 3 text,notes', 'God => tw:kt/god', 'Noah => tw:names/noah',
       'Bible: Genesis 6:1–8:22 => gen 6:1-8:22 text,notes', 'Bible stories (OBS) => browse',
@@ -133,6 +143,15 @@ describe('from a passage to its story, and back', () => {
     expect((await storyAt('gen 8:20', 'en'))!.f).toBeGreaterThanOrEqual(13)
   })
 
+  test('near ties go to the story whose words the passage has: Mark 1:21-28 is OBS 26, not 24', async () => {
+    const r: any = await ask('Mark 1:21-28', 'en')
+    const b = buttons(r).find((x) => x.includes('OBS 2'))
+    expect(b).toMatch(/^This part is told in OBS 26:\d+: Jesus Starts His Ministry/)
+    // a chapter range ("Genesis 6-8") has its story too
+    expect(rangeOfRef('gen 6-8')).toEqual([1006000, 1008999])
+    expect((await storyAt('gen 6-8', 'en'))?.n).toBe(3)
+  })
+
   test('a passage no story tells (Ruth 1:1, Titus 1:1): no button', async () => {
     for (const q of ['Ruth 1:1', 'Titus 1:1']) expect(targets(await ask(q, 'en')).some((t) => t.startsWith('obs '))).toBe(false)
   })
@@ -189,6 +208,11 @@ describe('a phone without the unit', () => {
     expect(steps).toContainEqual({ k: 'bible', label: 'Biblia: Génesis 6:1–8:22', ref: 'gen 6:1-8:22' })
   })
 
+  test('the Arabic words name Open Bible Stories once, as the other Arabic strings do', () => {
+    expect(OW('ar').missing).toBe('Open Bible Stories ليست على هذا الهاتف بعد ({pack}، {size}).')
+    expect(OW('ar').none).toContain('لا تحتوي بعد على Open Bible Stories (OBS)')
+  })
+
   test('no pack lists it: "no Open Bible Stories yet", in the question\'s language', async () => {
     await installPacks(ALL_PACKS)
     await withObs('en', 'none')
@@ -217,6 +241,38 @@ describe('the search', () => {
     // the verses' buttons as before, and the first story after them
     expect(targets(r).slice(0, targets(before).length)).toEqual(targets(before))
     expect(targets(r)).toContain('obs 3:2 text,notes,questions,terms')
+  })
+})
+
+describe('Hindi: its own Open Bible Stories (Mini\'s server, Nov 16)', () => {
+  beforeEach(async () => {
+    await fullPhone()
+    await withObs('hi')
+  })
+  afterAll(async () => { await installPacks(ALL_PACKS) })
+
+  test('a story from the Hindi pack, in Hindi, with its notes', async () => {
+    const r: any = await ask('कहानी 3', 'hi')
+    expect(r.ref).toBe('obs 3')
+    expect(strip(r.reply.intro)).toBe('यह कहानी OBS 3 है: बाढ़।')
+    expect(r.reply.info).toContain('**3:2** परन्तु परमेश्वर नूह से प्रसन्न था।')
+    expect(r.reply.info).toContain('उत्पत्ति अध्याय 6-8 से एक बाइबल की कहानी')
+    expect(r.reply.info).toContain('Door43-Catalog/hi/obs v8.3')
+  })
+
+  test('Hindi words stay whole (vowel signs are marks): search, a story by what it is about, the frame of a passage', async () => {
+    // प्रसन्न ("pleased") and नाव ("boat"): only whole words match
+    expect((await searchObs('नूह प्रसन्न', 'hi')).map((h) => h.ref)).toEqual(['obs 3:2', 'obs 3:14'])
+    expect((await searchObs('नूह नाव', 'hi'))[0]?.ref).toBe('obs 3:2')
+    expect(await namedStory('नूह की कहानी', 'hi')).toEqual({ ref: 'obs 3', what: ['text', 'notes'] })
+    // Matthew 13:31 in Hindi: the mustard seed (राई) is OBS 34:1, found by the Hindi words of the passage
+    const r: any = await ask('मत्ती 13:31', 'hi')
+    expect(targets(r)).toContain('obs 34:1 text,notes,questions,terms')
+    expect(buttons(r).find((b) => b.includes('OBS 34:1'))).toMatch(/^यह भाग OBS 34:1 में बताया गया है: यीशु दूसरी कहानियों की शिक्षा देता है/)
+  })
+
+  test('its size, as Mini\'s server lists it', () => {
+    expect(obsBytes('hi')).toBe(287_929)
   })
 })
 

@@ -358,6 +358,8 @@ export type Offer = {
   lang: string; books: string[]; bytes: number; segments: string[]; sizes: Record<string, number>
   /** a download of it started and did not end: what arrived stays, the next one goes on from there */
   partial?: boolean
+  /** whether Open Bible Stories come with it (the catalog lists them, OBS_MAX or less) */
+  obs?: boolean
 }
 /** A signal that aborts after `ms` (AbortSignal.timeout where the WebView has it). */
 function timeout(ms: number): AbortSignal {
@@ -379,20 +381,21 @@ const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '
  */
 export const MAP_UNITS = ['xmap', 'map', 'xtopics', 'topics']
 /**
- * Open Bible Stories (Abel, Nov 15–16): with the language when the unit is 3 MB or less (the obs units are 60–281 KB, Nov 2026),
- * never downloaded by itself over mobile data, and in the full APK. A language that does not list it installs as before (the
- * client skips a unit its catalog does not have).
- * TODO(obs): a phone that installed a language before this gets `obs` through the daily update of `updateLangs`, which must
- * skip metered connections first (branch ms/xtopics-update adds Android.metered() and that check): add `OBS_UNIT` to the units
- * it brings there, not here. Until then, the OBS answer offers to add it on a tap (`addUnit`).
+ * Open Bible Stories (Abel, Nov 15–16): with the language when the unit is OBS_MAX or less (the obs units are 60–288 KB, Nov
+ * 2026), never downloaded by itself over mobile data, and in the full APK. A language that does not list it installs as before
+ * (the client skips a unit its catalog does not have). A phone that installed a language before gets it from the daily update
+ * (`updateLang`, not on a metered connection), or on a tap under an OBS answer (`addUnit`).
  */
 export const OBS_UNIT = 'obs'
+/** The largest obs unit that comes with its language (Abel: 3 MB); a larger one is left out of the download. */
+export const OBS_MAX = 3 * 1024 * 1024
 /**
  * What `offerOf` plans and `downloadLang` installs: the map units, the books, the shared articles, in the order the client's
- * defaults gave them (defaults, then books, then units); Open Bible Stories with the defaults, where the client puts them.
+ * defaults gave them (defaults, then books, then units); Open Bible Stories with the defaults, where the client puts them,
+ * unless `obs` is false (its unit is over OBS_MAX).
  */
-export function installWant(books: readonly string[]): { defaults: false; units: string[] } {
-  return { defaults: false, units: [...MAP_UNITS, OBS_UNIT, ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
+export function installWant(books: readonly string[], obs = true): { defaults: false; units: string[] } {
+  return { defaults: false, units: [...MAP_UNITS, ...(obs ? [OBS_UNIT] : []), ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
 }
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
 /**
@@ -423,10 +426,14 @@ export async function offerOf(lang: string, source: PackSource = serverSource())
     }
     const listed = new Set(cat.catalog.units.map((u) => u.id))
     const books = CANON.filter((b) => listed.has(`book:${b}`))
-    const plan = planInstall(catalogs, emptyState(), installWant(books), new Set())
+    // Open Bible Stories with the language only when they are OBS_MAX or less (what the plan says they weigh)
+    let plan = planInstall(catalogs, emptyState(), installWant(books), new Set())
+    const obsStep = plan.steps.find((st) => st.key.endsWith(`/${OBS_UNIT}`))
+    const obs = !!obsStep && obsStep.segments.reduce((n, x) => n + x.size, 0) <= OBS_MAX
+    if (obsStep && !obs) plan = planInstall(catalogs, emptyState(), installWant(books, false), new Set())
     const sizes: Record<string, number> = {}
     for (const st of plan.steps) for (const x of st.segments) sizes[x.id] = x.size
-    return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, ...(partialLangs().includes(lang) ? { partial: true } : {}) }
+    return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, obs, ...(partialLangs().includes(lang) ? { partial: true } : {}) }
   } catch {
     return null
   }
@@ -498,7 +505,7 @@ export async function downloadLang(
   try {
     // one request at a time from the client (it asks 4 at once by default): the prefetch above already keeps `ahead` in flight,
     // and more at once can trip the fallback's timeouts on a slow link
-    const report = await serial(() => client.install(lang, installWant(offer.books), {
+    const report = await serial(() => client.install(lang, installWant(offer.books, offer.obs !== false), {
       concurrency: 1,
       ...(o.signal ? { signal: o.signal } : {}),
       onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
@@ -537,11 +544,12 @@ const COMMON_UPDATES = ['xtopics', 'xmap']
 export const COMMON_UPDATE_MAX = 1024 * 1024
 type Updater = {
   refresh(lang: string, o?: { signal?: AbortSignal }): Promise<{ updates?: { key: string; from: number; to: number; bytes: number }[] } | void>
-  open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean }>
+  open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean; size(u: string): number }>
   install(lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal; concurrency?: number }): Promise<unknown>
 }
 /**
- * Brings one language up to date: reads its catalog again and installs the shared units (SHARED_UNITS) it lacks; then, when the
+ * Brings one language up to date: reads its catalog again and installs the shared units (SHARED_UNITS) it lacks; Open Bible
+ * Stories when the catalog lists them and the phone lacks them (OBS_MAX or less, not on a metered connection); then, when the
  * refresh lists a newer common `xtopics` or `xmap` (a few hundred KB: the section map came that way), those too, up to
  * COMMON_UPDATE_MAX together, and never on a metered connection (`metered`: true; null, unknown, updates as if not). The units
  * installed.
@@ -549,9 +557,13 @@ type Updater = {
 export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal,
   metered: boolean | null = meteredNow()): Promise<string[]> {
   const report = await client.refresh(lang, signal ? { signal } : {})
-  const missing = missingUnits(await client.open(lang), units)
+  const r = await client.open(lang)
+  const missing = missingUnits(r, units)
   const opts = { concurrency: 1, ...(signal ? { signal } : {}) }
   if (missing.length) await client.install(lang, { units: missing, defaults: false }, opts)
+  // Open Bible Stories for a language installed before they came with it: OBS_MAX or less, never on a metered connection
+  const obs = metered !== true && r.listed(OBS_UNIT) && !r.installed(OBS_UNIT) && typeof r.size === 'function' && r.size(OBS_UNIT) <= OBS_MAX ? [OBS_UNIT] : []
+  if (obs.length) await client.install(lang, { units: obs, defaults: false }, opts)
   const common: string[] = []
   let bytes = 0
   for (const id of metered === true ? [] : COMMON_UPDATES) {
@@ -563,7 +575,7 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
     }
   }
   if (common.length) await client.install(lang, { units: common, defaults: false }, opts)
-  return [...missing, ...common]
+  return [...missing, ...obs, ...common]
 }
 const CHECKED = 'btsm.packs.checked'
 /**

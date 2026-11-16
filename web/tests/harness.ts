@@ -49,14 +49,17 @@ export type Outcome = {
 }
 
 let installed = ''
-/** The full build: every pack on disk, the English one with Open Bible Stories (as Mini's server has it: obs-fixture.ts). */
+/**
+ * The full build: every pack on disk, the English one with Open Bible Stories (as Mini's server has it: obs-fixture.ts).
+ * OBS=none: without them, as the packs on disk are (`OBS=none bun test tests/answers.test.ts`: the sets answer as before OBS).
+ */
 export async function fullPhone() {
   // (another test file may have left fewer installed since: then all again)
   if (!(installed === 'all' && installedPacks().length === ALL_PACKS.length)) {
     await installPacks(ALL_PACKS)
     installed = 'all'
   }
-  if (ALL_PACKS.includes('en')) await withObs('en')
+  if (ALL_PACKS.includes('en')) await withObs('en', process.env.OBS === 'none' ? 'none' : 'installed')
 }
 
 /**
