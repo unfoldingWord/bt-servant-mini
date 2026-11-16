@@ -19,7 +19,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, type ConvState, directRef, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { answer, codeReads, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, nodeOf } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton } from './share'
@@ -1096,6 +1096,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   updateMapBtn()
   c.updated = Date.now()
   save()
+  // the row of suggestions shows where the conversation is now (and builds its word index at idle after the first answer)
+  cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
   // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
   const asking = m.who === 'bot' && !!(m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()
@@ -1181,7 +1183,7 @@ setExploreHooks({
 })
 
 // Typing suggestions above the box (composer.ts, menu > Typing suggestions): its "✓" sends the box's text, which the submit
-// below reads as a direct question (directRef → readQuestion with no reader: the reading the "✓" showed)
+// below reads by code (codeReads → readQuestion with no reader: the reading the "✓" showed)
 const cmp = mountComposer(form, input, {
   ui: () => nav, conv: () => conv(), packs: () => INSTALLED, busy: () => busy || locked(),
   send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
@@ -1383,8 +1385,9 @@ form.addEventListener('submit', (e) => {
   input.value = ''
   cmp.clear()
   const c = conv()
-  // only a reference ("Rut 2:3", "Jonás 1:3 notas"): code reads it, so neither reader runs (saves about 4 s on a phone)
-  const direct = !has('help', q) && directRef(q)
+  // only a reference ("Rut 2:3", "Jonás 1:3 notas") or a follow-up code reads ("¿y las notas?" after one): neither reader runs
+  // (saves about 4 s on a phone), and the answer is what the composer's "✓" showed
+  const direct = !has('help', q) && codeReads(q, c)
   count('asked')
   count(direct ? 'model.skipped' : modelReady() && !modelOff() ? 'model.used' : 'model.none')
   respond(c, q0, async () => {

@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { booksOf, type Ctx, helpsKnown, loadHelps, ready, suggest, understood } from '../src/suggest'
 import { Composer, composerOn, setComposerOn } from '../src/composer'
 import { buildSheet } from '../src/sheet'
-import { type ConvState, directRef, directSheet, env, readQuestion } from '../src/pipeline'
+import { codeReads, type ConvState, directSheet, env, readQuestion } from '../src/pipeline'
 import { has } from '../src/commands'
 import { openLang } from '../src/packs'
 import { installPacks, ALL_PACKS } from './fs-packs'
@@ -115,10 +115,10 @@ describe('the "✓" asks what the answer reads', () => {
       for (const b of k.before) await turn(c, { q: b, slots: null }, k.lang)
       env.nav = k.lang
       const u = await understoodNow(k.q, ctx(k.lang, c))
-      const direct = directRef(k.q)
+      const direct = codeReads(k.q, c)
       if (!u || !u.has) continue
       shown++
-      // the send goes the direct way (main.ts: directRef), so it is read as the "✓" read it
+      // the send goes the direct way (main.ts: codeReads, a reference or a follow-up code reads), so it is read as the "✓" read it
       expect(direct, k.q).toBe(true)
       const before = JSON.stringify(c)
       const fromRow = (await buildSheet('row', u.slots, env.helpsLang)).sheet

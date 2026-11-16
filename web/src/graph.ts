@@ -35,7 +35,9 @@ export type GNode = {
  * `path`: the light path the person started through a book ("Voy a traducir Rut"), and where it is; `pathBefore`: the path it
  * replaced, while the answer that started the new one offers a new conversation (moved there, the old one comes back)
  */
-export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path }
+export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path
+  /** the step after `path`, when the last answer was on it (the button "Next: …" under it; the composer offers it too) */
+  pathNext?: Path }
 
 export const newGraph = (): Graph => ({ nodes: [], cur: null })
 export const nodeOf = (g: Graph | undefined, id: string | null | undefined): GNode | undefined =>

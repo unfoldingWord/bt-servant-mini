@@ -794,17 +794,37 @@ export function directSheet(q: string, c: ConvState = { last: null }): Slots | n
   for (const k of SHOW_KINDS) rest = rest.replace(new RegExp(pattern(k).source, 'giu'), ' ')
   const words = rest.replace(/[¿?!¡.,;«»"“”'’()؟،-]/g, ' ').split(/\s+/).filter(Boolean)
   if (!words.every((w) => /^[\d०-९٠-٩:.–-]+$/.test(w) || name.has(fold(w)) || bookExact(w) === code || REF_FILLER.has(fold(w)))) return null
-  // what readQuestion does with no slots, without its effects (the conversation's state is not kept here)
-  const s0 = refInText({ intent: 'unknown', lang: guessLang(q) }, q)
-  if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
-  else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
-  const shown = kindOf(q)
-  if (shown && s0.book && s0.chapter && !(s0.what ?? []).includes(shown[0]!)) Object.assign(s0, { intent: 'passage', what: shown })
+  const s0 = unreadSlots(q)
   if (ordinalPick(q) === undefined && followUp(withoutWeak(q), s0, c)) return null
   if (pickFound(q, s0, c) || pathStart(q)) return null
   const asked = introAsked(q, s0.lang ?? env.nav)
   return asked ? { ...asked, lang: s0.lang ?? env.nav } : withContext(s0, c.last, q)
 }
+
+/** What readQuestion starts from when no reader ran (slots null), without its effects (the conversation's state is not kept). */
+function unreadSlots(q: string): Slots {
+  const s0 = refInText({ intent: 'unknown', lang: guessLang(q) }, q)
+  if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
+  else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
+  const shown = kindOf(q)
+  if (shown && s0.book && s0.chapter && !(s0.what ?? []).includes(shown[0]!)) Object.assign(s0, { intent: 'passage', what: shown })
+  return s0
+}
+/**
+ * The follow-up code reads from this conversation ("notas", "siguiente", "5" after Rut 2:3), as readQuestion reads it when no
+ * reader ran, without its effects (no state kept, no book read, the book's ends not checked): the composer's "✓" with context.
+ * Null when the question is not one (or picks a search result).
+ */
+export function followUpPreview(q: string, c: ConvState): FollowUp | null {
+  if (ordinalPick(q) !== undefined) return null
+  return followUp(withoutWeak(q), unreadSlots(q), c)
+}
+/**
+ * Whether code alone reads the question: only a reference (directRef), or a follow-up of this conversation (followUpPreview).
+ * Then main.ts skips the readers (the phone's model, about 4 s; the online one) and readQuestion reads it with no slots: the
+ * very reading the composer's "✓" showed.
+ */
+export const codeReads = (q: string, c: ConvState): boolean => directRef(q) || !!followUpPreview(q, c)
 
 // ------------------------------------------------------------------------------------- training questions -> Translation Academy
 // "How do I translate idioms?", "What book should I translate first?", "How do I set up a translation team?": questions about
@@ -2077,8 +2097,10 @@ export function moveOut<M extends Moved>(c: ConvState & { msgs: M[] }, m: M, ui:
   const graph: Graph = { nodes: [{ ...n, parent: null, edge: 'start', drift: 'moved', msg: msgs.length - 1 }], cur: n.id }
   if (m.pathLine && c.graph.path) {
     graph.path = c.graph.path
+    if (c.graph.pathNext) graph.pathNext = c.graph.pathNext
     if (c.graph.pathBefore) c.graph.path = c.graph.pathBefore
     else delete c.graph.path
+    delete c.graph.pathNext
   }
   delete c.graph.pathBefore
   const q = moved[0]?.who === 'me' ? (moved[0] as { text?: string }).text : undefined
@@ -2117,6 +2139,8 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
     if (reply.drift && g.path) g.pathBefore = g.path
   } else if (g.path) at = stepOf(g.path, ref, x.sheet.what ?? [], await secsOf(g.path, P?.ch ?? null))
   const p = g.path
+  // (the next step is kept only while the last answer is on the path)
+  delete g.pathNext
   if (at) {
     g.path = at
     reply.pathMark = pathLabel(x.ui, at, 'mark')
@@ -2124,6 +2148,7 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
     const nx = nextStep(at, await secsOf(at, ch), at.step === 5 ? await secsOf(at, ch + 1) : [])
     const sheet = nx ? pathSheet(nx, x.sheet) : null
     if (nx && sheet) {
+      g.pathNext = nx
       // the next step first; a button to the same passage with those helps is that step ("First section: Ruth 1:1–5", "Notes")
       const same = (f: Follow) => f.sheet?.intent === 'passage' && f.sheet.ref === sheet.ref && sheet.what.every((w) => f.sheet!.what.includes(w))
       reply.follow = [{ label: pathLabel(x.ui, nx, 'next'), sheet, pathNext: true },...(reply.follow ?? []).filter((f) => !same(f))].slice(0, MAX_FOLLOW)
