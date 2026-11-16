@@ -128,6 +128,23 @@ describe('"✓" of a follow-up (followUpPreview)', () => {
     // with no conversation, nothing
     expect(await kinds('es', 'notas')).toEqual([])
   }, 120_000)
+  test('the readers are skipped only where a "✓" is shown; a word that may name a book goes to them', async () => {
+    const c: ConvState = { last: null }
+    await turn(c, { q: 'Ruth 2:3' }, 'en')
+    env.nav = 'en'
+    for (const q of ['notes', 'next verse', '5']) expect(`${q}: ${codeReads(q, c)}`).toBe(`${q}: true`)
+    // follow-ups code reads, whose answer reads more than the slots: no "✓", and the readers still run
+    for (const q of ['what does lamb mean here?', 'how many times in this chapter?', 'how do I translate this?']) {
+      expect(`${q}: ${codeReads(q, c)}`).toBe(`${q}: false`)
+      expect((await kinds('en', q, ctx('en', c))).filter((x) => x.startsWith('ok:'))).toEqual([])
+    }
+    // "العدد 5" after Ruth 2:3: Numbers 5 to a reader (fu-ar-numbers-read), verse 5 to the follow-up: no "✓", the reader decides
+    const ar: ConvState = { last: null }
+    await turn(ar, { q: 'اعرض راعوث 2:3' }, 'ar')
+    env.nav = 'ar'
+    expect([followUpPreview('العدد 5', ar), codeReads('العدد 5', ar)]).toEqual([null, false])
+    expect((await kinds('ar', 'العدد 5', ctx('ar', ar))).filter((x) => x.startsWith('ok:'))).toEqual([])
+  }, 120_000)
   test('each follow-up "✓" asks what the send reads (codeReads, readQuestion with no reader), over the follow-up cases', async () => {
     let shown = 0, cases = 0
     for (const k of loadCases('followup.jsonl')) {
@@ -192,6 +209,7 @@ describe('C: the word index', () => {
       ['id', 'anuge', 'term:anugerah · istilah kunci'],
       ['hi', 'अनुग्', 'term:अनुग्रह · मुख्य शब्द'],
       ['ar', 'ما معنى نع', 'term:نعمة · كلمة رئيسية'],
+      ['ar', 'الله', 'term:الله · كلمة رئيسية'],
       // French with no French pack: the glossary's names, the article from the English pack (said on the button)
       ['fr', 'Que signifie arch', 'term:arche · mot clé · en anglais'],
       ['es', 'g', null],
@@ -200,6 +218,8 @@ describe('C: the word index', () => {
       ['es', '¿Qué significa gracia en Rut 2:3?', null],
     ]
     for (const [ui, t, want] of table) expect(`${ui} ${t}: ${await first(ui, t)}`).toBe(`${ui} ${t}: ${want}`)
+    // a short Arabic prefix ("ال") starts hundreds of names: ranked while scanned, the key terms still come first
+    expect(lookup('ar', 'ال').map((h) => h.kind)[0]).toBe('kt')
     // a book and a person of that name: both
     expect(await kinds('es', 'Rut')).toEqual(['book:Rut', 'term:Rut · nombre'])
   }, 60_000)
@@ -274,6 +294,31 @@ describe('C: the word index', () => {
     await installPacks(ALL_PACKS)
   }, 120_000)
 
+  test('time per keystroke in a conversation, after "Rut 2:3" (median under 3 ms, the slowest 5 % under 8)', async () => {
+    await buildTermIndex(ALL_PACKS)
+    const c: ConvState = { last: null }
+    await turn(c, { q: 'Rut 2:3' }, 'es')
+    const texts = ['n', 'no', 'not', 'nota', 'notas', '5', 'sig', 'siguiente', 'el capítulo siguiente', 'Rut 2:3 notas', 'Rut 2:5', 'gra', '¿Qué significa gra', 'Notas de ', 'por qué Noemí se cambió']
+    env.nav = 'es'
+    for (const t of texts) await ready(t, ctx('es', c))
+    startRow(ctx('es', c))
+    const times: number[] = []
+    for (let r = 0; r < 20; r++) {
+      for (const t of texts) {
+        const t0 = performance.now()
+        suggest(t, ctx('es', c))
+        times.push(performance.now() - t0)
+      }
+      const t0 = performance.now()
+      startRow(ctx('es', c))
+      times.push(performance.now() - t0)
+    }
+    times.sort((a, b) => a - b)
+    const p50 = times[times.length >> 1]!, p95 = times[Math.floor(times.length * 0.95)]!
+    console.log(`suggest() after "Rut 2:3": median ${p50.toFixed(2)} ms, p95 ${p95.toFixed(2)} ms over ${times.length} calls`)
+    expect(p50).toBeLessThan(3)
+    expect(p95).toBeLessThan(8)
+  }, 120_000)
   test('time per keystroke with the index (median under 3 ms, the slowest 5 % under 8)', async () => {
     await buildTermIndex(ALL_PACKS)
     const texts: [string, string][] = [['es', 'g'], ['es', 'gr'], ['es', 'gra'], ['es', 'grac'], ['es', '¿Qué significa gra'], ['en', 'What does gr'], ['en', 'metaph'],

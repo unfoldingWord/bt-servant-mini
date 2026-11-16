@@ -1393,7 +1393,7 @@ form.addEventListener('submit', (e) => {
   respond(c, q0, async () => {
     // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
-    if (direct) return readQuestion(q, { slots: null, raw: 'model skipped (reference)', ms: 0 }, c, target)
+    if (direct) return readQuestion(q, { slots: null, raw: 'read by code (no reader)', ms: 0 }, c, target)
     // with the online helper on and a connection, the online model reads the question; otherwise (or if it fails) the phone's
     // a follow-up ("and the notes?", "and verse 5?") is read with the previous question's compact state; the phone model
     // gets it only when trained for it (followUps)

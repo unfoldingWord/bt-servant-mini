@@ -19,7 +19,7 @@
 //      another installed pack ("· en inglés"), exactly as buildSheet does
 import { bookCandidates, bookCode, fold, type Slots } from './sheet'
 import { rtlLang, strip as unmarked } from './bidi'
-import { type ConvState, directSheet, env, followUpPreview, type FollowUp, pathLabel, pathSheet } from './pipeline'
+import { type ConvState, directSheet, env, followUpPreview, pathLabel, pathSheet, previewable } from './pipeline'
 import { has, replyLang } from './commands'
 import { bookShown } from './firstuse'
 import { academyLabel, introLabel, whatWord } from './converse'
@@ -284,7 +284,7 @@ export function understood(text: string, ctx: Ctx): Understood | null {
   if (!q || q.length > 120 || !ctx.books || replyLang(q) || has('help', q)) return null
   let slots = directSheet(q, ctx.conv)
   let code = slots?.book ? bookCode(slots.lang ?? ctx.ui, slots.book) : null
-  // a follow-up of the conversation ("notas", "siguiente", "5"), as the send reads it (codeReads)
+  // a follow-up of the conversation ("notas", "siguiente", "5"), as the send reads it (pipeline.ts codeReads: the same test)
   const fu = slots ? null : followUpPreview(q, ctx.conv)
   if (fu && previewable(fu)) {
     slots = fu.slots
@@ -301,23 +301,6 @@ export function understood(text: string, ctx: Ctx): Understood | null {
   if (w) label += ` · ${w.toLocaleLowerCase(ctx.ui)}`
   if (where.other) label += ` · ${fillT(ST(ctx.ui).inLang, { lang: ST(ctx.ui).langs[where.pack] ?? where.pack })}`
   return { label, ui: ctx.ui, slots, code, ...where, ...more }
-}
-
-/**
- * A follow-up the "✓" may show: a passage (another verse, chapter or help of it), not a count, a term "here" or advice (their
- * answers read more than the slots), and within the book's chapters and verses as data/versification.json has them (readQuestion
- * moves "the next verse" past a chapter's end, or says there is none: no "✓" for those).
- */
-function previewable(f: FollowUp): boolean {
-  const s = f.slots
-  if (f.counted || f.termWords || s.intent !== 'passage' || s.term || !s.book || f.how.startsWith('meaning')) return false
-  const vs = VERSES[s.book]
-  const ch = s.chapter ?? null
-  if (!vs || ch === null || ch < 1 || ch > vs.length) return false
-  const max = vs[ch - 1]!
-  const v = s.verse_start ?? null, end = s.verse_end ?? null
-  if (v === null) return end === null
-  return v >= 1 && v <= max && (end === null || (end > v && end <= max))
 }
 
 const endsWithNumber = (t: string) => /[\d०-९٠-٩]\s*:?\s*$/.test(t)

@@ -308,7 +308,7 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
     if (c.missing !== null) {
       const it = row.items.find((x) => x.kind === 'missing' && x.book === c.missing)
       wrap.appendChild(el('span', 'cmp-note', it?.label ?? s.notHere))
-      wrap.appendChild(chip('cmp-chip', s.browse, () => { if (!hooks.busy()) hooks.browse() }))
+      wrap.appendChild(chip('cmp-chip', s.browse, () => { if (!hooks.busy()) hooks.browse() }, ui))
     } else {
       for (const it of row.items) {
         const b = chip(`cmp-chip cmp-${it.kind}`, it.label, () => void c.tap(it), ui)
@@ -329,7 +329,7 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
         nums.setAttribute('role', 'group')
         nums.setAttribute('aria-label', st.unit === 'chapter' ? s.chapter : s.verse)
         for (let n = 1; n <= st.max; n++) {
-          const b = chip('cmp-n', String(n), () => c.tapNumber(st, n))
+          const b = chip('cmp-n', String(n), () => c.tapNumber(st, n), ui)
           b.setAttribute('aria-label', `${st.unit === 'chapter' ? s.chapter : s.verse} ${n}`)
           nums.appendChild(b)
         }

@@ -14,6 +14,7 @@ import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
 import guideWords from './data/guide.json'
 import shapes from './data/shapes.json'
+import versification from './data/versification.json'
 
 /**
  * What the page tells the decisions: the app's language (the fallback for a question's), the helps language chosen in the
@@ -812,19 +813,47 @@ function unreadSlots(q: string): Slots {
 }
 /**
  * The follow-up code reads from this conversation ("notas", "siguiente", "5" after Rut 2:3), as readQuestion reads it when no
- * reader ran, without its effects (no state kept, no book read, the book's ends not checked): the composer's "✓" with context.
- * Null when the question is not one (or picks a search result).
+ * reader ran, without its effects (no state kept, no book read, the book's ends not checked). Null when the question is not
+ * one, picks a search result, or has a word that may name a book ("العدد 5" after Rut 2:3 is Numbers 5 to a reader, verse 5
+ * to the follow-up: the reader decides, as decided on Nov 15 for fu-ar-numbers-read).
  */
 export function followUpPreview(q: string, c: ConvState): FollowUp | null {
   if (ordinalPick(q) !== undefined) return null
+  const lang = /[؀-ۿ]/.test(q) ? 'ar' : /[ऀ-ॿ]/.test(q) ? 'hi' : guessLang(q)
+  if (refInText({ intent: 'unknown', lang }, q).book) return null
   return followUp(withoutWeak(q), unreadSlots(q), c)
 }
+const VERSES = versification as Record<string, number[]>
 /**
- * Whether code alone reads the question: only a reference (directRef), or a follow-up of this conversation (followUpPreview).
- * Then main.ts skips the readers (the phone's model, about 4 s; the online one) and readQuestion reads it with no slots: the
- * very reading the composer's "✓" showed.
+ * A follow-up whose answer is only its slots, so the composer may show it ("✓ Rut 2:3 · notas") and the send may skip the
+ * readers: a passage (another verse, chapter or help of it), not a count, a term "here" or advice (their answers read more
+ * than the slots), within the book's chapters and verses as data/versification.json has them (readQuestion moves "the next
+ * verse" past a chapter's end, or says there is none: those go the usual way).
  */
-export const codeReads = (q: string, c: ConvState): boolean => directRef(q) || !!followUpPreview(q, c)
+export function previewable(f: FollowUp): boolean {
+  const s = f.slots
+  if (f.counted || f.termWords || s.intent !== 'passage' || s.term || !s.book || f.how.startsWith('meaning')) return false
+  const vs = VERSES[s.book]
+  const ch = s.chapter ?? null
+  if (!vs || ch === null || ch < 1 || ch > vs.length) return false
+  const max = vs[ch - 1]!
+  const v = s.verse_start ?? null, end = s.verse_end ?? null
+  if (v === null) return end === null
+  return v >= 1 && v <= max && (end === null || (end > v && end <= max))
+}
+/**
+ * Whether code alone reads the question: only a reference in this conversation (directSheet with it, as the composer's "✓"
+ * reads it), or a follow-up of this conversation the composer shows with a "✓" (followUpPreview, previewable). Then main.ts
+ * skips the readers (the phone's model, about 4 s; the online one) and readQuestion reads it with no slots: the very reading
+ * the "✓" showed. Other follow-ups ("what does lamb mean here?", "how many times … here?", "how do I translate this?") still
+ * go to the readers, and so does a reference that is also a follow-up here ("العدد 5" after Ruth 2:3: directRef alone reads
+ * Numbers 5, but with no slots readQuestion would read verse 5 of Ruth).
+ */
+export function codeReads(q: string, c: ConvState): boolean {
+  if (directSheet(q, c)) return true
+  const fu = followUpPreview(q, c)
+  return !!fu && previewable(fu)
+}
 
 // ------------------------------------------------------------------------------------- training questions -> Translation Academy
 // "How do I translate idioms?", "What book should I translate first?", "How do I set up a translation team?": questions about

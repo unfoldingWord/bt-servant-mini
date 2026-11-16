@@ -107,8 +107,10 @@ export function scheduleTermIndex(packs: () => string[], done: () => void = () =
   scheduled = true
   const mine = gen
   idle(() => {
+    // (a callback from before the packs changed: a newer schedule's flag is not its to clear)
+    if (mine !== gen) return
     scheduled = false
-    if (mine === gen && packs().length) void buildTermIndex(packs()).then(() => { if (INDEX) done() })
+    if (packs().length) void buildTermIndex(packs()).then(() => { if (INDEX) done() })
   })
 }
 /** The packs changed: the index is dropped (built again after the next answer). */
@@ -140,12 +142,20 @@ export function lookup(pack: string, prefix: string, max = 6): TermHit[] {
     if (ix.keys[mid]! < k) lo = mid + 1
     else hi = mid
   }
+  // every name with the prefix, ranked as it is read: only the best few are kept (a short Arabic prefix, "ال…", starts
+  // hundreds of names; cutting them in the index's order before ranking would push the key terms out)
+  const rank = (a: TermHit, b: TermHit) => +b.exact - +a.exact || ORDER[a.kind] - ORDER[b.kind] || a.name.length - b.name.length
+  const keep = max * 8
   const found: TermHit[] = []
-  for (let i = lo; i < ix.keys.length && ix.keys[i]!.startsWith(k) && found.length < 200; i++) {
+  for (let i = lo; i < ix.keys.length && ix.keys[i]!.startsWith(k); i++) {
     const id = ix.ids[ix.at[i]!]!
-    found.push({ id, pack, name: ix.shown[i]!, kind: kindOf(id)!, exact: ix.keys[i] === k })
+    const h: TermHit = { id, pack, name: ix.shown[i]!, kind: kindOf(id)!, exact: ix.keys[i] === k }
+    if (found.length >= keep && rank(h, found[found.length - 1]!) >= 0) continue
+    let j = found.length
+    while (j > 0 && rank(h, found[j - 1]!) < 0) j--
+    found.splice(j, 0, h)
+    if (found.length > keep) found.pop()
   }
-  found.sort((a, b) => +b.exact - +a.exact || ORDER[a.kind] - ORDER[b.kind] || a.name.length - b.name.length)
   const out: TermHit[] = []
   const ids = new Set<string>()
   for (const h of found) {
