@@ -10,7 +10,7 @@ import { installedLangs, openLang } from './packs'
 import { bookExact, bookNameWords, fold } from './sheet'
 import storyWords from './data/story-words.json'
 import storyWordsMore from './data/story-words-more.json'
-import { rankVerses, resetIndexes, searchIndex, searchIntros, type RankedVerse, type Ranking, type Term } from './textindex'
+import { rankVerses, resetIndexes, searchIndex, searchIntros, type RankedVerse, type Ranking, type Term, verseText } from './textindex'
 
 /** Common story words of a question in English ("mar" -> "sea"), to match the English text when the language's pack lacks the book. */
 const LEX: Record<string, Record<string, string>> = Object.fromEntries(Object.entries(storyWords as unknown as Record<string, Record<string, string>>)
@@ -598,6 +598,19 @@ export async function articleForQuestion(q: string): Promise<string[] | null> {
   return null
 }
 
+/** The texts of these verses from a pack (else English, else any pack that has the book): the same verses in another language. */
+export async function textsOfVerses(hits: { book: string; ch: number; v: number }[], packLang: string): Promise<string[]> {
+  const order = [...new Set([packLang, 'en', ...(await installedLangs().catch(() => []))])]
+  return Promise.all(hits.map(async (h) => {
+    for (const pl of order) {
+      const r = await reader(pl).catch(() => null)
+      if (!r?.installed(`book:${h.book}`)) continue
+      const t = await verseText(r, h.book, h.ch, h.v, MAIN_TEXT, SKIP_TEXT)
+      if (t) return t
+    }
+    return ''
+  }))
+}
 /** `book`: only that book's verses, the words of its names left out ("Daniel en el foso de los leones": "foso", "leones" in Daniel). */
 export async function searchVerses(question: string, term: string | null, packLang: string, book?: string): Promise<SearchResult> {
   const own = book ? bookNameWords(book) : null

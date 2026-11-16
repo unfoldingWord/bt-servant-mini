@@ -109,6 +109,20 @@ describe('an article the question does not name (strayTerm)', () => {
     expect(await strayTerm(art('gracia', { book: 'Rut' }), 'Rut 2', c)).toBe(false)
     expect(await strayTerm(art('grace', { other_language: 'en' }), '¿Cómo se dice en inglés?', c)).toBe(false)
   })
+  test('fast once warm: a long sentence in a few milliseconds (one map lookup per word group, review of ms/reports4)', async () => {
+    const q = 'मैं अपने गाँव में लोगों के साथ बैठकर पुराने नियम की कहानियाँ पढ़ता हूँ और हम सब मिलकर उनके अर्थ पर बात करते हैं, फिर प्रार्थना करते हैं'
+    const s = { intent: 'article', term: 'grace', lang: 'hi' }
+    env.nav = 'hi'
+    expect(await strayTerm(s, q, c)).toBe(true) // warm-up: the packs' name indexes
+    let best = Infinity
+    for (let i = 0; i < 3; i++) {
+      const t0 = performance.now()
+      await strayTerm(s, q, c)
+      best = Math.min(best, performance.now() - t0)
+    }
+    console.log(`strayTerm, long Hindi sentence, warm: ${best.toFixed(1)} ms`)
+    expect(best).toBeLessThan(20)
+  }, 60_000)
   test("the conversation's term: kept", async () => {
     const st: ConvState = { last: null, state: { s: { intent: 'article', term: 'paz' }, at: Date.now() } }
     expect(await strayTerm(art('paz'), '¿Y qué más dicen?', st)).toBe(false)

@@ -547,6 +547,13 @@ function vocabWord(x: Index, id: number): string {
   return a[id]!
 }
 const refIs = (ref: string, v: number) => { const m = /^(\d+):(\d+)/.exec(ref); return !!m && Number(m[1]) * 1000 + Number(m[2]) === v % 1_000_000 }
+/** A verse's text in a pack, from the first main text that has it ("" when none: the book or the verse is not there). */
+export async function verseText(r: PackReader, book: string, ch: number, v: number, mainRes: RegExp, skipRes?: RegExp): Promise<string> {
+  const rows = await rowsOfBook(r, book).catch(() => [])
+  const id = ch * 1000 + v
+  const row = rows.find((pr) => pr.kind === 'text' && mainRes.test(pr.res) && !skipRes?.test(pr.res) && refIs(pr.ref, id))
+  return row ? row.body.replace(/\s+/g, ' ').trim() : ''
+}
 /** Whether a text holds one of the words (a snippet needs one to center on). */
 const holds = (body: string, phrases: string[][]) => { const ws = new Set(tokensOf(body)); return phrases.some((p) => ws.has(p[0]!)) }
 
