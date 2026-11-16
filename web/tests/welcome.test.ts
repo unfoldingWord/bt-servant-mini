@@ -14,7 +14,7 @@ import { manualArticles } from '../src/explore'
 import { openLang, CANON } from '../src/packs'
 import { booksOf } from '../src/suggest'
 import { newGraph } from '../src/graph'
-import { answer, type ConvState, pathStart } from '../src/pipeline'
+import { answer, type ConvState, helpsPack, pathStart } from '../src/pipeline'
 import type { Sheet } from '../src/answer'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
@@ -602,19 +602,76 @@ test('the path model: next, step-of and the count follow the steps it has', asyn
 
 // ------------------------------------------------------------------------------------------------------- review fixes
 
-test('each step is answered from the path’s own pack: Hindi Acts with English on the phone still has 4 steps', async () => {
+/** A book's path in Hindi, as typed, followed by "Next" through its first section: each step's marker, what it found, its line. */
+async function hindiPath(q: string) {
+  const c: ConvState = { last: null }
+  let r = await turn(c, { q }, 'hi')
+  const out = [{ mark: r.reply.pathMark ?? '', found: r.found, said: r.reply.intro ?? '' }]
+  for (let i = 0; i < 4; i++) {
+    const nx = r.reply.follow?.find((f) => f.pathNext)
+    if (!nx) break
+    r = await turn(c, { q: nx.label, sheet: nx.sheet as Sheet }, 'hi')
+    out.push({ mark: r.reply.pathMark ?? '', found: r.found, said: r.reply.intro ?? '' })
+  }
+  return { c, out }
+}
+const FROM_EN = (what: string) => new RegExp(`अंग्रेज़ी में ${what}, अंग्रेज़ी पैकेज से।`)
+
+test('helps the path’s pack lacks come from another pack, saying so: Hindi Ruth with English has 5 steps, 4–5 from English', async () => {
   if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('en')) return
   await installPacks(['hi', 'en'])
-  const c: ConvState = { last: null }
-  const r = await turn(c, { q: 'मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ' }, 'hi')
-  expect(r.ref).toBe('act front:intro')
+  const { c, out } = await hindiPath('मैं रूत का अनुवाद कर रहा हूँ')
   expect(c.graph?.path?.lang).toBe('hi')
-  expect(c.graph?.path?.has).toEqual([1, 2, 3, 4])
-  expect(r.reply.pathMark).toMatch(/ · चरण 1\/4: परिचय$/)
-  const steps = await walk('hi', r, c, 5)
-  for (const s of steps) {
-    expect(s.mark).toMatch(/चरण \d\/4/)
+  expect(c.graph?.path?.has).toEqual([1, 2, 3, 4, 5])
+  expect(out.map((s) => s.mark.replace(/^.* · /, ''))).toEqual(['चरण 1/5: परिचय', 'चरण 2/5: खंड', 'चरण 3/5: मुख्य शब्द', 'चरण 4/5: टिप्पणियाँ', 'चरण 5/5: प्रश्न'])
+  for (const s of out) expect(s.found, s.mark).toBeGreaterThan(0)
+  // steps 4 and 5 say where they come from; the sections and key terms (from the Hindi pack) say nothing of the kind (the
+  // introduction already came from the English pack before this, intro-elsewhere, and says so too)
+  expect(out[3]!.said).toMatch(FROM_EN('टिप्पणियाँ'))
+  expect(out[4]!.said).toMatch(FROM_EN('प्रश्न'))
+  for (const s of out.slice(1, 3)) expect(s.said).not.toContain('पैकेज से')
+})
+
+test('Hindi-only phone: Ruth has 3 steps and Acts 4, as before (nothing to take from)', async () => {
+  if (!ALL_PACKS.includes('hi')) return
+  await installPacks(['hi'])
+  const ruth = await hindiPath('मैं रूत का अनुवाद कर रहा हूँ')
+  expect(ruth.c.graph?.path?.has).toEqual([1, 2, 3])
+  expect(ruth.out.map((s) => s.mark.replace(/^.* · /, '').replace(/:.*/, ''))).toEqual(['चरण 1/3', 'चरण 2/3', 'चरण 3/3', 'चरण 2/3', 'चरण 3/3'])
+  const acts = await hindiPath('मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ')
+  expect(acts.c.graph?.path?.has).toEqual([1, 2, 3, 4])
+  // (every step but the introductions: the Hindi pack has none for Ruth, and a path always starts there)
+  for (const s of [...ruth.out.slice(1), ...acts.out.slice(1)]) {
     expect(s.found, s.mark).toBeGreaterThan(0)
+    expect(s.said).not.toContain('पैकेज से')
+  }
+})
+
+test('Hindi Acts with English: the notes from Hindi, the questions from English', async () => {
+  if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('en')) return
+  await installPacks(['hi', 'en'])
+  const { c, out } = await hindiPath('मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ')
+  expect(c.graph?.path?.has).toEqual([1, 2, 3, 4, 5])
+  expect(out[3]!.mark).toMatch(/चरण 4\/5: टिप्पणियाँ$/)
+  expect(out[3]!.said).not.toContain('पैकेज से') // the Hindi pack's own notes
+  expect(out[3]!.found).toBeGreaterThan(0)
+  expect(out[4]!.mark).toMatch(/चरण 5\/5: प्रश्न$/)
+  expect(out[4]!.said).toMatch(FROM_EN('प्रश्न'))
+  expect(out[4]!.found).toBeGreaterThan(0)
+  // the same decision for the path's steps and for its answers (one function), and for a plain question in Hindi
+  expect(await helpsPack('act', 'notes', 'hi')).toBe('hi')
+  expect(await helpsPack('act', 'questions', 'hi')).toBe('en')
+  expect(await helpsPack('rut', 'notes', 'hi')).toBe('en')
+  const q = await turn({ last: null }, { q: 'रूत 2:3 के नोट्स' }, 'hi')
+  expect([q.answered, q.ref]).toEqual(['passage', 'rut 2:3'])
+  expect(q.found).toBeGreaterThan(0)
+  expect(q.reply.intro).toMatch(FROM_EN('टिप्पणियाँ'))
+  // English first: with Spanish installed too, still English
+  if (ALL_PACKS.includes('es-419')) {
+    await installPacks(['hi', 'es-419', 'en'])
+    expect(await helpsPack('rut', 'questions', 'hi')).toBe('en')
+    await installPacks(['hi', 'es-419'])
+    expect(await helpsPack('rut', 'questions', 'hi')).toBe('es-419')
   }
 })
 
@@ -666,4 +723,24 @@ test('a start is looked for in the person’s own language first', async () => {
   resetLearn()
   expect((await startOf('intro', ['hi', 'en']))?.learn.lang).toBe('hi')
   expect((await startOf('checking', ['en', 'hi']))?.learn.lang).toBe('en')
+})
+
+test('the notice says what came from which pack, in the 6 app languages', async () => {
+  if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('en')) return
+  await installPacks(['hi', 'en'])
+  const SAYS: Record<string, string[]> = {
+    en: ['Notes in English, from the English pack.', 'Questions in English, from the English pack.'],
+    es: ['Notas en inglés, del paquete de inglés.', 'Preguntas en inglés, del paquete de inglés.'],
+    fr: ['Notes en anglais, du paquet anglais.', 'Questions en anglais, du paquet anglais.'],
+    id: ['Catatan dalam bahasa Inggris, dari paket bahasa Inggris.', 'Pertanyaan dalam bahasa Inggris, dari paket bahasa Inggris.'],
+    hi: ['अंग्रेज़ी में टिप्पणियाँ, अंग्रेज़ी पैकेज से।', 'अंग्रेज़ी में प्रश्न, अंग्रेज़ी पैकेज से।'],
+    ar: ['ملاحظات باللغة الإنجليزية، من حزمة اللغة الإنجليزية.', 'أسئلة باللغة الإنجليزية، من حزمة اللغة الإنجليزية.'],
+  }
+  for (const ui of UIS) for (const [i, what] of (['notes', 'questions'] as const).entries()) {
+    // a Ruth section asked in the Hindi pack (a Hindi path's step, whatever the app's language)
+    const sheet = { ...article('', 'hi'), intent: 'passage', concept: null, ref: 'rut 1:1-5', what: [what] }
+    const r = await turn({ last: null }, { q: 'x', sheet }, ui)
+    expect(r.found, `${ui} ${what}`).toBeGreaterThan(0)
+    expect(r.reply.intro, `${ui} ${what}`).toContain(SAYS[ui]![i]!)
+  }
 })
