@@ -4,7 +4,7 @@ import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQue
 import { bookCode, bookExact, bookNameWords, buildSheet, endsLongName, fold, idsOf, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
-import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
+import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf, textsOfVerses } from './search'
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
 import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, stepOf, stepTarget } from './graph'
@@ -25,6 +25,8 @@ export const env = { nav: 'en', helpsLang: null as string | null, details: 'deta
 
 export type Hit = { book: string; ch: number; v: number }
 /** What a conversation keeps for the next question (main.ts adds its messages and title). */
+/** The verses a free search found, and the words it says it found them by: "say it in English" keeps them (repeatOf). */
+export type Found = { hits: Hit[]; how: string; used: string[]; words?: string[] }
 export type ConvState = { last: Sheet | null; found?: Hit[]
   /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
   state?: { s: Record<string, unknown>; at: number }
@@ -34,7 +36,7 @@ export type ConvState = { last: Sheet | null; found?: Hit[]
    * What the last answer was asked for, once resolved (keepState): the slots (a follow-up already moved to its verse), the
    * button's sheet when it came from a button, and the question typed (none for a button). "In English" asks it again.
    */
-  prevResolved?: { slots: Slots; sheet?: Sheet; q?: string; ui?: string }
+  prevResolved?: { slots: Slots; sheet?: Sheet; q?: string; ui?: string; found?: Found }
   /** questionOf made this question a repeat of prevResolved: readQuestion builds it from there, and no reader runs (codeReads) */
   again?: string
   /** the conversation's points and how they join (graph.ts): made by `answer`, saved with the conversation */
@@ -503,9 +505,9 @@ export const followUpByCode = (q: string, c: ConvState): boolean =>
 const COMMON: Record<string, RegExp> = {
   // with no reader (no model yet, offline), these words alone tell the language: also a translator's own words ("Voy a
   // empezar a traducir Jonás" was answered in English on a phone in English)
-  en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says|translate|translating|want|start)\b/gi,
-  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice|traducir|traduzco|traduce|voy|vamos|empezar|empiezo|quiero|necesito|libro|puedo|debo|puedes|podr[ií]as|dime|d[ií]melo|decir(?:lo|me)?|mu[eé]strame|mostrar|significa)\b/gi,
-  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|verset|notes?|dit|traduire|traduis|livre|je|veux|dois|peux|commencer|signifie|veut|dire)\b/gi,
+  en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says|translate|translating|want|start|on|of)\b/gi,
+  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice|traducir|traduzco|traduce|voy|vamos|empezar|empiezo|quiero|necesito|libro|puedo|debo|puedes|podr[ií]as|dime|d[ií]melo|decir(?:lo|me)?|mu[eé]strame|mostrar|significa|del|dios|y(?!\s+a\b)|con|por)\b/gi,
+  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|versets?|notes?|dit|traduire|traduis|traduit|livre|je|veux|dois|peux|commencer|signifie|veut|dire|du|des|et|dieu|il|dans|combien|pourquoi|sur|avec)\b/gi,
   id: /\b(apa|siapa|bagaimana|di mana|yang|adalah|tolong|ayat|catatan|kata|dalam|itu|terjemahkan|menerjemahkan|saya|mau|ingin|kitab|mulai)\b/gi,
 }
 export function guessLang(q: string): string {
@@ -692,7 +694,9 @@ const BOOK_FILLER = new Set((
 const STORY_STRIP: Command[] = ['intro', 'overview', 'about', 'tell', 'notes', 'questions', 'terms', 'text', 'whole', 'chapter', 'verse', 'bookWord', 'howMany', 'again', 'replyVerb', 'this', 'here', 'also']
 const isFiller = (w: string): boolean => {
   const f = fold(w)
-  return [f, f.replace(/es$/, ''), f.replace(/s$/, '')].some((x) => BOOK_FILLER.has(x) || SAY_FILLER.has(x) || REF_FILLER.has(x) || START_FILLER.has(x))
+  // a plural as its singular ("capítulos", "apóstoles"), never down to a small word: "toes" is not "to" ("Daniel toes" is no book)
+  const singular = [f.replace(/es$/, ''), f.replace(/s$/, '')].filter((x) => x !== f && x.length >= 4)
+  return [f, ...singular].some((x) => BOOK_FILLER.has(x) || SAY_FILLER.has(x) || REF_FILLER.has(x) || START_FILLER.has(x))
 }
 /**
  * The words of a question beyond the books it names and the words that ask for a book ("Lee Daniel" has none; "Daniel en el
@@ -787,7 +791,9 @@ export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
   /** what code answers by itself, with no sheet to answer: past a book's end, how many verses or chapters */
   note?: { text: string; fromText: boolean }
   /** the helps were asked for in a language that is not on the phone, or lacks this: said before the answer (helpsIn) */
-  langNote?: string }
+  langNote?: string
+  /** the last search again in another language: these verses, not a new search (ROUTES 'found-again') */
+  keep?: Found }
 /**
  * The reader's article names a term the question does not have (no word of it, nor one that starts like it: "concubinas" is
  * «concubina»), the conversation was not about it either, and no article of it is one the question names in its own words
@@ -806,8 +812,11 @@ export async function strayTerm(s: Slots, q: string, c: ConvState): Promise<bool
   if (fold(q).includes(fold(s.term).trim()) || inQ(s.term)) return false
   const before = freshState(c)?.term
   if (before && (fold(before) === fold(s.term) || inQ(before))) return false
-  // the term's articles, and the ones the question's words name (a few of them together: "arca del pacto")
-  const packs = await installedLangs().catch(() => ['en'])
+  // the term's articles, and the ones the question's words name (a few of them together: "arca del pacto"), in the packs the
+  // answer reads from: the helps language chosen, the question's and the app's language, English (each a map lookup: sheet.ts
+  // nameIndex; reading every pack's names took 3.4 s cold)
+  const have = await installedLangs().catch(() => ['en'])
+  const packs = [...new Set([env.helpsLang, packCode(s.lang ?? env.nav), packCode(env.nav), 'en'])].filter((l): l is string => !!l && have.includes(l))
   const its = (await idsOf(s.term, packs).catch(() => null)) ?? []
   if (!its.length) return true
   const named = new Set<string>([...((await articleForQuestion(q).catch(() => null)) ?? []), ...(await articlesNamed(keywords(q)).catch(() => new Set<string>()))])
@@ -872,7 +881,7 @@ async function repeatOf(p: NonNullable<ConvState['prevResolved']>, target: strin
     return { sheet, ui, meta, inScope, ...(await helpsIn(target, sheet, ui)) }
   }
   const { sheet, ui } = await buildSheet(`q${Date.now()}`, p.slots, prefer)
-  return { sheet, ui, meta, ...(p.q !== undefined ? { q: p.q } : {}), inScope, ...(await helpsIn(target, sheet, ui)) }
+  return { sheet, ui, meta, ...(p.q !== undefined ? { q: p.q } : {}), inScope, ...(p.found ? { keep: p.found } : {}), ...(await helpsIn(target, sheet, ui)) }
 }
 
 /** The reading step once the slots are known (from the phone's model, the online one, or none): code reads what they missed. */
@@ -1836,6 +1845,40 @@ async function outOfScope(x: Ctx): Promise<Done> {
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
   {
+    // "¿Me lo puedes decir en inglés?" after a free search: the verses it found, from the pack asked for (a new search there
+    // found others: Esther 2:14 became 2:17), each a button as before; the notes and questions with the question's words, and
+    // the articles they name ("Ester", "Concubina"), from that pack
+    name: 'found-again',
+    when: (x) => !!x.keep?.hits.length,
+    run: async (x) => {
+      const { c, ui } = x
+      const k = x.keep!
+      const hits = k.hits.slice(0, 6)
+      const texts = await textsOfVerses(hits, x.sheet.lang).catch(() => hits.map(() => ''))
+      const lines = hits.map((h, i) => (texts[i] ? `**${hitLabel(ui, h)}** — ${texts[i]}` : '')).filter(Boolean)
+      if (!lines.length) return null
+      c.found = hits
+      const at = (h: Hit, what: string[]) => passageSheet(x.sheet, `${h.book} ${h.ch}:${h.v}`, what)
+      const follow: Follow[] = hits.slice(0, 4).map((h) => ({ label: hitLabel(ui, h), sheet: at(h, ['text', 'notes']) }))
+      follow.splice(1, 0, ...(await placeSteps(follow[0]!.sheet!, hits[0]!, ui)))
+      const words = k.words ?? k.used
+      for (const id of [...(await articlesNamed(words).catch(() => new Set<string>()))].filter((i) => i.startsWith('tw:')).slice(0, 2)) {
+        const f = await twStep(x.sheet, id).catch(() => null)
+        if (f) follow.push(f)
+      }
+      const helps = x.q ? await searchHelps(x.q, x.sheet.lang).catch(() => []) : []
+      const groups = (['note', 'question'] as const).map((kd) => ({
+        head: (kd === 'note' ? HT().notes : HT().questions).replace('{w}', words.join(' ')),
+        items: helps.filter((h) => h.kind === kd).map((h) => ({ ...h, snippet: plainSnippet(h.snippet), ref: hitLabel(ui, h) })),
+      })).filter((g) => g.items.length)
+      return {
+        answered: 'search', ref: `${hits[0]!.book} ${hits[0]!.ch}:${hits[0]!.v}`, concept: null, found: lines.length + helps.length,
+        reply: { ui, follow, intro: searchIntro(k.how, k.used, ui), info: lines.join('\n\n'), helps: groups.length ? groups : undefined,
+          meta: `${env.details} · ${secs(x)} s\n${x.meta}\nthe same verses (${hits.map((h) => `${h.book} ${h.ch}:${h.v}`).join(', ')})` },
+      }
+    },
+  },
+  {
     // what code answered by itself (readQuestion): past a book's end ("Ruth 4:22 is the last verse of Ruth"), or how many
     // verses or chapters the passage has, from the text
     name: 'note',
@@ -2056,6 +2099,8 @@ ${x.meta}` },
         return null
       }
       const used = res.how === 'concepts' ? (st?.matched.length ? st.matched : res.concepts) : res.how === 'text' ? (hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
+      // "say it in English" after this answer: these verses again, not a search in the other pack (repeatOf)
+      if (hits.length && c.prevResolved && c.prevResolved.q === q) c.prevResolved.found = { hits: hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v })), how: res.how, used, words: res.keywords }
       const follow: Follow[] = []
       for (const h of hits.slice(0, 4)) follow.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
       // the best verse in its place: its section and its chapter, right after it ("Ester concubinas" found Esther 2:14: a report

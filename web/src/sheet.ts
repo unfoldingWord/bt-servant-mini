@@ -224,21 +224,39 @@ export async function idsOf(term: string | null, packLangs: string[]): Promise<s
   const g = GLOSS.get(f)
   if (g) return g
   for (const pl of packLangs) {
-    let m: any
-    try {
-      m = await (await openLang(pl)).maps()
-    } catch {
-      continue
-    }
-    const names: Record<string, string[]> = m.map?.core?.names ?? {}
-    const exact: string[] = []
-    for (const [id, ns] of Object.entries(names)) {
-      if (!(id.startsWith('tw:') || id.startsWith('ta:'))) continue
-      if (ns.some((n) => fold(String(n).replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim() === f)) exact.push(id)
-    }
-    if (exact.length) return exact.sort((a, b) => (a.startsWith('tw:') ? 0 : 1) - (b.startsWith('tw:') ? 0 : 1))
+    const exact = (await nameIndex(pl).catch(() => null))?.get(f)
+    if (exact?.length) return [...exact]
   }
   return null
+}
+/**
+ * A pack's Translation Words and Academy articles by each of their names, folded ("paz" → tw:kt/peace), Words first: built once
+ * per pack reader (a pack added, updated or removed opens a new reader, so a new index), then a name is one map lookup.
+ */
+const NAME_INDEX = new WeakMap<object, Promise<Map<string, string[]>>>()
+async function nameIndex(pl: string): Promise<Map<string, string[]>> {
+  const r = await openLang(pl)
+  let p = NAME_INDEX.get(r)
+  if (!p) {
+    p = (async () => {
+      const m: any = await r.maps()
+      const out = new Map<string, string[]>()
+      for (const [id, ns] of Object.entries<string[]>(m.map?.core?.names ?? {})) {
+        if (!(id.startsWith('tw:') || id.startsWith('ta:'))) continue
+        for (const n of ns) {
+          const k = fold(String(n).replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim()
+          const l = out.get(k)
+          if (!l) out.set(k, [id])
+          else if (!l.includes(id)) l.push(id)
+        }
+      }
+      for (const l of out.values()) l.sort((a, b) => (a.startsWith('tw:') ? 0 : 1) - (b.startsWith('tw:') ? 0 : 1))
+      return out
+    })()
+    NAME_INDEX.set(r, p)
+    p.catch(() => { if (NAME_INDEX.get(r) === p) NAME_INDEX.delete(r) })
+  }
+  return p
 }
 
 const LANG_NAMES: Record<string, string> = {
