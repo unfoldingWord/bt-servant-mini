@@ -24,6 +24,7 @@ import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlinePr
 import { shareButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
+import { composerSwitch, mountComposer } from './composer'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -693,6 +694,7 @@ function renderPanel() {
     const u = updateRow(nav)
     row(u.title, u.sub, () => { checkForUpdate(nav, true, () => renderPanel()) })
   }
+  list.appendChild(composerSwitch(nav, MT().on, MT().off))
   row(PT(nav).title, protectSummary(nav, MT().off), go('safety'))
   const aboutRow = el('button', 'mrow') as HTMLButtonElement
   aboutRow.type = 'button'
@@ -1170,6 +1172,13 @@ setExploreHooks({
   },
 })
 
+// Typing suggestions above the box (composer.ts, menu > Typing suggestions): its "✓" sends the box's text, which the submit
+// below reads as a direct question (directRef → readQuestion with no reader: the reading the "✓" showed)
+const cmp = mountComposer(form, input, {
+  ui: () => nav, conv: () => conv(), packs: () => INSTALLED, busy: () => busy || locked(),
+  send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
+})
+
 function runSheet(label: string, sheet: Sheet, ui: string) {
   if (busy) return
   respond(conv(), label, async () => ({ sheet: { ...sheet, id: `f${Date.now()}` }, ui, meta: '(follow-up: no model call)' }), { sheet, label })
@@ -1363,6 +1372,7 @@ form.addEventListener('submit', (e) => {
   // "Reply in Indonesian", "Repeat your last answer in Indonesian"
   const { q, target } = questionOf(q0, conv())
   input.value = ''
+  cmp.clear()
   const c = conv()
   // only a reference ("Rut 2:3", "Jonás 1:3 notas"): code reads it, so neither reader runs (saves about 4 s on a phone)
   const direct = !has('help', q) && directRef(q)
@@ -1416,7 +1426,7 @@ onPacksChanged(() => {
   resetBooks()
   resetExplore()
   resetSearch()
-  refreshInstalled()
+  refreshInstalled().then(() => cmp.reset())
 })
 setReady()
 // usage counts (only if turned on): this opening, and the days that ended go out when there is internet

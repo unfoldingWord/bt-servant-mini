@@ -103,6 +103,23 @@
   #send { width: 38px; height: 38px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
   #send:active { background: var(--accent-hover); }
   #send:disabled { opacity: .45; }
+  /* typing suggestions (composer.ts): one row above the box, inside the card; it scrolls sideways, never wraps to a second row */
+  #ask { flex-wrap: wrap; }
+  .cmp { flex: 0 0 100%; min-width: 0; display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 4px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  [dir="rtl"] .cmp { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+  .cmp[hidden] { display: none; }
+  .cmp::-webkit-scrollbar { display: none; }
+  .cmp-chip { flex: none; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg);
+    font: 14.5px/1.5 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; white-space: nowrap; }
+  .cmp-ok { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .cmp-missing { color: var(--muted); border-style: dashed; }
+  .cmp-nums { display: flex; gap: 4px; flex: none; }
+  .cmp-n { flex: none; width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: 15px/1 system-ui, sans-serif; }
+  .cmp-note { flex: none; color: var(--muted); font: 13.5px/1.5 system-ui, sans-serif; white-space: nowrap; }
+  .cmp button:active { background: var(--line); }
+  .cmp .cmp-ok:active { background: var(--accent-hover); }
+  .cmp-said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   #panel { display: none; position: absolute; z-index: 5; left: 8px; right: 8px; top: 56px; background: var(--card); border-radius: 14px;
     padding: 10px 14px 14px; box-shadow: 0 12px 32px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.08); max-height: 75vh; overflow-y: auto; }
   #panel.show { display: block; }
