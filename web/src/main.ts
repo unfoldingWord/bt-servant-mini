@@ -12,6 +12,7 @@ import { has } from './commands'
 import { resetSearch } from './search'
 import { md } from './md'
 import { askSafety, closeSafety, safetyAsked } from './safety'
+import { autoCheckUpdate, checkForUpdate, updateRow, updateSupported } from './update'
 import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
@@ -664,6 +665,10 @@ function renderPanel() {
   row(modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
   row(packsTitle(nav), `${INSTALLED.length} ${MT().installed}`, go('packs'))
   row(UT().title, usageOn() ? MT().on : MT().off, go('usage'))
+  if (updateSupported()) {
+    const u = updateRow(nav)
+    row(u.title, u.sub, () => { checkForUpdate(nav, true, () => renderPanel()) })
+  }
   row(PT(nav).title, protectSummary(nav, MT().off), go('safety'))
   const aboutRow = el('button', 'mrow') as HTMLButtonElement
   aboutRow.type = 'button'
@@ -1397,6 +1402,9 @@ setTimeout(() => sendUsage(), 5000)
 setTimeout(() => { if (isOnline()) updateLangs().catch(() => {}) }, 8000)
 window.addEventListener('online', () => { sendUsage(); sendFeedback() })
 setTimeout(() => sendFeedback(), 6000)
+// a new version of the Android app (update.ts): the notice from the last check; a new check once a day, only if the internet is allowed
+setTimeout(() => autoCheckUpdate(nav, (onlineOn() && onlineAvailable() && (!signInAvailable() || !!onlineSession())) || usageOn(), isOnline()), 10000)
+window.addEventListener('online', () => autoCheckUpdate(nav, (onlineOn() && onlineAvailable() && (!signInAvailable() || !!onlineSession())) || usageOn(), true))
 if (!isOnline()) netNote('off')
 // the installable web app, in the browser: how to install it
 if (PWA) pwaHint(nav)
