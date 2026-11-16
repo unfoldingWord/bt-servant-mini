@@ -776,6 +776,37 @@ test('the notice names the language the helps are written in, from their own row
   expect(d.reply.intro ?? '').not.toContain('pack.')
 })
 
+test('the order follows the app’s language, not the reply’s: an English question in the Arabic app tries the Arabic pack', async () => {
+  if (!ALL_PACKS.includes('en') || !ALL_PACKS.includes('ar')) return
+  await installPacks(['en', 'ar'])
+  // (turn sets the app language to its last argument: here the app is in Arabic, the question in English)
+  const r = await turn({ last: null }, { q: 'notes on Numbers 6:2' }, 'ar')
+  expect(r.ref).toBe('num 6:2')
+  expect(r.found).toBeGreaterThan(0)
+  expect(r.reply.intro).toMatch(/from the Arabic pack\.|من حزمة اللغة العربية/)
+})
+
+test('a path keeps the app language it started with: its steps and their answers agree when the app language changes', async () => {
+  if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('es-419')) return
+  await installPacks(['hi', 'es-419'])
+  // started in the Spanish app (a Hindi sentence: the path reads the Hindi pack), so Spanish fills its notes and questions
+  const c: ConvState = { last: null }
+  let r = await turn(c, { q: 'मैं रूत का अनुवाद कर रहा हूँ' }, 'es')
+  expect(c.graph?.path).toMatchObject({ lang: 'hi', app: 'es', has: [1, 2, 3, 4, 5] })
+  // then the app is switched to Hindi: the next steps still answer from the Spanish pack, as counted
+  for (let i = 0; i < 4; i++) {
+    const nx = r.reply.follow!.find((f) => f.pathNext)!
+    r = await turn(c, { q: nx.label, sheet: nx.sheet as Sheet }, 'hi')
+  }
+  expect(r.reply.pathMark).toMatch(/चरण 5\/5: प्रश्न$/)
+  expect(r.found).toBeGreaterThan(0)
+  expect(r.reply.intro).toContain('स्पेनिश पैकेज से।')
+  // a path started in the Hindi app has 3 steps (Spanish is neither English nor the app's language)
+  const h: ConvState = { last: null }
+  await turn(h, { q: 'मैं रूत का अनुवाद कर रहा हूँ' }, 'hi')
+  expect(h.graph?.path).toMatchObject({ app: 'hi', has: [1, 2, 3] })
+})
+
 test('the helps’ language from their own text: original-language quotes and links left out, short text is the pack’s', () => {
   const en = 'The author is using the phrase to introduce a new event in the story. Use a word, phrase, or other method in your language that is natural for introducing a new event. If it would be more natural in your language, you could say this in another way.'
   expect(helpsLangOf(`Now it happened (וַ⁠יְהִ֗י) ${en} [[rc://en/ta/man/translate/writing-newevent]]`, 'hi')).toBe('en')
@@ -788,8 +819,8 @@ test('a question that names the language of its helps never gets another pack’
   await installPacks(['hi', 'en'])
   const r = await turn({ last: null }, { q: 'रूत 2:3 के नोट्स हिंदी में' }, 'hi')
   expect(r.ref).toBe('rut 2:3')
-  expect(r.reply.intro).toContain('इस फ़ोन पर हिंदी की सहायता में Ruth के लिए टिप्पणियाँ नहीं हैं।')
-  expect(r.reply.intro).not.toContain('पैकेज से')
+  // (only that: not also "nothing found", since the English pack has them and the button offers them)
+  expect(r.reply.intro).toBe('इस फ़ोन पर हिंदी की सहायता में Ruth के लिए टिप्पणियाँ नहीं हैं।')
   const see = r.reply.follow![0]!
   expect([see.label, see.sheet?.lang, see.sheet?.ref, see.sheet?.what]).toEqual(['अंग्रेज़ी में टिप्पणियाँ देखें', 'en', 'rut 2:3', ['notes']])
   const tapped = await turn({ last: null }, { q: see.label, sheet: see.sheet as Sheet }, 'hi')
@@ -799,6 +830,7 @@ test('a question that names the language of its helps never gets another pack’
   await turn(c, { q: 'notes Ruth 2:3' }, 'en')
   const again = await turn(c, { q: 'say it in Hindi' }, 'en')
   expect(again.reply.intro).toContain('The Hindi helps on this phone have no notes for Ruth.')
+  expect(again.reply.intro).not.toContain("didn't find")
   expect(again.reply.follow![0]!.label).toBe('See the notes in English')
   // with no language named, the same question still gets the English notes, saying so
   const plain = await turn({ last: null }, { q: 'रूत 2:3 के नोट्स' }, 'hi')

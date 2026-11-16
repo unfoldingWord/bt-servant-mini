@@ -1763,6 +1763,8 @@ type Ctx = Made & {
   r?: Result
   /** where the answer's notes come from when another pack had them ("Notes in English, from the Arabic pack.") */
   from?: string
+  /** `from` says it all: the answer's own "nothing found" sentence is left out (the other pack has them; a button offers them) */
+  fromOnly?: boolean
 }
 type Done = Omit<Answered, 'route' | 'sheet' | 'node'>
 /** A step of the answer: when it applies, and what it does. A step returns the answer, or null to let the next step go on. */
@@ -2329,12 +2331,17 @@ ${x.meta}` },
     name: 'helps-elsewhere',
     when: (x) => !!helpKindOf(x.sheet),
     run: async (x) => {
-      const e = await helpsElsewhere(x.sheet, x.ui).catch(() => null)
+      // (the app's language, not the reply's: an English question in the Arabic app still tries the Arabic pack; on a path's
+      // book, the app language the path started with, so its answers match the steps it counted)
+      const path = x.c.graph?.path
+      const app = (path && x.sheet.ref?.startsWith(`${path.book} `) ? path.app : undefined) ?? env.nav
+      const e = await helpsElsewhere(x.sheet, app).catch(() => null)
       if (!e) return null
       // the question named the language ("रूत 2:3 के नोट्स हिंदी में"): never taken silently from another pack; said, and offered
       if (x.wanted) {
         const w = noneInWords(x.ui, x.sheet.lang, e.lang, e.kind, bookLabel(x.ui, x.sheet.ref!.slice(0, 3)))
         x.from = w.none
+        x.fromOnly = true
         x.others.unshift({ label: w.see, sheet: { ...x.sheet, id: `f${Date.now()}`, lang: e.lang } })
         return null
       }
@@ -2382,7 +2389,7 @@ ${x.meta}` },
       // an introduction the helps do not have: say so, and offer what there is (the passage before this one among it)
       const none = sheet.intent === 'passage' && !found.intro ? await noIntro(sheet, ui, x.c.last).catch(() => null) : null
       if (none) said = none.said
-      if (x.from) said = [said, x.from].filter(Boolean).join(' ')
+      if (x.from) said = x.fromOnly ? x.from : [said, x.from].filter(Boolean).join(' ')
       const study = await studyOf(sheet).catch(() => null)
       const steps = await packSteps(sheet, study, ui).catch(() => [])
       const bounds = sheet.intent === 'passage' && sheet.ref ? await boundsOf(sheet.ref.slice(0, 3)).catch(() => null) : null
@@ -2608,10 +2615,12 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   delete g.pathBefore
   let at: Path | null = null
   if (made.path && P?.book === made.path.book) {
-    const has = await stepsHad(made.path.book, x.sheet.lang, x.ui)
+    // (the app's language now, kept with the path: its steps and their answers use the same one)
+    const app = env.nav
+    const has = await stepsHad(made.path.book, x.sheet.lang, app)
     // (a book's path replaces the lessons: its steps are not "away from the lessons")
     delete g.learn
-    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, has }
+    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, has, app }
     reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book), has)
     if (reply.drift && g.path) g.pathBefore = g.path
   } else if (g.path) at = stepOf(g.path, ref, x.sheet.what ?? [], await secsOf(g.path, P?.ch ?? null))
