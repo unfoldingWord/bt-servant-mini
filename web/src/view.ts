@@ -8,6 +8,7 @@ import { linkTarget } from './links'
 import { md, mdDir } from './md'
 import { bidiLabel, dirOf } from './bidi'
 import { count } from './usage'
+import { saveButton, yourNotes } from './savedview'
 
 type Ui = { back: string; close: string; inChat: string; notes: string; terms: string; noHelps: string; loading: string; missing: string; texts: string; failed: string; retry: string }
 const UI: Record<string, Ui> = {
@@ -513,14 +514,16 @@ async function draw() {
     return
   }
   title(sh, a.title)
-  sh.body.appendChild(richText(a.md, a.lang, v.id))
+  // the person's note about this article, above it; ☆ Save next to "Open in chat" (savedview.ts)
+  const q = { k: 'article' as const, id: v.id, lang: a.lang }
+  sh.body.append(yourNotes(q), richText(a.md, a.lang, v.id))
   const b = el('button', 'sheet-chat', ui.inChat)
   b.type = 'button'
   b.onclick = () => {
     closePanel()
     hooks?.article(v.id, a.title, a.lang)
   }
-  sh.foot.appendChild(b)
+  sh.foot.append(saveButton({ q, label: a.title, cls: 'sheet-save' }), b)
 }
 
 // Links anywhere (a bubble or the panel): an article opens in the panel, a reference is asked in the chat.

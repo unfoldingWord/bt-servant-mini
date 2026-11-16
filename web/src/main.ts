@@ -26,6 +26,8 @@ import { shareButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
+import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
+import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -135,6 +137,8 @@ type Msg = Reply & {
   waiting?: boolean
   /** an answer: its point in the conversation's graph (graph.ts); the person's: `mark`, where they went back to a point */
   node?: string; mark?: boolean
+  /** an answer: what ☆ Save keeps and where ✎ Note is tied (saved.ts: its passage, article or question) */
+  saveQ?: Query
 }
 type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
@@ -269,6 +273,9 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pm)
   }
+  // what the person wrote about this verse, article or question (saved.ts), above the answer
+  const savedQ = m.saveQ ?? (m.waiting || m.limits || m.packs ? null : queryOfAnswer({ q: askedFor(m) }))
+  d.appendChild(yourNotes(savedQ))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const cv = convs.find((x) => x.msgs.includes(m))
   const asked = askedFor(m)
@@ -339,6 +346,9 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
   const sh = m.waiting ? null : shareButton(m, m.ui ?? nav, asked)
   if (sh) d.appendChild(sh)
+  // ☆ Save and ✎ Note (savedview.ts); with an online answer, Save keeps its text too
+  const keep = !m.waiting && !m.limits && !m.packs && (m.info || m.study || m.helps?.length || m.ai) ? keepButtons({ q: savedQ, label: asked ?? m.text ?? '', ai: () => m.ai, question: asked }) : null
+  if (keep) d.appendChild(keep)
   // thumbs up or down, and with a thumbs down a report (feedback.ts)
   if (!m.waiting && (m.info || m.intro || m.ai || m.text || m.helps)) {
     let bar = el('div', 'rate')
@@ -683,6 +693,7 @@ function renderPanel() {
     closePanel()
     openExplore('menu')
   })
+  row(SVT(nav).title, savedSummary(nav), () => { closePanel(); openSaved() })
   // the Map of the conversation open now: how many points, and where it is
   if (points() >= MAP_MIN) {
     const c = conv()
@@ -921,6 +932,7 @@ function eraseAll() {
   convs = []
   current = ''
   try { localStorage.removeItem(KEY) } catch {}
+  eraseSaved() // and the saved items and notes
   newConv()
   renderConv()
 }
@@ -931,6 +943,7 @@ const closePanel = () => panel.classList.remove('show')
   if (closeSafety()) return true
   if (closeReport()) return true
   if (backPanel()) return true
+  if (backSaved()) return true
   if (backExplore()) return true
   if (mapIsOpen()) { closeMap(); return true }
   const about = document.querySelector('#about')
@@ -942,6 +955,7 @@ const closePanel = () => panel.classList.remove('show')
 browse.onclick = () => {
   closePanel()
   closeMap(false)
+  closeSaved(false)
   openExplore('bar')
 }
 menu.onclick = () => {
@@ -1069,7 +1083,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // what the answer is: pipeline.ts decides (and keeps the conversation's last passage and search results)
     const r = await answer(c, made, t0)
     answered = r.answered
-    m = { who: 'bot', ...r.reply }
+    m = { who: 'bot', ...r.reply, saveQ: queryOfAnswer({ sheet: made.sheet, ref: r.ref, concept: r.concept, q: made.q, label, lang: r.reply.lang }) ?? undefined }
     point = r.node
     if (r.sheet && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(r.sheet).catch(() => '')
   } catch (err: any) {
@@ -1178,6 +1192,15 @@ setExploreHooks({
     panel.classList.add('show')
     renderPanel()
   },
+  saved: () => { closeExplore(false); openSaved() },
+})
+// Saved items and notes (savedview.ts): what opening one asks the chat
+setSavedHooks({
+  ui: () => nav, busy: () => busy || locked(), packName: (l) => PACK_NAMES[l] ?? l,
+  run: (label, sheet) => runSheet(label, sheet, nav),
+  ask: (q) => { const typed = input.value; input.value = q; form.requestSubmit(); input.value = typed },
+  addLang: () => { panelView = 'packs'; panel.classList.add('show'); renderPanel() },
+  closeOthers: () => { closePanel(); closeExplore(false); closeMap(false) },
 })
 
 // Typing suggestions above the box (composer.ts, menu > Typing suggestions): its "✓" sends the box's text, which the submit
