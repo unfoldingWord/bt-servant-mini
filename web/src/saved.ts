@@ -343,12 +343,19 @@ const named = (q: Query, label: string, ui: string): string =>
 // ------------------------------------------------------------------------------------------------------------ saved items
 
 export const savedItems = (): Saved[] => [...store().items].sort((a, b) => b.at - a.at)
-export const findSaved = (q: Query, ai = false): Saved | undefined => store().items.find((x) => savedKey(x.q, x.kind === 'answer') === savedKey(q, ai))
-export const isSaved = (q: Query, ai = false): boolean => !!findSaved(q, ai)
+/**
+ * The saved item for a query: without `ai`, the query itself (a passage, an article, a question); with an online answer's
+ * text, that answer (another answer to the same question is another item); `true`, any answer to it.
+ */
+export const findSaved = (q: Query, ai: { text: string } | boolean = false): Saved | undefined => {
+  const key = keyOf(q)
+  return store().items.find((x) => keyOf(x.q) === key && (ai ? x.kind === 'answer' && (ai === true || x.ai?.text === ai.text) : x.kind !== 'answer'))
+}
+export const isSaved = (q: Query, ai: { text: string } | boolean = false): boolean => !!findSaved(q, ai)
 
 /** Saves a query (with an online answer's text when `ai`); saved already: that one, unchanged. */
 export function addSaved(o: { q: Query; label: string; ui: string; ai?: { text: string; model: string }; question?: string }): { res: Result; item?: Saved } {
-  const had = findSaved(o.q, !!o.ai)
+  const had = findSaved(o.q, o.ai ?? false)
   if (had) return { res: 'ok', item: had }
   let item: Saved | undefined
   const res = change((s) => {
@@ -363,14 +370,15 @@ export function addSaved(o: { q: Query; label: string; ui: string; ai?: { text: 
   return res === 'ok' ? { res, item } : { res }
 }
 /**
- * The online answer arrived after its query was saved (while it was written): the item keeps the answer's text too, as one
- * saved with it would, instead of a second item. Nothing to do when there is no such item, or one with the answer already.
+ * The online answer arrived after its button saved it (while it was written): that item, `id`, keeps the answer's text too, as
+ * one saved with it would, instead of a second item. Only that one: a verse saved before (in Browse, say) stays a passage.
+ * Nothing to do when the item is gone (taken out meanwhile) or has an answer already.
  */
-export function upgradeSaved(q: Query, ai: { text: string; model: string }, question?: string): Result {
-  const plain = findSaved(q, false)
-  if (!plain || findSaved(q, true)) return 'ok'
+export function upgradeSaved(id: string, ai: { text: string; model: string }, question?: string): Result {
+  const had = store().items.find((i) => i.id === id)
+  if (!had || had.kind === 'answer') return 'ok'
   return change((s) => {
-    const x = s.items.find((i) => i.id === plain.id)
+    const x = s.items.find((i) => i.id === id)
     if (!x) return
     x.kind = 'answer'
     x.ai = { text: ai.text.slice(0, AI_MAX), model: strip(ai.model).slice(0, 80) }
@@ -518,6 +526,7 @@ export async function reopen(q: Query, label: string): Promise<Plan> {
       return missing(q.lang)
     }
     if (q.k === 'article') {
+      // (articleView reads its pack, then English, then every other pack on the phone: answer.ts packsFor)
       const a = await articleView(langs.includes(q.lang) ? q.lang : langs[0]!, q.id).catch(() => null)
       return a ? { k: 'sheet', label, sheet: sheetOf(a.lang, { intent: 'article', concept: q.id }), ...from(a.lang, q.lang) } : missing(q.lang)
     }

@@ -315,21 +315,48 @@ test('the words in the six languages', () => {
   expect(ST('xx').save).toBe('Save')
 })
 
-test('saved while the online answer was written: the item gets its text, no second item', () => {
-  expect(addSaved({ q: RUTH, label: 'What does Ruth 1:16 mean?', ui: 'en' }).res).toBe('ok')
-  // (main.ts fillAi draws the button again with the answer: savedview.ts saveButton upgrades the item)
-  expect(upgradeSaved(RUTH, { text: 'Ruth commits to Naomi.', model: 'gpt-x' }, 'What does Ruth 1:16 mean?')).toBe('ok')
+test('saved while the online answer was written: that item gets its text, no second item, no other item', () => {
+  const ai = { text: 'Ruth commits to Naomi.', model: 'gpt-x' }
+  // (the ☆ of the answer, tapped while it was written, saved this item; main.ts keeps its id for the answer)
+  const pending = addSaved({ q: RUTH, label: 'What does Ruth 1:16 mean?', ui: 'en' }).item!
+  // (main.ts fillAi draws the button again with the answer: savedview.ts saveButton upgrades that id)
+  expect(upgradeSaved(pending.id, ai, 'What does Ruth 1:16 mean?')).toBe('ok')
   expect(savedItems().length).toBe(1)
   const x = savedItems()[0]!
   expect(x.kind).toBe('answer')
-  expect(x.ai).toEqual({ text: 'Ruth commits to Naomi.', model: 'gpt-x' })
-  expect(isSaved(RUTH, true)).toBe(true)
-  // so the ★ takes it out again
+  expect(x.ai).toEqual(ai)
+  expect(isSaved(RUTH, ai)).toBe(true)
+  // so the ★ of that answer takes it out again
   removeSaved(x.id)
   expect(savedItems()).toEqual([])
-  // nothing saved: nothing made
-  expect(upgradeSaved(RUTH, { text: 't', model: 'm' })).toBe('ok')
+  // gone meanwhile: nothing made
+  expect(upgradeSaved(pending.id, ai)).toBe('ok')
   expect(savedItems()).toEqual([])
+})
+
+test('a passage saved before an answer stays a passage when the answer comes; another answer is not this one', () => {
+  // Ruth 1:16 saved in Browse, then asked with online AI: the answer's ☆ saved nothing while it was written (no id to upgrade)
+  const verse = addSaved({ q: { k: 'passage', ref: 'rut 1:16', lang: 'en', what: ['text', 'notes'] }, label: 'Ruth 1:16', ui: 'en' }).item!
+  const first = { text: 'Ruth commits to Naomi.', model: 'gpt-x' }
+  expect(isSaved(RUTH)).toBe(true) // (the verse: ★ while the answer is written)
+  expect(isSaved(RUTH, first)).toBe(false) // (the answer, once it came: ☆)
+  expect(savedItems()[0]!.kind).toBe('passage')
+  // the first answer saved; a second answer to the same question shows ☆, and saving it makes its own item
+  addSaved({ q: RUTH, label: 'q', ui: 'en', ai: first })
+  const second = { text: 'Ruth chooses Naomi’s God.', model: 'gpt-x' }
+  expect(isSaved(RUTH, first)).toBe(true)
+  expect(isSaved(RUTH, second)).toBe(false)
+  expect(isSaved(RUTH, true)).toBe(true)
+  addSaved({ q: RUTH, label: 'q', ui: 'en', ai: second })
+  expect(savedItems().length).toBe(3)
+  // the verse saved in Browse is untouched (Browse still marks it)
+  const v = savedItems().find((i) => i.id === verse.id)!
+  expect(v.kind).toBe('passage')
+  expect(v.ai).toBeUndefined()
+  // an upgrade of an item that is an answer already changes nothing
+  const a1 = savedItems().find((i) => i.ai?.text === first.text)!
+  expect(upgradeSaved(a1.id, second)).toBe('ok')
+  expect(savedItems().find((i) => i.id === a1.id)!.ai).toEqual(first)
 })
 
 test('a stored call sheet is read with only the fields a sheet has', () => {

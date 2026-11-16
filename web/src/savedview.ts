@@ -37,6 +37,7 @@ export function setSavedHooks(h: SavedHooks) {
       if (e.key !== SAVED_KEY && e.key !== null) return
       resetSaved()
       redrawNotes()
+      redrawStars()
     })
   }
 }
@@ -91,11 +92,11 @@ export function noteEditor(q: Query, label: string, l: string, done: () => void)
   const box = el('div', 'sv-editor')
   box.dir = dirUi(l)
   const ta = el('textarea', 'sv-ta')
-  typedDir(ta, l)
   ta.rows = 4
   ta.placeholder = s.notePh
   ta.setAttribute('aria-label', s.yourNote)
   ta.value = noteFor(q)?.text ?? ''
+  typedDir(ta, l) // (after its text: an English note in the Arabic app reads left to right)
   const msg = el('p', 'sv-msg')
   msg.setAttribute('role', 'status')
   const row = el('div', 'sv-acts')
@@ -160,22 +161,34 @@ export function redrawNotes() {
 // ------------------------------------------------------------------------------------------------------- the save button
 
 const STAR = '☆', STARRED = '★'
+const REDRAW = 'saved-redraw'
+/** Every ☆/★ on the page shows what is saved now. */
+const redrawStars = () => document.querySelectorAll('.keep-one').forEach((w) => w.dispatchEvent(new Event(REDRAW)))
+/** What an answer's ☆ needs while its online answer is written (main.ts): the item it saved then, and where that is kept. */
+export type Pending = { saved?: string; set: (id: string | undefined) => void }
 /**
  * ☆ Save / ★ Saved for one query; `ai()`: the online answer to keep with it, when there is one by the time it is tapped (it
- * may arrive after the button is drawn). A tap on ★ takes it out of Saved.
+ * may arrive after the button is drawn). A tap on ★ takes it out of Saved. `pending`: an answer whose online text is written
+ * now, or (`arrived`) has just come: the item this button saved meanwhile gets the text, and no other.
  */
-export function saveButton(o: { q: Query; label: string; ai?: () => { text: string; model: string } | undefined; question?: string; cls?: string; arrived?: boolean }): HTMLElement {
+export function saveButton(o: {
+  q: Query; label: string; ai?: () => { text: string; model: string } | undefined; question?: string; cls?: string
+  pending?: Pending; arrived?: boolean
+}): HTMLElement {
   const l = ui()
-  // the online answer has just arrived (main.ts fillAi): saved while it was written, the item keeps its text now
   const now = o.arrived ? o.ai?.() : undefined
-  if (now) upgradeSaved(o.q, now, o.question ?? o.label)
+  if (now && o.pending?.saved) {
+    upgradeSaved(o.pending.saved, now, o.question ?? o.label)
+    o.pending.set(undefined)
+  }
   const s = ST(l)
   const b = el('button', o.cls ?? 'keep-btn')
   b.type = 'button'
   const msg = el('span', 'keep-msg')
   msg.setAttribute('role', 'status')
   const draw = () => {
-    const on = !!findSaved(o.q, !!o.ai?.())
+    // with an online answer: that answer (another answer to the same question is not this one)
+    const on = !!findSaved(o.q, o.ai?.() ?? false)
     b.textContent = `${on ? STARRED : STAR} ${on ? s.saved : s.save}`
     b.classList.toggle('on', on)
     b.setAttribute('aria-pressed', String(on))
@@ -185,7 +198,7 @@ export function saveButton(o: { q: Query; label: string; ai?: () => { text: stri
   b.onclick = async () => {
     msg.textContent = ''
     const ai = o.ai?.()
-    const had = findSaved(o.q, !!ai)
+    const had = findSaved(o.q, ai ?? false)
     if (had) {
       // one the person named or grouped: a second tap
       if (personal(had) && !armed) {
@@ -196,17 +209,22 @@ export function saveButton(o: { q: Query; label: string; ai?: () => { text: stri
       if (armed) clearTimeout(armed)
       armed = null
       removeSaved(had.id)
+      if (o.pending?.saved === had.id) o.pending.set(undefined)
       return void draw()
     }
     // an article is named by its title (the question that found it may have been "what does grace mean?")
     const label = o.q.k === 'article' ? await titleFor(o.q.lang, o.q.id).catch(() => o.label) : o.label
     const r = addSaved({ q: o.q, label, ui: l, ...(ai ? { ai, question: o.question ?? o.label } : {}) })
     if (r.res !== 'ok') msg.textContent = why(r.res, l, MAX_ITEMS)
+    // saved while its online answer is written: this item gets the text when it comes
+    else if (!ai && o.pending && r.item) o.pending.set(r.item.id)
     draw()
   }
   draw()
   const w = el('span', 'keep-one')
   w.append(b, msg)
+  // read again from the phone (another tab changed it): ★ follows
+  w.addEventListener(REDRAW, draw)
   return w
 }
 
@@ -214,7 +232,7 @@ export function saveButton(o: { q: Query; label: string; ai?: () => { text: stri
  * Under an answer, next to Share: ☆ Save and ✎ Note (its box opens below them). Null when there is nothing to open again
  * (an answer that could not answer).
  */
-export function keepButtons(o: { q: Query | null | undefined; label: string; ai?: () => { text: string; model: string } | undefined; question?: string; arrived?: boolean }): HTMLElement | null {
+export function keepButtons(o: { q: Query | null | undefined; label: string; ai?: () => { text: string; model: string } | undefined; question?: string; pending?: Pending; arrived?: boolean }): HTMLElement | null {
   if (!o.q) return null
   const q = o.q
   const l = ui()
@@ -228,7 +246,7 @@ export function keepButtons(o: { q: Query | null | undefined; label: string; ai?
     note.disabled = true
     row.after(noteEditor(q, o.label, l, () => { note.disabled = false }))
   }
-  row.append(saveButton({ q, label: o.label, ai: o.ai, question: o.question, arrived: o.arrived }), note)
+  row.append(saveButton({ q, label: o.label, ai: o.ai, question: o.question, pending: o.pending, arrived: o.arrived }), note)
   return row
 }
 
@@ -356,10 +374,10 @@ function draw() {
   b.body.appendChild(el('p', 'ex-note sv-private', kept ? s.private : `${s.private} ${s.notKept}`))
   const find = el('input', 'sv-find')
   find.type = 'search'
-  typedDir(find, l)
   find.placeholder = tab === 'saved' ? s.search : s.searchNotes
   find.setAttribute('aria-label', find.placeholder)
   find.value = text
+  typedDir(find, l)
   find.oninput = () => { text = find.value; drawList() }
   b.body.appendChild(find)
   if (tab === 'saved' && allTags().length) {
@@ -443,15 +461,15 @@ function editForm(x: Saved, done: () => void): HTMLElement {
   const f = el('div', 'sv-editor')
   f.dir = dirUi(l)
   const name = el('input', 'sv-in')
-  typedDir(name, l)
   name.placeholder = s.name
   name.setAttribute('aria-label', s.name)
   name.value = x.name ?? ''
+  typedDir(name, l)
   const tags = el('input', 'sv-in')
-  typedDir(tags, l)
   tags.placeholder = s.tags
   tags.setAttribute('aria-label', s.tags)
   tags.value = x.tags.join(', ')
+  typedDir(tags, l)
   const msg = el('p', 'sv-msg')
   const acts = el('div', 'sv-acts')
   acts.append(

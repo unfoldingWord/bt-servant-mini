@@ -257,7 +257,13 @@ function fillAi(node: HTMLElement, m: Msg) {
 const savedQOf = (m: Msg): Query | null => m.saveQ ?? (m.waiting || m.limits || m.packs ? null : queryOfAnswer({ q: askedFor(m) }))
 /** ☆ Save and ✎ Note under an answer (savedview.ts); `arrived`: its online text has just come. */
 const keepOf = (m: Msg, arrived = false) => !m.waiting && !m.limits && !m.packs && (m.info || m.study || m.helps?.length || m.ai)
-  ? keepButtons({ q: savedQOf(m), label: askedFor(m) ?? m.text ?? '', ai: () => m.ai, question: askedFor(m), arrived }) : null
+  ? keepButtons({ q: savedQOf(m), label: askedFor(m) ?? m.text ?? '', ai: () => m.ai, question: askedFor(m), arrived, pending: pendingOf(m) }) : null
+/** The item an answer's ☆ saved while its online answer was written (only that one gets the text when it comes). */
+const savedWhilePending = new WeakMap<Msg, string>()
+const pendingOf = (m: Msg) => ({
+  get saved() { return savedWhilePending.get(m) },
+  set: (id: string | undefined) => { if (id && !m.ai) savedWhilePending.set(m, id); else savedWhilePending.delete(m) },
+})
 /** `pending`: online AI is writing its answer to this message (the helps show as cards already). */
 function renderMsg(m: Msg, pending = false): HTMLElement {
   // going back to an earlier point: a small divider ("Back to Ruth 2:3"), not a bubble
