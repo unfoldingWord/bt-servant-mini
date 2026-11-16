@@ -14,7 +14,7 @@ import { nextSteps, stepTarget, turn } from './harness'
 import { CANON, installWant, offerOf, openLang } from '../src/packs'
 import { SHARED_UNITS, trustedKeys } from '../src/shared'
 import { type ConvState, mapChapter, resetBooks, sectionsOf } from '../src/pipeline'
-import { newGraph } from '../src/graph'
+import { newGraph, nextStep, type Path } from '../src/graph'
 
 const FX = resolve(import.meta.dir, 'fixtures/packs-2026-11-16')
 const trust = { trustedKeys: trustedKeys() }
@@ -102,6 +102,25 @@ describe('sections from the packs\' section map', () => {
     expect(buttons(r2)[0]).toBe('Next section: Ruth 1:22 => rut 1:22 text,notes')
     const r3 = await turn({ last: null }, { q: 'Ruth 2:21-22' }, 'en')
     expect(buttons(r3)[0]).toBe('Next section: Ruth 2:23 => rut 2:23 text,notes')
+  })
+
+  test('a one-verse section goes on too: Ruth 1:22, then the first of chapter 2', async () => {
+    await phone(['en'])
+    const r = await turn({ last: null }, { q: 'Ruth 1:22' }, 'en')
+    expect(buttons(r)[0]).toBe('Next section: Ruth 2:1–2 => rut 2:1-2 text,notes')
+    // a verse that is no section of its own: no "Next section"
+    const r2 = await turn({ last: null }, { q: 'Ruth 1:4' }, 'en')
+    expect(buttons(r2).some((b) => b.startsWith('Next section'))).toBe(false)
+  })
+
+  test('a path whose section the map does not have (saved with the guessed ones, typed by hand) goes on without skipping', () => {
+    const ruth1 = MAP.rut!.filter(([a]) => Math.floor(a / 1000) % 1000 === 1).map(([a, b]): [number, number] => [a % 1000, b % 1000])
+    const ruth2 = MAP.rut!.filter(([a]) => Math.floor(a / 1000) % 1000 === 2).map(([a, b]): [number, number] => [a % 1000, b % 1000])
+    const P: Path = { book: 'rut', ch: 1, step: 5, sec: null, lang: 'en', task: 'translate' }
+    expect(nextStep({ ...P, sec: [6, 18] }, ruth1, ruth2)).toMatchObject({ step: 2, ch: 1, sec: [19, 21] })
+    expect(nextStep({ ...P, sec: [1, 5] }, ruth1, ruth2)).toMatchObject({ step: 2, ch: 1, sec: [6, 7] })
+    expect(nextStep({ ...P, sec: [4, 9] }, ruth1, ruth2)).toMatchObject({ step: 2, ch: 1, sec: [8, 10] })
+    expect(nextStep({ ...P, sec: [19, 22] }, ruth1, ruth2)).toMatchObject({ step: 2, ch: 2, sec: [1, 2] })
   })
 
   test('a search that finds Esther 2:14 offers the map\'s section that holds it (2:12–14)', async () => {

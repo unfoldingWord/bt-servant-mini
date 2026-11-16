@@ -280,8 +280,10 @@ export function nextStep(p: Path, secs: Sec[], nextSecs: Sec[]): Path | null {
   if (!p.sec || !p.ch) return null
   const later = pathSteps(p).find((s) => s > p.step)
   if (later) return { ...p, step: later }
-  const i = secs.findIndex(([a]) => a === p.sec![0])
-  if (i >= 0 && secs[i + 1]) return { ...p, step: 2, sec: secs[i + 1]! }
+  // the first section that ends after this one: a section the list does not have (a path saved with the guessed sections, a
+  // range typed by hand) goes on from where it ended, without skipping verses
+  const n = secs.find(([, b]) => b > p.sec![1])
+  if (n) return { ...p, step: 2, sec: n }
   return nextSecs[0] ? { ...p, step: 2, ch: p.ch + 1, sec: nextSecs[0] } : null
 }
 

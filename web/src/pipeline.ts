@@ -1485,18 +1485,23 @@ const mapCache = new Map<string, Promise<[number, number][] | null>>()
 function mapSectionsOf(code: string, l: string): Promise<[number, number][] | null> {
   if (!mapCache.has(code)) {
     const p = (async () => {
+      let failed: unknown = null
       for (const x of new Set([l, 'en', ...(await installedLangs())])) {
         try {
           if (!(await hasLang(x))) continue
           const a = await (await openLang(x)).sections(code)
           const list = a.data?.sections ?? []
           if (a.data && a.coverage?.[a.data.source] === 'count' && list.length) return list.map((s): [number, number] => [s.first, s.last])
-        } catch {}
+        } catch (e) {
+          failed = e
+        }
       }
+      // a pack that could not be read is asked again next time; "no map" is kept until the packs change (resetBooks)
+      if (failed) throw failed
       return null
-    })().catch(() => null)
+    })()
     mapCache.set(code, p)
-    p.then((m) => { if (!m && mapCache.get(code) === p) mapCache.delete(code) })
+    p.catch(() => { if (mapCache.get(code) === p) mapCache.delete(code) })
   }
   return mapCache.get(code)!
 }
@@ -1563,11 +1568,12 @@ async function placeSteps(base: Sheet, h: Hit, ui: string): Promise<Follow[]> {
   out.push({ label: nextWords(ui).read.replace('{ref}', `${bookLabel(ui, h.book)} ${h.ch}`), sheet: passageSheet(base, `${h.book} ${h.ch}`, ['text', 'notes']) })
   return out
 }
-/** Under a passage that is one section ("Ruth 1:1-5"): the next one, in this chapter or the first of the next. */
+/** Under a passage that is one section ("Ruth 1:1-5", or "Ruth 1:22" alone): the next one, in this chapter or the first of the next. */
 async function nextSection(base: Sheet, ui: string): Promise<Follow | null> {
-  const m = /^([0-9a-z]{3}) (\d+):(\d+)-(\d+)$/.exec(base.ref ?? '')
+  const m = /^([0-9a-z]{3}) (\d+):(\d+)(?:-(\d+))?$/.exec(base.ref ?? '')
   if (!m) return null
-  const [code, ch, v1, v2] = [m[1]!, +m[2]!, +m[3]!, +m[4]!]
+  const [code, ch, v1] = [m[1]!, +m[2]!, +m[3]!]
+  const v2 = m[4] ? +m[4] : v1
   const secs = await sectionsOf(code, ch, base.lang).catch(() => [])
   const i = secs.findIndex(([a, b]) => a === v1 && b === v2)
   if (i < 0) return null
