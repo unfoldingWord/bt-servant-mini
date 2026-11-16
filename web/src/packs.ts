@@ -373,6 +373,20 @@ export const HEADER_MS = 30000
 /** How long a download may go without a single new byte before the next server is asked (slow is fine; stopped is not). */
 export const STALL_MS = 60000
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+/**
+ * The map units a language installs with its books: the client's default units as they were up to bt-synergy c68e3622. Since
+ * #86 the client's defaults also bring `obs` (Open Bible Stories), and it has no way to leave one out, so Mini names its units
+ * itself (`defaults: false`). OBS waits for Mini's stories view: then it comes with the language when it is 3 MB or less, else as
+ * an add-on, never by itself over mobile data (Abel), and in the full APK.
+ */
+export const MAP_UNITS = ['xmap', 'map', 'xtopics', 'topics']
+/**
+ * What `offerOf` plans and `downloadLang` installs: the map units, the books, the shared articles, in the order the client's
+ * defaults gave them (defaults, then books, then units), so the download is the same as before the client knew OBS.
+ */
+export function installWant(books: readonly string[]): { defaults: false; units: string[] } {
+  return { defaults: false, units: [...MAP_UNITS, ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
+}
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
 /**
  * Reads the language's catalog (a few KB) and the common catalog it names, and plans the same install `downloadLang` runs, so the
@@ -402,7 +416,7 @@ export async function offerOf(lang: string, source: PackSource = serverSource())
     }
     const listed = new Set(cat.catalog.units.map((u) => u.id))
     const books = CANON.filter((b) => listed.has(`book:${b}`))
-    const plan = planInstall(catalogs, emptyState(), { books, defaults: true, units: SHARED_UNITS }, new Set())
+    const plan = planInstall(catalogs, emptyState(), installWant(books), new Set())
     const sizes: Record<string, number> = {}
     for (const st of plan.steps) for (const x of st.segments) sizes[x.id] = x.size
     return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, ...(partialLangs().includes(lang) ? { partial: true } : {}) }
@@ -477,7 +491,7 @@ export async function downloadLang(
   try {
     // one request at a time from the client (it asks 4 at once by default): the prefetch above already keeps `ahead` in flight,
     // and more at once can trip the fallback's timeouts on a slow link
-    const report = await serial(() => client.install(lang, { books: offer.books, defaults: true, units: SHARED_UNITS }, {
+    const report = await serial(() => client.install(lang, installWant(offer.books), {
       concurrency: 1,
       ...(o.signal ? { signal: o.signal } : {}),
       onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),

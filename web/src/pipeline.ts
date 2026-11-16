@@ -452,6 +452,7 @@ export function boundsOf(code: string): Promise<Map<number, number> | null> {
 export function resetBooks() {
   boundsCache.clear()
   headsCache.clear()
+  mapCache.clear()
 }
 /**
  * A follow-up's numbers checked against the book: "the next verse" at a chapter's end is the first of the next chapter, "the
@@ -1475,10 +1476,56 @@ async function outlineStarts(code: string, ch: number, l: string, last: number):
   }
   return []
 }
-/** A chapter's sections as [first verse, last verse]: from the text's headings, else its introduction's outline, else 5 verses each. */
+/**
+ * A book's section map from the packs (`reader.sections`: the `\ts\*` chunks of the English ULT, the same for every language, in
+ * the common catalog's `xtopics`), as [first, last] verse ids; null when no pack on the phone has it for the book (an older common
+ * catalog, a book without an entry, no `xtopics`). The pack of `l` is asked first, then English, then any other.
+ */
+const mapCache = new Map<string, Promise<[number, number][] | null>>()
+function mapSectionsOf(code: string, l: string): Promise<[number, number][] | null> {
+  if (!mapCache.has(code)) {
+    const p = (async () => {
+      let failed: unknown = null
+      for (const x of new Set([l, 'en', ...(await installedLangs())])) {
+        try {
+          if (!(await hasLang(x))) continue
+          const a = await (await openLang(x)).sections(code)
+          const list = a.data?.sections ?? []
+          if (a.data && a.coverage?.[a.data.source] === 'count' && list.length) return list.map((s): [number, number] => [s.first, s.last])
+        } catch (e) {
+          failed = e
+        }
+      }
+      // a pack that could not be read is asked again next time; "no map" is kept until the packs change (resetBooks)
+      if (failed) throw failed
+      return null
+    })()
+    mapCache.set(code, p)
+    p.catch(() => { if (mapCache.get(code) === p) mapCache.delete(code) })
+  }
+  return mapCache.get(code)!
+}
+/**
+ * A chapter's part of a book's section map, as [first verse, last verse] up to `last` (the chapter's last verse). A section that
+ * crosses into the chapter starts it at verse 1, one that runs past it ends at `last`: each chapter's sections cover it whole.
+ */
+export function mapChapter(map: readonly [number, number][], ch: number, last: number): [number, number][] {
+  const chOf = (id: number) => Math.floor(id / 1000) % 1000
+  const starts = new Set([1])
+  for (const [a, b] of map) if (chOf(a) <= ch && ch <= chOf(b)) starts.add(chOf(a) === ch ? a % 1000 : 1)
+  const s = [...starts].filter((v) => v >= 1 && v <= last).sort((a, b) => a - b)
+  return s.map((v, i) => [v, (s[i + 1] ?? last + 1) - 1])
+}
+/**
+ * A chapter's sections as [first verse, last verse]: from the packs' section map (`mapSectionsOf`), else the text's headings,
+ * else its introduction's outline, else 5 verses each. Every place that shows sections (First / Next section, Its section, the
+ * path's sections step) reads them here, so they agree.
+ */
 export async function sectionsOf(code: string, ch: number, l: string): Promise<[number, number][]> {
   const last = (await boundsOf(code).catch(() => null))?.get(ch)
   if (!last) return []
+  const map = await mapSectionsOf(code, l).catch(() => null)
+  if (map && map.some(([a, b]) => Math.floor(a / 1000) % 1000 <= ch && ch <= Math.floor(b / 1000) % 1000)) return mapChapter(map, ch, last)
   // (a source that leaves the whole chapter as one section is no help: the next one)
   const splits = (s: number[]) => s.filter((v) => v > 1 && v <= last).length > 0
   let starts = (await headsOf(code).catch(() => null))?.get(ch) ?? []
@@ -1511,8 +1558,7 @@ async function firstSection(base: Sheet, code: string, ch: number, ui: string): 
 /**
  * A verse in its place, as buttons: the section it is in ("Its section: Esther 2:12–18", when the chapter has more than one and
  * the section is more than the verse) and its chapter ("Read Esther 2"). `base`: the verse's own sheet (its pack).
- * TODO(sections): the packs will carry each book's section map (`reader.sections(book)`, not in staging yet, Nov 16); when they
- * do, sectionsOf should read it first, before the headings and outline guesses, and this button follows it with no change here.
+ * The section is the packs' section map's when they have it (sectionsOf).
  */
 async function placeSteps(base: Sheet, h: Hit, ui: string): Promise<Follow[]> {
   const out: Follow[] = []
@@ -1522,11 +1568,12 @@ async function placeSteps(base: Sheet, h: Hit, ui: string): Promise<Follow[]> {
   out.push({ label: nextWords(ui).read.replace('{ref}', `${bookLabel(ui, h.book)} ${h.ch}`), sheet: passageSheet(base, `${h.book} ${h.ch}`, ['text', 'notes']) })
   return out
 }
-/** Under a passage that is one section ("Ruth 1:1-5"): the next one, in this chapter or the first of the next. */
+/** Under a passage that is one section ("Ruth 1:1-5", or "Ruth 1:22" alone): the next one, in this chapter or the first of the next. */
 async function nextSection(base: Sheet, ui: string): Promise<Follow | null> {
-  const m = /^([0-9a-z]{3}) (\d+):(\d+)-(\d+)$/.exec(base.ref ?? '')
+  const m = /^([0-9a-z]{3}) (\d+):(\d+)(?:-(\d+))?$/.exec(base.ref ?? '')
   if (!m) return null
-  const [code, ch, v1, v2] = [m[1]!, +m[2]!, +m[3]!, +m[4]!]
+  const [code, ch, v1] = [m[1]!, +m[2]!, +m[3]!]
+  const v2 = m[4] ? +m[4] : v1
   const secs = await sectionsOf(code, ch, base.lang).catch(() => [])
   const i = secs.findIndex(([a, b]) => a === v1 && b === v2)
   if (i < 0) return null
