@@ -330,6 +330,23 @@ def reports():
     ]
     out += [{'id': i, 'set': 'reports', 'lang': lang, 'q': q, 'slots': None, 'before': b, 'expect': e, 'from': 'user reports Nov 15 (0.10.0)'}
             for i, lang, q, b, e in sections]
+    # The composer's review (Nov 15): a numbered book after a word ("Notas de 1 Juan 3:2") read as nothing with no reader, and
+    # "Catatan 1 Yohanes 3:2" as Lamentations 1 ("Catatan" one letter from "Ratapan"). Without a reader and with its slots.
+    numbered = [
+        ('numbered-id-catatan', 'id', 'Catatan 1 Yohanes 3:2', '1 Yohanes', 3, 2, ['notes'], '1jn 3:2'),
+        ('numbered-es-notas', 'es', 'Notas de 1 Juan 3:2', '1 Juan', 3, 2, ['notes'], '1jn 3:2'),
+        ('numbered-en-notes', 'en', 'Notes on 1 John 3:2', '1 John', 3, 2, ['notes'], '1jn 3:2'),
+        ('numbered-es-timoteo', 'es', '¿Qué dicen las notas de 2 Timoteo 1:5?', '2 Timoteo', 1, 5, ['notes'], '2ti 1:5'),
+        ('numbered-fr-notes', 'fr', 'Notes sur 1 Jean 3:2', '1 Jean', 3, 2, ['notes'], '1jn 3:2'),
+        ('numbered-hi-terms', 'hi', '1 यूहन्ना 3:2 के मुख्य शब्द', '1 यूहन्ना', 3, 2, ['terms'], '1jn 3:2'),  # (the Hindi pack has no notes for it)
+        ('numbered-ar-notes', 'ar', 'ملاحظات 1 يوحنا 3:2', '1 يوحنا', 3, 2, ['notes'], '1jn 3:2'),
+        ('numbered-es-intro', 'es', 'Introducción a 1 Juan 3', '1 Juan', 3, None, ['intro'], '1jn 3:intro'),
+    ]
+    for i, lang, q, book, ch, v, what, ref in numbered:
+        e = {'ref': ref, 'notRef': 'lam 1'}
+        out.append({'id': i, 'set': 'reports', 'lang': lang, 'q': q, 'slots': None, 'before': [], 'expect': e, 'from': 'composer review Nov 15'})
+        slots = S(intent='passage', book=book, chapter=ch, verse_start=v, verse_end=None, what=what, lang=lang)
+        out.append({'id': f'{i}-read', 'set': 'reports', 'lang': lang, 'q': q, 'slots': slots, 'before': [], 'expect': e, 'from': 'composer review Nov 15'})
     return out
 
 

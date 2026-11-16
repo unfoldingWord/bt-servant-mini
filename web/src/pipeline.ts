@@ -13,6 +13,7 @@ import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
 import guideWords from './data/guide.json'
+import shapes from './data/shapes.json'
 
 /**
  * What the page tells the decisions: the app's language (the fallback for a question's), the helps language chosen in the
@@ -608,18 +609,32 @@ export function refInText(slots: Slots, q: string): Slots {
     .replace(new RegExp(`${ch}\\s*(\\d+)\\s+(?:of|de|del|du|dari|का|من)\\s+((?:[123]\\s*)?[\\p{L}][\\p{L}\\p{M}]+)`, 'iu'), '$2 $1')
     .replace(new RegExp(`\\s+${ch}\\s*(\\d+)`, 'iu'), ' $1')
     .replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-  const m = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/u.exec(t)
-  if (!m) return slots
-  const words = m[1]!.trim().split(/\s+/)
+  // every reference-like match, in order, until one names a book: "Notas de 1 Juan 3:2" first matches "de 1", whose number
+  // starts a numbered book, so the reading starts again at that digit ("1 Juan 3:2"); the word before it ("Catatan") is never
+  // read as a misspelled book (it was Lamentations, "Ratapan")
+  const re = /((?:[123]\s*)?[\p{L}][\p{L}\p{M}.]+(?:\s+(?:de|of|des|du)\s+[\p{L}]+)?)\s+(\d+)(?:\s*[:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?)?/gu
+  const lang = slots.lang ?? env.nav
+  let m: RegExpExecArray | null
   let code: string | null = null
   let name = ''
-  for (let k = Math.min(3, words.length); k >= 1 && !code; k--) {
-    name = words.slice(-k).join(' ')
-    code = bookCode(slots.lang ?? env.nav, name)
+  while (!code && (m = re.exec(t))) {
+    if (!m[3] && /^[123]$/.test(m[2]!)) {
+      const after = t.slice(m.index + m[0].length).match(/^\s+([\p{L}][\p{L}\p{M}]*)(?:\s+([\p{L}][\p{L}\p{M}]*))?/u)
+      if (after && (bookExact(`${m[2]} ${after[1]}`) || (after[2] && bookExact(`${m[2]} ${after[1]} ${after[2]}`)))) {
+        re.lastIndex = m.index + m[0].length - m[2]!.length
+        continue
+      }
+    }
+    const words = m[1]!.trim().split(/\s+/)
+    for (let k = Math.min(3, words.length); k >= 1 && !code; k--) {
+      name = words.slice(-k).join(' ')
+      code = bookCode(lang, name)
+    }
+    if (!code) continue
+    const what = kindOf(q) ?? slots.what ?? []
+    return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
   }
-  if (!code) return slots
-  const what = kindOf(q) ?? slots.what ?? []
-  return { ...slots, intent: slots.intent === 'advice' ? 'advice' : 'passage', book: name, chapter: +m[2]!, verse_start: m[3] ? +m[3] : null, verse_end: m[4] ? +m[4] : null, what }
+  return slots
 }
 
 /** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
@@ -733,22 +748,62 @@ const REF_FILLER = new Set((
 ).split(' ').map(fold))
 const SHOW_KINDS = ['terms', 'notes', 'questions', 'text', 'intro', 'chapter'] as const
 /**
+ * The composer's ways of asking for a passage (data/shapes.json: "Notes on {ref}", "Introducción a {what}"), around the
+ * reference: their small words ("on", "sur", "a", "à") are taken out only there, at the start or the end, never anywhere
+ * ("Ruth 2:3 to 5" is a range).
+ */
+const SHAPE_EDGES: { head: string; tail: string }[] = (['notes', 'intro'] as const).flatMap((k) =>
+  Object.values((shapes as unknown as Record<string, { text: Record<string, string> }>)[k]!.text).map((t) => {
+    const [head, tail] = t.split(/\{(?:ref|what)\}/)
+    return { head: fold(head ?? '').trim(), tail: fold(tail ?? '').trim() }
+  }))
+function withoutShape(q: string): string {
+  const f = fold(q).trim()
+  for (const { head, tail } of SHAPE_EDGES) {
+    if (head && f.startsWith(head + ' ')) return f.slice(head.length)
+    if (tail && f.endsWith(' ' + tail)) return f.slice(0, -tail.length)
+  }
+  return q
+}
+/**
  * The question is only a reference, read by code alone ("Rut 2:3", "Jonás 1:3 notas", "1 Juan 3:2", "योना 1:3"): every word
  * is the book's name, a number, what to show ("notes", "key terms", "intro") or a few filler words. Then the phone's model
  * (about 4 s) and the online reader are skipped. Any other word ("why", "who speaks", "translate", "and Ruth 2:4") keeps
  * them: a wrong skip costs a wrong answer, a missed one only 4 s.
  */
-export function directRef(q: string): boolean {
+export const directRef = (q: string): boolean => !!directSheet(q)
+
+/**
+ * The question read by code alone when it is only a reference (directRef's test), as the slots readQuestion turns into the
+ * call sheet when no reader runs: the same reading for the composer's "✓ Rut 2:3 · notas" and for the answer (main.ts sends a
+ * direct question to readQuestion with no slots). Null when it is not only a reference, or when this conversation would read it
+ * otherwise (a pick of a search result, a task announced on a book): then no "✓" is offered. The book is not checked against
+ * the packs here (buildSheet does that, and the composer with the same test).
+ */
+export function directSheet(q: string, c: ConvState = { last: null }): Slots | null {
   const lang = /[؀-ۿ]/.test(q) ? 'ar' : /[ऀ-ॿ]/.test(q) ? 'hi' : guessLang(q)
   const s = introAsked(q, lang) ?? refInText({ intent: 'unknown', lang }, q)
   const code = s.book && s.chapter ? bookCode(s.lang ?? lang, s.book) : null
-  if (!code) return false
+  if (!code) return null
   // the words of the book's name as the question wrote it ("1 Juan": "Juan" alone would be John)
-  const name = new Set(fold(s.book!).split(/\s+/))
-  let rest = q
-  for (const c of SHOW_KINDS) rest = rest.replace(new RegExp(pattern(c).source, 'giu'), ' ')
+  // (an introduction's reading has the book's code: its name as written comes from the reference, "1 यूहन्ना 3 का परिचय")
+  const asWritten = refInText({ intent: 'unknown', lang }, q).book
+  const same = asWritten && bookCode(lang, asWritten) === code ? asWritten : ''
+  const name = new Set([s.book!, same].flatMap((b) => fold(b).split(/\s+/)).filter(Boolean))
+  let rest = withoutShape(q)
+  for (const k of SHOW_KINDS) rest = rest.replace(new RegExp(pattern(k).source, 'giu'), ' ')
   const words = rest.replace(/[¿?!¡.,;«»"“”'’()؟،-]/g, ' ').split(/\s+/).filter(Boolean)
-  return words.every((w) => /^[\d०-९٠-٩:.–-]+$/.test(w) || name.has(fold(w)) || bookExact(w) === code || REF_FILLER.has(fold(w)))
+  if (!words.every((w) => /^[\d०-९٠-٩:.–-]+$/.test(w) || name.has(fold(w)) || bookExact(w) === code || REF_FILLER.has(fold(w)))) return null
+  // what readQuestion does with no slots, without its effects (the conversation's state is not kept here)
+  const s0 = refInText({ intent: 'unknown', lang: guessLang(q) }, q)
+  if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
+  else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
+  const shown = kindOf(q)
+  if (shown && s0.book && s0.chapter && !(s0.what ?? []).includes(shown[0]!)) Object.assign(s0, { intent: 'passage', what: shown })
+  if (ordinalPick(q) === undefined && followUp(withoutWeak(q), s0, c)) return null
+  if (pickFound(q, s0, c) || pathStart(q)) return null
+  const asked = introAsked(q, s0.lang ?? env.nav)
+  return asked ? { ...asked, lang: s0.lang ?? env.nav } : withContext(s0, c.last, q)
 }
 
 // ------------------------------------------------------------------------------------- training questions -> Translation Academy

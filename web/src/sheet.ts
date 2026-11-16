@@ -36,8 +36,18 @@ export function bookExact(name: string): string | null {
   return null
 }
 let CODES: Set<string> | undefined
+const codeMemo = new Map<string, string | null>()
+/** A book's code from its name in any language: exact, else a prefix, else one or two letters off ("Mathew"). Remembered (pure). */
 export function bookCode(lang: string, name: string | null | undefined): string | null {
   if (!name) return null
+  const key = `${lang}\u0000${name}`
+  if (codeMemo.has(key)) return codeMemo.get(key)!
+  if (codeMemo.size > 4000) codeMemo.clear()
+  const c = readCode(lang, name)
+  codeMemo.set(key, c)
+  return c
+}
+function readCode(lang: string, name: string): string | null {
   const k = normBook(name)
   const tables = books as Record<string, Record<string, string>>
   // a code itself ("rut"): a follow-up's book comes from the conversation's state, where books are kept as codes
@@ -71,6 +81,73 @@ export function bookCode(lang: string, name: string | null | undefined): string 
     if (codes.size === 1) return [...codes][0]!
   }
   return null
+}
+/** A book the composer may offer for what was typed: its code, the name of the table it matched, and how it matched. */
+export type BookCandidate = { code: string; name: string; how: 'exact' | 'prefix' | 'typo' }
+const BOOK_LANGS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
+/** Devanagari syllables, roughly: letters that are not vowel signs and do not follow a virama ("योना" 2, "रूत" 2, "1 शमूएल" 3). */
+const syllables = (s: string) => (s.replace(/\S्\S/gu, 'x').match(/[\p{L}\d]/gu) ?? []).length
+/**
+ * Every book a typed name may be, best first (bookCode's search, keeping all the candidates instead of one or none): a code
+ * or a name of any language's table ("rut", "Ruth", "1 jn", "रूत"), then the names that start with it ("ro" → Romans; at
+ * least two letters, two syllables in Devanagari), then the names one edit away (two for long names: "Mathew", "Jonas").
+ * Names of the app's language first, then English and Spanish, then the others. "1 Juan" is 1 John; "Juan" is John.
+ */
+export function bookCandidates(ui: string, text: string): BookCandidate[] {
+  const k = normBook(text)
+  if (!k) return []
+  const tables = books as Record<string, Record<string, string>>
+  const order = [...new Set([ui, 'en', 'es', ...BOOK_LANGS])].filter((l) => tables[l])
+  const out: BookCandidate[] = []
+  const seen = new Set<string>()
+  const add = (code: string, name: string, how: BookCandidate['how']) => {
+    if (!seen.has(code)) {
+      seen.add(code)
+      out.push({ code, name, how })
+    }
+  }
+  const raw = fold(text).replace(/\s+/g, '')
+  if (/^[1-3]?[a-z]{2,3}$/.test(raw) && (CODES ??= new Set(Object.values(tables).flatMap((t) => Object.values(t)))).has(raw)) add(raw, raw, 'exact')
+  for (const l of order) if (tables[l]![k]) add(tables[l]![k]!, k, 'exact')
+  const long = isDeva(k) ? syllables(k) >= 2 : k.replace(/[\s\d]/g, '').length >= 2
+  if (long) for (const l of order) for (const [n, c] of entriesOf(l)) if (n.length > k.length && n.startsWith(k)) add(c, n, 'prefix')
+  // (a name written in full, or enough names that start so, needs no guess at a misspelling)
+  if (k.length >= 4 && !/\d/.test(k) && out[0]?.how !== 'exact' && out.length < 6) {
+    const max = k.length >= 7 ? 2 : 1
+    const near: [number, string, string][] = []
+    for (const l of order)
+      for (const [n, c] of entriesOf(l)) {
+        if (Math.abs(n.length - k.length) > max || seen.has(c)) continue
+        const d = within(k, n, max)
+        if (d && d <= max) near.push([d, c, n])
+      }
+    for (const [, c, n] of near.sort((a, b) => a[0] - b[0])) add(c, n, 'typo')
+  }
+  return out
+}
+const ENTRIES = new Map<string, [string, string][]>()
+const entriesOf = (l: string) => {
+  let e = ENTRIES.get(l)
+  if (!e) ENTRIES.set(l, (e = Object.entries((books as Record<string, Record<string, string>>)[l] ?? {})))
+  return e
+}
+/** The edit distance when it is at most `max`, else max + 1 (stops as soon as a row passes it). */
+function within(a: string, b: string, max: number): number {
+  let row = new Array<number>(b.length + 1)
+  let next = new Array<number>(b.length + 1)
+  for (let j = 0; j <= b.length; j++) row[j] = j
+  for (let i = 1; i <= a.length; i++) {
+    next[0] = i
+    let low = i
+    for (let j = 1; j <= b.length; j++) {
+      const v = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1))
+      next[j] = v
+      if (v < low) low = v
+    }
+    if (low > max) return max + 1
+    ;[row, next] = [next, row]
+  }
+  return row[b.length]!
 }
 function edits(a: string, b: string): number {
   const row = Array.from({ length: b.length + 1 }, (_, j) => j)
