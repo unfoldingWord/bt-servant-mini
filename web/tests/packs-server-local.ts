@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 
-await import(resolve(import.meta.dir, '../../../lp3-mcp/packages/language-pack-client/node_modules/fake-indexeddb/auto/index.mjs'))
+await import(resolve(import.meta.dir, '../../../bts-client/packages/language-pack-client/node_modules/fake-indexeddb/auto/index.mjs'))
 const LOCAL = process.argv[2] ?? 'http://127.0.0.1:8787'
 const LANG = process.argv[3] ?? 'id'
 const DEAD = 'http://127.0.0.1:9' // nothing listens there: the first server "is down"

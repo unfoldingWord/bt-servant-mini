@@ -439,7 +439,7 @@ async function article(s: Sheet, l: Lang): Promise<Result> {
   const ans = await l.r.article(s.concept, 'all')
   if (!ans.data) return { answer: say(lang, 'article_missing', {}), cites: [...cites, `id:${s.concept}`] }
   const a = ans.data
-  const by = (...roles: string[]) => a.sections.filter((x) => roles.includes(x.role))
+  const by = (...roles: string[]) => ownRoles(a.sections).filter((x) => roles.includes(x.role))
   const main = s.concept.startsWith('tw:') ? (by('definition').length ? by('definition').slice(0, 1) : by('intro').slice(0, 1)) : by('description')
   facts = { kind: 'article', title: a.title }
   for (const c of ans.cites) cites.push(cite(c.res, c.release, `${c.id}, ${c.section}`))
@@ -463,6 +463,18 @@ async function article(s: Sheet, l: Lang): Promise<Result> {
   if (more) out.push(FOLD + say(lang, 'article_more', { title: a.title }), more)
   if (sug && clean(sug.md) && !howTo) out.push(FOLD + sugTitle, clip(clean(sug.md), 1500))
   return { answer: out.join('\n\n'), cites }
+}
+
+/**
+ * The sections whose role is their own, not passed down from the section they sit under (packs built since bt-synergy
+ * c68e3622 give a sub-section its parent's role): the answers pick the sections they did before, not their sub-sections too.
+ */
+function ownRoles<T extends { role: string; level: number }>(secs: T[]): T[] {
+  return secs.filter((s, i) => {
+    let p = i - 1
+    while (p >= 0 && secs[p]!.level >= s.level) p--
+    return !(p >= 0 && secs[p]!.role === s.role)
+  })
 }
 
 /** A question that asks how to translate something: the article's translation suggestions come first. */
@@ -729,7 +741,7 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
   if (articleId) {
     const ans = await l.r.article(articleId, 'all')
     if (ans.data) {
-      const by = (...r: string[]) => ans.data!.sections.filter((x) => r.includes(x.role))
+      const by = (...r: string[]) => ownRoles(ans.data!.sections).filter((x) => r.includes(x.role))
       out.push('### ' + say(lang, 'advice_academy', { title: ans.data.title }))
       cites.push(`id:${articleId}`)
       if (!matched) out.push(say(lang, 'advice_general'))

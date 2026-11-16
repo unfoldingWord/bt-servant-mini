@@ -56,6 +56,26 @@ describe('section kinds from headings', () => {
       { sid: 'strategies-2', role: 'strategies', level: 3, md: 'a' }] }
     expect(kindsOf(a)).toEqual(['description', 'strategies', 'applied'])
   })
+  test('packs with section roles (bt-synergy c68e3622): a sub-section with its parent role is part of it; examples after the strategies are applied', () => {
+    const sec = (sid: string, role: string, level: number, title: string) => ({ sid, role, level, title, md: `${title} text` })
+    // "You formal": a sub-section of the strategies inherits `strategies`; it is not the applied ones
+    const a: Art = { id: 'ta:translate/x', title: 'X', sections: [
+      sec('s1', 'description', 3, 'विवरण'), sec('s2', 'strategies', 3, 'अनुवाद रणनीतियाँ'), sec('s3', 'strategies', 4, 'उप'),
+      sec('s4', 'examples', 3, 'अनुवाद रणनीति प्रयोग के उदाहरण'), sec('s5', 'examples', 4, 'उप')] }
+    expect(kindsOf(a)).toEqual(['description', 'strategies', 'strategies', 'applied', 'applied'])
+    expect(pickSections(a, 'how').map((p) => [p.kind, p.secs.map((s) => s.sid).join('+')])).toEqual([
+      ['description', 's1'], ['strategies', 's2+s3'], ['applied', 's4+s5']])
+    // "Examples From the Bible" after deeper strategies (end of story) stays examples
+    const b: Art = { id: 'ta:translate/y', title: 'Y', sections: [
+      sec('description', 'description', 3, 'Description'), sec('strategies', 'strategies', 4, 'Translation Strategies'),
+      sec('examples', 'examples', 3, 'Examples From the Bible')] }
+    expect(kindsOf(b)).toEqual(['description', 'strategies', 'examples'])
+    // a heading the pack's table missed (es: the singular) under the description: its own heading wins over the inherited role
+    const c: Art = { id: 'ta:translate/z', title: 'Z', sections: [
+      sec('d', 'description', 3, 'Descripción'), sec('s', 'description', 4, 'Estrategia de traducción')] }
+    expect(kindsOf(c)).toEqual(['description', 'strategies'])
+    expect(pickSections(c, 'how').map((p) => [p.kind, p.secs.map((s) => s.sid).join('+')])).toEqual([['description', 'd'], ['strategies', 's']])
+  })
 })
 
 describe('the sections a question needs, from the packs', () => {

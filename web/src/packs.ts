@@ -475,7 +475,10 @@ export async function downloadLang(
   const fresh = !(await addedLangs()).includes(lang)
   if (fresh) markPartial(lang, true)
   try {
+    // one request at a time from the client (it asks 4 at once by default): the prefetch above already keeps `ahead` in flight,
+    // and more at once can trip the fallback's timeouts on a slow link
     const report = await serial(() => client.install(lang, { books: offer.books, defaults: true, units: SHARED_UNITS }, {
+      concurrency: 1,
       ...(o.signal ? { signal: o.signal } : {}),
       onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
     }))
@@ -496,13 +499,13 @@ export function missingUnits(r: { listed(u: string): boolean; installed(u: strin
 type Updater = {
   refresh(lang: string, o?: { signal?: AbortSignal }): Promise<unknown>
   open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean }>
-  install(lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal }): Promise<unknown>
+  install(lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal; concurrency?: number }): Promise<unknown>
 }
 /** Brings one language's shared units up to SHARED_UNITS: reads its catalog again, installs only what is missing. The units installed. */
 export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal): Promise<string[]> {
   await client.refresh(lang, signal ? { signal } : {})
   const missing = missingUnits(await client.open(lang), units)
-  if (missing.length) await client.install(lang, { units: missing, defaults: false }, signal ? { signal } : {})
+  if (missing.length) await client.install(lang, { units: missing, defaults: false }, { concurrency: 1, ...(signal ? { signal } : {}) })
   return missing
 }
 const CHECKED = 'btsm.packs.checked'
