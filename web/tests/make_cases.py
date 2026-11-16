@@ -581,7 +581,7 @@ GUIDE = [
     ('path-es-review', 'es', 'Estoy revisando Jonás 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': '^Jonás 2 · paso 1 de 5', 'follow': ['^jon 2:1-\\d+ text$']}, None),
     ('path-fr-ruth', 'fr', 'Je vais traduire Ruth', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'étape 1 sur 5', 'follow': ['^rut 1:1-5 text$']}, None),
     ('path-id-ruth', 'id', 'Saya sedang menerjemahkan Rut 1', {'route': 'intro', 'ref': 'rut 1:intro', 'mark': 'langkah 1 dari 5', 'follow': ['^rut 1:1-5 text$']}, None),
-    ('path-hi-ruth', 'hi', 'मैं रूत का अनुवाद कर रहा हूँ', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'चरण 1/5', 'follow': ['^rut 1:1-5 text$']}, None),
+    ('path-hi-ruth', 'hi', 'मैं रूत का अनुवाद कर रहा हूँ', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'चरण 1/3', 'follow': ['^rut 1:1-5 text$']}, None),
     ('path-ar-ruth', 'ar', 'سأترجم راعوث', {'route': 'intro', 'ref': 'rut front:intro', 'mark': 'الخطوة 1 من 5', 'follow': ['^rut 1:1-5 text$']}, None),
     ('path-ar-review', 'ar', 'أراجع يونان 2', {'route': 'intro', 'ref': 'jon 2:intro', 'mark': 'الخطوة 1 من 5'}, None),
     # not a task on a book: no path

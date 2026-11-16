@@ -34,7 +34,7 @@ const STR: Record<string, W> = {
   en: {
     title: 'What would you like to do today?', sub: 'Choose one, or skip. You can come back here from the menu: “Start over”.',
     doors: {
-      book: ['I’m translating a book', 'A path through it: introduction, sections, key terms, notes, questions'],
+      book: ['I’m translating a book', 'Its introduction, then section by section with its helps'],
       learn: ['I want to learn to translate', 'Short Translation Academy lessons, one at a time'],
       look: ['I want to look up a passage or a word', 'Ask in the chat, and see how to ask'],
       explore: ['Just explore', 'The Bible book by book, and the Translation Academy manuals'],
@@ -54,9 +54,9 @@ const STR: Record<string, W> = {
     change: 'You can change this at any time: ask anything, or open {browse}.', translating: 'I’m translating {book}',
   },
   es: {
-    title: '¿Qué quieres hacer hoy?', sub: 'Elige una opción o sáltala. Puedes volver aquí desde el menú: «Empezar de nuevo».',
+    title: '¿Qué quieres hacer hoy?', sub: 'Elige una opción o salta este paso. Puedes volver aquí desde el menú: «Empezar de nuevo».',
     doors: {
-      book: ['Estoy traduciendo un libro', 'Un camino por el libro: introducción, secciones, palabras clave, notas, preguntas'],
+      book: ['Estoy traduciendo un libro', 'Su introducción y luego sección por sección, con sus ayudas'],
       learn: ['Quiero aprender a traducir', 'Lecciones cortas de Translation Academy, una a la vez'],
       look: ['Quiero consultar un pasaje o una palabra', 'Pregunta en el chat y mira cómo preguntar'],
       explore: ['Solo explorar', 'La Biblia libro por libro y los manuales de Translation Academy'],
@@ -78,7 +78,7 @@ const STR: Record<string, W> = {
   fr: {
     title: 'Que voulez-vous faire aujourd’hui ?', sub: 'Choisissez, ou passez. Vous pouvez revenir ici depuis le menu : « Recommencer ».',
     doors: {
-      book: ['Je traduis un livre', 'Un parcours du livre : introduction, sections, mots clés, notes, questions'],
+      book: ['Je traduis un livre', 'Son introduction, puis section par section avec ses aides'],
       learn: ['Je veux apprendre à traduire', 'De courtes leçons de Translation Academy, une à la fois'],
       look: ['Je veux consulter un passage ou un mot', 'Posez votre question dans la conversation, et voyez comment la poser'],
       explore: ['Simplement explorer', 'La Bible livre par livre, et les manuels de Translation Academy'],
@@ -100,7 +100,7 @@ const STR: Record<string, W> = {
   id: {
     title: 'Apa yang ingin Anda lakukan hari ini?', sub: 'Pilih salah satu, atau lewati. Anda bisa kembali ke sini dari menu: «Mulai dari awal».',
     doors: {
-      book: ['Saya sedang menerjemahkan sebuah kitab', 'Jalur melalui kitab itu: pengantar, bagian, istilah kunci, catatan, pertanyaan'],
+      book: ['Saya sedang menerjemahkan sebuah kitab', 'Pengantarnya, lalu bagian demi bagian dengan bahan bantunya'],
       learn: ['Saya ingin belajar menerjemahkan', 'Pelajaran singkat Translation Academy, satu per satu'],
       look: ['Saya ingin mencari perikop atau kata', 'Tanyakan di percakapan, dan lihat cara bertanya'],
       explore: ['Jelajahi saja', 'Alkitab kitab demi kitab, dan buku panduan Translation Academy'],
@@ -123,7 +123,7 @@ const STR: Record<string, W> = {
   hi: {
     title: 'आज आप क्या करना चाहेंगे?', sub: 'एक चुनें, या छोड़ दें। आप मेनू से यहाँ लौट सकते हैं: «फिर से शुरू करें»।',
     doors: {
-      book: ['किसी पुस्तक का अनुवाद', 'उसका मार्ग: परिचय, खंड, मुख्य शब्द, टिप्पणियाँ, प्रश्न'],
+      book: ['किसी पुस्तक का अनुवाद', 'उसका परिचय, फिर खंड-दर-खंड उसकी सहायताओं के साथ'],
       learn: ['अनुवाद करना सीखना', 'Translation Academy के छोटे पाठ, एक बार में एक'],
       look: ['कोई अंश या शब्द देखना', 'बातचीत में पूछें, और देखें कैसे पूछें'],
       explore: ['बस घूमकर देखना', 'बाइबल पुस्तक-दर-पुस्तक, और Translation Academy की पुस्तिकाएँ'],
@@ -145,7 +145,7 @@ const STR: Record<string, W> = {
   ar: {
     title: 'ماذا تريد أن تفعل اليوم؟', sub: 'اختر واحدًا، أو تخطَّ. يمكنك العودة إلى هنا من القائمة: «البدء من جديد».',
     doors: {
-      book: ['أترجم سفرًا', 'مسار عبره: المقدمة، المقاطع، الكلمات الرئيسية، الملاحظات، الأسئلة'],
+      book: ['أترجم سفرًا', 'مقدمته، ثم مقطعًا بعد مقطع مع مساعداته'],
       learn: ['أريد أن أتعلّم الترجمة', 'دروس قصيرة من Translation Academy، درسًا بعد درس'],
       look: ['أريد البحث عن مقطع أو كلمة', 'اسأل في المحادثة، وتعرّف على طريقة السؤال'],
       explore: ['أتصفّح فقط', 'الكتاب المقدس سفرًا سفرًا، وأدلة Translation Academy'],
@@ -268,16 +268,21 @@ function button(text: string, on: () => void, cls = ''): HTMLButtonElement {
 
 let opener: HTMLElement | null = null
 let quiet: HTMLElement[] = []
+// a door (or Skip) was chosen on the welcome on screen: closing it then records nothing more
+let chosen = true
 const onKey = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && document.querySelector('#welcome')) {
+  // (not under the PIN lock: Escape there is the lock's)
+  if (e.key === 'Escape' && document.querySelector('#welcome') && !document.querySelector('#lock')) {
     e.preventDefault()
     closeWelcome()
   }
 }
-/** Closes the welcome (Skip, ×, Escape, Android's back button); false when it was not open. Closing it is skipping it. */
+/** Closes the welcome (Skip, ×, Escape, Android's back button); false when it was not open. Closing it with no door chosen is skipping it. */
 export function closeWelcome(): boolean {
   const g = document.querySelector('#welcome')
   if (!g) return false
+  if (!chosen) remember({ door: 'skip' })
+  chosen = true
   g.remove()
   for (const q of quiet) q.inert = false
   quiet = []
@@ -300,6 +305,7 @@ export function openWelcome(ui: string) {
   if (!h || document.querySelector('#lock')) return
   remember()
   closeWelcome()
+  chosen = false
   opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
   const s = WT(ui)
   const dir = rtlLang(ui) ? 'rtl' : 'ltr'
@@ -320,6 +326,7 @@ export function openWelcome(ui: string) {
   const stack: View[] = [{ k: 'home' }]
   const done = (door: Door | 'skip', patch: Saved = {}) => {
     remember({ door, ...patch })
+    chosen = true
     closeWelcome()
   }
   const go = (v: View) => { stack.push(v); draw() }

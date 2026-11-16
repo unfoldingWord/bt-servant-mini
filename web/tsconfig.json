@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "skipLibCheck": true, "noEmit": true,
-    "resolveJsonModule": true, "lib": ["ES2022", "DOM"], "baseUrl": ".",
+    "resolveJsonModule": true, "lib": ["ES2022", "DOM", "DOM.Iterable"], "baseUrl": ".",
     "paths": {
       "@bt-synergy/language-pack-client": ["../../bts-client/packages/language-pack-client/src/index.ts"],
       "@bt-synergy/language-pack-v3": ["../../bts-client/packages/language-pack-v3/src/index.ts"],

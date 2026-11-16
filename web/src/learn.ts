@@ -18,10 +18,10 @@ export type Learn = { kind: LearnKind; at: string; title: string; lang: string }
 export type Answer = 0 | 1 | 2
 export type Level = 'new' | 'some' | 'experienced'
 
-/** Nothing yet: new; one "yes" or two "a little": some experience; more: experienced. */
+/** Never translated (and studied it a little at most): new; then up to one "yes" or two "a little": some experience; more: experienced. */
 export function levelOf(before: Answer, studied: Answer): Level {
-  const n = before + studied
-  return n === 0 ? 'new' : n <= 2 ? 'some' : 'experienced'
+  if (before === 0 && studied <= 1) return 'new'
+  return before + studied <= 2 ? 'some' : 'experienced'
 }
 export const START: Record<Level, LearnKind> = { new: 'intro', some: 'trips', experienced: 'checking' }
 /** When a pack lacks the manual a path starts with: the next one that exists. */
@@ -31,7 +31,7 @@ const NEXT_KIND: Record<LearnKind, LearnKind[]> = {
 
 // The manuals' own order (unfoldingWord en_ta v88 intro/toc.yaml and checking/toc.yaml; the Translate manual's is
 // data/ta-sections.json, through explore.ts manualSections). An article a pack has that these do not list goes after, by title.
-const ORDER: Record<'intro' | 'checking', string[]> = {
+export const ORDER: Record<'intro' | 'checking', string[]> = {
   intro: ['ta-intro', 'translate-why', 'uw-intro', 'statement-of-faith', 'translation-guidelines', 'open-license', 'gl-strategy', 'finding-answers'],
   checking: ['intro-checking', 'intro-check', 'goal-checking', 'authority-process', 'peer-check', 'team-oral-chunk-check', 'important-term-check',
     'trans-note-check', 'language-community-check', 'other-methods', 'clear', 'natural', 'acceptable', 'community-evaluation', 'church-leader-check',
@@ -95,12 +95,13 @@ async function makeSeq(kind: LearnKind, lang: string): Promise<Step[]> {
 }
 
 /**
- * Where a path for this level starts, with the packs in `packs` (the helps language first): its kind (the next one that exists
- * when a pack lacks the manual), the pack it reads, and its first article. Null when no pack has any of them.
+ * Where a path for this level starts, with the packs in `packs` (the person's own language first): in that language, its kind
+ * or the next manual that exists there; only then another pack. The pack it reads and its first article; null when no pack has
+ * any of them.
  */
 export async function startOf(kind: LearnKind, packs: string[]): Promise<{ learn: Learn; first: Step } | null> {
-  for (const k of NEXT_KIND[kind]) {
-    for (const lang of packs) {
+  for (const lang of packs) {
+    for (const k of NEXT_KIND[kind]) {
       const seq = await learnSeq(k, lang)
       if (seq[0]) return { learn: { kind: k, at: seq[0].id, title: seq[0].title, lang }, first: seq[0] }
     }
@@ -211,7 +212,8 @@ export async function learnStep(c: ConvState, done: { reply: Reply; answered: st
     reply.follow = [...steps, ...(reply.follow ?? []).filter((f) => !dup(f))].slice(0, MAX_FOLLOW)
     return
   }
-  if (reply.pathBack || done.answered === 'edge' || done.answered === 'nopack') return
+  // (not under a step of a book's path, nor where there is already a way back to one)
+  if (reply.pathMark || reply.pathBack || done.answered === 'edge' || done.answered === 'nopack') return
   reply.pathBack = { label: learnLabel(ui, L, 'back'), sheet: learnSheet(L), toPath: true }
 }
 

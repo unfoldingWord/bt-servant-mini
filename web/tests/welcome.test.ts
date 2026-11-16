@@ -7,7 +7,7 @@ import { ALL_PACKS, installPacks, OLD_PACKS_DIR, usePacksDir } from './fs-packs'
 import { turn } from './harness'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { type Answer, LT, learnSeq, learnStep, levelOf, resetLearn, START, startOf, TRIPS, tryVerse } from '../src/learn'
+import { type Answer, LT, learnSeq, learnStep, levelOf, ORDER, resetLearn, START, startOf, TRIPS, tryVerse } from '../src/learn'
 import { bookStart, closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, translatingText, welcomeDue, welcomeSaved, WT } from '../src/welcome'
 import { closeHowto, endInvite, forgetHowto, setHowtoHooks } from '../src/howto'
 import { manualArticles } from '../src/explore'
@@ -184,6 +184,7 @@ test('the first time a language is on the phone: the welcome, once, as a dialog 
   key('Escape')
   expect($('#welcome')).toBeNull()
   expect(log.inert).toBe(false)
+  expect(welcomeSaved()?.door).toBe('skip') // closed with no door chosen: skipped
   expect(slot('en', 'c2', true)).toBeNull()
   expect(slot('en', 'c3', false)).toBeNull()
   await sleep(50)
@@ -237,6 +238,8 @@ test('it waits for the first questions and the PIN, and never covers the lock', 
   openWelcome('en')
   doc.body.appendChild(lock)
   expect(lock.inert).toBe(false)
+  key('Escape') // Escape is the lock's while it is there
+  expect($('#welcome')).not.toBeNull()
   closeWelcome()
   lock.remove()
   // the conversation got a question before it could open: not shown (and the next empty conversation gets How to ask's line)
@@ -374,8 +377,8 @@ test('door 1 for every book in every app language: what it sends reads as that b
 
 test('two questions at most: the level and where it starts', () => {
   const L = (a: number, b: number) => levelOf(a as Answer, b as Answer)
-  expect(L(0, 0)).toBe('new')
-  expect([L(1, 0), L(0, 1), L(1, 1), L(2, 0), L(0, 2)]).toEqual(['some', 'some', 'some', 'some', 'some'])
+  expect([L(0, 0), L(0, 1)]).toEqual(['new', 'new']) // never translated, studied it a little at most
+  expect([L(1, 0), L(1, 1), L(2, 0), L(0, 2)]).toEqual(['some', 'some', 'some', 'some'])
   expect([L(2, 1), L(1, 2), L(2, 2)]).toEqual(['experienced', 'experienced', 'experienced'])
   expect(START).toEqual({ new: 'intro', some: 'trips', experienced: 'checking' })
 })
@@ -595,4 +598,72 @@ test('the path model: next, step-of and the count follow the steps it has', asyn
   const { has: _, ...old } = P
   expect(pathWords('en', { ...old, step: 5 }, 'Acts', 'mark')).toBe('Acts 1:1–5 · step 5 of 5: questions')
   expect(nextStep({ ...old, step: 3 }, secs, [])).toMatchObject({ step: 4 })
+})
+
+// ------------------------------------------------------------------------------------------------------- review fixes
+
+test('each step is answered from the path’s own pack: Hindi Acts with English on the phone still has 4 steps', async () => {
+  if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('en')) return
+  await installPacks(['hi', 'en'])
+  const c: ConvState = { last: null }
+  const r = await turn(c, { q: 'मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ' }, 'hi')
+  expect(r.ref).toBe('act front:intro')
+  expect(c.graph?.path?.lang).toBe('hi')
+  expect(c.graph?.path?.has).toEqual([1, 2, 3, 4])
+  expect(r.reply.pathMark).toMatch(/ · चरण 1\/4: परिचय$/)
+  const steps = await walk('hi', r, c, 5)
+  for (const s of steps) {
+    expect(s.mark).toMatch(/चरण \d\/4/)
+    expect(s.found, s.mark).toBeGreaterThan(0)
+  }
+})
+
+test('lessons, then a book: the book’s path replaces them, and its steps never offer "Back to the lessons"', async () => {
+  if (!ALL_PACKS.includes('en')) return
+  await installPacks(['en'])
+  resetLearn()
+  const c: ConvState = { last: null, graph: newGraph() }
+  const st = (await startOf('intro', ['en']))!
+  c.graph!.learn = st.learn
+  const l = await turn(c, { q: st.first.title, sheet: article(st.first.id, 'en') }, 'en')
+  expect(l.reply.pathMark).toMatch(/^Learning/)
+  const r = await turn(c, { q: 'I am translating Ruth' }, 'en')
+  expect(r.reply.pathMark).toMatch(/ · step 1 of \d: introduction$/)
+  expect(c.graph!.learn).toBeUndefined()
+  const lessons = LT('en').back.split('{')[0]!
+  const steps = [r]
+  for (let i = 0; i < 4; i++) {
+    const nx = steps[steps.length - 1]!.reply.follow?.find((f) => f.pathNext)
+    if (!nx) break
+    steps.push(await turn(c, { q: nx.label, sheet: nx.sheet as Sheet }, 'en'))
+  }
+  expect(steps.length).toBe(5)
+  for (const x of steps) {
+    expect(x.reply.pathMark).toBeTruthy()
+    const backs = [x.reply.pathBack, x.reply.back, ...(x.reply.follow ?? [])].filter(Boolean).map((f) => f!.label)
+    expect(backs.some((b) => b.includes(lessons)), backs.join(' | ')).toBe(false)
+  }
+  // a lesson kept by mistake next to a book's path: still never under a step of it
+  c.graph!.learn = st.learn
+  const nx = steps[4]!.reply.follow!.find((f) => f.pathNext)!
+  const y = await turn(c, { q: nx.label, sheet: nx.sheet as Sheet }, 'en')
+  expect(y.reply.pathMark).toBeTruthy()
+  expect(y.reply.pathBack?.label ?? '').not.toContain(lessons)
+})
+
+test('every Introduction and Checking article of the English pack is in the manuals’ order (no drift)', async () => {
+  if (!ALL_PACKS.includes('en')) return
+  await installPacks(['en'])
+  for (const m of ['intro', 'checking'] as const) {
+    const ids = (await manualArticles('en', m)).map((a) => a.id.slice(`ta:${m}/`.length))
+    for (const id of ids) expect(ORDER[m], `${m}/${id}`).toContain(id)
+  }
+})
+
+test('a start is looked for in the person’s own language first', async () => {
+  if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('en')) return
+  await installPacks(['hi', 'en'])
+  resetLearn()
+  expect((await startOf('intro', ['hi', 'en']))?.learn.lang).toBe('hi')
+  expect((await startOf('checking', ['en', 'hi']))?.learn.lang).toBe('en')
 })

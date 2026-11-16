@@ -2152,17 +2152,15 @@ export function moveOut<M extends Moved>(c: ConvState & { msgs: M[] }, m: M, ui:
 
 // ------------------------------------------------------------------------------------------------- the path, per answer
 /**
- * The steps of a path through a book that the packs on the phone can answer: the introduction and the sections always; its key
- * terms, its notes, its questions when an installed pack has them for the book (an answer takes them from any of them). The
- * Hindi pack has no questions: a Hindi-only phone's path through Acts has four steps.
+ * The steps of a path through a book that its pack (`lang`, the path's language: each step is answered from it) can answer: the
+ * introduction and the sections always; its key terms, its notes, its questions when the pack has them for the book. The Hindi
+ * pack has no questions: a path through Acts in Hindi has four steps, with or without English on the phone.
  */
-export async function stepsHad(book: string): Promise<number[]> {
+export async function stepsHad(book: string, lang: string): Promise<number[]> {
   const out = new Set([1, 2])
   const rows = (t: any) => ((t?.rows ?? []) as any[]).filter((x) => !(x.cols?.isIntro === true || x.cols?.isIntro === 'true'))
-  for (const l of await installedLangs().catch(() => [] as string[])) {
-    if (out.size === 5) break
-    const r = await openLang(l).catch(() => null)
-    if (!r?.installed(`book:${book}`)) continue
+  const r = await openLang(lang).catch(() => null)
+  if (r?.installed(`book:${book}`)) {
     const m: any = await r.book(book).catch(() => null)
     if (rows(m?.links).some((x) => x.concept)) out.add(3)
     if (rows(m?.notes).length) out.add(4)
@@ -2196,7 +2194,9 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   delete g.pathBefore
   let at: Path | null = null
   if (made.path && P?.book === made.path.book) {
-    const has = await stepsHad(made.path.book)
+    const has = await stepsHad(made.path.book, x.sheet.lang)
+    // (a book's path replaces the lessons: its steps are not "away from the lessons")
+    delete g.learn
     at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, has }
     reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book), has)
     if (reply.drift && g.path) g.pathBefore = g.path

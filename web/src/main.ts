@@ -1269,7 +1269,8 @@ setHowtoHooks({
   helpsLang: () => helpsLang,
 })
 // The welcome (welcome.ts): a book's path starts as if "Voy a traducir Rut" were typed (read by code, no model); a learning path
-// starts in this conversation at its first article; nothing here is counted in the usage counts
+// starts in this conversation at its first article (in place of a book's path). Its answers are counted like any answer; the
+// welcome adds no counters of its own
 setWelcomeHooks({
   packs: () => [...new Set([examplesLang(), 'en', ...INSTALLED].filter((l): l is string => !!l && INSTALLED.includes(l)))],
   start: (label, make) => {
@@ -1279,7 +1280,12 @@ setWelcomeHooks({
   },
   learn: (l, label, sheet) => {
     if (busy || locked()) return
-    ;(conv().graph ??= newGraph()).learn = l
+    const g = (conv().graph ??= newGraph())
+    g.learn = l
+    // (the lessons replace a book's path: their articles are not "away from the path")
+    delete g.path
+    delete g.pathNext
+    delete g.pathBefore
     runSheet(label, sheet, nav)
   },
   browse: () => openExplore('welcome'),
