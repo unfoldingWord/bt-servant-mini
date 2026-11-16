@@ -17,6 +17,11 @@ Fix it with one of:
   git -C <your bt-synergy clone> worktree add --detach {BTS} {REF}
   git -C {BTS} fetch && git -C {BTS} checkout --detach {REF}
 then: cd {BTS} && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3""")
+_dirty = subprocess.run(['git', '-C', str(BTS), 'status', '--porcelain'], capture_output=True, text=True).stdout.strip()
+if _dirty:
+    raise SystemExit(f"""{BTS} has local changes (the client must be bt-synergy.ref as committed):
+{_dirty[:800]}
+Undo them before building (git -C {BTS} status shows them).""")
 if not (BTS / 'packages' / 'language-pack-client' / 'node_modules').is_dir():
     raise SystemExit(f'{BTS} has no node_modules: cd {BTS} && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3')
 shutil.rmtree(WWW, ignore_errors=True)

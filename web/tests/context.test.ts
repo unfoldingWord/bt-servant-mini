@@ -70,6 +70,11 @@ describe('section kinds from headings', () => {
       sec('description', 'description', 3, 'Description'), sec('strategies', 'strategies', 4, 'Translation Strategies'),
       sec('examples', 'examples', 3, 'Examples From the Bible')] }
     expect(kindsOf(b)).toEqual(['description', 'strategies', 'examples'])
+    // a heading the pack's table missed (es: the singular) under the description: its own heading wins over the inherited role
+    const c: Art = { id: 'ta:translate/z', title: 'Z', sections: [
+      sec('d', 'description', 3, 'Descripción'), sec('s', 'description', 4, 'Estrategia de traducción')] }
+    expect(kindsOf(c)).toEqual(['description', 'strategies'])
+    expect(pickSections(c, 'how').map((p) => [p.kind, p.secs.map((s) => s.sid).join('+')])).toEqual([['description', 'd'], ['strategies', 's']])
   })
 })
 

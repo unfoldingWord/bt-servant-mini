@@ -108,9 +108,13 @@ export function kindsOf(a: Art): Kind[] {
     let p = i - 1
     while (p >= 0 && a.sections[p]!.level >= s.level) p--
     let k: Kind
-    if (s.role && s.role !== 'unknown' && s.role !== 'intro' && p >= 0 && a.sections[p]!.role === s.role) {
+    // (unless its heading names another kind: "Estrategia de traducción" under "Descripción", a heading the pack's table missed)
+    const headK = byHead === 'translation-suggestions' && a.id.startsWith('ta:') ? 'strategies' : byHead
+    if (s.role && s.role !== 'unknown' && s.role !== 'intro' && p >= 0 && a.sections[p]!.role === s.role && !(headK && headK !== out[p])) {
       k = out[p]!
       sub.add(i)
+    } else if (s.role && s.role !== 'unknown' && s.role !== 'intro' && p >= 0 && a.sections[p]!.role === s.role) {
+      k = headK!
     } else if (s.role && s.role !== 'unknown') {
       k = s.role as Kind
       if (k === 'strategies' && strategies++ === 0) stLevel = s.level

@@ -49,9 +49,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 El cliente de paquetes (`language-pack-client` y `language-pack-v3`) sale de bt-synergy (tc-study) en el commit de
 `bt-synergy.ref`, sacado en `../bts-client` (como Servos). `web/tsconfig.json` y `packs-server/tsconfig.json` apuntan ahí;
-`build.py` y `bun test` fallan si `../bts-client` está en otro commit. Prepararlo:
+`build.py` y `bun test` fallan si `../bts-client` está en otro commit (`build.py` también si tiene cambios locales). Prepararlo:
 ```
-git -C <clon de bt-synergy> worktree add --detach ../wt/bts-client $(cat bt-synergy.ref)   # o: git -C ../bts-client checkout --detach <ref>
+git -C <clon de bt-synergy> worktree add --detach "$(cd .. && pwd)/bts-client" $(cat bt-synergy.ref)   # desde la raíz de este repo; o: git -C ../bts-client checkout --detach <ref>
 cd ../bts-client && bun install --frozen-lockfile --filter @bt-synergy/language-pack-client --filter @bt-synergy/language-pack-v3
 ```
 Para pasar a un bt-synergy más nuevo: correr todas las pruebas contra él y escribir su commit en `bt-synergy.ref`.
