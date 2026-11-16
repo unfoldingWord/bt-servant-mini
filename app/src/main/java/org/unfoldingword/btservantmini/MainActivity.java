@@ -414,6 +414,12 @@ public class MainActivity extends Activity {
         return cm == null || cm.getActiveNetwork() != null;
     }
 
+    /** Whether the connection costs the person (mobile data, a metered hotspot): the page's daily pack update waits for another. */
+    private boolean isMetered() {
+        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        return cm != null && cm.isActiveNetworkMetered();
+    }
+
     /**
      * Tells the page when the connection comes and goes: an "online" or "offline" event on its window. WebView keeps
      * navigator.onLine true without a connection, so the page asks Android.online() instead.
@@ -460,6 +466,9 @@ public class MainActivity extends Activity {
     private class Bridge {
         @JavascriptInterface
         public boolean online() { return hasNetwork(); }
+
+        @JavascriptInterface
+        public boolean metered() { return isMetered(); }
 
         @JavascriptInterface
         public boolean discreet() { return isDiscreet(); }
