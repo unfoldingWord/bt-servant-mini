@@ -1,6 +1,7 @@
 // Share an answer (WhatsApp is where translators talk): the question, the answer as plain text, the reference and the app
 // link. Android and iOS apps have a native share sheet through the bridge (window.Android.share); the browser uses
 // navigator.share, or opens WhatsApp with the text ready. Only the number of shares is counted (usage.ts), never the text.
+import { strip } from './bidi'
 import { bookLabel } from './converse'
 import { unfold } from './focus'
 import { slugLabel } from './links'
@@ -78,7 +79,7 @@ export function shareText(m: ShareMsg, ui: string, question?: string): string | 
   const ref = referenceOf(m, ui)
   if (ref) parts.push(ref)
   parts.push(APP_LINK)
-  return parts.join('\n\n')
+  return strip(parts.join('\n\n')) // no isolate marks (bidi.ts): WhatsApp and the other apps get the plain words
 }
 
 /** Hands the text to the system: the app's share sheet, the browser's, or WhatsApp's link. */

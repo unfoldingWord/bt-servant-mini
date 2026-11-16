@@ -200,7 +200,7 @@ export function lock(lang: string) {
   const wrap = el('div', '')
   wrap.id = 'lock'
   const box = el('form', 'card') as HTMLFormElement
-  box.dir = 'auto'
+  box.dir = /^(ar|he|fa|ur|ps|sd|ug|yi|dv|ckb)(-|$)/i.test(lang) ? 'rtl' : 'auto' // bidi.ts rtlLang, written out: one line here
   box.appendChild(el('h2', '', discreetOn() ? s.name : 'BT Servant Mini'))
   const i = pinInput(s.enter)
   const msg = el('p', 'note', '')

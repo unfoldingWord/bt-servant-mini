@@ -59,13 +59,15 @@
   .info p { margin: 0 0 10px; }
   .info ul, .info ol { margin: 0 0 10px; padding-inline-start: 22px; }
   .info li { margin: 0 0 8px; }
+  /* an English item in an Arabic list (or the other way round, md.ts): its bullet would sit on the bubble's edge, where the list has no padding */
+  :is(ul, ol)[dir="rtl"] > li[dir="ltr"], :is(ul, ol)[dir="ltr"] > li[dir="rtl"] { list-style-position: inside; }
   .info li::marker { color: var(--faint); }
   .info strong { font-weight: 650; }
   .info em { color: var(--muted); }
   .info > :last-child { margin-bottom: 0; }
   .follow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .follow button, .examples button { font: 14px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
-    border-radius: 10px; padding: 7px 11px; text-align: left; }
+    border-radius: 10px; padding: 7px 11px; text-align: start; }
   .follow button:active, .examples button:active { background: var(--line); }
   details { margin-top: 8px; font: 12px system-ui, sans-serif; color: var(--faint); }
   details pre { white-space: pre-wrap; font-size: 11px; max-height: 240px; overflow: auto; }
@@ -125,7 +127,7 @@
   #panel.show { display: block; }
   #panel h2 { font: 600 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin: 10px 0 8px; }
   #panel .row { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
-  #panel .open { flex: 1; text-align: left; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 10px;
+  #panel .open { flex: 1; text-align: start; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 10px;
     font: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #panel .row.on .open { background: var(--me); border-color: transparent; }
   #panel .del { border: 0; color: #b4432f; background: transparent; padding: 9px 6px; font: inherit; font-size: 14px; }
@@ -255,8 +257,9 @@
   :is(.info, .md) details.fold > summary::-webkit-details-marker { display: none; }
   :is(.info, .md) details.fold > summary::before { content: "▸"; display: inline-block; margin-inline-end: 8px; transition: transform .15s; }
   /* right to left: the bubble's own direction (dir="auto" on an Arabic answer in any app language), not only the app's */
-  [dir="rtl"] details.fold > summary::before { transform: scaleX(-1); }
-  details.fold:dir(rtl) > summary::before { transform: scaleX(-1); }
+  /* the summary's own direction: an English summary (dir="ltr", md.ts) inside an Arabic bubble keeps its arrow */
+  details.fold > summary:dir(rtl)::before { transform: scaleX(-1); }
+  @supports not selector(:dir(rtl)) { [dir="rtl"] details.fold > summary:not([dir="ltr"])::before { transform: scaleX(-1); } }
   :is(.info, .md) details.fold[open] > summary::before { transform: rotate(90deg); }
   :is(.info, .md) details.fold[open] > summary { margin-bottom: 10px; }
   :is(.info, .md) details.fold.verse { margin: 4px 0; }

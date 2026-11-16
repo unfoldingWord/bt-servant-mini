@@ -5,6 +5,7 @@
 // by itself only when the person already allows the internet (online AI or usage counts); otherwise only when they tap
 // "Check for a new version" in the menu. The request is a plain GET of a fixed URL: no id, no version, no cookie.
 // The web app updates itself and the iOS app is not there yet: neither gets any of this.
+import { bidiLabel, rtlLang } from './bidi'
 
 export const LATEST_URL = 'https://bt-servant-mini.unfoldingword.workers.dev/latest.json'
 const RELEASES = '/unfoldingWord/bt-servant-mini/releases/' // the only links opened (the Android bridge checks the same)
@@ -154,9 +155,10 @@ export function showUpdateNote(lang: string, ignoreDismissed = false) {
   const box = document.createElement('div')
   box.id = 'updnote'
   box.setAttribute('role', 'status')
-  box.dir = 'auto'
+  box.dir = rtlLang(lang) ? 'rtl' : 'auto' // a Latin name first must not turn an Arabic notice left to right
   const text = document.createElement('span')
-  text.textContent = s.found.replace('{v}', o.version).replace('{size}', sizeText(o.bytes))
+  // "18 MB" and a "0.12.0-beta" kept whole in Arabic (bidi.ts)
+  text.textContent = bidiLabel(s.found.replace('{v}', o.version).replace('{size}', sizeText(o.bytes)), lang)
   const go = document.createElement('button')
   go.type = 'button'
   go.className = 'go'

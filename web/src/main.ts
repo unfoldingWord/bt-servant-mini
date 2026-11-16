@@ -11,7 +11,8 @@ import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
 import { has } from './commands'
 import { resetSearch } from './search'
-import { md } from './md'
+import { md, mdDir } from './md'
+import { bidiLabel, dirOf, rtlLang, strip } from './bidi'
 import { askSafety, closeSafety, safetyAsked } from './safety'
 import { autoCheckUpdate, checkForUpdate, updateRow, updateSupported } from './update'
 import { hint as pwaHint } from './pwa'
@@ -208,7 +209,8 @@ applyUi()
 function el(tag: string, cls: string, text?: string): HTMLElement {
   const d = document.createElement(tag)
   d.className = cls
-  if (/^(info|plain|intro|msg)/.test(cls)) d.dir = 'auto' // Arabic helps read right to left
+  // Arabic helps read right to left, English ones left to right, whatever the app's language (bidi.ts textDir)
+  if (/^(info|plain|intro|msg)/.test(cls)) d.dir = text !== undefined ? dirOf(text) : 'auto'
   if (text !== undefined) d.textContent = text
   return d
 }
@@ -220,9 +222,9 @@ const LIMITS: Record<string, string> = {
 /** The online answer's text, with its badge ("Online AI · model"). */
 function aiBlock(a: NonNullable<Msg['ai']>): HTMLElement {
   const ai = el('div', 'ai')
-  ai.appendChild(el('span', 'ai-badge', `${OT().label} · ${modelLabel(a.model)}`))
+  ai.appendChild(el('span', 'ai-badge', bidiLabel(`${OT().label} · ${modelLabel(a.model)}`, nav)))
   const body = el('div', 'ai-text')
-  body.dir = 'auto' // an Arabic answer reads right to left
+  body.dir = mdDir(a.text) // an Arabic answer reads right to left (its English paragraphs left to right: md.ts)
   body.innerHTML = md(a.text)
   ai.appendChild(body)
   return ai
@@ -254,7 +256,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   if (m.who === 'me' && m.mark) {
     const d = el('div', 'msg mark')
     d.setAttribute('role', 'separator')
-    d.appendChild(el('span', '', m.text))
+    d.dir = rtlLang(nav) ? 'rtl' : 'ltr' // built in the app's language: its direction, the other one's runs isolated
+    d.appendChild(el('span', '', bidiLabel(m.text ?? '', nav)))
     return d
   }
   if (m.who === 'me') return el('div', 'msg me', m.text)
@@ -262,8 +265,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   d.dataset.lang = m.lang ?? 'en'
   // on a light path: where it is ("Ruth 1:6–18 · step 4 of 5: notes"), first
   if (m.pathMark) {
-    const pm = el('div', 'path-mark', m.pathMark)
-    pm.dir = 'auto'
+    const pm = el('div', 'path-mark', bidiLabel(m.pathMark, m.ui ?? nav))
+    pm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pm)
   }
   // the question this answers (the person's message before it): the passage shows the notes about its words first
@@ -297,6 +300,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   else if (m.info) {
     const box = el('div', m.intro ? 'info' : 'plain md')
     box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
+    box.dir = mdDir(m.info)
     fillTitles(box, m.lang ?? 'en')
     host.appendChild(box)
   }
@@ -307,8 +311,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   if (backs.length) d.appendChild(followRow(m, backs, 'follow back-row'))
   // a path starts: the line that proposes it, just above its first step
   if (m.pathLine) {
-    const pl = el('p', 'path-line', m.pathLine)
-    pl.dir = 'auto'
+    const pl = el('p', 'path-line', bidiLabel(m.pathLine, m.ui ?? nav))
+    pl.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pl)
   }
   if (m.follow?.length) d.appendChild(followRow(m, m.follow))
@@ -370,7 +374,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   }
   if (m.meta) {
     const det = document.createElement('details')
-    det.appendChild(el('summary', '', m.meta.split('\n')[0]))
+    det.appendChild(el('summary', '', bidiLabel(m.meta.split('\n')[0]!, m.ui ?? nav)))
     det.appendChild(el('pre', '', m.meta.split('\n').slice(1).join('\n')))
     d.appendChild(det)
   }
@@ -381,8 +385,11 @@ const retries = new WeakMap<Msg, () => void>()
 /** The next steps under an answer: a ready sheet (no model call), Browse at a book or manual, or the question again. */
 function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
   const f = el('div', cls)
+  // in the app's direction (not the answer's: an Arabic answer in an English app keeps English buttons left to right)
+  const ui = m.ui ?? nav
+  f.dir = rtlLang(ui) ? 'rtl' : 'ltr'
   for (const x of follow) {
-    const b = el('button', '', x.label) as HTMLButtonElement
+    const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
     b.type = 'button'
     if (x.back || x.toPath) b.className = 'back'
     else if (x.pathNext) b.className = 'path-next'
@@ -555,7 +562,7 @@ function fillExamples(ex: HTMLElement) {
   examplesFor(nav, lang).then((list) => {
     if (!ex.isConnected) return
     for (const e of list) {
-      const b = el('button', '', e.label) as HTMLButtonElement
+      const b = el('button', '', bidiLabel(e.label, nav)) as HTMLButtonElement
       b.type = 'button'
       b.onclick = () => runSheet(e.label, { ...bare(e.lang), intent: e.intent, ref: e.ref ?? null, what: e.what ?? [], concept: e.concept ?? null }, nav)
       ex.appendChild(b)
@@ -615,6 +622,7 @@ function renderPanel() {
     const row = el('div', c.id === current ? 'row on' : 'row')
     const open = el('button', 'open', c.title || T.untitled) as HTMLButtonElement
     open.type = 'button'
+    open.dir = dirOf(c.title || T.untitled) // a question in Arabic reads right to left in any app language
     open.onclick = () => {
       current = c.id
       save()
@@ -1312,8 +1320,8 @@ function drawMap() {
     const ic = el('span', 'gm-ic gm-line')
     ic.innerHTML = svg('<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>')
     const txt = el('span', 'gm-txt')
-    const name = el('span', 'ex-row-t', label)
-    name.dir = 'auto'
+    const name = el('span', 'ex-row-t', bidiLabel(label, nav))
+    name.dir = rtlLang(nav) ? 'rtl' : 'ltr'
     txt.appendChild(name)
     row.append(ic, txt)
     row.onclick = () => {
@@ -1343,7 +1351,7 @@ function drawMap() {
       ic.innerHTML = svg(ICONS[r.node.edge] ?? ICONS.start!)
       const txt = el('span', 'gm-txt')
       const name = el('span', 'ex-row-t', r.node.label)
-      name.dir = 'auto'
+      name.dir = dirOf(r.node.label) // what the person asked, or a button's label: its own direction
       txt.appendChild(name)
       txt.appendChild(el('span', 'ex-row-s', r.cur ? `${t.here} · ${t.edge[r.node.edge]}` : t.edge[r.node.edge]))
       row.append(ic, txt)
@@ -1367,7 +1375,8 @@ function drawMap() {
 
 form.addEventListener('submit', (e) => {
   e.preventDefault()
-  const q0 = input.value.trim()
+  // without bidi marks: text copied from the app or pasted from WhatsApp may carry them (an isolated Ruth 2:3 is not read as a reference)
+  const q0 = strip(input.value).trim()
   if (!q0 || busy) return
   // "Reply in Indonesian", "Repeat your last answer in Indonesian"
   const { q, target } = questionOf(q0, conv())

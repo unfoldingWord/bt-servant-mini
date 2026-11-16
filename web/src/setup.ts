@@ -2,6 +2,7 @@
 // model, add languages from the packs server or from a .tcpack file, share them with another phone.
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { FU } from './firstuse'
+import { rtlLang } from './bidi'
 import { availableLangs, downloadLang, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
 
 type S = {
@@ -317,7 +318,7 @@ export function showAbout(lang: string, refresh: () => void) {
   const wrap = el('div', '')
   wrap.id = 'about'
   const card = el('div', 'card')
-  card.dir = 'auto'
+  card.dir = rtlLang(lang) ? 'rtl' : 'auto' // the Latin name in the title must not turn an Arabic card left to right
   card.appendChild(el('h2', '', s.title))
   for (const p of s.body) {
     const para = el('p', '')
