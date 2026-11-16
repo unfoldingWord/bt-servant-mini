@@ -481,6 +481,32 @@ export async function obsAnswer(s: { ref: string | null; what: string[]; lang: s
   return { answer: out.join('\n\n'), cites, facts }
 }
 
+/**
+ * What one frame's helps are, for the 5M session's step (obs5m.ts `ObsFrameHelps`): the facts of its OBS answer (`terms`: the
+ * tW ids of its word links), the Translation Academy articles its notes cite (each note's link, else an rc://…/ta/man/… in its
+ * text, which the answer leaves out), its word links with their words, and how many notes and questions it has. Null when the
+ * story or the frame is not on the phone (the obs unit missing, no such frame). Reads; changes nothing of `obsAnswer`.
+ */
+export type ObsFrameData = {
+  facts: ObsFacts; academy: string[]; twl: { id: string; words: string }[]; notes: number; questions: number
+}
+export async function frameHelps(ref: string, lang: string, ui: string): Promise<ObsFrameData | null> {
+  const p = parseObsRef(ref)
+  if (!p?.f) return null
+  const { facts } = await obsAnswer({ ref, what: ['terms'], lang }, ui)
+  if (facts.state !== 'ok' || !facts.pack) return null
+  const r = await read(facts.pack)
+  const fr = r ? (await r.story(p.n)).data?.frames?.find((x) => +x.ref.split(':')[1]! === p.f) : undefined
+  if (!fr) return null
+  const academy: string[] = []
+  for (const x of fr.notes) {
+    const ids = x.concept?.startsWith('ta:') ? [x.concept] : [...String(x.cols.note ?? '').matchAll(/rc:\/\/[^/\s]+\/ta\/man\/([\w-]+)\/([\w-]+)/g)].map((m) => `ta:${m[1]}/${m[2]}`)
+    for (const id of ids) if (!academy.includes(id)) academy.push(id)
+  }
+  const twl = [...new Map(fr.links.filter((x) => x.concept).map((x) => [x.concept!, String(x.cols.origWords ?? '').trim()])).entries()].map(([id, words]) => ({ id, words }))
+  return { facts, academy, twl, notes: fr.notes.filter((x) => tidyNote(x.cols.note)).length, questions: fr.questions.length }
+}
+
 /** The sentence before an answer: "Here is OBS 3:5 of Open Bible Stories (The Flood)." (runs of the other direction isolated). */
 export const introLine = (f: ObsFacts, ui: string): string | null =>
   f.state !== 'ok' ? null : bidiLabel(f.f ? fill(OW(ui).found, { ref: obsLabel(f.n, f.f), title: f.title || obsLabel(f.n) }) : fill(OW(ui).foundStory, { ref: obsLabel(f.n), title: f.title || obsLabel(f.n) }), ui)

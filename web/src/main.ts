@@ -1476,6 +1476,13 @@ function drawMap() {
         mapOpened.add(r.key)
         drawMap()
       }
+    } else if (r.k === 'group') {
+      // a 5M session (dev switch `obs5m`): its name over its steps; the steps themselves are the points to go back to
+      row.classList.add('gm-group')
+      row.disabled = true
+      const name = el('span', 'ex-row-t', r.label)
+      name.dir = 'ltr'
+      row.appendChild(name)
     } else {
       const ic = el('span', `gm-ic gm-${r.node.edge}`)
       ic.innerHTML = svg(ICONS[r.node.edge] ?? ICONS.start!)
