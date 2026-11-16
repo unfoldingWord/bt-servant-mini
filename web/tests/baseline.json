@@ -2,11 +2,11 @@
  "note": "Right answers per set (tests/answers.test.ts). Raise it with UPDATE_BASELINE=1 bun test.",
  "sets": {
   "q36": {
-   "pass": 28,
+   "pass": 30,
    "total": 36,
-   "known": 8,
-   "must": 27,
-   "empty": 3,
+   "known": 6,
+   "must": 29,
+   "empty": 1,
    "oos": 0
   },
   "langs": {

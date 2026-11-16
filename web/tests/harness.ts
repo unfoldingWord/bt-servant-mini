@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ALL_PACKS, installedPacks, installPacks } from './fs-packs'
+import { withObs } from './obs-fixture'
 import { answer, codeReads, env, type ConvState, type Made, questionOf, readQuestion } from '../src/pipeline'
 import { has } from '../src/commands'
 import type { Sheet } from '../src/answer'
@@ -48,12 +49,17 @@ export type Outcome = {
 }
 
 let installed = ''
-/** The full build: every pack on disk. */
+/**
+ * The full build: every pack on disk, the English one with Open Bible Stories (as Mini's server has it: obs-fixture.ts).
+ * OBS=none: without them, as the packs on disk are (`OBS=none bun test tests/answers.test.ts`: the sets answer as before OBS).
+ */
 export async function fullPhone() {
   // (another test file may have left fewer installed since: then all again)
-  if (installed === 'all' && installedPacks().length === ALL_PACKS.length) return
-  await installPacks(ALL_PACKS)
-  installed = 'all'
+  if (!(installed === 'all' && installedPacks().length === ALL_PACKS.length)) {
+    await installPacks(ALL_PACKS)
+    installed = 'all'
+  }
+  if (ALL_PACKS.includes('en')) await withObs('en', process.env.OBS === 'none' ? 'none' : 'installed')
 }
 
 /**

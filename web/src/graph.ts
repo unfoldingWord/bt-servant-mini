@@ -83,6 +83,13 @@ export function branchOf(g: Graph, id: string, n = 3): GNode[] {
   return out
 }
 
+/** Whether a passage ref ("gen 6:1-8:22", a story's range) holds the chapter of a place (Genesis 7). */
+function inChapters(ref: string, N: { book: string; ch: number | null }): boolean {
+  const m = /^([0-9a-z]{3}) (\d+)(?::\d+)?(?:-(?:(\d+):)?\d+)?$/.exec(ref)
+  if (!m || m[1] !== N.book || N.ch === null) return false
+  return N.ch >= +m[2]! && N.ch <= (m[3] ? +m[3] : +m[2]!)
+}
+
 /** What is compared: the new turn's kind, its sheet, and what it links to. */
 export type Turn = { kind: string; sheet: NodeSheet; links?: string[] }
 
@@ -121,6 +128,14 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
       if (A && sameLine(A, N)) return { edge: 'line', parent: a.id }
     }
     if (N.intro && P && N.book === P.book) return deeper
+    // Open Bible Stories (obs.ts): a story is a point linked to its passages. The story a passage is told in ("This part is
+    // told in OBS 3", `obs:3` in the passage's links), and a passage a story is told from (the story's links hold its ranges)
+    if (N.book === 'obs' && N.ch !== null) {
+      const story = `obs:${N.ch}`
+      if (c.links?.includes(story)) return deeper
+      if (p?.links?.includes(story)) return { edge: 'deeper', parent: p.id }
+    }
+    if (c.sheet.ref?.startsWith('obs ') && c.links?.some((l) => l === t.sheet.ref || inChapters(l, N))) return deeper
     return branch
   }
   const id = t.sheet.concept

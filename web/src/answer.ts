@@ -8,6 +8,7 @@ import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
 import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
+import { isObsRef, obsAnswer, storyText } from './obs'
 import tEn from './data/tpl-en.json'
 import tEs from './data/tpl-es.json'
 import tFr from './data/tpl-fr.json'
@@ -225,7 +226,12 @@ async function titleOf(l: Lang, id: string): Promise<string> {
 async function passage(s: Sheet, l: Lang): Promise<Result> {
   const cites: string[] = []
   const lang = l.lang
-  if (/^obs\b/.test(s.ref ?? '')) return { answer: say(lang, 'obs_none', { ref: s.ref ?? 'obs' }), cites }
+  // Open Bible Stories (obs.ts): a story or one frame, from the first pack that has them, or what is missing
+  if (isObsRef(s.ref)) {
+    const o = await obsAnswer({ ref: s.ref, what: s.what, lang }, UI ?? (lang.startsWith('es') ? 'es' : 'en'))
+    facts = o.facts
+    return { answer: o.answer, cites: o.cites }
+  }
   const ref = parseRef(s.ref ?? '')
   if (!ref) return { answer: say(lang, 'bad_ref', { ref: s.ref ?? '' }), cites }
   const book = bookName(lang, ref.book)
@@ -1009,6 +1015,8 @@ ${String(row.cols.response ?? '')}` }
  */
 export async function passageContext(s: Sheet): Promise<string> {
   if (!s.ref || !['passage', 'advice'].includes(s.intent)) return ''
+  // a story of Open Bible Stories: its plain text (the branch is on a story)
+  if (isObsRef(s.ref)) return storyText(s.ref, s.lang).catch(() => '')
   const ref = parseRef(s.ref)
   if (!ref || ref.kind !== 'verses') return ''
   const l = await getLang(s.lang)

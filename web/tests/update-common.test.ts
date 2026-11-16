@@ -2,7 +2,7 @@
 // a phone that added its languages before the packs had the section map gets it (common r2 -> r3: the xtopics core, 257 KB).
 // Never on a metered connection (Abel: no automatic downloads over mobile data); when the app cannot tell, as if not.
 import { afterEach, expect, test } from 'bun:test'
-import { COMMON_UPDATE_MAX, meteredNow, updateLang } from '../src/packs'
+import { COMMON_UPDATE_MAX, meteredNow, OBS_MAX, updateLang } from '../src/packs'
 
 const ARTICLES = ['art:tw:kt', 'art:ta:intro']
 /** A client whose refresh lists `updates`, with every article installed unless `lacks` says otherwise. */
@@ -73,6 +73,41 @@ test('a downgrade the refresh lists (a language built against an older common) i
   const { client, calls } = fake([{ key: 'common/xtopics', bytes: 220000, from: 3, to: 2 }, { key: 'common/xmap', bytes: 1000, from: 3, to: 3 }])
   expect(await updateLang(client, 'es-419', ARTICLES, undefined, false)).toEqual([])
   expect(calls).toEqual(['refresh es-419'])
+})
+
+// ---------------------------------------------------------------------------------------------------- Open Bible Stories
+// A phone that installed a language before OBS came with it gets the unit from the daily update: when the catalog lists it, the
+// phone lacks it, it is OBS_MAX (3 MB) or less, and the connection is not metered (Abel, Nov 16).
+function withObsUnit(o: { listed?: boolean; installed?: boolean; bytes?: number; lacks?: string[] } = {}) {
+  const calls: string[] = []
+  const client = {
+    refresh: async (lang: string) => { calls.push(`refresh ${lang}`) },
+    open: async () => ({
+      listed: (u: string) => (u === 'obs' ? o.listed ?? true : true),
+      installed: (u: string) => (u === 'obs' ? o.installed ?? false : !(o.lacks ?? []).includes(u)),
+      size: (u: string) => (u === 'obs' ? o.bytes ?? 287_929 : 50_000),
+    }),
+    install: async (lang: string, want: { units: string[]; defaults: false }) => { calls.push(`install ${lang} ${want.units.join(',')}`) },
+  }
+  return { client, calls }
+}
+
+test('obs: a language that lacks it gets it, after its missing articles', async () => {
+  const { client, calls } = withObsUnit({ lacks: ['art:ta:intro'] })
+  expect(await updateLang(client, 'hi', ARTICLES, undefined, false)).toEqual(['art:ta:intro', 'obs'])
+  expect(calls).toEqual(['refresh hi', 'install hi art:ta:intro', 'install hi obs'])
+  // a connection the app cannot tell: as if not metered
+  expect(await updateLang(withObsUnit().client, 'hi', ARTICLES, undefined, null)).toEqual(['obs'])
+})
+
+test('obs: not on a metered connection, not over 3 MB, not when installed or not listed', async () => {
+  for (const [o, metered] of [[{}, true], [{ bytes: OBS_MAX + 1 }, false], [{ installed: true }, false], [{ listed: false }, false]] as const) {
+    const { client, calls } = withObsUnit(o)
+    expect(await updateLang(client, 'es-419', ARTICLES, undefined, metered)).toEqual([])
+    expect(calls).toEqual(['refresh es-419'])
+  }
+  // exactly 3 MB still comes
+  expect(await updateLang(withObsUnit({ bytes: OBS_MAX }).client, 'id', ARTICLES, undefined, false)).toEqual(['obs'])
 })
 
 // ---------------------------------------------------------------------------------------------------- meteredNow

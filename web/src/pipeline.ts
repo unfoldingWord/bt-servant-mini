@@ -9,6 +9,7 @@ import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, i
 import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
+import { fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, obsAsked, obsLabel, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -132,7 +133,7 @@ const TERM_NAME: Record<string, string> = {
 }
 export const TT = (ui: string) => ({ ...(TERM_T[ui] ?? TERM_T.en!), name: TERM_NAME[ui] ?? TERM_NAME.en! })
 /** "jon 1:17" as the person reads it: "Jonás 1:17". */
-export const refLabelOf = (ui: string, ref: string): string => { const [code, rest] = ref.split(' '); return `${bookLabel(ui, code!)}${rest ? ' ' + rest.replace(/^front:intro$/, '') : ''}`.trim() }
+export const refLabelOf = (ui: string, ref: string): string => { const [code, rest] = ref.split(' '); if (code === 'obs') { const o = parseObsRef(ref); return o ? obsLabel(o.n, o.f) : 'OBS' } return `${bookLabel(ui, code!)}${rest ? ' ' + rest.replace(/^front:intro$/, '') : ''}`.trim() }
 /**
  * The one Translation Words article the question's words name, leaving out book names: two words together first ("pez
  * grande"), then each word, exact names before a close spelling ("jueces" ~ "juez").
@@ -1075,6 +1076,8 @@ export function codeReads(q: string, c: ConvState): boolean {
   // the last answer again in another language ("en inglés"): readQuestion builds it from what it was asked for (repeatOf)
   if (c.again === q) return true
   if (directSheet(q, c)) return true
+  // a story of Open Bible Stories by its number ("historia 34", "OBS 3:5"): the obs-question step reads it (obs.ts)
+  if (obsAsked(q)) return true
   const fu = followUpPreview(q, c)
   return !!fu && previewable(fu)
 }
@@ -1744,7 +1747,7 @@ async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
   const seen = new Set<string>()
   const out: Follow[] = []
   for (const f of follow) {
-    const key = f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''}` : `again ${f.again?.q ?? f.again?.label ?? ""}`
+    const key = (f.add ? `add ${f.add.lang} ${f.add.unit} ` : '') + (f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''} ${f.browse.obs ? 'obs' : ''}` : `again ${f.again?.q ?? f.again?.label ?? ""}`)
     if (seen.has(key)) continue
     seen.add(key)
     if (f.browse?.book) {
@@ -2022,6 +2025,22 @@ async function outOfScope(x: Ctx): Promise<Done> {
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
   {
+    // Open Bible Stories asked for (obs.ts): by number ("¿qué dice OBS 3:5?", "historia 34", "story 3, frame 4", "القصة 34"),
+    // or by what the story is about when one story clearly is it ("the story of Noah"); the sheet becomes that story or frame,
+    // answered by the `sheet` and `obs` steps (a question about a book, "la historia de Jonás", goes on as before)
+    name: 'obs-question',
+    when: (x) => x.q !== undefined && !x.at && !x.keep?.hits.length,
+    run: async (x) => {
+      const q = x.q!
+      const o = obsAsked(q) ?? (x.sheet.ref && !isObsRef(x.sheet.ref) ? null : await namedStory(q, x.sheet.lang).catch(() => null))
+      if (!o) return null
+      x.sheet = { ...x.sheet, intent: 'passage', ref: o.ref, what: o.what, concept: null, term: null, phrase: null, candidates: null, version: null }
+      x.note = undefined
+      x.searched += `\nobs: ${o.ref}`
+      return null
+    },
+  },
+  {
     // "¿Me lo puedes decir en inglés?" after a free search: the verses it found, from the pack asked for (a new search there
     // found others: Esther 2:14 became 2:17), each a button as before; the notes and questions with the question's words, and
     // the articles they name ("Ester", "Concubina"), from that pack
@@ -2160,7 +2179,7 @@ ${x.meta}` },
     // (not when it quotes a phrase of the verse: "Rut 3:9 qué quiere decir «extiende tu manto…»" wants the notes on that phrase)
     name: 'meaning',
     // (not over an introduction asked for: "¿Quién es el autor de Rut?" is no meaning of «autor»)
-    when: ({ q, sheet }) => q !== undefined && !!sheet.ref && !/:intro$/.test(sheet.ref) && has('meaning', q) && ['passage', 'advice'].includes(sheet.intent) && !(sheet.intent === 'advice' && sheet.phrase),
+    when: ({ q, sheet }) => q !== undefined && !!sheet.ref && !/:intro$/.test(sheet.ref) && !isObsRef(sheet.ref) && has('meaning', q) && ['passage', 'advice'].includes(sheet.intent) && !(sheet.intent === 'advice' && sheet.phrase),
     run: async (x) => {
       const { sheet, ui } = x
       const id = await termArticle(x.q!, ui)
@@ -2303,8 +2322,11 @@ ${x.meta}` },
       const want = packCode(ui) // the question's language (the sheet's is the pack it fell back to)
       const have = await installedLangs()
       const absent = !hits.length && !helps.length && !have.includes(want)
+      // the frames of Open Bible Stories that hold every word (obs.ts): under the verses, the first one a button
+      const stories = kind ? [] : await searchObs(q, x.sheet.lang).catch(() => [])
+      const storyLines = stories.map((h) => `**${h.label}** — ${h.snippet}`)
       // nothing fits well: what was searched, and ways to ask again
-      if (!absent && !hits.length && !helps.length) {
+      if (!absent && !hits.length && !helps.length && !stories.length) {
         const named = res.keywords.map((w) => bookExact(w)).find((b): b is string => !!b)
         const t = noFit(ui, res.keywords, st?.rarest ?? null, `${bookLabel(ui, named ?? 'jon')} ${named ? '1:1' : '1:17'}`)
         return {
@@ -2322,18 +2344,20 @@ ${x.meta}` },
         const f = await twStep(x.sheet, id).catch(() => null)
         if (f) follow.push(f)
       }
+      if (stories[0]) follow.push({ label: stories[0].label, sheet: passageSheet(x.sheet, stories[0].ref, ['text', 'notes', 'questions', 'terms'], stories[0].lang) })
       // nothing to tap yet (the language asked in is not on the phone): the ways forward
       if (!follow.length) follow.push(...(await wayForward(x.sheet, ui)))
       const first = hits[0]
       const partial = !good && hits.length > 0
+      const shown = [info, storyLines.length ? `### ${OW(ui).inStories}\n\n${storyLines.join('\n\n')}` : ''].filter(Boolean).join('\n\n')
       return {
-        answered: absent ? 'nopack' : 'search', ref: first ? `${first.book} ${first.ch}:${first.v}` : null, concept: null, found: hits.length + helps.length,
+        answered: absent ? 'nopack' : 'search', ref: first ? `${first.book} ${first.ch}:${first.v}` : stories[0]?.ref ?? null, concept: null, found: hits.length + helps.length + stories.length,
         reply: { ui, follow, packs: absent || undefined,
           intro: absent ? NP(ui).missing.replaceAll('{lang}', env.packName(want)).replace('{have}', have.map((l) => env.packName(l)).join(', '))
             : where ? FT(ui).where.replace('{ref}', hitLabel(ui, first!))
             : partial ? FT(ui).partial.replace('{all}', words).replace('{some}', (st?.matched ?? []).join(' '))
-            : hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words),
-          info: info || undefined, helps: groups.length ? groups : undefined,
+            : hits.length || helps.length || !stories.length ? (hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words)) : null,
+          info: shown || undefined, helps: groups.length ? groups : undefined,
           meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}${helps.length ? `\nhelps: ${helps.length}` : ''}` },
       }
     },
@@ -2345,6 +2369,34 @@ ${x.meta}` },
     run: async (x) => {
       x.r = await answerSheet(x.sheet)
       return null
+    },
+  },
+  {
+    // Open Bible Stories (obs.ts): the story or frame the sheet's answer showed, or what is missing; its next frame, the whole
+    // story, its key terms, its Bible passages, the list of stories, and the way to add the unit when this phone can
+    name: 'obs',
+    when: (x) => x.sheet.intent === 'passage' && isObsRef(x.sheet.ref),
+    run: async (x) => {
+      const { sheet, ui } = x
+      const f = facts as ObsFacts
+      if (f?.kind !== 'obs') return null
+      const follow: Follow[] = []
+      for (const s of await obsSteps(f, sheet.lang, ui).catch(() => [])) {
+        if (s.k === 'obs') follow.push({ label: s.label, sheet: passageSheet(sheet, s.ref, s.what) })
+        else if (s.k === 'bible') follow.push({ label: s.label, sheet: passageSheet(sheet, s.ref, ['text', 'notes'], (await packWithBook(s.ref.slice(0, 3), sheet.lang).catch(() => null)) ?? sheet.lang) })
+        else if (s.k === 'add') follow.push({ label: s.label, sheet: { ...sheet, id: `o${Date.now()}` }, add: { lang: s.lang, unit: 'obs' } })
+        else follow.push({ label: s.label, browse: { obs: true, lang: f.pack ?? sheet.lang } })
+      }
+      // the frame's key terms (two of them), after the next frame and the whole story
+      const terms = (await Promise.all(f.terms.slice(0, 2).map((id) => twStep(sheet, id).catch(() => null)))).filter((t): t is Follow => !!t)
+      follow.splice(Math.min(2, follow.length), 0, ...terms)
+      if (!follow.length) follow.push(browseStep(ui))
+      const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
+      return {
+        answered: 'passage', ref: sheet.ref, concept: null, found: x.r?.cites.length ?? 0,
+        reply: { intro: said, info: x.r?.answer, follow: [...x.others, ...follow].slice(0, MAX_FOLLOW), ui, lang: f.pack ?? sheet.lang,
+          meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nobs: ${f.state}${f.pack ? ` (${f.pack} pack)` : ''}\n${JSON.stringify(sheet, null, 1)}` },
+      }
     },
   },
   {
@@ -2461,6 +2513,12 @@ ${x.meta}` },
           if (f) follow.unshift(f)
         }
       }
+      // the story of Open Bible Stories this passage is told in, at its nearest frame (obs.ts), after the first steps
+      if (sheet.intent === 'passage' && pack && !none && follow.length && sheet.ref) {
+        const text = study?.texts[0]?.verses.map((v) => v.p.map((p) => p[0]).join('')).join(' ') ?? ''
+        const st = await storyStep(sheet.ref, sheet.lang, ui, text).catch(() => null)
+        if (st) follow.splice(Math.min(3, follow.length), 0, { label: st.label, sheet: passageSheet(sheet, st.ref, st.ref.includes(':') ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'], st.lang) })
+      }
       // a passage with nothing to go on from (the version asked for is not here): the ways forward, its book first
       if (sheet.intent === 'passage' && !follow.length) follow.push(...(await wayForward(sheet, ui, pack ? sheet.ref!.slice(0, 3) : null)))
       // online AI is given the article and the Translation Academy article its text links to ("How to Translate Names")
@@ -2533,7 +2591,9 @@ async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: str
     const links = [
       ...(reply.study?.terms.map((t) => t.id) ?? []), ...(reply.study?.notes.map((n) => n.concept ?? '') ?? []),
       ...(reply.sources?.map((s) => s.id) ?? []), ...(reply.ctx ? [reply.ctx] : []),
-      ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' ? f.sheet.concept ?? '' : kind === 'search' ? f.sheet?.ref ?? '' : '')),
+      ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' ? f.sheet.concept ?? '' : kind === 'search' || isObsRef(sheet.ref) ? f.sheet?.ref ?? '' : '')),
+      // the story a passage is told in (obs.ts "This part is told in OBS 3"): going there goes deeper (graph.ts classify)
+      ...(reply.follow ?? []).map((f) => { const o = parseObsRef(f.sheet?.ref); return o ? `obs:${o.n}` : '' }),
     ].filter(Boolean)
     // a search keeps the verses it found, in order: going back to it, "the second one" is its second verse
     const found = kind === 'search' ? (c.found ?? []).map((h) => `${h.book} ${h.ch}:${h.v}`) : undefined
@@ -2558,6 +2618,16 @@ async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: str
     reply.follow = reply.follow.map(({ back, ...f }) => f)
   }
   return id
+}
+
+/**
+ * The sheet whose passage context online AI is given (answer.ts passageContext): the answer's own, else, when the branch the
+ * answer is on goes through a story of Open Bible Stories (an article tapped under it), that story: its plain text.
+ */
+export function contextSheet(c: ConvState, r: Pick<Answered, 'sheet' | 'node'>): Sheet | null {
+  if (r.sheet?.intent === 'passage' && r.sheet.ref) return r.sheet
+  const p = c.graph && r.node ? passageAt(c.graph, r.node) : undefined
+  return p && isObsRef(p.sheet.ref) ? sheetOfNode(p) : r.sheet
 }
 
 /**
