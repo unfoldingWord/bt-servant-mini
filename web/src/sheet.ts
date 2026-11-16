@@ -40,6 +40,18 @@ export function bookExact(name: string): string | null {
   exactMemo.set(name, c)
   return c
 }
+const NAME_WORDS = new Map<string, Set<string>>()
+/** Every word of every name a book has in any language's table, folded ("cantar", "de", "los", "cantares", "song", "kidung"…). */
+export function bookNameWords(code: string): Set<string> {
+  let s = NAME_WORDS.get(code)
+  if (!s) {
+    s = new Set([code])
+    for (const t of Object.values(books as Record<string, Record<string, string>>))
+      for (const [n, c] of Object.entries(t)) if (c === code) for (const w of n.split(/\s+/)) if (w) s.add(fold(w))
+    NAME_WORDS.set(code, s)
+  }
+  return s
+}
 let LAST_WORDS: Set<string> | undefined
 /**
  * Whether a word is the last of a book name of several words ("काम" of "प्रेरितों के काम", "الأولى", "rasul", "cantiques"), so
@@ -204,7 +216,7 @@ for (const [id, byLang] of Object.entries(glossary as Record<string, Record<stri
   }
 
 /** Article ids whose name is the term, in the pack of `lang` and then English (tW first, then tA: all four manuals). */
-async function idsOf(term: string | null, packLangs: string[]): Promise<string[] | null> {
+export async function idsOf(term: string | null, packLangs: string[]): Promise<string[] | null> {
   if (!term) return null
   const f = fold(term).replace(/[«»"“”'?¿!¡.]/g, '').replace(/\s+/g, ' ').trim()
   const fig = (figs as Record<string, string>)[f]
@@ -246,7 +258,10 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
   let lang = 'en'
   for (const c of [prefer, UI_PACK[ui], 'en']) if (c && (await hasLang(c))) { lang = c; break }
   if (!(await hasLang(lang))) lang = (await installedLangs())[0] ?? 'en'
-  const packLangs = lang === 'en' ? ['en'] : [lang, 'en']
+  // a term is named in the question's language even when the helps come from another pack ("¿Qué es la paz?" with the
+  // helps in English: «paz» is tw:kt/peace)
+  const own = UI_PACK[ui] && UI_PACK[ui] !== lang && (await hasLang(UI_PACK[ui]!)) ? [UI_PACK[ui]!] : []
+  const packLangs = [...new Set([lang, ...own, 'en'])]
   const sheet: Sheet = {
     id: qid, intent: d.intent ?? 'unknown', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang,
   }

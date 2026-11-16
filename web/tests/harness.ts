@@ -2,7 +2,7 @@
 // would give are part of the case (gold slots, or none = code only), or the case starts from a gold call sheet.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ALL_PACKS, installPacks } from './fs-packs'
+import { ALL_PACKS, installedPacks, installPacks } from './fs-packs'
 import { answer, codeReads, env, type ConvState, type Made, questionOf, readQuestion } from '../src/pipeline'
 import { has } from '../src/commands'
 import type { Sheet } from '../src/answer'
@@ -50,7 +50,8 @@ export type Outcome = {
 let installed = ''
 /** The full build: every pack on disk. */
 export async function fullPhone() {
-  if (installed === 'all') return
+  // (another test file may have left fewer installed since: then all again)
+  if (installed === 'all' && installedPacks().length === ALL_PACKS.length) return
   await installPacks(ALL_PACKS)
   installed = 'all'
 }

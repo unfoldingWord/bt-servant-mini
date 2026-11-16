@@ -54,8 +54,9 @@ describe('A: the empty box', () => {
   test('the ways of asking each language reads (shapes.test.ts), in the order of use', () => {
     const got = Object.fromEntries(['en', 'es', 'fr', 'id', 'hi', 'ar'].map((ui) => [ui, show(startRow(ctx(ui)))]))
     expect(got).toEqual({
-      en: ['shape:Passage', 'shape:Notes on…', 'shape:How to translate…?'],
-      es: ['shape:Pasaje', 'shape:Notas de…'],
+      // (the meaning shape reads in English and Spanish since Nov 16: search.ts ASKS)
+      en: ['shape:Passage', 'shape:Notes on…', 'shape:What does … mean?', 'shape:How to translate…?'],
+      es: ['shape:Pasaje', 'shape:Notas de…', 'shape:¿Qué significa…?'],
       fr: ['shape:Passage', 'shape:Notes sur…', 'shape:Que signifie… ?', 'shape:Comment traduire… ?'],
       id: ['shape:Perikop', 'shape:Catatan…', 'shape:Apa arti…?', 'shape:Bagaimana menerjemahkan…?'],
       hi: ['shape:अंश', 'shape:…की टिप्पणियाँ'],
@@ -91,7 +92,7 @@ describe('A: the empty box', () => {
     const k = new Composer(box, hooks(log))
     k.books = all
     k.focusChanged(true)
-    expect(show(k.row)).toEqual(['shape:Pasaje', 'shape:Notas de…'])
+    expect(show(k.row)).toEqual(['shape:Pasaje', 'shape:Notas de…', 'shape:¿Qué significa…?'])
     await k.tap(k.row.items[0]!)
     expect(k.row.pick!.length).toBeGreaterThan(5)
     await k.tap(k.row.pick!.find((b) => b.book === 'rut')!)
