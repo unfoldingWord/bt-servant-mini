@@ -1,7 +1,8 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { passageContext, resetLangs, type Sheet } from './answer'
-import { backPanel, fillTitles, renderHelps, renderStudy, setHooks, setViewLang } from './view'
+import { backPanel, fillTitles, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
+import { chooseCards, moreLabel, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
@@ -215,7 +216,39 @@ const LIMITS: Record<string, string> = {
   en: 'What this app can and cannot do ›', es: 'Lo que esta app puede y no puede hacer ›', fr: 'Ce que cette application peut et ne peut pas faire ›',
   id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
 }
-function renderMsg(m: Msg): HTMLElement {
+/** The online answer's text, with its badge ("Online AI · model"). */
+function aiBlock(a: NonNullable<Msg['ai']>): HTMLElement {
+  const ai = el('div', 'ai')
+  ai.appendChild(el('span', 'ai-badge', `${OT().label} · ${modelLabel(a.model)}`))
+  const body = el('div', 'ai-text')
+  body.dir = 'auto' // an Arabic answer reads right to left
+  body.innerHTML = md(a.text)
+  ai.appendChild(body)
+  return ai
+}
+/** The question an answer answers: the person's message just before it (not a "Back to …" divider). */
+function askedFor(m: Msg): string | undefined {
+  const cv = convs.find((x) => x.msgs.includes(m))
+  const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
+  return prev?.who === 'me' && !prev.mark ? prev.text : undefined
+}
+/**
+ * The online answer arrived for a message drawn while it was written: its text in place of "Writing…", the cards untouched,
+ * and the share button made again, so it sends the online answer (it was made before it existed, or not at all).
+ */
+function fillAi(node: HTMLElement, m: Msg) {
+  if (!m.ai) return
+  node.querySelector('.ai.pending')?.replaceWith(aiBlock(m.ai))
+  markCited(node, (m.ai.sources ?? []).map((s) => s.id), m.ui ?? nav)
+  const sh = shareButton(m, m.ui ?? nav, askedFor(m))
+  const old = node.querySelector(':scope > .share')
+  if (old) old.remove()
+  const rate = node.querySelector(':scope > .rate')
+  if (sh && rate) rate.before(sh)
+  else if (sh) node.appendChild(sh)
+}
+/** `pending`: online AI is writing its answer to this message (the helps show as cards already). */
+function renderMsg(m: Msg, pending = false): HTMLElement {
   // going back to an earlier point: a small divider ("Back to Ruth 2:3"), not a bubble
   if (m.who === 'me' && m.mark) {
     const d = el('div', 'msg mark')
@@ -232,41 +265,32 @@ function renderMsg(m: Msg): HTMLElement {
     pm.dir = 'auto'
     d.appendChild(pm)
   }
-  // with an online answer, it comes first and the offline answer becomes its sources
+  // the question this answers (the person's message before it): the passage shows the notes about its words first
+  const cv = convs.find((x) => x.msgs.includes(m))
+  const asked = askedFor(m)
+  // with an online answer (or while it is written), it comes first, then the helps the phone found as cards in sight (the
+  // articles it was grounded in first), then the whole phone's answer folded behind what it holds ("See all 66 notes…").
+  // The cards are drawn already while the answer is written and stay where they are when it arrives (fillAi).
   let host: HTMLElement = d
-  if (m.ai) {
-    const ai = el('div', 'ai')
-    ai.appendChild(el('span', 'ai-badge', `${OT().label} · ${modelLabel(m.ai.model)}`))
-    const body = el('div', 'ai-text')
-    body.dir = 'auto' // an Arabic answer reads right to left
-    body.innerHTML = md(m.ai.text)
-    ai.appendChild(body)
-    d.appendChild(ai)
+  if (showsCards(m, pending)) {
+    d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
+    const ui = m.ui ?? nav
+    const plan = chooseCards({
+      study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: asked,
+      sources: m.ai?.sources?.length ? m.ai.sources : m.sources, cited: m.ai?.sources?.map((s) => s.id),
+    })
     const src = document.createElement('details')
-    src.className = 'sources'
-    src.appendChild(el('summary', '', OT().sources))
-    // the article the answer was written from, always named, whatever the model wrote: a tap opens it in the sources below
-    // (it is this answer's own article, so no new question and no second online call)
-    if (m.ai.sources?.length) {
-      const f = el('div', 'follow ai-sources')
-      for (const s of m.ai.sources) {
-        const b = el('button', '', s.label) as HTMLButtonElement
-        b.type = 'button'
-        b.onclick = () => {
-          src.open = true
-          src.scrollIntoView({ block: 'start', behavior: 'smooth' })
-        }
-        f.appendChild(b)
-      }
-      ai.appendChild(f)
+    src.className = 'sources fold'
+    src.appendChild(el('summary', '', moreLabel(plan.more, ui)))
+    const reveal = (what: 'text' | 'answer') => {
+      src.open = true
+      const at = (what === 'text' && src.querySelector<HTMLElement>('.study .tx')) || src
+      at.scrollIntoView({ block: 'start', behavior: 'smooth' })
     }
+    if (plan.cards.length) d.appendChild(renderHelpCards(plan.cards, { ui, lang: m.lang ?? 'en', study: m.study, helps: m.helps, reveal }))
     d.appendChild(src)
     host = src
   }
-  // the question this answers (the person's message before it): the passage shows the notes about its words first
-  const cv = convs.find((x) => x.msgs.includes(m))
-  const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
-  const asked = prev?.who === 'me' && !prev.mark ? prev.text : undefined
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.study) host.appendChild(renderStudy(m.study, asked))
   else if (m.info) {
@@ -1062,7 +1086,11 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   updateMapBtn()
   c.updated = Date.now()
   save()
-  let node = renderMsg(m)
+  // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
+  // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
+  const asking = m.who === 'bot' && !!(m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()
+  // while it is written, the phone's answer shows as it will under it (its helps as cards), so nothing moves when it arrives
+  let node = renderMsg(m, asking)
   wait.replaceWith(node)
   if (m.waiting) {
     log.querySelectorAll('.fu').forEach((x) => x.remove())
@@ -1077,11 +1105,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     reaskLater = false
     setTimeout(() => reaskWaiting(), 0)
   }
-  // level 3: the online answer, if allowed and there is internet; the offline answer already stands
-  // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
-  if (m.who === 'bot' && (m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()) {
-    const writing = el('p', 'ai pending', OT().writing)
-    node.prepend(writing)
+  if (asking) {
     // what the model is given, chosen with the conversation's graph (context.ts): the history of this answer's branch; the
     // helps the phone found (of an article, the sections the question needs) with the passage's context; the articles one
     // link away and the earlier points that share a word with the question; the path to this point. The articles the phone
@@ -1095,17 +1119,22 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     if (res) {
       m.ai = res
       save()
-      const fresh = renderMsg(m)
-      node.replaceWith(fresh)
-      node = fresh
-    } else if (onlineProblem) {
+      fillAi(node, m)
+      return
+    }
+    // no online answer: the phone's answer as it is without online AI, with why above it
+    const fresh = renderMsg(m)
+    node.replaceWith(fresh)
+    node = fresh
+    const writing = el('p', 'ai', '')
+    if (onlineProblem) {
+      node.prepend(writing)
       // say why there is no online answer this time; the phone's answer stands
-      writing.classList.remove('pending')
       writing.textContent = onlineProblem === 'signin' ? OT().relogin : onlineProblem === 'limit' ? OT().limit : NT().unreachable
       if (onlineProblem === 'network' && !isOnline()) netNote('off')
       // online AI did not answer: the question again (when there is a connection), or Browse; the phone's answer stands
       if (onlineProblem === 'network') writing.after(followRow(m, [...(isOnline() ? againStep(m.ui ?? nav, again) : []), browseStep(m.ui ?? nav)], 'follow ai-retry'))
-    } else writing.remove()
+    }
   }
 }
 

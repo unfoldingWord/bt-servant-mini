@@ -3,18 +3,19 @@
 // The panel keeps a stack, so "back" returns to where the reader was; "Open in chat" turns an article into a message.
 import { articleView, helpView, type Study, titleFor } from './answer'
 import { focusOrder, focusWords, SHOWN, wordsOf } from './focus'
+import { type Card, cardsT, firstLine } from './helpcards'
 import { linkTarget } from './links'
 import { md } from './md'
 import { count } from './usage'
 
-type Ui = { back: string; close: string; inChat: string; notes: string; terms: string; noHelps: string; loading: string; missing: string; texts: string }
+type Ui = { back: string; close: string; inChat: string; notes: string; terms: string; noHelps: string; loading: string; missing: string; texts: string; failed: string; retry: string }
 const UI: Record<string, Ui> = {
-  en: { back: 'Back', close: 'Close', inChat: 'Open in chat', notes: 'Translation notes', terms: 'Key terms', noHelps: 'No note or key term quotes this word.', loading: 'Opening…', missing: 'This article is not in the installed packs.', texts: 'Other versions' },
-  es: { back: 'Atrás', close: 'Cerrar', inChat: 'Abrir en el chat', notes: 'Notas de traducción', terms: 'Palabras clave', noHelps: 'Ninguna nota ni palabra clave cita esta palabra.', loading: 'Abriendo…', missing: 'Este artículo no está en los paquetes instalados.', texts: 'Otras versiones' },
-  fr: { back: 'Retour', close: 'Fermer', inChat: 'Ouvrir dans le chat', notes: 'Notes de traduction', terms: 'Termes clés', noHelps: 'Aucune note ni terme clé ne cite ce mot.', loading: 'Ouverture…', missing: "Cet article n'est pas dans les paquets installés.", texts: 'Autres versions' },
-  id: { back: 'Kembali', close: 'Tutup', inChat: 'Buka di obrolan', notes: 'Catatan terjemahan', terms: 'Istilah kunci', noHelps: 'Tidak ada catatan atau istilah kunci untuk kata ini.', loading: 'Membuka…', missing: 'Artikel ini tidak ada di paket yang terpasang.', texts: 'Versi lain' },
-  hi: { back: 'वापस', close: 'बंद करें', inChat: 'चैट में खोलें', notes: 'अनुवाद नोट्स', terms: 'मुख्य शब्द', noHelps: 'कोई नोट या मुख्य शब्द इस शब्द को उद्धृत नहीं करता।', loading: 'खुल रहा है…', missing: 'यह लेख इंस्टॉल किए गए पैकों में नहीं है।', texts: 'अन्य संस्करण' },
-  ar: { back: 'رجوع', close: 'إغلاق', inChat: 'افتح في المحادثة', notes: 'ملاحظات الترجمة', terms: 'الكلمات الرئيسية', noHelps: 'لا توجد ملاحظة أو كلمة رئيسية لهذه الكلمة.', loading: 'جارٍ الفتح…', missing: 'هذه المقالة ليست في الحزم المثبّتة.', texts: 'ترجمات أخرى' },
+  en: { back: 'Back', close: 'Close', inChat: 'Open in chat', notes: 'Translation notes', terms: 'Key terms', noHelps: 'No note or key term quotes this word.', loading: 'Opening…', missing: 'This article is not in the installed packs.', texts: 'Other versions', failed: 'Could not open this.', retry: 'Try again' },
+  es: { back: 'Atrás', close: 'Cerrar', inChat: 'Abrir en el chat', notes: 'Notas de traducción', terms: 'Palabras clave', noHelps: 'Ninguna nota ni palabra clave cita esta palabra.', loading: 'Abriendo…', missing: 'Este artículo no está en los paquetes instalados.', texts: 'Otras versiones', failed: 'No se pudo abrir.', retry: 'Reintentar' },
+  fr: { back: 'Retour', close: 'Fermer', inChat: 'Ouvrir dans le chat', notes: 'Notes de traduction', terms: 'Termes clés', noHelps: 'Aucune note ni terme clé ne cite ce mot.', loading: 'Ouverture…', missing: "Cet article n'est pas dans les paquets installés.", texts: 'Autres versions', failed: "Impossible d'ouvrir ceci.", retry: 'Réessayer' },
+  id: { back: 'Kembali', close: 'Tutup', inChat: 'Buka di obrolan', notes: 'Catatan terjemahan', terms: 'Istilah kunci', noHelps: 'Tidak ada catatan atau istilah kunci untuk kata ini.', loading: 'Membuka…', missing: 'Artikel ini tidak ada di paket yang terpasang.', texts: 'Versi lain', failed: 'Tidak bisa dibuka.', retry: 'Coba lagi' },
+  hi: { back: 'वापस', close: 'बंद करें', inChat: 'चैट में खोलें', notes: 'अनुवाद नोट्स', terms: 'मुख्य शब्द', noHelps: 'कोई नोट या मुख्य शब्द इस शब्द को उद्धृत नहीं करता।', loading: 'खुल रहा है…', missing: 'यह लेख इंस्टॉल किए गए पैकों में नहीं है।', texts: 'अन्य संस्करण', failed: 'इसे खोला नहीं जा सका।', retry: 'फिर से कोशिश करें' },
+  ar: { back: 'رجوع', close: 'إغلاق', inChat: 'افتح في المحادثة', notes: 'ملاحظات الترجمة', terms: 'الكلمات الرئيسية', noHelps: 'لا توجد ملاحظة أو كلمة رئيسية لهذه الكلمة.', loading: 'جارٍ الفتح…', missing: 'هذه المقالة ليست في الحزم المثبّتة.', texts: 'ترجمات أخرى', failed: 'تعذّر فتح هذا.', retry: 'حاول مرة أخرى' },
 }
 let ui: Ui = UI.en!
 export function setViewLang(lang: string) {
@@ -85,6 +86,67 @@ export function renderHelps(groups: { head: string; items: HelpItem[] }[]): HTML
     box.appendChild(list)
   }
   return box
+}
+
+/**
+ * The helps under an online answer, as cards in sight (helpcards.ts chooses them): a kind, a title and a first line, each a
+ * button that opens what the phone's answer opens (a note or an article in the panel; the text and the answer itself in the
+ * fold below, through `reveal`). An article's first line is read when drawn, in a line kept for it, so nothing moves.
+ */
+export function renderHelpCards(cards: Card[], o: {
+  ui: string; lang: string; study?: Study; helps?: { head: string; items: HelpItem[] }[]; reveal: (what: 'text' | 'answer') => void
+}): HTMLElement {
+  const L = cardsT(o.ui)
+  const box = el('section', 'hcards')
+  box.setAttribute('aria-label', L.head)
+  box.appendChild(el('h4', 'hc-head', L.head))
+  const list = el('div', 'hc-list')
+  for (const c of cards) {
+    const b = el('button', `hc hc-${c.kind}`)
+    b.type = 'button'
+    const meta = el('span', 'hc-meta')
+    const title = el('span', 'hc-title', c.title)
+    const line = el('span', 'hc-line', c.line)
+    title.dir = line.dir = 'auto' // a title or line in Arabic reads right to left in any app language
+    b.append(meta, title, line)
+    if (c.kind === 'article') {
+      const lang = o.study?.terms.some((t) => t.id === c.id) ? o.study.lang : o.lang
+      b.dataset.id = c.id
+      b.dataset.kind = c.id.startsWith('ta:') ? L.ta : L.tw
+      setCited(b, c.cited, L)
+      // (drawn as the app starts, the packs may not be open yet: tried again later, a few times)
+      const waits = [1500, 4000, 10000, 20000]
+      const read = (n: number) => articleView(lang, c.id).then((a) => {
+        if (!a) throw 0
+        if (title.textContent === c.id.split('/').pop()!.replace(/[-_]/g, ' ')) title.textContent = a.title
+        line.textContent = firstLine(a.md)
+      }).catch(() => { if (n < waits.length && b.isConnected) setTimeout(() => read(n + 1), waits[n]) })
+      if (!c.line) setTimeout(() => read(0), 0)
+      b.onclick = () => openPanel({ kind: 'article', id: c.id, lang })
+    } else if (c.kind === 'note' && o.study) {
+      meta.textContent = o.study.long ? `${L.note} · ${c.ref}` : L.note
+      b.onclick = () => openPanel({ kind: 'note', study: o.study!, i: c.i, root: box })
+    } else if (c.kind === 'help') {
+      meta.textContent = c.head
+      const h = o.helps?.[c.g]?.items[c.i]
+      if (h) b.onclick = () => openPanel({ kind: 'help', lang: h.lang, book: h.book, id: h.id, which: h.kind, label: h.ref })
+    } else if (c.kind === 'text') {
+      meta.textContent = `${L.text} · ${c.label}`
+      b.onclick = () => o.reveal('text')
+    } else b.onclick = () => o.reveal('answer')
+    list.appendChild(b)
+  }
+  box.appendChild(list)
+  return box
+}
+function setCited(b: HTMLElement, cited: boolean, L: ReturnType<typeof cardsT>) {
+  b.classList.toggle('cited', cited)
+  const meta = b.querySelector('.hc-meta')
+  if (meta) meta.textContent = cited ? `${L.cited} · ${b.dataset.kind}` : b.dataset.kind ?? ''
+}
+/** The online answer arrived: its articles' cards say so, where they stand (no card moves). */
+export function markCited(root: HTMLElement, ids: string[], ui: string) {
+  for (const b of root.querySelectorAll<HTMLElement>('.hc[data-id]')) setCited(b, ids.includes(b.dataset.id ?? ''), cardsT(ui))
 }
 
 /**
@@ -349,6 +411,15 @@ function noteBlock(s: Study, i: number): HTMLElement {
   return d
 }
 
+/** The pack could not be read (it failed to open, say): say so, with a button that tries again, never "Opening…" for good. */
+function failed(sh: NonNullable<typeof sheet>) {
+  sh.body.appendChild(el('p', 'muted', ui.failed))
+  const b = el('button', 'sheet-chat', ui.retry)
+  b.type = 'button'
+  b.onclick = () => void draw()
+  sh.foot.appendChild(b)
+}
+
 async function draw() {
   const sh = ensureSheet()
   const v = stack[stack.length - 1]
@@ -385,8 +456,9 @@ async function draw() {
   }
   if (v.kind === 'help') {
     sh.title.textContent = v.label
-    const h = await helpView(v.lang, v.book, v.id, v.which)
+    const h = await helpView(v.lang, v.book, v.id, v.which).catch(() => undefined)
     if (stack[stack.length - 1] !== v) return
+    if (h === undefined) return failed(sh)
     if (!h) {
       sh.body.appendChild(el('p', 'muted', ui.missing))
       return
@@ -409,8 +481,12 @@ async function draw() {
     return
   }
   sh.title.textContent = ui.loading
-  const a = await articleView(v.lang, v.id)
+  const a = await articleView(v.lang, v.id).catch(() => undefined)
   if (stack[stack.length - 1] !== v) return // the reader moved on
+  if (a === undefined) {
+    sh.title.textContent = v.id.split('/').pop()!.replace(/[-_]/g, ' ')
+    return failed(sh)
+  }
   if (!a) {
     sh.title.textContent = v.id.split('/').pop()!
     sh.body.appendChild(el('p', 'muted', ui.missing))
