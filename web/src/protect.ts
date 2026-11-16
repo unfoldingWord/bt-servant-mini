@@ -127,7 +127,11 @@ export function discreetOn(): boolean {
 export function applyBrand(lang: string) {
   const on = discreetOn()
   const h1 = document.querySelector('header .brand h1')
-  if (h1) h1.textContent = on ? PT(lang).name : 'BTS' // short, so the header fits; the page title keeps the full name
+  if (h1) {
+    h1.textContent = on ? PT(lang).name : 'BTS' // short, so the header fits; the page title keeps the full name
+    if (on) h1.removeAttribute('aria-label')
+    else h1.setAttribute('aria-label', 'BT Servant Mini') // a screen reader says the full name
+  }
   // (an <svg> has no `hidden` property: display it is)
   for (const e of document.querySelectorAll<HTMLElement | SVGElement>('header .brand svg, header .brand .badge')) e.style.display = on ? 'none' : ''
   document.title = on ? PT(lang).name : 'BT Servant Mini'
