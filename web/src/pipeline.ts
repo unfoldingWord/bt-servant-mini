@@ -7,7 +7,7 @@ import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
 import { learnStep } from './learn'
-import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, stepOf, stepTarget } from './graph'
+import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import type { HelpItem } from './view'
@@ -2151,6 +2151,25 @@ export function moveOut<M extends Moved>(c: ConvState & { msgs: M[] }, m: M, ui:
 }
 
 // ------------------------------------------------------------------------------------------------- the path, per answer
+/**
+ * The steps of a path through a book that the packs on the phone can answer: the introduction and the sections always; its key
+ * terms, its notes, its questions when an installed pack has them for the book (an answer takes them from any of them). The
+ * Hindi pack has no questions: a Hindi-only phone's path through Acts has four steps.
+ */
+export async function stepsHad(book: string): Promise<number[]> {
+  const out = new Set([1, 2])
+  const rows = (t: any) => ((t?.rows ?? []) as any[]).filter((x) => !(x.cols?.isIntro === true || x.cols?.isIntro === 'true'))
+  for (const l of await installedLangs().catch(() => [] as string[])) {
+    if (out.size === 5) break
+    const r = await openLang(l).catch(() => null)
+    if (!r?.installed(`book:${book}`)) continue
+    const m: any = await r.book(book).catch(() => null)
+    if (rows(m?.links).some((x) => x.concept)) out.add(3)
+    if (rows(m?.notes).length) out.add(4)
+    if (rows(m?.questions).length) out.add(5)
+  }
+  return [...out].sort((a, b) => a - b)
+}
 /** The sections of a book's chapter (none when it has no such chapter or no text on the phone). */
 const secsOf = (p: Path, ch: number | null): Promise<Sec[]> => (ch ? sectionsOf(p.book, ch, p.lang).catch(() => []) : Promise.resolve([]))
 /** A step of the path as a call sheet (the next step's button, the way back to it, the Map's "Continue the path"). */
@@ -2177,8 +2196,9 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   delete g.pathBefore
   let at: Path | null = null
   if (made.path && P?.book === made.path.book) {
-    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null }
-    reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book))
+    const has = await stepsHad(made.path.book)
+    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, has }
+    reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book), has)
     if (reply.drift && g.path) g.pathBefore = g.path
   } else if (g.path) at = stepOf(g.path, ref, x.sheet.what ?? [], await secsOf(g.path, P?.ch ?? null))
   const p = g.path
@@ -2188,7 +2208,7 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
     g.path = at
     reply.pathMark = pathLabel(x.ui, at, 'mark')
     const ch = at.ch ?? 1
-    const nx = nextStep(at, await secsOf(at, ch), at.step === 5 ? await secsOf(at, ch + 1) : [])
+    const nx = nextStep(at, await secsOf(at, ch), lastOfSection(at) ? await secsOf(at, ch + 1) : [])
     const sheet = nx ? pathSheet(nx, x.sheet) : null
     if (nx && sheet) {
       g.pathNext = nx

@@ -84,16 +84,17 @@ for (const ui of UIS) {
 
 // the About's "if you say what you are working on" example starts a light path through a book the pack has (setup.ts; the
 // sentence is checked against its text, so the two stay the same)
-const PATHS: [string, string, string, string][] = [
-  ['hi', 'hi', 'मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ', 'act'],
-  ['id', 'id', 'Saya akan menerjemahkan Titus', 'tit'],
+// (the steps of each path: the Hindi pack has no questions for Acts, so its path has four)
+const PATHS: [string, string, string, string, number][] = [
+  ['hi', 'hi', 'मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ', 'act', 4],
+  ['id', 'id', 'Saya akan menerjemahkan Titus', 'tit', 5],
 ]
-for (const [ui, pack, q, book] of PATHS)
+for (const [ui, pack, q, book, steps] of PATHS)
   test(`${ui}: «${q}» starts a light path with only the ${pack} pack`, async () => {
     expect(readFileSync(`${import.meta.dir}/../src/setup.ts`, 'utf-8')).toContain(`«${q}»`)
     await installPacks([pack])
     const r = await turn({ last: null }, { q, slots: null }, ui)
     expect(r.ref).toBe(`${book} front:intro`)
     expect(r.found).toBeGreaterThan(0)
-    expect((r.reply as { pathMark?: string }).pathMark ?? '').toMatch(/1\D+5/)
+    expect((r.reply as { pathMark?: string }).pathMark ?? '').toMatch(new RegExp(`^[^0-9]*1[^0-9]+${steps}:`))
   }, 120_000)

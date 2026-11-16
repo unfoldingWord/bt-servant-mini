@@ -524,3 +524,75 @@ test('every app language has every word of the welcome and the lessons', () => {
     expect(WT(ui).translating).toContain('{book}')
   }
 })
+
+// ------------------------------------------------------------------------------------- a book's path, only steps with helps
+
+/** Walks a book's path from its start (as door 1 or typed), following "Next" `n` times: each answer's marker, and what it found. */
+async function walk(ui: string, first: Awaited<ReturnType<typeof turn>>, c: ConvState, n: number) {
+  const out = [{ mark: first.reply.pathMark, found: first.found, line: first.reply.pathLine }]
+  let r = first
+  for (let i = 0; i < n; i++) {
+    const nx = r.reply.follow?.find((f) => f.pathNext)
+    if (!nx) break
+    r = await turn(c, { q: nx.label, sheet: nx.sheet as Sheet }, ui)
+    out.push({ mark: r.reply.pathMark, found: r.found, line: undefined })
+  }
+  return out
+}
+
+test('a path skips the steps the packs cannot answer: Hindi Acts has no questions (4 steps), Indonesian Titus has them (5)', async () => {
+  if (ALL_PACKS.includes('hi')) {
+    await installPacks(['hi'])
+    const c: ConvState = { last: null }
+    // as typed (the coordinator's report), and from the welcome's door
+    const r = await turn(c, { q: 'मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ' }, 'hi')
+    expect(r.ref).toBe('act front:intro')
+    expect(c.graph?.path?.has).toEqual([1, 2, 3, 4])
+    expect(r.reply.pathLine).not.toContain('प्रश्न')
+    const steps = await walk('hi', r, c, 5)
+    expect(steps.map((s) => s.mark)).toEqual([
+      expect.stringMatching(/ · चरण 1\/4: परिचय$/), expect.stringMatching(/ 1:1–\d+ · चरण 2\/4: खंड$/),
+      expect.stringMatching(/ · चरण 3\/4: मुख्य शब्द$/), expect.stringMatching(/ · चरण 4\/4: टिप्पणियाँ$/),
+      expect.stringMatching(/ 1:\d+–\d+ · चरण 2\/4: खंड$/), expect.stringMatching(/ · चरण 3\/4: मुख्य शब्द$/),
+    ])
+    // every step finds something (no "questions" step that finds nothing)
+    for (const s of steps) expect(s.found, s.mark).toBeGreaterThan(0)
+    // "questions" asked anyway is not a step of this path
+    const q = await turn(c, { q: 'x', sheet: { ...article('', 'hi'), intent: 'passage', concept: null, ref: 'act 1:1-5', what: ['questions'] } }, 'hi')
+    expect(q.reply.pathMark).toBeUndefined()
+    const d = await bookStart('hi', 'act', { last: null })
+    expect(d.path?.book).toBe('act')
+  }
+  if (ALL_PACKS.includes('id')) {
+    await installPacks(['id'])
+    const c: ConvState = { last: null }
+    const r = await answer(c, await bookStart('id', 'tit', c), performance.now())
+    expect(c.graph?.path?.has).toEqual([1, 2, 3, 4, 5])
+    expect(r.reply.pathLine).toContain('pertanyaan')
+    const steps = await walk('id', r, c, 5)
+    expect(steps.map((s) => s.mark)).toEqual([
+      expect.stringMatching(/ · langkah 1 dari 5: pengantar$/), expect.stringMatching(/ · langkah 2 dari 5: bagian$/), expect.stringMatching(/ · langkah 3 dari 5: istilah kunci$/),
+      expect.stringMatching(/ · langkah 4 dari 5: catatan$/), expect.stringMatching(/ · langkah 5 dari 5: pertanyaan$/),
+      expect.stringMatching(/ · langkah 2 dari 5: bagian$/),
+    ])
+    for (const s of steps) expect(s.found, s.mark).toBeGreaterThan(0)
+  }
+}, 180000)
+
+test('the path model: next, step-of and the count follow the steps it has', async () => {
+  const { nextStep, stepOf, pathWords, pathStartLine } = await import('../src/graph')
+  const P = { book: 'act', ch: 1, step: 2, sec: [1, 5] as [number, number], lang: 'hi', task: 'translate' as const, has: [1, 2, 4] }
+  const secs: [number, number][] = [[1, 5], [6, 11]]
+  expect(nextStep(P, secs, [])).toMatchObject({ step: 4, sec: [1, 5] }) // no key terms: the notes
+  expect(nextStep({ ...P, step: 4 }, secs, [])).toMatchObject({ step: 2, sec: [6, 11] }) // no questions: the next section
+  expect(nextStep({ ...P, step: 4, sec: [6, 11] }, secs, [[1, 3]])).toMatchObject({ step: 2, ch: 2, sec: [1, 3] })
+  expect(stepOf(P, 'act 1:1-5', ['questions'], secs)).toBeNull()
+  expect(stepOf(P, 'act 1:1-5', ['terms'], secs)).toBeNull()
+  expect(stepOf(P, 'act 1:1-5', ['notes'], secs)).toMatchObject({ step: 4 })
+  expect(pathWords('en', { ...P, step: 4 }, 'Acts', 'mark')).toBe('Acts 1:1–5 · step 3 of 3: notes')
+  expect(pathStartLine('en', 'Acts', P.has)).toBe('A path through Acts: introduction → sections → notes. Ask anything along the way.')
+  // a path kept from before (no `has`): all five, as before
+  const { has: _, ...old } = P
+  expect(pathWords('en', { ...old, step: 5 }, 'Acts', 'mark')).toBe('Acts 1:1–5 · step 5 of 5: questions')
+  expect(nextStep({ ...old, step: 3 }, secs, [])).toMatchObject({ step: 4 })
+})
