@@ -117,6 +117,8 @@
   .cmp-ok { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   .cmp-missing { color: var(--muted); border-style: dashed; }
   .cmp-nums { display: flex; gap: 4px; flex: none; }
+  .cmp-pick { display: flex; gap: 8px; flex: none; }
+  .cmp-next { border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .cmp-n { flex: none; width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: 15px/1 system-ui, sans-serif; }
   .cmp-note { flex: none; color: var(--muted); font: 13.5px/1.5 system-ui, sans-serif; white-space: nowrap; }
   .cmp button:active { background: var(--line); }
@@ -156,6 +158,25 @@
   #about button.primary, #safety button.primary, #report button.primary { width: 100%; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 12px; font: inherit; font-weight: 600; margin-top: 4px; }
   #safety { z-index: 11; }
   #report { z-index: 12; }
+  /* How to ask (howto.ts): one card at a time over the chat, like About; under the PIN lock (20) */
+  #howto { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #howto .card { background: var(--card); border-radius: 18px; padding: 16px 20px 18px; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 12px 40px rgba(0,0,0,.18); outline: none; }
+  .howto-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .howto-step { font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px; color: var(--faint); }
+  #howto h2 { font: 600 22px/1.25 Georgia, "Noto Serif", "Noto Serif Devanagari", serif; margin: 0 0 10px; }
+  #howto p { margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
+  .howto-ex { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .howto-ex li { font: 15px/1.35 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--bg); border-radius: 10px; padding: 8px 12px; }
+  .howto-try { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .howto-try button, .howto-nav button { flex: 1 1 0; min-height: 44px; border-radius: 12px; font: inherit; font-weight: 600; padding: 10px 12px; cursor: pointer; }
+  #howto button.primary { border: 0; background: var(--accent); color: #fff; }
+  #howto button.secondary { border: 1px solid var(--line); background: transparent; color: var(--fg); }
+  #howto button:disabled { opacity: .4; cursor: default; }
+  #howto .howto-free { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .howto-nav { display: flex; gap: 8px; }
+  .howto-x { border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; min-width: 44px; min-height: 44px; cursor: pointer; }
+  .howto-invite { display: flex; align-items: center; justify-content: center; gap: 2px; margin: -8px auto 14px; max-width: 34ch; }
+  .howto-go { border: 0; background: transparent; color: var(--accent); font: 14.5px/1.4 system-ui, sans-serif; font-weight: 600; padding: 8px 4px; min-height: 44px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   #report .card { display: grid; gap: 10px; width: 100%; box-sizing: border-box; }
   #report .langs button { font-size: 13.5px; padding: 6px 11px; }
   #report h2 { margin: 0; }
@@ -175,7 +196,58 @@
   .rate .done { color: var(--muted); font-size: 12.5px; margin-inline-start: 4px; }
   .share { display: inline-flex; gap: 6px; align-items: center; margin-top: 4px; border: 0; background: transparent; color: var(--faint); padding: 6px; border-radius: 8px; font: inherit; font-size: 12.5px; }
   .share:hover, .share:focus-visible { color: var(--accent); }
-  #lock { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  /* saved items and notes (savedview.ts): ☆ Save and ✎ Note next to Share, "Your note" above an answer, the Saved view */
+  .keep, .keep-one { display: inline-flex; gap: 2px; align-items: center; flex-wrap: wrap; }
+  .keep-btn { display: inline-flex; gap: 4px; align-items: center; margin-top: 4px; border: 0; background: transparent; color: var(--faint); padding: 6px; border-radius: 8px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  .keep-btn:hover, .keep-btn:focus-visible, .keep-btn.on { color: var(--accent); }
+  .keep-btn:disabled { opacity: .5; }
+  .keep-msg:empty { display: none; }
+  .keep-msg { color: var(--muted); font-size: 12.5px; padding: 0 4px; }
+  .mynote:empty { display: none; }
+  .mynote { border-inline-start: 3px solid var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 6px 10px 8px; margin: 0 0 10px; }
+  .mynote-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 600 11.5px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .4px; color: var(--accent); }
+  .mynote-head .sv-act { min-height: 30px; padding: 4px 10px; text-transform: none; letter-spacing: 0; }
+  .mynote .sv-notetext + .mynote-head { margin-top: 8px; }
+  .sv-notetext { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; font: 14.5px/1.45 system-ui, "Noto Sans", "Noto Sans Devanagari", "Noto Naskh Arabic", sans-serif; color: var(--fg); }
+  .sv-editor { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .sv-ta, .sv-in, .sv-find { width: 100%; box-sizing: border-box; font: 15px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", "Noto Naskh Arabic", sans-serif; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .sv-ta { min-height: 100px; resize: vertical; }
+  .sv-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .sv-act { min-height: 36px; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 6px 12px; font: 500 13.5px/1.2 system-ui, sans-serif; cursor: pointer; }
+  .sv-act.sv-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sv-act.armed { background: #b4432f; border-color: #b4432f; color: #fff; }
+  .sv-act:disabled { opacity: .5; }
+  .sv-msg:empty { display: none; }
+  .sv-msg { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 13.5px; margin: 6px 0 0; }
+  #saved { position: fixed; inset: 0; z-index: 15; /* like Browse: under the PIN lock (60) */ background: var(--bg); display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  #saved.open { display: flex; }
+  #saved:focus { outline: none; }
+  .sv-private { font-size: 13px; margin: 6px 0 8px; }
+  .sv-find { margin: 0 0 8px; }
+  .sv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; }
+  .sv-tags button { min-height: 36px; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 6px 12px; font: 500 13.5px/1.2 system-ui, sans-serif; cursor: pointer; }
+  .sv-tags button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sv-card { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 8px 12px 10px; margin: 0 0 8px; }
+  .sv-open { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 2px; width: 100%; min-height: 44px; text-align: start; background: transparent; border: 0; padding: 4px 0; color: var(--fg); cursor: pointer; }
+  .sv-t { font: 600 15.5px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", "Noto Naskh Arabic", sans-serif; overflow-wrap: anywhere; }
+  .sv-s { font: 12.5px/1.3 system-ui, sans-serif; color: var(--muted); }
+  .sv-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
+  .sv-chip { font: 500 12px/1 system-ui, sans-serif; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 4px 8px; }
+  .sv-card .sv-acts { margin-top: 8px; }
+  .sv-q { font-weight: 600; }
+  .ex-saved { margin: 4px 0 8px; }
+  .ex-grid button.saved { position: relative; border-color: var(--accent); }
+  .ex-grid button.saved::after { content: "★"; position: absolute; top: 3px; inset-inline-end: 5px; font-size: 10px; color: var(--accent); }
+  .ex-grid.picking button { border-style: dashed; }
+  .ex-pill.on { background: var(--accent); color: #fff; }
+  .sheet-foot { display: flex; gap: 8px; align-items: center; }
+  .sheet-foot { flex-wrap: wrap; }
+  .sheet-foot .keep-one { flex: 0 1 auto; min-width: 0; }
+  .sheet-foot .keep-one:has(.keep-msg:not(:empty)) { flex-basis: 100%; }
+  .sheet-foot .sheet-chat { flex: 1 1 140px; width: auto; }
+  .sheet-save { min-height: 42px; border: 1px solid var(--accent); color: var(--accent); background: transparent; border-radius: 10px; padding: 8px 12px; font: 600 14px system-ui, sans-serif; cursor: pointer; overflow-wrap: anywhere; }
+  .sheet-save.on { background: var(--accent-soft); }
+  #lock { position: fixed; inset: 0; z-index: 60; /* above everything, the bottom panel (41) too */ background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #lock .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; width: min(360px, 100%); display: grid; gap: 10px; }
   #lock h2 { font: 600 20px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 4px; }
   #lock .note { color: var(--accent); margin: 0; min-height: 1em; font-size: 14px; }
@@ -314,7 +386,7 @@
   .welcome .browse-go { margin-top: 12px; width: 100%; min-height: 48px; font: 600 15px/1.3 system-ui, sans-serif; color: var(--accent); background: var(--accent-soft);
     border: 1px solid transparent; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
   .welcome .browse-go:active { border-color: var(--accent); }
-  #explore { position: fixed; inset: 0; z-index: 15; /* above the chat and the menu, under the PIN lock (20) */ background: var(--bg); display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  #explore { position: fixed; inset: 0; z-index: 15; /* above the chat and the menu, under the PIN lock (60) */ background: var(--bg); display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   #explore.open { display: flex; }
   #explore:focus { outline: none; }
   .ex-head { display: flex; align-items: center; gap: 4px; padding: 8px 8px; border-bottom: 1px solid var(--line); max-width: 760px; width: 100%; margin: 0 auto; }
@@ -364,7 +436,7 @@
   #mapbtn { width: 40px; height: 44px; margin: -3px 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); display: grid; place-items: center; flex: none; padding: 0; cursor: pointer; }
   #mapbtn[hidden] { display: none; }
   #mapbtn:active { background: var(--line); }
-  #gmap { position: fixed; inset: 0; z-index: 15; /* like Browse: under the PIN lock (20) */ background: var(--bg); display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  #gmap { position: fixed; inset: 0; z-index: 15; /* like Browse: under the PIN lock (60) */ background: var(--bg); display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   #gmap.open { display: flex; }
   #gmap:focus { outline: none; }
   #gmap .ex-head { padding-inline-start: 16px; }

@@ -7,6 +7,7 @@ import { CANON, openLang } from './packs'
 import { bookShown } from './firstuse'
 import { count } from './usage'
 import taSections from './data/ta-sections.json'
+import { addSaved, findSaved, MAX_ITEMS, personal, removeSaved, savedSummary, ST as SVT } from './saved'
 
 // ------------------------------------------------------------------------------------------------------------------ data
 
@@ -240,6 +241,8 @@ export type ExploreHooks = {
   ask: (label: string, q: Ask) => boolean
   /** no language on the phone: to where one is added */
   addLang: () => void
+  /** the Saved view (savedview.ts), over Browse */
+  saved?: () => void
 }
 let hooks: ExploreHooks | null = null
 export function setExploreHooks(h: ExploreHooks) {
@@ -256,6 +259,7 @@ const stack: View[] = []
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
 let reached = false // whether this opening of the app has reached a help through Browse (counted once)
 let opener: HTMLElement | null = null // where the focus goes back to
+let picking = false // a chapter's verses saved with a tap (☆ Save verses) instead of opened
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag)
@@ -395,8 +399,17 @@ async function draw() {
   const packs = hooks.packs()
   const name = (lang: string) => hooks!.packName(lang)
 
+  if (v.k !== 'chapter') picking = false
   if (v.k === 'home') {
     b.title.textContent = s.browse
+    // saved items and notes, one tap away (savedview.ts)
+    if (hooks.saved) {
+      const sv = el('div', 'ex-rows ex-saved')
+      const row = button('ex-row', '', () => hooks?.saved?.())
+      row.append(el('span', 'ex-row-t', `☆ ${SVT(ui).title}`), el('span', 'ex-row-s', savedSummary(ui)), chevron('ex-row-c'))
+      sv.appendChild(row)
+      b.body.appendChild(sv)
+    }
     if (!packs.length) {
       if (!done()) return
       b.body.appendChild(el('p', 'ex-note', s.none))
@@ -487,10 +500,48 @@ async function draw() {
     const pills = el('div', 'ex-pills')
     pills.appendChild(button('ex-pill', fill(s.chapter, { ch: c.ch }), () => passage(`${book} ${c.ch}`, `${v.code} ${c.ch}`, ['text', 'notes'])))
     if (c.intro) pills.appendChild(button('ex-pill', fill(s.chIntro, { ch: c.ch }), () => passage(`${book} ${c.ch}: ${fill(s.chIntro, { ch: c.ch })}`, `${v.code} ${c.ch}:intro`, ['intro'])))
+    // ☆ Save verses: a tap on a verse saves it (or takes it out) instead of opening it, until Done (saved.ts)
+    const pick = button(picking ? 'ex-pill on' : 'ex-pill', picking ? SVT(ui).done : SVT(ui).saveVerses, () => { picking = !picking; draw() })
+    pick.setAttribute('aria-pressed', String(picking))
+    pills.appendChild(pick)
     b.body.appendChild(pills)
+    if (picking) b.body.appendChild(el('p', 'ex-note', SVT(ui).versesHint)).setAttribute('role', 'status')
     b.body.appendChild(el('h3', '', s.verses))
-    const grid = el('div', 'ex-grid')
-    for (const n of c.verses) grid.appendChild(button('', String(n), () => passage(`${book} ${c.ch}:${n}`, `${v.code} ${c.ch}:${n}`, ['text', 'notes'])))
+    const grid = el('div', picking ? 'ex-grid picking' : 'ex-grid')
+    let sure = '' // the verse whose removal waits for a second tap
+    for (const n of c.verses) {
+      const q = { k: 'passage' as const, ref: `${v.code} ${c.ch}:${n}`, lang: v.lang, what: ['text', 'notes'] }
+      const vb = button('', String(n), () => {
+        if (!picking) return passage(`${book} ${c.ch}:${n}`, q.ref, q.what)
+        const say = (t: string) => {
+          b.body.querySelector('.ex-busy')?.remove()
+          const note = el('p', 'ex-note ex-busy', t)
+          note.setAttribute('role', 'status')
+          grid.before(note)
+        }
+        const had = findSaved(q)
+        if (had) {
+          // one the person named or grouped goes with a second tap
+          if (personal(had) && sure !== q.ref) {
+            sure = q.ref
+            return say(SVT(ui).sure)
+          }
+          sure = ''
+          b.body.querySelector('.ex-busy')?.remove()
+          removeSaved(had.id)
+        } else {
+          const r = addSaved({ q, label: `${book} ${c.ch}:${n}`, ui }).res
+          if (r !== 'ok') say(r === 'full' ? SVT(ui).full : fill(SVT(ui).many, { n: MAX_ITEMS }))
+        }
+        const on = !!findSaved(q)
+        vb.classList.toggle('saved', on)
+        vb.setAttribute('aria-pressed', String(on))
+      })
+      // a saved verse is marked (★), in both modes
+      if (findSaved(q)) vb.classList.add('saved')
+      if (picking) vb.setAttribute('aria-pressed', String(vb.classList.contains('saved')))
+      grid.appendChild(vb)
+    }
     b.body.appendChild(grid)
     return
   }
