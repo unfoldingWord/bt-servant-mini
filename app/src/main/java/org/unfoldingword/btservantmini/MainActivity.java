@@ -141,7 +141,9 @@ public class MainActivity extends Activity {
                 return android.view.WindowInsets.CONSUMED;
             });
         }
-        web.loadUrl("https://appassets.androidplatform.net/assets/www/index.html");
+        // the dev APK (build type devtest) turns its dev switch on (dev.ts initDev keeps it in localStorage)
+        String dev = BuildConfig.DEV_SWITCH.isEmpty() ? "" : "?dev=" + BuildConfig.DEV_SWITCH;
+        web.loadUrl("https://appassets.androidplatform.net/assets/www/index.html" + dev);
         if (server == null) pool.execute(this::prepareModel);
     }
 

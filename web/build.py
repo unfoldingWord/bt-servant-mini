@@ -1,5 +1,6 @@
 """Builds the page into app/src/main/assets/www: the JS bundle, index.html and the language packs (with ids.json and index.json).
-   python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none; --dev also puts web/src/data/dev in web/desktop/dev, for ?dev=)"""
+   python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none; --dev also puts web/src/data/dev in web/desktop/dev, for ?dev=;
+   --devapk puts it in app/src/devtest for the dev APK, `gradle assembleFullDevtest`)"""
 import json, re, shutil, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
@@ -78,6 +79,12 @@ shutil.copytree(FULL, DESK / 'packs')
 # the dev fixtures (--dev) go only here, the local preview outside the APK and iOS assets; a build without --dev leaves none
 if '--dev' in sys.argv:
     shutil.copytree(ROOT / 'web' / 'src' / 'data' / 'dev', DESK / 'dev')
+# the dev APK (--devapk): the dev fixtures go into app/src/devtest, the assets of the `devtest` build type only (app id
+# ….btservantmini.dev, named "BT Servant DEV", opens the page with ?dev=obs5m); the debug APK never has them
+DEVAPK = ROOT / 'app' / 'src' / 'devtest' / 'assets' / 'www' / 'dev'
+shutil.rmtree(DEVAPK, ignore_errors=True)
+if '--devapk' in sys.argv:
+    shutil.copytree(ROOT / 'web' / 'src' / 'data' / 'dev', DEVAPK)
 print('packs', langs, 'www', sum(f.stat().st_size for f in WWW.rglob('*') if f.is_file()) // 1024, 'KB')
 
 # The iOS app (ios/): the same page as the Android app, without packs (they are added from the app, like the light build).
