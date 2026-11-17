@@ -1272,6 +1272,18 @@ async function relatedOf(lang: string, id: string, max = 3): Promise<{ id: strin
   return out
 }
 /** An article's name in a pack (the first of its names), or null when the pack does not list it. */
+/**
+ * A Translation Academy article's title for its button: in the app's language when a pack on the phone has the article (Abel,
+ * Nov 17: "Academia: Introduction of New and Old Participants" in a Spanish app), else in `l`, the pack it opens in.
+ */
+async function taTitle(id: string, l: string, ui: string): Promise<string | null> {
+  for (const u of uiLangs(ui, await installedLangs())) {
+    if (u === l || !(await hasTa(u, id))) continue
+    const t = await nameIn(u, id).catch(() => null)
+    if (t) return t
+  }
+  return nameIn(l, id)
+}
 async function nameIn(lang: string, id: string): Promise<string | null> {
   const names = ((await (await openLang(lang)).maps()) as any).map?.core?.names ?? {}
   return names[id]?.length ? String(names[id][0]) : null
@@ -1289,7 +1301,7 @@ async function packSteps(sheet: Sheet, study: Study | null, ui: string): Promise
     if (!id) return []
     for (const l of new Set([sheet.lang, 'en'])) {
       if (!(await hasTa(l, id))) continue
-      const title = await nameIn(l, id)
+      const title = await taTitle(id, l, ui)
       return title ? [{ label: academyLabel(ui, title), sheet: article(id, l) }] : []
     }
     return []
@@ -1323,12 +1335,7 @@ async function taStep(base: Sheet, id: string, ui: string): Promise<Follow | nul
     if (!(await hasTa(l, id))) continue
     // its title in the app's language when a pack on the phone has the article (Abel, Nov 17: "Academia: Introduction of New
     // and Old Participants" in a Spanish app), else the found pack's; the article opens where it was found
-    let title = await nameIn(l, id)
-    for (const u of uiLangs(ui, await installedLangs())) {
-      if (u === l || !(await hasTa(u, id))) continue
-      title = (await nameIn(u, id).catch(() => null)) ?? title
-      break
-    }
+    const title = await taTitle(id, l, ui)
     return title ? { label: academyLabel(ui, title), sheet: articleSheet(base, id, l) } : null
   }
   return null
