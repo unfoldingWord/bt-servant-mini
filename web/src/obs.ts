@@ -564,8 +564,12 @@ const DIGITS = (q: string) => q.replace(/[०-९]/g, (d) => String('०१२�
 /** The names of OBS, in the six languages: then a number is a story ("OBS 34", "Historias de la Biblia 3:5"). */
 const NAME = String.raw`(?:obs|open\s+bible\s+stor(?:y|ies)|historias?\s+(?:de\s+la\s+)?biblia|histoires?\s+bibliques?|cerita(?:-cerita)?\s+alkitab|बाइबल\s+(?:की\s+)?कहानि(?:याँ|यां|यों)|قصص\s+الكتاب\s+المقدس)`
 /** The word "story" (then a number is a story: "story 34", "historia 34", "कहानी 34", "القصة 34"). */
-const STORY = String.raw`(?:story|historia|histoire|cerita|कहानी|(?:ال)?قصة)`
-const FRAME = String.raw`(?:frame|marco|cuadro|image|cadre|bingkai|गद्यांश|फ़्रेम|फ्रेम|(?:ال)?إطار|(?:ال)?مشهد)`
+/** The Arabic letters that join the word after them: "و" and, "ف" so, "ب" in, "ك" as, "ل" for ("للقصة 1", "والإطار"). */
+const AR_PRE = String.raw`(?:[وفبكل]?ال|[وف]?لل|[وفبكل])?`
+const STORY = String.raw`(?:story|historia|histoire|cerita|कहानी|${AR_PRE}قصة)`
+const FRAME = String.raw`(?:frame|marco|cuadro|image|cadre|bingkai|गद्यांश|फ़्रेम|फ्रेम|${AR_PRE}إطار|${AR_PRE}مشهد)`
+/** A frame word anywhere ("next frame", "l'image suivante", "والإطار التالي", "अगला फ़्रेम"): pipeline.ts reads it as a verse of OBS. */
+export const FRAME_ANY = new RegExp(String.raw`(?<![\p{L}\p{M}])${FRAME}(?![\p{L}\p{M}])`, 'giu')
 const NUM = String.raw`(?:no\.?\s*|n[º°o]\.?\s*|#\s*|nomor\s+|संख्या\s+|رقم\s+)?(\d{1,3})(?!\d)`
 const BY_NAME = new RegExp(String.raw`(?<![\p{L}\p{M}])${NAME}\s*${NUM}(?:\s*[:.,]\s*(\d{1,3})(?!\d))?`, 'iu')
 const BY_STORY = new RegExp(String.raw`(?<![\p{L}\p{M}])${STORY}\s*${NUM}(?:\s*[:.]\s*(\d{1,3})(?!\d))?`, 'iu')
@@ -609,12 +613,58 @@ const NAMED = [
   /(?:^|\s)(?:l['’]\s*)?histoire\s+(?:de|du|d['’]|sur)\s*(.+)$/i,
   /(?:^|\s)cerita\s+(?:tentang\s+)?(.+)$/i,
   /^(.+?)\s+की\s+कहानी/,
-  /(?:^|\s)(?:ال)?قصة\s+(.+)$/,
+  /(?:^|\s)(?:[وفبكل]?ال|[وف]?لل|[وفبكل])?قصة\s+(.+)$/,
 ]
+/**
+ * Stories by the common names of what they tell, in the six languages: a name read the same whatever OBS pack is on the phone
+ * (an English pack's titles have no "Noé", "نوح" or "नूह"). Only names that point to one story: Abraham is in stories 4 to 6,
+ * the first that tells him; Jonah is in none. Each entry is a name of one or more words, folded as `fold` folds them.
+ */
+const STORY_NAMES: Record<number, string[]> = {
+  1: ['creation', 'creacion', 'la creacion', 'penciptaan', 'सृष्टि', 'الخلق', 'الخليقة'],
+  2: ['adam', 'eve', 'adan', 'eva', 'ève', 'hawa', 'आदम', 'हव्वा', 'آدم', 'حواء'],
+  3: ['noah', 'noe', 'nuh', 'नूह', 'نوح', 'flood', 'diluvio', 'deluge', 'air bah', 'जलप्रलय', 'الطوفان'],
+  4: ['abraham', 'abram', 'अब्राहम', 'इब्राहीम', 'ابراهيم', 'ابرام'],
+  7: ['jacob', 'esau', 'yakub', 'याकूब', 'एसाव', 'يعقوب', 'عيسو'],
+  8: ['joseph', 'jose', 'yusuf', 'यूसुफ', 'يوسف'],
+  9: ['moses', 'moises', 'moise', 'musa', 'मूसा', 'موسى', 'burning bush', 'zarza'],
+  10: ['plagues', 'plagas', 'plaies', 'tulah', 'विपत्तियाँ', 'الضربات'],
+  11: ['passover', 'pascua', 'paque', 'paskah', 'फसह', 'الفصح'],
+  12: ['exodus', 'exodo', 'exode', 'red sea', 'mar rojo', 'mer rouge', 'laut merah', 'लाल समुद्र', 'البحر الاحمر'],
+  13: ['ten commandments', 'diez mandamientos', 'dix commandements', 'sepuluh perintah', 'दस आज्ञाएँ', 'الوصايا العشر'],
+  15: ['joshua', 'josue', 'yosua', 'यहोशू', 'يشوع', 'jericho', 'jerico', 'yerikho', 'यरीहो', 'اريحا'],
+  16: ['gideon', 'gedeon', 'गिदोन', 'جدعون'],
+  17: ['david', 'daud', 'दाऊद', 'داود', 'goliath', 'goliat', 'गोलियत', 'جليات'],
+  18: ['solomon', 'salomon', 'salomo', 'सुलैमान', 'سليمان'],
+  19: ['elijah', 'elias', 'elie', 'elia', 'एलिय्याह', 'ايليا', 'elisha', 'eliseo', 'elisee', 'elisa', 'एलीशा', 'اليشع'],
+  23: ['christmas', 'navidad', 'noel', 'natal', 'क्रिसमस', 'الميلاد'],
+  24: ['baptism', 'bautismo', 'bapteme', 'baptisan', 'बपतिस्मा', 'المعمودية', 'معمودية'],
+  25: ['temptation', 'tentacion', 'tentation', 'pencobaan', 'परीक्षा', 'التجربة'],
+  27: ['good samaritan', 'samaritan', 'samaritano', 'samaritain', 'samaria yang baik', 'सामरी', 'السامري'],
+  33: ['sower', 'sembrador', 'semeur', 'penabur', 'बोने वाले', 'الزارع'],
+  35: ['prodigal', 'prodigo', 'prodigue', 'anak yang hilang', 'उड़ाऊ', 'الضال'],
+  36: ['transfiguration', 'transfiguracion', 'transfigurasi', 'रूपान्तरण', 'التجلي'],
+  37: ['lazarus', 'lazaro', 'lazare', 'लाज़र', 'लाजर', 'لعازر'],
+  40: ['crucifixion', 'penyaliban', 'क्रूस पर चढ़ाया', 'الصلب'],
+  41: ['resurrection', 'resurreccion', 'kebangkitan', 'पुनरुत्थान', 'القيامة'],
+  43: ['pentecost', 'pentecostes', 'pentecote', 'pentakosta', 'पिन्तेकुस्त', 'الخمسين'],
+  45: ['stephen', 'esteban', 'etienne', 'stefanus', 'स्तिफनुस', 'استفانوس', 'ethiopian', 'etiope', 'ethiopien', 'الحبشي'],
+  46: ['paul', 'pablo', 'paulus', 'पौलुस', 'بولس'],
+  47: ['philippi', 'filipos', 'philippes', 'filipi', 'फिलिप्पी', 'فيلبي'],
+}
+const NAME_INDEX: [number, string[]][] = Object.entries(STORY_NAMES).flatMap(([n, names]) => names.map((s) => [+n, s.split(' ').map(fold)] as [number, string[]]))
+/** The one story the words name by STORY_NAMES (every word of a name, at a word's start: "Noé's"), or null (none, or two disagree). */
+export function storyByName(words: string[]): number | null {
+  const toks = words.map(fold).map((w) => w.replace(/^(?:[وفبكل]?ال|[وف]?لل)(?=\S{3})/, ''))
+  const at = (w: string) => toks.some((x) => x === w || x === w.replace(/^ال/, '') || (w.length >= 4 && x.startsWith(w) && x.length <= w.length + 2))
+  const hits = new Set(NAME_INDEX.filter(([, ws]) => ws.every(at)).map(([n]) => n))
+  return hits.size === 1 ? [...hits][0]! : null
+}
 /**
  * A story named by what it is about ("the story of Noah", "la historia de José"), when Open Bible Stories are on the phone and
  * one story clearly is it: its title has every word, or its frames name them far more than any other story's. Null otherwise
- * (then the question goes on as before: "la historia de Jonás" finds Jonah's verses, OBS has no story of Jonah).
+ * (then the question goes on as before: "la historia de Jonás" finds Jonah's verses, OBS has no story of Jonah). When the
+ * pack's titles and frames do not say, a common name in STORY_NAMES does ("la historia de Noé" with an English pack).
  */
 export async function namedStory(q: string, lang: string): Promise<{ ref: string; what: string[] } | null> {
   const t = q.replace(/[¿?!¡.,;:«»"“”؟،()]/g, ' ').replace(/\s+/g, ' ').trim()
@@ -622,8 +672,10 @@ export async function namedStory(q: string, lang: string): Promise<{ ref: string
   if (!hit) return null
   const at = await obsPack(lang)
   if (!at) return null
+  // else a common name ("Noé", "نوح", "नूह"): the story it names, whatever the pack's language
+  const byName = (): { ref: string; what: string[] } | null => { const n = storyByName(wordsOf(hit[1]!)); return n ? { ref: obsRef(n), what: ['text', 'notes'] } : null }
   const want = keywords(hit[1]!).map((x) => fold(x)).filter((x) => x.length >= 3)
-  if (!want.length) return null
+  if (!want.length) return byName()
   const has = (s: string) => { const toks = wordsOf(s); return want.filter((w) => toks.some((x) => x === w || (w.length >= 5 && x.startsWith(w.slice(0, w.length - 1))))).length }
   const list = await storyList(at.r).catch(() => [] as StoryEntry[])
   const byTitle = list.filter((e) => e.title && has(e.title) === want.length)
@@ -632,7 +684,7 @@ export async function namedStory(q: string, lang: string): Promise<{ ref: string
   const counts = (model?.stories ?? []).map((s) => ({ n: s.n, c: s.frames.filter((fr) => has(fr.text) === want.length).length })).sort((a, b) => b.c - a.c)
   const [a, b] = counts
   if (a && a.c >= 3 && a.c >= 2 * (b?.c ?? 0)) return { ref: obsRef(a.n), what: ['text', 'notes'] }
-  return null
+  return byName()
 }
 
 // ------------------------------------------------------------------------------------------------------------------- search

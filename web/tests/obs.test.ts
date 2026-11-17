@@ -9,7 +9,7 @@ import { OBS_BYTES, obsBytes, withObs } from './obs-fixture'
 import { answer, type ConvState, contextSheet, type Made } from '../src/pipeline'
 import { newGraph, nodeOf } from '../src/graph'
 import { passageContext, type Sheet } from '../src/answer'
-import { namedStory, obsAsked, obsPack, obsSteps, OW, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
+import { namedStory, obsAsked, obsPack, storyByName, obsSteps, OW, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
 import { openLang } from '../src/packs'
 import { strip } from '../src/bidi'
 
@@ -118,6 +118,75 @@ describe('questions that name a story or a frame', () => {
     const f: any = await ask('historia 3:40', 'es')
     expect(f.reply.info).toBe('La historia 3 tiene los cuadros 1 a 16: no hay cuadro 40.')
     expect(targets(f)).toContain('obs 3 text,notes')
+  })
+})
+
+describe('OBS questions the obs set missed (Nov 17): fixed in code, no retraining', () => {
+  beforeEach(async () => { await fullPhone() })
+  const slotsTurn = async (c: ConvState, q: string, lang: string, slots: any) => turn(c, { q, slots: { lang, ...slots } }, lang)
+
+  test('Arabic: a letter joined before the story or the frame ("للقصة 1", "والإطار 4", "بالقصة 3")', () => {
+    expect(obsAsked('ابدأ جلسة الحركات الخمس للقصة 1')?.ref).toBe('obs 1')
+    expect(obsAsked('ماذا في القصة 3 والإطار 4؟')?.ref).toBe('obs 3:4')
+    expect(obsAsked('ملاحظات بالقصة 3')).toEqual({ ref: 'obs 3', what: ['notes'] })
+    expect(obsAsked('وقصة 34')?.ref).toBe('obs 34')
+    // a word that only ends in the letters is no story
+    expect(obsAsked('مرقصة 3')).toBeNull()
+  })
+
+  test('a story by its common name in any language, whatever pack is on the phone', async () => {
+    for (const [q, lang, ref] of [['la historia de Noé', 'es', 'obs 3'], ['l’histoire de Noé', 'fr', 'obs 3'], ['قصة نوح', 'ar', 'obs 3'],
+      ['नूह की कहानी', 'hi', 'obs 3'], ['la historia de Moisés', 'es', 'obs 9'], ['l’histoire de Lazare', 'fr', 'obs 37'], ['قصة داود', 'ar', 'obs 17'],
+      ['cerita Nuh', 'id', 'obs 3'], ['the story of the prodigal son', 'en', 'obs 35']] as const)
+      expect((await namedStory(q, lang))?.ref, q).toBe(ref)
+    // no story of Jonah; two names of different stories: neither
+    expect(await namedStory('la historia de Jonás', 'es')).toBeNull()
+    expect(storyByName(['moises', 'david'])).toBeNull()
+    expect(storyByName(['noe', 'diluvio'])).toBe(3)
+    expect(storyByName(['والطوفان'])).toBe(3)
+    expect(storyByName(['jonas'])).toBeNull()
+    // the answer itself: Noah's story, not Genesis verses
+    expect((await ask('la historia de Noé', 'es')).ref).toBe('obs 3')
+    expect((await ask('قصة نوح', 'ar')).ref).toBe('obs 3')
+  })
+
+  test('"next frame" in five languages goes to the next frame, with or without a reader', async () => {
+    for (const [q, lang] of [['next frame', 'en'], ['¿y el cuadro siguiente?', 'es'], ['et l’image suivante ?', 'fr'], ['والإطار التالي؟', 'ar'], ['अगला फ़्रेम', 'hi']] as const) {
+      const c: ConvState = { last: null }
+      await ask('OBS 3:5', lang, c)
+      expect((await ask(q, lang, c)).ref, q).toBe('obs 3:6')
+      // the small model reads it as nothing, or as a book of its own («أمثال»): the follow-up still wins
+      const c2: ConvState = { last: null }
+      await ask('OBS 3:5', lang, c2)
+      expect((await slotsTurn(c2, q, lang, { intent: 'passage', book: 'أمثال', what: ['intro'] })).ref, q).toBe('obs 3:6')
+    }
+    const c: ConvState = { last: null }
+    await ask('OBS 3:5', 'en', c)
+    expect((await ask('previous frame', 'en', c)).ref).toBe('obs 3:4')
+  })
+
+  test("a follow-up code reads is not overridden by a reader's junk; a book the question names stays the reader's", async () => {
+    const junk: [string, string, any, string][] = [
+      ['what are the key terms?', 'en', { intent: 'passage', book: 'article', what: ['terms'] }, 'obs 3:5'],
+      ['¿y las notas?', 'es', { intent: 'search', term: 'notes' }, 'obs 3:5'],
+      ['والملاحظات؟', 'ar', { intent: 'passage', book: 'unknown', what: ['notes'] }, 'obs 3:5'],
+      ['और टिप्पणियाँ?', 'hi', { intent: 'count', what: ['notes'] }, 'obs 3:5'],
+    ]
+    for (const [q, lang, slots, ref] of junk) {
+      const c: ConvState = { last: null }
+      await ask('OBS 3:5', lang, c)
+      const r: any = await slotsTurn(c, q, lang, slots)
+      expect(r.ref, q).toBe(ref)
+      expect(r.answered, q).toBe('passage')
+    }
+    // in a Bible book too
+    const c: ConvState = { last: null }
+    await ask('Rut 2:3', 'es', c)
+    expect((await slotsTurn(c, '¿y las notas?', 'es', { intent: 'search', term: 'notes' })).ref).toBe('rut 2:3')
+    // "والعدد 5" after Ruth 2:3: the reader that reads the book of Numbers keeps it
+    const c3: ConvState = { last: null }
+    await ask('راعوث 2:3', 'ar', c3)
+    expect((await slotsTurn(c3, 'والعدد 5', 'ar', { intent: 'passage', book: 'العدد', chapter: 5, what: ['text'] })).ref).toMatch(/^num 5/)
   })
 })
 
