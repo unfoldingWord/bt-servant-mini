@@ -34,6 +34,7 @@ const STOP = new Set(words(
   'please here it its one ones other others something someone like understand understanding language people our comprehension ' +
   'ult ust glt gst bsb happen happens happened happening going need needs want wants summarize summarise summary let ' +
   'not any all use get put way also has had have very much many more most some ' +
+  'whole entire complete full ' + // "the whole chapter": how much to show, not what it is about (Abel, Nov 17)
   // es
   'el la los las un una unos unas de del en y o u que qué quien quién quienes donde dónde cuando como cómo cual cuál es son fue era eran ' +
   'se su sus mi mis tu tus lo le les al por para con sin sobre hay dice dicen decir quiere significa significado puede ser esto eso ' +
@@ -41,22 +42,22 @@ const STOP = new Set(words(
   'pregunta preguntas texto ayuda ayudas idioma pueblo nuestro nuestra explica explicame explícame explique expliquen explicar ' +
   'comprension comprensión pasa pasó paso sucede sucedió ocurre ocurrió necesito necesita quiero entender entiendo comprender ' +
   'resume resumen resumir resúmeme muestra muéstrame muestrame muestre enseña enséñame dime digame dígame cuenta cuéntame leer lee ' +
-  'ayúdame ayudame dame muy más mas también tambien todo todos ' +
+  'ayúdame ayudame dame muy más mas también tambien todo todos completo completa entero entera ' +
   // fr
   'le la les un une des de du d l et ou qui quoi où quand comment est sont était sa son ses mon ma mes dans sur pour par avec ' +
   'veut dire signifie mot mots verset versets chapitre livre traduire traduction note notes quel quelle quels quelles ce cette ' +
   'passe arrive besoin comprendre résume résumer résumez explique expliquez expliquer montre montrez dis dites moi donne donnez ' +
-  'aide aidez lis lisez aux ont été tout tous très plus ' +
+  'aide aidez lis lisez aux ont été tout tous très plus complet complète entier entière ' +
   // id
   'yang di ke dari dan atau apa siapa mana kapan bagaimana adalah itu ini ada dalam pada untuk dengan tentang ayat pasal kitab ' +
   'arti maksud kata catatan terjemahan menerjemahkan alkitab terjadi perlu butuh mengerti memahami ringkas ringkasan jelaskan ' +
-  'tunjukkan tolong beritahu katakan berikan bantu baca saya kami kita aku anda kamu ' +
+  'tunjukkan tolong beritahu katakan berikan bantu baca saya kami kita aku anda kamu seluruh lengkap semua utuh ' +
   // hi
   'में का की के है हैं था थे कौन किस कहाँ कब क्या कैसे और या से पर को ने यह वह पद अध्याय मतलब अर्थ शब्द नोट्स अनुवाद करें करूँ ' +
-  'हो रहा होता हुआ चाहिए समझना समझ समझाइए समझाओ सारांश दिखाओ दिखाइए कृपया बताओ बताइए बताएं मुझे मैं हम आप तुम ' +
+  'हो रहा होता हुआ चाहिए समझना समझ समझाइए समझाओ सारांश दिखाओ दिखाइए कृपया बताओ बताइए बताएं मुझे मैं हम आप तुम पूरा पूरी संपूर्ण ' +
   // ar
   'في من على إلى عن ما ماذا هو هي هل أين متى كيف لماذا أي التي الذي هذا هذه ذلك تلك و أو معنى كلمة ملاحظات الترجمة أترجم آية الأصحاح ' +
-  'يحدث حدث أحتاج أريد أفهم فهم لخص ملخص اشرح أرني أخبرني قل أعطني ساعدني اقرأ أنا نحن',
+  'يحدث حدث أحتاج أريد أفهم فهم لخص ملخص اشرح أرني أخبرني قل أعطني ساعدني اقرأ أنا نحن كامل كاملا كله بأكمله',
 ))
 // Book names in every language the app reads: "Rut", "Ruth", "Jonás"… name the passage, not the word.
 const BOOKS = new Set<string>()
