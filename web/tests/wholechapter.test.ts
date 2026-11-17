@@ -13,8 +13,12 @@ describe('"the whole chapter" is not a word to look for', () => {
       'Exodus 22, the entire chapter', 'tout le chapitre complet de Exode 22', 'seluruh pasal Keluaran 22', 'निर्गमन 22 पूरा अध्याय', 'الخروج 22 كاملا'])
       expect(focusWords(q), q).toEqual([])
     // asked about as a word, it is the word (Abel: "¿y si hay algún artículo de las palabras que se llame Completo?")
-    for (const q of ['¿Qué significa completo en Éxodo 22?', 'la palabra completo en Mateo 5:48', 'What does "whole" mean in Luke 11:36?', 'Que signifie complet dans Matthieu 5:48 ?'])
-      expect(focusWords(q).length, q).toBe(1)
+    for (const [q, w] of [['¿Qué significa completo en Éxodo 22?', 'completo'], ['la palabra completo en Mateo 5:48', 'completo'], ['What does "whole" mean in Luke 11:36?', 'whole'],
+      ['What does whole mean in Luke 11:36?', 'whole'], ['Que signifie complet dans Matthieu 5:48 ?', 'complet']])
+      expect(focusWords(q), q).toEqual(focusWords(`«${w}»`))
+    // the cue elsewhere in the question: still how much to show
+    for (const q of ['¿Qué significa el capítulo completo de Rut 1?', 'Explícame el significado de Éxodo 22 completo', 'What does the whole chapter of Exodus 22 mean?'])
+      expect(focusWords(q), q).toEqual([])
     // a real word still counts
     expect(focusWords('¿Qué dice Éxodo 22 sobre el ladrón?')).toContain(focusWords('ladrón')[0]!)
   })

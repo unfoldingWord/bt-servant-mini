@@ -86,9 +86,11 @@ export function focusWords(question: string | null | undefined, exact: (string |
   // quotes ("What does «see» mean in John 1:39?")
   for (const t of [...exact, ...quoted(question ?? '')]) for (const w of words(t ?? '')) if (!/^\d+$/.test(w) && w.length >= 2) add(w)
   const ws = words((question ?? '').replace(PHRASES, ' '))
-  const aboutWord = ws.some((w) => ASKS_WORD.has(w))
-  for (const w of ws) {
-    if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w) || (WHOLE.has(w) && !aboutWord)) continue
+  // asked about only when the cue is right next to it («significa completo», «la palabra completo», "does whole mean"); «el
+  // capítulo completo», "the whole chapter … mean" are still how much to show
+  const asked = (i: number) => ASKS_WORD.has(ws[i - 1] ?? '') || ASKS_WORD.has(ws[i + 1] ?? '')
+  for (const [i, w] of ws.entries()) {
+    if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w) || (WHOLE.has(w) && !asked(i))) continue
     if (w.length < 3) continue
     add(w)
   }

@@ -14,6 +14,9 @@ describe('who were the sons of Isaac', () => {
     expect(keywords('¿Quiénes eran los hijos de Isaac?')).toEqual(['hijos', 'Isaac'])
     // («eran» capitalized is a name: Eran, Numbers 26:36)
     expect(keywords('¿Quién fue Eran?')).toEqual(['Eran'])
+    // first in the question or in capitals: the verb
+    expect(keywords('Eran muchos los hijos de Jacob?')).not.toContain('Eran')
+    expect(keywords('¿QUIÉNES ERAN LOS HIJOS DE ISAAC?').map((w) => w.toLowerCase())).toEqual(['hijos', 'isaac'])
     expect(keywords('Qui étaient les fils d’Isaac ?').map((w) => w.toLowerCase())).not.toContain('étaient')
     expect(keywords('من هم أبناء إسحاق؟')).not.toContain('هم')
   })
