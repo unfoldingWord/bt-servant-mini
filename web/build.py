@@ -1,12 +1,16 @@
 """Builds the page into app/src/main/assets/www: the JS bundle, index.html and the language packs (with ids.json and index.json).
    python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none; --dev also puts web/src/data/dev in web/desktop/dev, for ?dev=;
    --devapk puts it in app/src/devtest for the dev APK, `gradle assembleFullDevtest`)"""
-import json, re, shutil, subprocess, sys
+import json, os, re, shutil, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WWW = ROOT / 'app' / 'src' / 'main' / 'assets' / 'www'
 # the packs with all four Translation Academy manuals, else the older ones (the same choice as web/tests/fs-packs.ts)
 PACKS = next((p for p in (ROOT.parent / 'lp3-ta-packs', ROOT.parent / 'fase0-mini-servant' / 'packs') if p.is_dir()), ROOT.parent / 'fase0-mini-servant' / 'packs')
+# PACKS_DIR=<dir> ships other packs (as in web/tests/fs-packs.ts), e.g. ../mini-obs-packs, the packs with Open Bible Stories
+if os.environ.get('PACKS_DIR'):
+    PACKS = Path(os.environ['PACKS_DIR']).resolve()
+    assert PACKS.is_dir(), f'PACKS_DIR {PACKS} is not a folder'
 # The language-pack client (web/tsconfig.json paths): bt-synergy at the commit in bt-synergy.ref, checked out in ../bts-client2
 # (as Servos does). Built against another commit, the app would read the packs with a client it was not tested with.
 REF = (ROOT / 'bt-synergy.ref').read_text(encoding='utf-8').strip()
