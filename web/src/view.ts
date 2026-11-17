@@ -362,41 +362,48 @@ export function linkObsWords(box: HTMLElement, o: ObsStudy) {
     const head = p.firstElementChild
     const m = head?.tagName === 'STRONG' && p.firstChild === head ? /^(\d{1,2}):(\d{1,2})$/.exec(head.textContent?.trim() ?? '') : null
     if (!m || +m[1]! !== o.n) continue
-    p.classList.add('obs-fr')
-    const quotes = o.frames[String(+m[2]!)]
-    if (!quotes?.length) continue
-    // the text after the frame's number, in order (an emphasis or a link inside it counts too)
-    const nodes: Text[] = []
-    const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT)
-    for (let n = walk.nextNode(); n; n = walk.nextNode()) if (!head!.contains(n) && !n.parentElement?.closest('a')) nodes.push(n as Text)
-    const text = nodes.map((n) => n.data).join('')
-    const spans = wordSpans(text, quotes)
-    if (!spans.length) continue
-    let at = 0
-    for (const node of nodes) {
-      const from = at
-      const to = (at += node.data.length)
-      const here = spans.filter(([a, b]) => a < to && b > from)
-      if (!here.length) continue
-      const frag = document.createDocumentFragment()
-      let k = from
-      for (const [a0, b0, keys] of here) {
-        const a = Math.max(a0, from), b = Math.min(b0, to)
-        if (a > k) frag.appendChild(document.createTextNode(text.slice(k, a)))
-        const word = text.slice(a, b)
-        const w = el('span', /(^| )n/.test(keys) ? 'w n' : 'w t', word)
-        w.dataset.k = keys
-        w.onclick = (e) => {
-          e.stopPropagation()
-          mark(box, w, keys.split(' '))
-          openPanel({ kind: 'word', study: o, word: text.slice(a0, b0), keys: keys.split(' '), root: box })
-        }
-        frag.appendChild(w)
-        k = b
+    linkFrameWords(p, o, +m[2]!, box, head)
+  }
+}
+/**
+ * One frame's text made tappable (`p`: its words, after `head` when the frame's number is inside it; `box`: where the marks
+ * are cleared). Also the frame of a 5M session's card (obs5mview.ts): the same words, the same panel, the session untouched.
+ */
+export function linkFrameWords(p: HTMLElement, o: ObsStudy, f: number, box: HTMLElement, head: Element | null = null) {
+  p.classList.add('obs-fr')
+  const quotes = o.frames[String(f)]
+  if (!quotes?.length) return
+  // the text after the frame's number, in order (an emphasis or a link inside it counts too)
+  const nodes: Text[] = []
+  const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT)
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) if (!head?.contains(n) && !n.parentElement?.closest('a')) nodes.push(n as Text)
+  const text = nodes.map((n) => n.data).join('')
+  const spans = wordSpans(text, quotes)
+  if (!spans.length) return
+  let at = 0
+  for (const node of nodes) {
+    const from = at
+    const to = (at += node.data.length)
+    const here = spans.filter(([a, b]) => a < to && b > from)
+    if (!here.length) continue
+    const frag = document.createDocumentFragment()
+    let k = from
+    for (const [a0, b0, keys] of here) {
+      const a = Math.max(a0, from), b = Math.min(b0, to)
+      if (a > k) frag.appendChild(document.createTextNode(text.slice(k, a)))
+      const word = text.slice(a, b)
+      const w = el('span', /(^| )n/.test(keys) ? 'w n' : 'w t', word)
+      w.dataset.k = keys
+      w.onclick = (e) => {
+        e.stopPropagation()
+        mark(box, w, keys.split(' '))
+        openPanel({ kind: 'word', study: o, word: text.slice(a0, b0), keys: keys.split(' '), root: box })
       }
-      if (k < to) frag.appendChild(document.createTextNode(text.slice(k, to)))
-      node.replaceWith(frag)
+      frag.appendChild(w)
+      k = b
     }
+    if (k < to) frag.appendChild(document.createTextNode(text.slice(k, to)))
+    node.replaceWith(frag)
   }
 }
 

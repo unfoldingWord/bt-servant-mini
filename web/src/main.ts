@@ -1,7 +1,7 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { passageContext, resetLangs, type Sheet } from './answer'
-import { backPanel, fillTitles, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
+import { backPanel, fillTitles, linkFrameWords, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
@@ -36,7 +36,8 @@ import { devOn, type Fixture, initDev } from './dev'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel } from './obs'
+import { obsLabel, parseObsRef } from './obs'
+import { obsStudyOf } from './obswords'
 import { addObsPictures } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
@@ -1428,7 +1429,12 @@ function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
     // an answer shown on a card is remembered here, in memory only, for share and the online context (never saved, never counted)
     reveal: (id: string, shown: boolean) => { if (node) revealOn(cv.id, node, id, shown) },
     // (a mark is kept with the conversation and the saved place, as any answer is; saveSession asks keepHistory and never throws)
-    marked: () => { save(); if (g.session) saveSession(cv.id, g.session) } }
+    marked: () => { save(); if (g.session) saveSession(cv.id, g.session) },
+    // the frame's words: the story's notes and key terms, read once per card, in the session's language (obswords.ts)
+    words: (text: HTMLElement, ref: string, root: HTMLElement) => {
+      const f = parseObsRef(ref)?.f
+      if (f) void obsStudyOf({ ref, lang: g.session!.lang }).then((o) => { if (o) linkFrameWords(text, o, f, root) }).catch(() => {})
+    } }
 }
 /** A step of the session as a turn of the chat */
 function runStep(label: string, s: Session) {
