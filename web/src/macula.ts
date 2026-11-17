@@ -435,13 +435,13 @@ const P_HI = 'वह|वो|वे|उसने|उसे|उसको|उन्
 const P_AR = 'هو|هي|هم|هن|هما|انت|انتم|انا|نحن|ه|ها'
 /** The pronouns safe to take unquoted: no articles (el, la, le, les, lo...), no second person (you, kamu), no possessives that start a noun phrase (their). */
 const U_EN = 'he|she|they|him|her|them|it|we|us'
-const U_ES = 'ella|ellos|ellas|yo|nosotros'
+const U_ES = 'elpron|ella|ellos|ellas|yo|nosotros'
 const U_FR = 'il|elle|ils|elles|lui|leur|nous'
 const U_ID = 'dia|ia|mereka|aku|saya|kami|kita|beliau'
 const U_HI = 'वह|वो|वे|उसने|उसे|उसको|उन्होंने|उन्हें|उनको|मैं|हम|उसका|उसकी|उसके|उनका|उनकी|उनके|इसने|इसे'
 const U_AR = 'هو|هي|هم|هن|هما|انا|نحن'
 /** After a pronoun with no quotes: a place ("he in Ruth 2:4"), the question's end; not a noun ("¿quién es el redentor?"). */
-const END = `(?=\\s+(?:in|en|dans|di|dalam|here|aqui|ici|disini|di sini|this|este|ce)\\b|\\s*[?؟.!]|\\s*$)`
+const END = `(?=\\s+(?:in|en|dans|di|dalam|here|aqui|ici|disini|di sini|this|este|ce|itu)\\b|\\s*[?؟.!]|\\s*$)`
 const RE_ALL = [
   /\bwho(?:'s| is| are| was| were)\s+who\b/, /\bquien(?:es)? es quien\b/, /\bqui est qui\b/, /\bsiapa (?:adalah |itu )?siapa\b/,
   /कौन\s+(?:किसको|किसे|किसका|किसकी|कौन)/, /من (?:هو|هي|هم) من(?=\s|$|[؟?])/,
@@ -458,7 +458,7 @@ const RE_PRON = [
   new RegExp(`\\bqui\\s+(?:est|sont|etait)\\s+(?:${QUOTE}(${P_FR})${QUOTE}|(${U_FR})${END})`),
   new RegExp(`\\bsiapa(?:kah)?\\s+(?:yang dimaksud(?:kan)?\\s+(?:dengan\\s+)?)?(?:${QUOTE}-?(${P_ID})${QUOTE}|(${U_ID})${END})`),
   new RegExp(`${QUOTE}-?(${P_ID})${QUOTE}\\s+(?:itu\\s+)?siapa`),
-  new RegExp(`(?:^|[\\s(])${QUOTE}?(${P_HI})${QUOTE}?\\s+(?:कौन|किसको|किसे)`),
+  new RegExp(`(?:^|[\\s(])(?:${QUOTE}(${P_HI})${QUOTE}|(${U_HI}))\\s+(?:कौन|किसको|किसे)`),
   new RegExp(`कौन\\s+(?:है|हैं|था|थे)\\s+${QUOTE}(${P_HI})${QUOTE}`),
   new RegExp(`من\\s+(?:هو|هي|هم)\\s+${QUOTE}(${P_AR})${QUOTE}`),
 ]
@@ -486,18 +486,22 @@ const RE_QUOTED = new RegExp(`${QUOTE}\\s*([^"'“”‘’«»„]{1,30}?)\\s*$
  * The passage is the pipeline's to find (in the question, else the conversation's).
  */
 export function asksWho(q: string): { word: string | null } | null {
-  const f = fold(q).replace(/[’‘]/g, "'")
+  // the pronoun "él" (accent, not in quotes) is kept apart from the article "el", which folding would make the same
+  const f = fold(q.replace(/(?<![\p{L}«"'“‘])él(?![\p{L}])/giu, 'elpron')).replace(/[’‘]/g, "'")
   const quoted = RE_QUOTED.exec(q)?.[1]?.trim() ?? null
   if (RE_ALL.some((r) => r.test(f))) return { word: null }
   for (const r of RE_PRON) {
     const m = r.exec(f)
-    if (m) return { word: quoted ?? m.slice(1).find(Boolean) ?? null }
+    if (m) {
+      const w = m.slice(1).find(Boolean) ?? null
+      return { word: quoted ?? (w === 'elpron' ? 'él' : w) }
+    }
   }
   // "who does he refer to?", "à qui se réfère « il » ?": a pronoun must be named (quoted or not), or the word "pronoun"
   if (RE_REFER.some((r) => r.test(f))) {
     if (quoted && isPronoun(quoted)) return { word: quoted }
     const said = pronounIn(f)
-    if (!quoted && said) return { word: said }
+    if (!quoted && said) return { word: said === 'elpron' ? 'él' : said }
     if (/\b(?:pronoun|pronombre|pronom|kata ganti)\b|सर्वनाम|الضمير/.test(f)) return { word: null }
   }
   return null

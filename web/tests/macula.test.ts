@@ -148,6 +148,7 @@ describe('the sentence structure (trees, fixture)', () => {
 describe('the question, read by code', () => {
   const yes: [string, string | null][] = [
     ["who is 'he' in Ruth 2:4?", 'he'], ['Who is he in Ruth 2:4?', 'he'], ['who does he refer to in Ruth 2:4', 'he'], ['Who is who in this verse?', null],
+    ['¿Quién es él en Rut 1:3?', 'él'], ['¿A quién se refiere él en Rut 1:3?', 'él'], ['Siapa dia itu?', 'dia'],
     ['¿Quién es «él» en Rut 2:4?', 'él'], ['¿A quién se refiere «ella» en Rut 2:3?', 'ella'], ['¿Quién es quién en este versículo?', null],
     ['À qui se réfère « il » dans Ruth 2:4 ?', 'il'], ['Qui est qui dans ce verset ?', null],
     ["Siapa yang dimaksud dengan 'dia' dalam Rut 2:4?", 'dia'], ["'Dia' dalam Rut 2:4 merujuk kepada siapa?", 'Dia'], ['Siapa adalah siapa dalam ayat ini?', null],
@@ -159,7 +160,7 @@ describe('the question, read by code', () => {
     'who is Boaz?', 'Who is Boaz in Ruth 2:4?', '¿Quién es Booz?', '¿quién es el redentor?', 'Qui est Boaz ?', 'Siapa Boas?', 'बोअज़ कौन है?', 'من هو بوعز؟',
     "What does 'kinsman redeemer' refer to?", 'who is speaking here?', 'Who are the Moabites?', 'Who wrote Ruth?', 'Ruth 2:4', 'What does glean mean here?',
     '¿a qué se refiere la expresión reino de los cielos?', "à quoi renvoie le terme Fils de l'homme ?", 'what does their culture refer to', 'quién es el',
-    'who are you?', 'siapa kamu?',
+    'who are you?', 'siapa kamu?', 'आप कौन हैं?', 'तुम कौन हो', 'यह कौन है', 'ये कौन हैं', 'siapa itu',
   ]
   for (const q of no) test(`does not: ${q}`, () => expect(asksWho(q)).toBeNull())
 })
@@ -236,7 +237,7 @@ describe.skipIf(!PACKS)('in the app (packs on disk)', () => {
   })
   test('articles and "you" are not pronouns: after one verse these do not take the who-is-who route', async () => {
     for (const q of ['¿a qué se refiere la expresión reino de los cielos?', "à quoi renvoie le terme Fils de l'homme ?", 'what does their culture refer to', 'quién es el',
-      'who are you?', 'siapa kamu?']) {
+      'who are you?', 'siapa kamu?', 'आप कौन हैं?', 'तुम कौन हो', 'यह कौन है', 'ये कौन हैं']) {
       const c: ConvState = { last: null }
       await turn(c, { q: 'Ruth 2:4' }, 'en')
       const r = await turn(c, { q }, 'en')
