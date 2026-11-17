@@ -298,14 +298,14 @@ export type Told = { n: number; f: number | null; title: string; lang: string; r
  * verses), most specific first: the fewest verses, then story order. Empty when no pack on the phone has the table (a common catalog
  * from before it) or no frame tells the passage. `r`: a reader of any pack (the common unit is the same for all).
  */
-export async function framesTelling(r: PackReader, range: [number, number]): Promise<{ n: number; f: number }[]> {
+export async function framesTelling(r: PackReader, range: [number, number]): Promise<{ n: number; f: number; verses: number }[]> {
   if (typeof (r as Partial<PackReader>).framesAt !== 'function' || noTable.has(r)) return []
   const [a, z] = [Math.max(range[0], Math.floor(range[0] / 1000) * 1000 + 1), range[1]]
   if (Math.floor(a / 1_000_000) !== Math.floor(z / 1_000_000) || a > z) return []
   const ans = await r.framesAt(a, z).catch(() => null)
   // a pack whose common catalog has no table answers so once: not asked again (a new reader after an update asks again)
   if (ans && (ans.data === null || ans.coverage?.['bcv-commons/bible-story-builder'] === 'none')) noTable.add(r)
-  return (ans?.data?.frames ?? []).map((x) => ({ n: x.story, f: x.frame }))
+  return (ans?.data?.frames ?? []).map((x) => ({ n: x.story, f: x.frame, verses: x.verses }))
 }
 let noTable = new WeakSet<PackReader>()
 /** Forgets which packs had no frame map (the tests change a reader's maps in place). */
@@ -331,17 +331,18 @@ function idsOf(from: number, to: number): number[] {
  */
 async function exactFrames(r: PackReader, range: [number, number]): Promise<{ n: number; f: number }[]> {
   if (range[0] % 1000 === 0) return []
-  const found = await framesTelling(r, range)
-  if (range[0] === range[1] || !found.length) return found
+  const found = (await framesTelling(r, range)).map(({ n, f, verses }) => ({ n, f, verses }))
+  if (range[0] === range[1] || !found.length) return found.map(({ n, f }) => ({ n, f }))
   const want = idsOf(range[0], range[1])
   const out: { n: number; f: number }[] = []
-  for (const x of found.slice(0, 12)) {
+  // only a frame with at least as many verses as the passage can cover it (the others are skipped without a lookup)
+  for (const x of found.filter((y) => y.verses >= want.length)) {
     const have = new Set<number>()
     for (const ref of await frameRefsOf(r, x.n, x.f)) {
       const rr = rangeOfRef(ref)
       if (rr) for (let v = rr[0]; v <= rr[1]; v++) have.add(v)
     }
-    if (want.length && want.every((v) => have.has(v))) out.push(x)
+    if (want.length && want.every((v) => have.has(v))) out.push({ n: x.n, f: x.f })
   }
   return out
 }
@@ -362,7 +363,7 @@ export async function pictureFrame(ref: string, lang: string): Promise<{ n: numb
     const r = await read(l)
     if (!r) continue
     const found = await framesTelling(r, range)
-    if (found.length) return found[0]!
+    if (found.length) return { n: found[0]!.n, f: found[0]!.f }
   }
   return null
 }
