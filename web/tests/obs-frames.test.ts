@@ -138,11 +138,15 @@ describe('the frame map', () => {
       expect(box.children).toEqual([])
     }
     // offline with no pictures on the phone: nothing
-    ;(globalThis as any).navigator = { onLine: false }
-    const off: any = document.createElement('div')
-    expect(await addVersePicture(off, JSON.stringify({ ref: 'gen 1:7' }), 'en', frameOf)).toBeNull()
-    expect(off.children).toEqual([])
-    delete (globalThis as any).navigator
+    const nav = (globalThis as any).navigator
+    Object.defineProperty(nav, 'onLine', { value: false, configurable: true })
+    try {
+      const off: any = document.createElement('div')
+      expect(await addVersePicture(off, JSON.stringify({ ref: 'gen 1:7' }), 'en', frameOf)).toBeNull()
+      expect(off.children).toEqual([])
+    } finally {
+      delete nav.onLine
+    }
     delete (globalThis as any).document
   })
 })
