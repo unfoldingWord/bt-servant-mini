@@ -336,11 +336,16 @@
   .study .tx-label { font: 600 11px/1.3 system-ui, sans-serif; letter-spacing: .6px; color: var(--accent); margin: 0 0 3px; }
   .study .vv { margin: 0; font: 16px/1.75 Georgia, "Noto Serif", "Noto Serif Devanagari", "Noto Naskh Arabic", serif; }
   .study .vv sup { font: 600 10px system-ui, sans-serif; color: var(--faint); margin-inline-end: 2px; }
-  .study .w { cursor: pointer; border-radius: 3px; -webkit-tap-highlight-color: transparent; }
-  .study .w.n { text-decoration: underline dotted var(--accent); text-underline-offset: 4px; text-decoration-thickness: 1.5px; }
-  .study .w.t { text-decoration: underline dotted var(--faint); text-underline-offset: 4px; }
-  .study .w.rel { background: var(--accent-soft); }
-  .study .w.on { background: var(--accent); color: #fff; text-decoration: none; }
+  .study .w, .obs-fr .w { cursor: pointer; border-radius: 3px; -webkit-tap-highlight-color: transparent; }
+  .study .w.n, .obs-fr .w.n { text-decoration: underline dotted var(--accent); text-underline-offset: 4px; text-decoration-thickness: 1.5px; }
+  .study .w.t, .obs-fr .w.t { text-decoration: underline dotted var(--faint); text-underline-offset: 4px; }
+  .study .w.rel, .obs-fr .w.rel { background: var(--accent-soft); }
+  .study .w.on, .obs-fr .w.on { background: var(--accent); color: #fff; text-decoration: none; }
+  .msg [hidden] { display: none !important; }
+  .pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 12px; }
+  .pager-label { flex: 1; text-align: center; font: 600 13px/1.3 system-ui, sans-serif; color: var(--muted); }
+  .pager-btn { min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); color: var(--accent); font: 16px system-ui, sans-serif; cursor: pointer; }
+  .pager-btn:disabled { color: var(--faint); opacity: .5; cursor: default; }
   .study details.more-tx, .study details.qs { margin: 4px 0 10px; }
   .study details > summary { font: 600 13px system-ui, sans-serif; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }

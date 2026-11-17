@@ -1,7 +1,7 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { passageContext, resetLangs, type Sheet } from './answer'
-import { backPanel, fillTitles, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
+import { backPanel, fillTitles, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { chooseCards, moreLabel, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
@@ -15,6 +15,7 @@ import { has } from './commands'
 import { resetSearch } from './search'
 import { md, mdDir } from './md'
 import { bidiLabel, dirOf, rtlLang, strip } from './bidi'
+import { pageAnswer } from './pager'
 import { askSafety, closeSafety, safetyAsked } from './safety'
 import { autoCheckUpdate, checkForUpdate, updateRow, updateSupported } from './update'
 import { hint as pwaHint } from './pwa'
@@ -179,7 +180,8 @@ function load() {
 }
 function save() {
   // the interactive passage is kept for the last messages of each conversation; older ones show their text answer
-  for (const c of convs) c.msgs.slice(0, -8).forEach((m) => delete m.study)
+  // (an OBS story's helps too: a whole story's are a few KB, a Bible chapter's study tens of KB)
+  for (const c of convs) c.msgs.slice(0, -8).forEach((m) => { delete m.study; delete m.obs })
   try {
     if (keepHistory()) localStorage.setItem(KEY, JSON.stringify({ convs, current }))
     else localStorage.removeItem(KEY)
@@ -336,7 +338,11 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     host = src
   }
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
-  if (m.study) host.appendChild(renderStudy(m.study, asked))
+  if (m.study) {
+    const sb = host.appendChild(renderStudy(m.study, asked))
+    // a long answer in parts (pager.ts): only how it is drawn, the message keeps all of it
+    pageAnswer(sb, m.ui ?? nav)
+  }
   // who is who, the sentence's structure (macula.ts): drawn, its text kept for sharing and reports
   else if (m.macula) host.appendChild(renderMacula(m.macula))
   else if (m.info) {
@@ -346,7 +352,10 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     fillTitles(box, m.lang ?? 'en')
     // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
     addObsPictures(box, m.meta, m.ui ?? nav)
+    // an OBS story or frame: the words its notes and key terms quote, tappable as a passage's (obswords.ts)
+    if (m.obs) linkObsWords(box, m.obs)
     host.appendChild(box)
+    pageAnswer(box, m.ui ?? nav)
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
