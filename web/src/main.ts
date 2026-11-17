@@ -1440,7 +1440,13 @@ function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
 const frameStudies = new Map<string, Promise<ObsStudy | null>>()
 function frameStudy(ref: string, lang: string): Promise<ObsStudy | null> {
   const k = `${ref}|${lang}`
-  if (!frameStudies.has(k)) frameStudies.set(k, obsStudyOf({ ref, lang }).catch(() => null))
+  // only quotes in the text's language (obsPack falls back to another pack: its quotes would mark wrong words, or none);
+  // nothing found is not kept (a pack added later links the words)
+  if (!frameStudies.has(k)) frameStudies.set(k, obsStudyOf({ ref, lang }).catch(() => null).then((o) => {
+    if (o?.lang.split('-')[0] === lang.split('-')[0]) return o
+    frameStudies.delete(k)
+    return null
+  }))
   return frameStudies.get(k)!
 }
 /** A step of the session as a turn of the chat */
