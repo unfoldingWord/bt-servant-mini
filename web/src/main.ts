@@ -2,7 +2,7 @@
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { passageContext, resetLangs, type Sheet } from './answer'
 import { backPanel, fillTitles, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
-import { chooseCards, moreLabel, showsCards } from './helpcards'
+import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
@@ -314,29 +314,11 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const asked = askedFor(m)
-  // with an online answer (or while it is written), it comes first, then the helps the phone found as cards in sight (the
-  // articles it was grounded in first), then the whole phone's answer folded behind what it holds ("See all 66 notes…").
-  // The cards are drawn already while the answer is written and stay where they are when it arrives (fillAi).
-  let host: HTMLElement = d
-  if (showsCards(m, pending)) {
-    d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
-    const ui = m.ui ?? nav
-    const plan = chooseCards({
-      study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: asked,
-      sources: m.ai?.sources?.length ? m.ai.sources : m.sources, cited: m.ai?.sources?.map((s) => s.id),
-    })
-    const src = document.createElement('details')
-    src.className = 'sources fold'
-    src.appendChild(el('summary', '', moreLabel(plan.more, ui)))
-    const reveal = (what: 'text' | 'answer') => {
-      src.open = true
-      const at = (what === 'text' && src.querySelector<HTMLElement>('.study .tx')) || src
-      at.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    }
-    if (plan.cards.length) d.appendChild(renderHelpCards(plan.cards, { ui, lang: m.lang ?? 'en', study: m.study, helps: m.helps, reveal }))
-    d.appendChild(src)
-    host = src
-  }
+  // the phone's answer first, open, as without online AI (the passage, its helps folded as always); with an online answer (or
+  // while it is written), then the helps it was grounded in as cards behind one fold ("Helps of this answer (3)"), then the
+  // online answer itself, last, with its badge (Abel, Nov 17: "primero es el contenido que viene de los datos"). It is drawn
+  // the same while it is written ("Writing…" last) and when it arrives (fillAi puts it in that place).
+  const host: HTMLElement = d
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.study) {
     const sb = host.appendChild(renderStudy(m.study, asked))
@@ -358,6 +340,28 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pageAnswer(box, m.ui ?? nav)
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
+  if (showsCards(m, pending)) {
+    const ui = m.ui ?? nav
+    const plan = chooseCards({
+      study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: asked,
+      sources: m.ai?.sources?.length ? m.ai.sources : m.sources, cited: m.ai?.sources?.map((s) => s.id),
+    })
+    // a card of the text or of the answer goes to it, above (open now)
+    const reveal = (what: 'text' | 'answer') => {
+      const at = (what === 'text' && d.querySelector<HTMLElement>('.study .tx')) || d.querySelector<HTMLElement>('.study, .info, .plain.md')
+      at?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+    if (plan.cards.length) {
+      const fold = document.createElement('details')
+      fold.className = 'sources fold'
+      fold.appendChild(el('summary', '', `${cardsT(ui).head} (${plan.cards.length})`))
+      const cards = renderHelpCards(plan.cards, { ui, lang: m.lang ?? 'en', study: m.study, helps: m.helps, reveal })
+      cards.querySelector('.hc-head')?.remove() // the fold says it
+      fold.appendChild(cards)
+      d.appendChild(fold)
+    }
+    d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
+  }
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
   // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
   const s5 = devOn('obs5m')
