@@ -1376,7 +1376,9 @@ function cardHooks(cv: Conv | undefined, ui: string) {
   if (!fx || !cv?.graph?.session) return undefined
   const g = cv.graph
   // the session as it is when tapped (each step replaces g.session; the marks go to the current copy)
-  return { fx, get s() { return g.session! }, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui) }
+  return { fx, get s() { return g.session! }, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui),
+    // (a mark is kept with the conversation and the saved place, as any answer is; saveSession asks keepHistory and never throws)
+    marked: () => { save(); if (g.session) saveSession(cv.id, g.session) } }
 }
 /** A step of the session as a turn of the chat */
 function runStep(label: string, s: Session) {
@@ -1458,6 +1460,8 @@ function end5() {
   if (busy) return
   endSession(conv())
   save()
+  // (the cards drawn before keep no live buttons into the ended session)
+  renderConv()
   updateBar()
   cmp.answered()
 }

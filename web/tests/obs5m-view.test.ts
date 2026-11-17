@@ -8,6 +8,7 @@ import { loadFixture, type Fixture } from '../src/dev'
 import { cardOf, ORDER, type Session, stepId, steps } from '../src/obs5m'
 import { barModel, drawBar, drawCard, drawOutline, outlineModel, reviewPick } from '../src/obs5mview'
 import { W5 } from '../src/obs5mwords'
+import { KEY5, savedSessions, saveSession } from '../src/obs5mstore'
 import type { Sheet } from '../src/answer'
 
 // ---------------------------------------------------------------------------------------------------- a stand-in page
@@ -192,6 +193,27 @@ describe('a step card', () => {
     const again = draw(s, helps)
     expect(again.byClass('s5-check')[1]!.byClass('s5-mark')[1]!.getAttribute('aria-pressed')).toBe('true')
     for (const q of tq) expect(again.seen).not.toContain(q.a)
+  })
+})
+
+describe('a checking mark is kept', () => {
+  test('mark, then a fresh load from storage still has it; with conversations not kept, nothing is written', () => {
+    store.clear()
+    const tq = [{ id: 'tq1', q: 'What did God create?', a: 'Dry land.' }]
+    const helps = { facts: { kind: 'obs' as const, n: 1, f: 5, title: '', refs: [], state: 'ok' as const, pack: 'en', frames: 16, terms: [] }, academy: [], tq }
+    const s = session('checking', atFrame('checking', 'check', '1:5'))
+    const h = { ...hooks(s), marked: () => saveSession('c1', s) }
+    const d = drawCard(cardOf(fx, s, helps, 'en')!, 'en', h) as unknown as FakeEl
+    d.byClass('s5-check')[0]!.byClass('s5-mark')[0]!.click()
+    expect(savedSessions()[0]!.s.checked).toEqual({ '1:5': { tq1: 'understood' } })
+    expect(store.get(KEY5)).not.toContain('Dry land')
+    store.clear()
+    store.set('btsm.history', 'none')
+    d.byClass('s5-check')[0]!.byClass('s5-mark')[1]!.click()
+    expect(store.has(KEY5)).toBe(false)
+    // main.ts hands the card this hook
+    const main = readFileSync(join(import.meta.dir, '../src/main.ts'), 'utf8')
+    expect(main.includes('marked: () => { save(); if (g.session) saveSession(cv.id, g.session) }')).toBe(true)
   })
 })
 

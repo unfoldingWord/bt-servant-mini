@@ -93,7 +93,7 @@ export function cardModel(card: Card5, ui: string, fx?: Fixture | null, s?: Sess
 }
 
 /** What a card can do: run a sheet (a turn of the chat), and hear of a reveal (share and online context). `s`: the session as it is now (main.ts gives a getter) */
-export type CardHooks = { fx: Fixture; s: Session; run(label: string, sheet: Sheet): void; reveal?(id: string, shown: boolean): void }
+export type CardHooks = { fx: Fixture; s: Session; run(label: string, sheet: Sheet): void; reveal?(id: string, shown: boolean): void; marked?(): void }
 
 function el(tag: string, cls: string, text?: string): HTMLElement {
   const d = document.createElement(tag)
@@ -162,6 +162,7 @@ function drawQ(q: QCard, m: CardModel, ui: string, on: CardHooks | undefined, ma
       ;(c[q.frame] ??= {})[q.id] = v
       ok.setAttribute('aria-pressed', String(v === 'understood'))
       no.setAttribute('aria-pressed', String(v === 'confusing'))
+      on.marked?.()
     }
     const ok = btn('s5-mark', m.words.understood, ui)
     const no = btn('s5-mark', m.words.confusing, ui)

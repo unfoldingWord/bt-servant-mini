@@ -141,10 +141,11 @@ describe('the saved place (btsm.5m.v1)', () => {
     expect(savedSessions()).toEqual([expect.objectContaining({ story: 1, conv: 'c1', s: expect.objectContaining({ part: 'm1', at: 5 }) })])
     for (const k of Object.keys(savedSessions()[0]!.s)) expect(['at', 'checked', 'done', 'lang', 'part', 'started', 'story', 'tfLang']).toContain(k)
     // conversations not kept (menu > Safety): no write, nothing read, no [Resume]
-    store.delete(KEY5)
     store.set('btsm.history', 'none')
-    saveSession('c1', s1)
-    expect(store.has(KEY5)).toBe(false)
+    const had = store.get(KEY5)
+    expect(had).toBeDefined() // the key stays: only the setting hides it
+    saveSession('c2', { ...s1, story: 2 })
+    expect(store.get(KEY5)).toBe(had)
     expect(savedSessions()).toEqual([])
     const fresh: ConvState = { last: null }
     expect(startRow(ctx(fresh)).items.some((x) => x.resume !== undefined)).toBe(false)
@@ -248,6 +249,67 @@ describe('[End session]', () => {
     expect(g1.reply.pathBack).toMatchObject({ toPath: true })
     expect(g1.reply.sessionBack).toBeUndefined()
   }, 60_000)
+})
+
+describe('after [End session]', () => {
+  /** a conversation at M1 frame 5 with parts done and a checking mark, saved, whose Next chip was drawn before the end */
+  async function ended() {
+    const c = await atFrame5()
+    Object.assign(c.graph!.session!, { done: ['intro', 'frames'], checked: { '1:3': { tq1: 'understood' } } })
+    const started = c.graph!.session!.started
+    const stale = startRow(ctx(c)).items[0]!
+    saveSession('c1', c.graph!.session!)
+    endSession(c)
+    expect(c.graph!.session).toBeUndefined()
+    return { c, stale, started }
+  }
+  test('a stale [Next] keeps the saved parts done, start and marks, and saves them back', async () => {
+    const { c, stale, started } = await ended()
+    expect(stale.label.startsWith('Next:')).toBe(true)
+    const r: any = await press(c, stale)
+    expect([r.answered, at(c)]).toEqual(['obs5m', 'm1/6'])
+    expect(c.graph!.session).toMatchObject({ started, done: ['intro', 'frames'], checked: { '1:3': { tq1: 'understood' } } })
+    saveSession('c1', c.graph!.session!)
+    expect(savedSessions()[0]!.s).toMatchObject({ started, done: ['intro', 'frames'], checked: { '1:3': { tq1: 'understood' } } })
+  }, 120_000)
+  test('"5M OBS 1" typed after End starts at the intro with the saved entry as its base', async () => {
+    const { c, started } = await ended()
+    const r: any = await turn(c, { q: '5M OBS 1' }, 'en')
+    expect(r.answered).toBe('obs5m')
+    expect(at(c)).toBe('intro/0')
+    expect(c.graph!.session).toMatchObject({ started, done: ['intro', 'frames'], checked: { '1:3': { tq1: 'understood' } } })
+  }, 120_000)
+  test('[End session] redraws the conversation (main.ts end5)', () => {
+    const main = readFileSync(join(import.meta.dir, '../src/main.ts'), 'utf8')
+    const body = main.slice(main.indexOf('function end5()'), main.indexOf('function resumeRow'))
+    expect(body.indexOf('endSession(conv())')).toBeGreaterThan(0)
+    expect(body.indexOf('renderConv()')).toBeGreaterThan(body.indexOf('endSession(conv())'))
+  })
+})
+
+describe('a corrupt saved entry', () => {
+  test('is skipped, never throws', () => {
+    store.set(KEY5, JSON.stringify({ v: 1, stories: {
+      '1': { conv: 'c', updated: 1, s: { story: 1, part: 'm1', at: 2, lang: 'en', tfLang: 'en', started: 1, done: 'nope' } },
+      '2': { conv: 'c', updated: 2, s: { story: 2, part: 'm1', at: 2, lang: 'en', tfLang: 'en', started: 1, done: ['m1', 'bogus'], checked: 7 } },
+      '3': null } }))
+    const l = savedSessions()
+    expect(l.map((x) => x.story)).toEqual([2])
+    expect(l[0]!.s.done).toEqual(['m1'])
+  })
+})
+
+describe('the step a frame help names', () => {
+  test('"Understood" shows where a step is (sessionMark) and what a frame help is ("OBS 1:5 · notes")', async () => {
+    const c = await atFrame5()
+    const rs: any = await press(c, { sheet: sheetOf(fx, c.graph!.session!, 'en') })
+    expect(rs.reply.sessionMark).toBe('Movement 1 · observation · frame 5/16')
+    const rn: any = await turn(c, { q: 'and the notes?' }, 'en')
+    expect(rn.reply.sessionMark).toBe('OBS 1:5 · notes')
+    expect(placeLabel(nodeOf(c.graph, rn.node)!, 'en')).toBe('OBS 1:5 · notes')
+    const re: any = await turn(c, { q: 'notas' }, 'es')
+    expect(re.reply.sessionMark).toBe('OBS 1:5 · notas')
+  }, 120_000)
 })
 
 describe('dev switch off', () => {

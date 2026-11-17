@@ -4,7 +4,7 @@
 // never a note (notes are saved.ts', tied to the step id). Like the conversations it is kept only while menu > Safety keeps
 // them (`keepHistory`), it goes with "Erase everything", and the PIN covers what shows it. Every read and write is in try/catch.
 import type { ConvState } from './pipeline'
-import type { Code, Session } from './obs5m'
+import { type Code, ORDER, type Session } from './obs5m'
 import { newGraph } from './graph'
 
 export const KEY5 = 'btsm.5m.v1'
@@ -33,27 +33,36 @@ function write(stories: Record<string, Entry>) {
     localStorage.setItem(KEY5, JSON.stringify({ v: 1, stories }))
   } catch {}
 }
-/** The session's place and marks only (nothing else a Session may carry is kept) */
-function placeOf(s: Session): Session {
-  const out: Session = { story: s.story, part: s.part, at: s.at, lang: s.lang, tfLang: s.tfLang, started: s.started, done: [...s.done] as Code[] }
-  if (s.checked) {
-    const c: NonNullable<Session['checked']> = {}
-    for (const [f, m] of Object.entries(s.checked)) {
-      const marks: Record<string, 'understood' | 'confusing'> = {}
-      for (const [id, v] of Object.entries(m ?? {})) if (v === 'understood' || v === 'confusing') marks[id] = v
-      c[f] = marks
+/** The session's place and marks only (nothing else a Session may carry is kept); null when the entry is not a session */
+function placeOf(s: Session): Session | null {
+  try {
+    if (!s || typeof s !== 'object' || !(ORDER as readonly string[]).includes(s.part) || !Number.isInteger(s.at) || !Number.isInteger(s.story)) return null
+    if (typeof s.lang !== 'string' || typeof s.tfLang !== 'string' || !Array.isArray(s.done)) return null
+    const done = s.done.filter((p): p is Code => (ORDER as readonly string[]).includes(p as string))
+    const out: Session = { story: s.story, part: s.part, at: s.at, lang: s.lang, tfLang: s.tfLang, started: +s.started || Date.now(), done }
+    if (s.checked && typeof s.checked === 'object') {
+      const c: NonNullable<Session['checked']> = {}
+      for (const [f, m] of Object.entries(s.checked)) {
+        const marks: Record<string, 'understood' | 'confusing'> = {}
+        for (const [id, v] of Object.entries(m ?? {})) if (v === 'understood' || v === 'confusing') marks[id] = v
+        c[f] = marks
+      }
+      out.checked = c
     }
-    out.checked = c
+    return out
+  } catch {
+    return null
   }
-  return out
 }
 
 /** Keeps where the session is (after each answer of a conversation that has one); nothing when conversations are not kept */
 export function saveSession(convId: string, s: Session): void {
   if (!keep()) return
   try {
+    const p = placeOf(s)
+    if (!p) return
     const all = read()
-    all[String(s.story)] = { conv: convId, s: placeOf(s), updated: Date.now() }
+    all[String(s.story)] = { conv: convId, s: p, updated: Date.now() }
     write(all)
   } catch {}
 }
@@ -61,10 +70,14 @@ export function saveSession(convId: string, s: Session): void {
 export function savedSessions(): Saved5[] {
   if (!keep()) return []
   try {
-    return Object.entries(read())
-      .filter(([, e]) => e && typeof e.conv === 'string' && e.s && typeof e.s.part === 'string' && Number.isInteger(e.s.at))
-      .map(([k, e]) => ({ story: +k, conv: e.conv, s: e.s, updated: +e.updated || 0, ...(e.ended ? { ended: true } : {}) }))
-      .sort((a, b) => b.updated - a.updated)
+    const out: Saved5[] = []
+    for (const [k, e] of Object.entries(read())) {
+      try {
+        const s = e && typeof e.conv === 'string' ? placeOf(e.s) : null
+        if (s) out.push({ story: +k, conv: e.conv, s, updated: +e.updated || 0, ...(e.ended ? { ended: true } : {}) })
+      } catch {}
+    }
+    return out.sort((a, b) => b.updated - a.updated)
   } catch {
     return []
   }
@@ -114,7 +127,7 @@ export function resumeTarget(conv: string, convs: { id: string; empty: boolean }
 /** The saved session put back into a conversation, before its step is asked again (its parts done, start and marks are kept) */
 export function resumeIn(c: ConvState, s: Session): void {
   const g = (c.graph ??= newGraph())
-  g.session = placeOf(s)
+  g.session = placeOf(s) ?? undefined
   g.pathPaused = !!g.path
   delete g.pathNext
 }

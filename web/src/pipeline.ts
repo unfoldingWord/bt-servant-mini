@@ -2996,7 +2996,9 @@ async function step5(x: Ctx): Promise<Done | null> {
   const { sheet, ui } = x
   const fx = await fixture5()
   const meta = `${env.details} · ${secs(x)} s\n${x.meta}`
-  const s = sheet.concept ? sessionOfSheet(sheet, fx, x.c.graph?.session ?? null) : null
+  // (no session in this conversation, e.g. after [End session]: the saved place of the story is the base, never a blank one)
+  const base = x.c.graph?.session ?? savedSessions().find((e) => e.story === fx.story)?.s ?? null
+  const s = sheet.concept ? sessionOfSheet(sheet, fx, base) : null
   if (!s) {
     const n = parseObsRef(sheet.ref)?.n ?? 0
     const follow: Follow[] = n >= 1 && n <= 50 ? [{ label: obsLabel(n), sheet: passageSheet(sheet, obsRef(n), ['text', 'notes']) }] : []
@@ -3071,6 +3073,9 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
   if (!s) return
   delete g.pathNext
   const fx = await fixture5()
+  // a frame's help ("OBS 1:5 · notes"): says what it shows, as the Map and the way back do (placeLabel)
+  const pt = nodeOf(g, g.cur)
+  if (pt?.kind === 'passage' && parseObsRef(pt.sheet.ref)?.f && pt.sheet.what.length === 1) reply.sessionMark = placeLabel(pt, x.ui)
   const st = sessionNode(g)
   const to = sheetOf(fx, s, s.lang)
   if (reply.back && nodeOf(g, reply.back.back)?.kind === 'obs5m') delete reply.back
