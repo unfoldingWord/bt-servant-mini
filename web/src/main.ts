@@ -36,7 +36,7 @@ import { devOn, type Fixture, initDev } from './dev'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel, pictureFrame } from './obs'
+import { obsLabel, obsServer, pictureFrame } from './obs'
 import { addObsPictures, addVersePicture } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
@@ -1212,7 +1212,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
   // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
-  const asking = m.who === 'bot' && !m.macula && !!(m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()
+  // (not over an answer that offers to add something, Open Bible Stories: that button is the next step, a report of Nov 17)
+  const asking = m.who === 'bot' && !m.macula && !!(m.info || m.helps?.length || m.study) && !m.follow?.some((f) => f.add) && onlineOn() && onlineAvailable() && isOnline()
   // while it is written, the phone's answer shows as it will under it (its helps as cards), so nothing moves when it arrives
   let node = renderMsg(m, asking)
   wait.replaceWith(node)
@@ -1832,6 +1833,8 @@ count('opens')
 setTimeout(() => sendUsage(), 5000)
 // once a day with internet, the added languages get the shared articles they lack (packs.ts updateLangs); silent
 setTimeout(() => { if (isOnline()) updateLangs().catch(() => {}) }, 8000)
+// an OBS answer may ask the packs server whether it has the stories for this language, where the person allows the internet
+obsServer.allowed = () => (onlineOn() || usageOn()) && isOnline()
 window.addEventListener('online', () => { sendUsage(); sendFeedback() })
 setTimeout(() => sendFeedback(), 6000)
 // a new version of the Android app (update.ts): the notice from the last check; a new check once a day, only if the internet is allowed

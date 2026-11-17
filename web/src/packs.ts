@@ -398,32 +398,54 @@ export function installWant(books: readonly string[], obs = true): { defaults: f
   return { defaults: false, units: [...MAP_UNITS, ...(obs ? [OBS_UNIT] : []), ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
 }
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
+/** The language's catalog on the packs server and the common catalogs it names, verified; null when the server has none. */
+async function serverCatalogs(lang: string, source: PackSource): Promise<VerifiedCatalog[] | null> {
+  // each server gets CATALOG_MS (serverSource); this is the time for all of them
+  const wait = () => timeout(CATALOG_MS * Math.max(1, servers.length))
+  const got = await source.catalog(lang, { signal: wait() })
+  if (got === 'not-modified') return null
+  const cat = await verifyCatalogFile(got.bytes, trust, { from: 'network' })
+  const catalogs = [cat]
+  for (const [rname, , rid] of cat.catalog.requires ?? []) {
+    const id = hex(rid)
+    if (!commonCats.has(id)) {
+      commonCats.set(id, (async () => {
+        const c = await source.catalog(rname, { signal: wait() })
+        if (c === 'not-modified') return null
+        const v = await verifyCatalogFile(c.bytes, trust, { from: 'network' })
+        return v.id === id ? v : null
+      })().catch(() => null))
+    }
+    const common = await commonCats.get(id)!
+    if (!common) commonCats.delete(id) // try again next time (the server may be ahead or behind for a moment)
+    else catalogs.push(common)
+  }
+  return catalogs
+}
+/**
+ * The download size of one unit of a language as the packs server lists it now (`obs` for a phone whose packs were installed
+ * before the server had Open Bible Stories), or null: not listed, no server, no internet.
+ */
+export async function serverUnitSize(lang: string, unit: string, source: PackSource = serverSource()): Promise<number | null> {
+  try {
+    const catalogs = await serverCatalogs(lang, source)
+    if (!catalogs?.[0]?.catalog.units.some((u) => u.id === unit)) return null
+    const plan = planInstall(catalogs, emptyState(), { defaults: false, units: [unit] }, new Set())
+    const bytes = plan.steps.filter((st) => st.key.endsWith(`/${unit}`)).reduce((n, st) => n + st.segments.reduce((k, x) => k + x.size, 0), 0)
+    return bytes > 0 ? bytes : null
+  } catch {
+    return null
+  }
+}
 /**
  * Reads the language's catalog (a few KB) and the common catalog it names, and plans the same install `downloadLang` runs, so the
  * size shown before the download is the size downloaded. Null when the server has no pack for it (or no internet).
  */
 export async function offerOf(lang: string, source: PackSource = serverSource()): Promise<Offer | null> {
-  // each server gets CATALOG_MS (serverSource); this is the time for all of them
-  const wait = () => timeout(CATALOG_MS * Math.max(1, servers.length))
   try {
-    const got = await source.catalog(lang, { signal: wait() })
-    if (got === 'not-modified') return null
-    const cat = await verifyCatalogFile(got.bytes, trust, { from: 'network' })
-    const catalogs = [cat]
-    for (const [rname, , rid] of cat.catalog.requires ?? []) {
-      const id = hex(rid)
-      if (!commonCats.has(id)) {
-        commonCats.set(id, (async () => {
-          const c = await source.catalog(rname, { signal: wait() })
-          if (c === 'not-modified') return null
-          const v = await verifyCatalogFile(c.bytes, trust, { from: 'network' })
-          return v.id === id ? v : null
-        })().catch(() => null))
-      }
-      const common = await commonCats.get(id)!
-      if (!common) commonCats.delete(id) // try again next time (the server may be ahead or behind for a moment)
-      else catalogs.push(common)
-    }
+    const catalogs = await serverCatalogs(lang, source)
+    if (!catalogs) return null
+    const cat = catalogs[0]!
     const listed = new Set(cat.catalog.units.map((u) => u.id))
     const books = CANON.filter((b) => listed.has(`book:${b}`))
     // Open Bible Stories with the language only when they are OBS_MAX or less (what the plan says they weigh)

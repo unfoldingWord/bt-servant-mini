@@ -176,6 +176,18 @@ function conceptOf(word: string, m: Map<string, string[]>, strict = false): stri
   return best ? m.get(best)! : null
 }
 
+/**
+ * A question's word in the forms an English heading or story title may have it (storyfind.ts): the word, its English story
+ * word ("leones" -> lion, data/story-words.json) and the last part of the Translation Words articles it names ("Salomón" ->
+ * solomon, "templo" -> temple).
+ */
+export async function englishForms(word: string, lang: string): Promise<string[]> {
+  const out = new Set([fold(word), ...toEnglish([word], lang).map((w) => fold(w))])
+  const ids = conceptOf(word, await names().catch(() => new Map<string, string[]>()), true) ?? []
+  for (const id of ids) if (/^tw:(names|kt|other)\//.test(id)) out.add(id.slice(id.lastIndexOf('/') + 1).replace(/\d+$/, ''))
+  return [...out].filter(Boolean)
+}
+
 /** A verse found: `text` as a list shows it (a snippet around the words, or the whole verse), `full` the whole verse. */
 export type Found = { book: string; ch: number; v: number; text: string; why: string; full?: string
   /** the verse's rarity score (rankVerses): how far the first verse is ahead of the next */

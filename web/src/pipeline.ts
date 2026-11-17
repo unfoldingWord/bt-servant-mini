@@ -10,7 +10,8 @@ import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
 import { type ObsStudy, obsStudyOf } from './obswords'
-import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
+import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyName, storyStep } from './obs'
+import { findSections, findStories, resetSections, type Section, type SectionHit, sectionRef } from './storyfind'
 import { devOn, type Fixture, loadFixture } from './dev'
 import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
 import { W5 } from './obs5mwords'
@@ -463,6 +464,7 @@ export function resetBooks() {
   headsCache.clear()
   mapCache.clear()
   HAS.clear()
+  resetSections()
 }
 /**
  * A follow-up's numbers checked against the book: "the next verse" at a chapter's end is the first of the next chapter, "the
@@ -535,6 +537,20 @@ export function guessLang(q: string): string {
     }
   }
   return best
+}
+/**
+ * The language the question's own words say, or null when they do not: by script, else the language with the most common
+ * words (a tie with the app's language is the app's; any other tie, or no such word, says nothing).
+ */
+export function langByWords(q: string): string | null {
+  if (/[؀-ۿ]/.test(q)) return 'ar'
+  if (/[ऀ-ॿ]/.test(q)) return 'hi'
+  const n = Object.entries(COMMON).map(([l, re]) => [l, q.match(re)?.length ?? 0] as const).filter(([, k]) => k > 0)
+  const most = Math.max(0, ...n.map(([, k]) => k))
+  const top = n.filter(([, k]) => k === most).map(([l]) => l)
+  if (!most) return null
+  if (top.length === 1) return top[0]!
+  return top.includes(env.nav) ? env.nav : null
 }
 
 // "Voy a empezar a traducir Jonás", "I want to translate Ruth", "Je vais traduire Jonas": about to translate a book (a report
@@ -934,6 +950,12 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   // "and the notes in Spanish?": the reader may take the language named for the question's own; the reply's words stay in
   // the language of the rest of the question
   if (target && given?.lang && packCode(given.lang) === packCode(target)) given.lang = guessLang(q)
+  // the reader's language against the question's own words (a report of Nov 16: "¿Dónde se tragó a Jonás un gran pez?" read
+  // as French on a phone in Spanish got a French sentence and English verses): the words win when they say another language
+  else if (given?.lang) {
+    const said = langByWords(q)
+    if (said && baseOf(said) !== baseOf(given.lang)) given.lang = said
+  }
   // an article the question does not name (a report of Nov 16: "Puedes decirlo" read as «metáfora»): read by code instead
   const slots = given && (await strayTerm(given, q, c)) ? ({ intent: 'unknown', lang: given.lang } as Slots) : given
   const stray = slots !== given ? `\n(the reader's term «${given!.term}» is not in the question: read by code)` : ''
@@ -1936,6 +1958,44 @@ async function findBeyondVerses(x: Ctx, words: string[]): Promise<boolean> {
 }
 
 /**
+ * An event or story by a section's heading (storyfind.ts): the best section of these books becomes the sheet (its passage; the
+ * steps after answer it, with x.lead naming the heading); the next sections and an Open Bible Story whose title has the words
+ * are buttons. With no heading, a story title that has every word is the answer. `one`: a single word is enough when exactly
+ * one heading has it (in the book the question names). False when nothing fits (the verses are searched as before).
+ */
+async function sectionFor(x: Ctx, words: string[], books: string[], one: boolean): Promise<boolean> {
+  if (!words.length || (words.length < 2 && !one)) return false
+  const lang = x.sheet.lang ?? env.nav
+  const hits = await findSections(words, lang, books).catch(() => [] as SectionHit[])
+  const stories = await findStories(words, lang).catch(() => [])
+  const lone = words.length < 2
+  const base = { ...x.sheet, candidates: null, term: null, phrase: null } as Sheet
+  const what = x.sheet.intent === 'passage' && x.sheet.what?.length ? x.sheet.what : ['text']
+  const secLabel = (s: Section) => `${bookLabel(x.ui, s.book)} ${s.ch}:${s.v}${s.end > s.v ? `–${s.end}` : ''}`
+  const pack = async (s: Section) => (await packWithBook(s.book, lang).catch(() => null)) ?? lang
+  const storyButtons = async (): Promise<Follow[]> => stories.slice(0, 1).map((st) =>
+    ({ label: storyName({ n: st.n, title: st.title }), sheet: passageSheet(base, obsRef(st.n), ['text', 'notes'], st.lang) }))
+  if (hits.length && !(lone && hits.length > 1)) {
+    const best = hits[0]!
+    x.sheet = passageSheet(base, sectionRef(best), what, await pack(best))
+    x.lead = FT(x.ui).section.replace('{title}', best.title).replace('{ref}', secLabel(best))
+    for (const s of hits.slice(1, 4)) x.others.push({ label: `${secLabel(s)} · ${s.title}`, sheet: passageSheet(base, sectionRef(s), ['text', 'notes'], await pack(s)) })
+    x.others.push(...(await storyButtons()))
+    x.searched += `\nsections: ${hits.slice(0, 4).map((h) => `${sectionRef(h)} «${h.title}» [${h.matched.join(' ')}]`).join(', ')}`
+    x.c.found = []
+    return true
+  }
+  if (!hits.length && stories.length && !lone) {
+    const st = stories[0]!
+    x.sheet = passageSheet(base, obsRef(st.n), ['text', 'notes'], st.lang)
+    x.searched += `\nstory title: OBS ${st.n} «${st.title}» [${st.matched.join(' ')}]`
+    x.c.found = []
+    return true
+  }
+  return false
+}
+
+/**
  * The next steps under an answer that is not a passage: a Translation Words article, its verses (when the name-verses step did
  * not list them), how to translate it, the articles it links to; a Translation Academy article, its related ones and its manual
  * in Browse; a count, the verses or the passage counted; a ranking, the articles ranked; advice on a verse, its helps and the
@@ -2327,21 +2387,34 @@ ${x.meta}` },
       // a story in a book ("Daniel en el foso de los leones" read as Daniel, isOpen): searched in that book only, without its
       // name; unless a verse there fits well, the book itself as the reader read it (the sheet route answers it), never the
       // weaker answers below (an article, an introduction, notes elsewhere: "Quiero leer Rut" is Ruth)
-      const inBook = scope && x.sheet.intent === 'passage' && !has('where', q) ? scope : null
-      const res = inBook ? await searchVerses(storyWords(q, inBook).join(' '), null, x.sheet.lang, inBook) : await searchVerses(q, x.sheet.term, x.sheet.lang)
+      let inBook = scope && x.sheet.intent === 'passage' && !has('where', q) ? scope : null
+      const kind0 = kindOf(q)
+      // the story by a section's heading first ("Daniel in the Lions' Den", storyfind.ts): its passage is the answer
+      if (inBook && !kind0 && (await sectionFor(x, storyWords(q, inBook), [inBook], true))) return null
+      let res = inBook ? await searchVerses(storyWords(q, inBook).join(' '), null, x.sheet.lang, inBook) : await searchVerses(q, x.sheet.term, x.sheet.lang)
       // a where-question read as a book ("¿Dónde fue tragado Jonás…?" -> Jonah): that book's verses first
       if (scope && !inBook && res.hits.some((h) => h.book === scope)) res.hits = [...res.hits.filter((h) => h.book === scope), ...res.hits.filter((h) => h.book !== scope)]
       if (inBook) {
         const s0 = res.strength
         if (!res.hits.length || (s0 && !s0.full && s0.coverage < GOOD)) {
-          x.searched = `\nsearch in ${inBook}: ${JSON.stringify(res.keywords)}, nothing fits well (coverage ${(s0?.coverage ?? 0).toFixed(2)}): the book`
-          return null
+          // never the whole book for a story (reports of Nov 15 and 17: "Salomón construye el templo" read as 1 Kings got all
+          // of it): the question searched in the whole Bible, as an open question
+          x.searched = `\nsearch in ${inBook}: ${JSON.stringify(res.keywords)}, nothing fits well (coverage ${(s0?.coverage ?? 0).toFixed(2)}): the whole Bible`
+          inBook = null
+          res = await searchVerses(q, x.sheet.term, x.sheet.lang)
+          x.sheet = { ...x.sheet, intent: 'search', ref: null } as Sheet
         }
+      }
+      // an event named by every word of a section's heading, in the books of the verses found ("Solomon builds the temple":
+      // 1 Kings 6, 2 Chronicles 3): that section, unless a where-question wants its verse or a kind of help was asked for
+      if (!inBook && !kind0 && !has('where', q) && !asksWhere(q)) {
+        const books = [...new Set(res.hits.map((h) => h.book))].slice(0, 6)
+        if (await sectionFor(x, res.keywords, books, false)) return null
       }
       const st = res.strength
       const cover = st ? st.coverage : 1
       const good = res.hits.length > 0 && (!st || st.full || cover >= GOOD)
-      x.searched = `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}` +
+      x.searched += `\nsearch: ${res.how} ${JSON.stringify(res.keywords)} concepts ${JSON.stringify(res.concepts)}` +
         (st ? `\nfindall: ${good ? 'verses' : 'weak'}, coverage ${cover.toFixed(2)}, margin ${st.margin.toFixed(2)}, found ${JSON.stringify(st.matched)}, not ${JSON.stringify(st.missing)}` : '')
       const kind = kindOf(q)
       if (!good && (await findBeyondVerses(x, res.keywords))) {

@@ -1,6 +1,7 @@
 {
   "_": "Common words of Bible stories, to English, for searches in a language whose pack lacks the book (the question's words are then matched against the English text). Keys are folded: lowercase, no accents.",
   "es": {
+    "construye": "build", "construyo": "build", "construir": "build", "construyen": "build", "edifica": "build", "edifico": "build", "templo": "temple",
     "mar": "sea", "pez": "fish", "peces": "fish", "ballena": "fish", "leon": "lion", "leones": "lion", "foso": "den",
     "arca": "ark", "diluvio": "flood", "gigante": "giant", "piedra": "stone", "piedras": "stone", "fuego": "fire",
     "horno": "furnace", "agua": "water", "aguas": "water", "rio": "river", "monte": "mountain", "montana": "mountain",
@@ -12,6 +13,7 @@
     "becerro": "calf", "tablas": "tablets", "honda": "sling", "cabello": "hair", "pozo": "well", "escalera": "ladder"
   },
   "fr": {
+    "construit": "build", "construire": "build", "batit": "build", "batir": "build",
     "mer": "sea", "poisson": "fish", "poissons": "fish", "baleine": "fish", "lion": "lion", "lions": "lion", "fosse": "den",
     "arche": "ark", "deluge": "flood", "geant": "giant", "pierre": "stone", "pierres": "stone", "feu": "fire",
     "fournaise": "furnace", "eau": "water", "eaux": "water", "fleuve": "river", "montagne": "mountain", "desert": "wilderness",
@@ -22,6 +24,7 @@
     "fronde": "sling", "cheveux": "hair", "puits": "well", "echelle": "ladder"
   },
   "id": {
+    "membangun": "build", "dibangun": "build", "pembangunan": "build",
     "laut": "sea", "ikan": "fish", "singa": "lion", "gua": "den", "bahtera": "ark", "raksasa": "giant", "batu": "stone",
     "api": "fire", "perapian": "furnace", "air": "water", "sungai": "river", "gunung": "mountain", "gurun": "wilderness",
     "semak": "bush", "ular": "serpent", "domba": "lamb", "roti": "bread", "anggur": "wine", "perahu": "boat",

@@ -11,7 +11,7 @@
 // that does not list it says plainly that its packs have no Open Bible Stories yet. Nothing here throws for a missing unit.
 import { BOOKS, bookNumber, type ObsModel, parseRef as v3Ref, verseId } from '@bt-synergy/language-pack-v3'
 import type { PackReader } from '@bt-synergy/language-pack-client'
-import { installedLangs, openLang, origin, PACK_NAMES } from './packs'
+import { installedLangs, openLang, origin, PACK_NAMES, serverUnitSize } from './packs'
 import { FOLD } from './focus'
 import { bidiLabel } from './bidi'
 import { keywords } from './search'
@@ -231,10 +231,29 @@ export async function obsPack(lang: string): Promise<{ lang: string; r: PackRead
 }
 /** A pack that lists the obs unit and does not have it: its size, and whether this phone can add it (a pack it downloaded). */
 export type ObsMissing = { lang: string; bytes: number; canAdd: boolean }
+/**
+ * Asking the packs server whether it has Open Bible Stories for a language: main.ts allows it where the person allows the
+ * internet (online AI or usage counts) and there is a connection; tests replace `size` and `origin`.
+ */
+export const obsServer = {
+  allowed: (): boolean => false,
+  size: (lang: string): Promise<number | null> => serverUnitSize(lang, 'obs'),
+  origin: (lang: string): Promise<'added' | 'shipped' | null> => origin(lang),
+}
 export async function obsMissing(lang: string): Promise<ObsMissing | null> {
-  for (const l of await order(lang)) {
+  const langs = await order(lang)
+  for (const l of langs) {
     const r = await read(l)
     if (r && r.listed('obs') && !r.installed('obs')) return { lang: l, bytes: r.size('obs'), canAdd: (await origin(l).catch(() => null)) === 'added' }
+  }
+  // no pack here lists them (installed before the server had them, a report of Nov 17: "OBS 1" said there were none and online
+  // AI answered): the server may have them for the question's language or English, when this phone downloaded that language
+  // (its unit can be added on a tap: addUnit)
+  if (!obsServer.allowed()) return null
+  for (const l of langs.filter((x) => x === lang || x === 'en')) {
+    if ((await obsServer.origin(l).catch(() => null)) !== 'added') continue
+    const bytes = await obsServer.size(l).catch(() => null)
+    if (bytes) return { lang: l, bytes, canAdd: true }
   }
   return null
 }

@@ -43,6 +43,83 @@
         "تعابير اصطلاح*"
       ]
     },
+    "ta:translate/guidelines-clear": {
+      "en": [
+        "=clear translat*",
+        "clarity translat*"
+      ],
+      "es": [
+        "=tradu* clar*",
+        "claridad tradu*"
+      ],
+      "fr": [
+        "=traduction* clair*",
+        "clarte tradu*"
+      ],
+      "id": [
+        "=terjemahan jelas",
+        "kejelasan terjemah*"
+      ],
+      "hi": [
+        "=स्पष्ट अनुवाद*",
+        "स्पष्टता अनुवाद*"
+      ],
+      "ar": [
+        "=ترجم* واضح*",
+        "وضوح ترجم*"
+      ]
+    },
+    "ta:translate/guidelines-natural": {
+      "en": [
+        "=natural translat*",
+        "naturalness translat*"
+      ],
+      "es": [
+        "=tradu* natural*",
+        "naturalidad tradu*"
+      ],
+      "fr": [
+        "=traduction* naturelle*",
+        "naturel tradu*"
+      ],
+      "id": [
+        "=terjemahan alami",
+        "kewajaran terjemah*"
+      ],
+      "hi": [
+        "=स्वाभाविक अनुवाद*"
+      ],
+      "ar": [
+        "=ترجم* طبيعي*"
+      ]
+    },
+    "ta:translate/guidelines-accurate": {
+      "en": [
+        "=accurate translat*",
+        "accuracy translat*"
+      ],
+      "es": [
+        "=tradu* precisa*",
+        "precision tradu*",
+        "=tradu* exacta*"
+      ],
+      "fr": [
+        "=traduction* exacte*",
+        "=traduction* precise*",
+        "exactitude tradu*"
+      ],
+      "id": [
+        "=terjemahan akurat",
+        "ketepatan terjemah*"
+      ],
+      "hi": [
+        "=सटीक अनुवाद*"
+      ],
+      "ar": [
+        "=ترجم* دقيق*",
+        "دقة ترجم*"
+      ]
+    },
     "ta:translate/figs-metaphor": {
       "en": [
         "metaphor"
