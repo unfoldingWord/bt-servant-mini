@@ -60,9 +60,11 @@ describe('questions that name a story or a frame', () => {
     expect(r.reply.info.match(/unfoldingWord\/en\/obs v9|Open Bible Stories v9/g)).toHaveLength(1)
     expect(r.reply.info.split('\n')[1]).toBe('*A Bible story from: Genesis 6-8*')
     expect(buttons(r)).toEqual([
-      'Next: OBS 3:6 => obs 3:6 text,notes,questions,terms', 'The whole story: OBS 3 => obs 3 text,notes', 'God => tw:kt/god', 'Noah => tw:names/noah',
+      // (its key terms, God and Noah, are linked in the answer: no button asks for them again, Abel, Nov 17)
+      'Next: OBS 3:6 => obs 3:6 text,notes,questions,terms', 'The whole story: OBS 3 => obs 3 text,notes',
       'Bible: Genesis 6:1–8:22 => gen 6:1-8:22 text,notes', 'Bible stories (OBS) => browse',
     ])
+    expect(r.reply.info).toContain('(tw:kt/god)')
   })
 
   test('a frame\'s notes and questions (story 3, frame 4), as the q36 case asks them', async () => {
@@ -427,7 +429,8 @@ describe('the graph and online AI', () => {
     const ctx = await passageContext(contextSheet(c, o)!)
     expect(ctx).toMatch(/^## Open Bible Stories 3: The Flood \(A Bible story from: Genesis 6-8\)\n3:1 After a long time/)
     expect(ctx).toContain('3:16 ')
-    const noah = o.reply.follow.find((f: any) => f.sheet?.concept === 'tw:names/noah')
+    // Noah's article, tapped in the answer (its link; the button is gone, the answer shows it)
+    const noah = { sheet: { ...o.reply.follow[0].sheet, intent: 'article', concept: 'tw:names/noah', ref: null, what: [], lang: 'en' } }
     const a = await press(c, noah, 'en')
     expect(contextSheet(c, a)?.ref).toBe('obs 3:5')
   })
