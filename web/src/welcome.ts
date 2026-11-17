@@ -11,6 +11,8 @@ import { CANON, openLang } from './packs'
 import { booksOf, fillName } from './suggest'
 import { bookShown } from './firstuse'
 import { XT } from './explore'
+import { fiveOffered, fiveStories, modeTitle } from './modes'
+import { obsPack } from './obs'
 import { inviteUsed, offerAfterFirstUse, openHowTo } from './howto'
 import { type Answer, type Learn, type LearnKind, levelOf, partName, START, startOf } from './learn'
 import type { Sheet } from './answer'
@@ -19,11 +21,13 @@ import type { Slots } from './sheet'
 
 const KEY = 'btsm.welcome.v1'
 
-export type Door = 'book' | 'learn' | 'look' | 'explore'
+export type Door = 'book' | 'learn' | 'look' | 'five' | 'explore'
 type W = {
-  title: string; sub: string; doors: Record<Door, [string, string]>; skip: string; back: string; close: string
+  title: string; sub: string; doors: Record<Exclude<Door, 'five'>, [string, string]>; skip: string; back: string; close: string
   whichBook: string; bookNote: string
   q1: string; a1: [string, string, string]; q2: string; a2: [string, string, string]; qStep: string
+  /** the 5M's door (offered when a 5M session is, modes.ts): its title, and its line ({name}: the mode's name); Just explore's line with the Bible Stories named */
+  five: [string, string]; exploreObs: string
   suggestT: string; kinds: Record<LearnKind, string>; firstIs: string; start: string; other: string; withBook: string
   menu: string; none: string; change: string
   /** what door 1 sends, as if typed: a task announced on a book, which starts its light path (pipeline.ts pathStart) */
@@ -42,6 +46,7 @@ const STR: Record<string, W> = {
     skip: 'Skip', back: 'Back', close: 'Close',
     whichBook: 'Which book are you translating?', bookNote: 'I will start with its introduction, then go section by section. You can ask anything along the way.',
     q1: 'Have you translated before?', a1: ['Never', 'A little', 'Yes'], q2: 'Have you studied translation?', a2: ['No', 'A little', 'Yes'], qStep: 'Question {n} of 2',
+    five: ['I want to study a story with my team', '{name}, in five movements'], exploreObs: 'The Bible, the Bible Stories and Translation Academy',
     suggestT: 'A place to start',
     kinds: {
       intro: 'The Introduction manual of Translation Academy, in order: what it is, why we translate, and how to find answers.',
@@ -64,6 +69,7 @@ const STR: Record<string, W> = {
     skip: 'Saltar', back: 'Atrás', close: 'Cerrar',
     whichBook: '¿Qué libro estás traduciendo?', bookNote: 'Empiezo por su introducción y luego sigo sección por sección. Puedes preguntar cualquier cosa en el camino.',
     q1: '¿Has traducido antes?', a1: ['Nunca', 'Un poco', 'Sí'], q2: '¿Has estudiado traducción?', a2: ['No', 'Un poco', 'Sí'], qStep: 'Pregunta {n} de 2',
+    five: ['Quiero estudiar una historia con mi equipo', '{name}, en cinco movimientos'], exploreObs: 'La Biblia, las Historias de la Biblia y Translation Academy',
     suggestT: 'Un punto de partida',
     kinds: {
       intro: 'El manual de Introducción de Translation Academy, en orden: qué es, por qué traducimos y cómo encontrar respuestas.',
@@ -86,6 +92,7 @@ const STR: Record<string, W> = {
     skip: 'Passer', back: 'Retour', close: 'Fermer',
     whichBook: 'Quel livre traduisez-vous ?', bookNote: 'Je commence par son introduction, puis section par section. Posez toute question en chemin.',
     q1: 'Avez-vous déjà traduit ?', a1: ['Jamais', 'Un peu', 'Oui'], q2: 'Avez-vous étudié la traduction ?', a2: ['Non', 'Un peu', 'Oui'], qStep: 'Question {n} sur 2',
+    five: ['Je veux étudier une histoire avec mon équipe', '{name}, en cinq mouvements'], exploreObs: 'La Bible, les Histoires de la Bible et Translation Academy',
     suggestT: 'Un point de départ',
     kinds: {
       intro: 'Le manuel d’introduction de Translation Academy, dans l’ordre : ce que c’est, pourquoi nous traduisons, et comment trouver des réponses.',
@@ -109,6 +116,7 @@ const STR: Record<string, W> = {
     whichBook: 'Kitab apa yang sedang Anda terjemahkan?', bookNote: 'Saya mulai dari pengantarnya, lalu bagian demi bagian. Tanyakan apa saja di sepanjang jalan.',
     q1: 'Pernahkah Anda menerjemahkan sebelumnya?', a1: ['Belum pernah', 'Sedikit', 'Ya'], q2: 'Pernahkah Anda belajar penerjemahan?', a2: ['Belum', 'Sedikit', 'Ya'],
     qStep: 'Pertanyaan {n} dari 2',
+    five: ['Saya ingin mempelajari sebuah kisah bersama tim saya', '{name}, dalam lima gerakan'], exploreObs: 'Alkitab, Kisah-kisah Alkitab, dan Translation Academy',
     suggestT: 'Titik awal',
     kinds: {
       intro: 'Buku panduan Pengantar Translation Academy, berurutan: apa itu, mengapa kita menerjemahkan, dan cara menemukan jawaban.',
@@ -131,6 +139,7 @@ const STR: Record<string, W> = {
     skip: 'छोड़ें', back: 'पीछे', close: 'बंद करें',
     whichBook: 'आप किस पुस्तक का अनुवाद कर रहे हैं?', bookNote: 'मैं उसके परिचय से शुरू करूँगा, फिर खंड-दर-खंड आगे बढ़ूँगा। रास्ते में कुछ भी पूछें।',
     q1: 'क्या आपने पहले अनुवाद किया है?', a1: ['कभी नहीं', 'थोड़ा', 'हाँ'], q2: 'क्या आपने अनुवाद की पढ़ाई की है?', a2: ['नहीं', 'थोड़ी', 'हाँ'], qStep: 'प्रश्न {n}/2',
+    five: ['मैं अपनी टीम के साथ एक कहानी का अध्ययन करना चाहता हूँ', '{name}, पाँच चरणों में'], exploreObs: 'बाइबल, बाइबल की कहानियाँ और Translation Academy',
     suggestT: 'शुरुआत का एक बिंदु',
     kinds: {
       intro: 'Translation Academy की परिचय पुस्तिका, क्रम से: यह क्या है, हम अनुवाद क्यों करते हैं, और उत्तर कैसे ढूँढें।',
@@ -153,6 +162,7 @@ const STR: Record<string, W> = {
     skip: 'تخطَّ', back: 'السابق', close: 'إغلاق',
     whichBook: 'أيّ سفر تترجم؟', bookNote: 'أبدأ بمقدمته، ثم مقطعًا بعد مقطع. اسأل عن أي شيء في الطريق.',
     q1: 'هل ترجمت من قبل؟', a1: ['أبدًا', 'قليلًا', 'نعم'], q2: 'هل درست الترجمة؟', a2: ['لا', 'قليلًا', 'نعم'], qStep: 'السؤال {n} من 2',
+    five: ['أريد أن أدرس قصة مع فريقي', '{name}، في خمس حركات'], exploreObs: 'الكتاب المقدس وقصص الكتاب المقدس وTranslation Academy',
     suggestT: 'نقطة للبدء',
     kinds: {
       intro: 'دليل المقدمة في Translation Academy بالترتيب: ما هو، ولماذا نترجم، وكيف تجد الإجابات.',
@@ -244,6 +254,8 @@ export type WelcomeHooks = {
   /** a learning path starts in the conversation, at its first article (`label`: what the chat shows as asked) */
   learn: (l: Learn, label: string, sheet: Sheet) => void
   browse: () => void
+  /** the 5M's door: Browse opens on the 5M view (with Browse's home behind it) */
+  openFive: () => void
   /** an answer is being written: a door that asks waits */
   busy: () => boolean
 }
@@ -299,13 +311,19 @@ async function whenIdle(go: () => void) {
 
 type View = { k: 'home' } | { k: 'book' } | { k: 'q1' } | { k: 'q2'; before: Answer } | { k: 'suggest'; before: Answer; studied: Answer }
 
-/** The welcome over the chat (the first time, and from the menu's "Start over"). Needs setWelcomeHooks first. */
-export function openWelcome(ui: string) {
+/**
+ * The welcome over the chat (the first time, and from the menu's "Start over"). Needs setWelcomeHooks first.
+ * `at`: opened by a guided mode in Browse (modes.ts) on its own screen, the books or the two questions. That is not the welcome
+ * showing: it saves nothing (not that it showed, not a door, not the answers to the two questions, not a skip), so someone who
+ * has not seen the welcome still sees it, and what was chosen on it stays. Back from the first screen closes it.
+ */
+export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}) {
   const h = hooks
   if (!h || document.querySelector('#lock')) return
-  remember()
+  const entry = !!opts.at
+  if (!entry) remember()
   closeWelcome()
-  chosen = false
+  chosen = entry
   opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
   const s = WT(ui)
   const dir = rtlLang(ui) ? 'rtl' : 'ltr'
@@ -323,14 +341,18 @@ export function openWelcome(ui: string) {
   for (const q of quiet) q.inert = true
   document.body.appendChild(wrap)
   document.addEventListener('keydown', onKey)
-  const stack: View[] = [{ k: 'home' }]
+  const stack: View[] = [opts.at === 'book' ? { k: 'book' } : opts.at === 'learn' ? { k: 'q1' } : { k: 'home' }]
   const done = (door: Door | 'skip', patch: Saved = {}) => {
-    remember({ door, ...patch })
+    if (!entry) remember({ door, ...patch })
     chosen = true
     closeWelcome()
   }
   const go = (v: View) => { stack.push(v); draw() }
-  const back = () => { if (stack.length > 1) stack.pop(); draw() }
+  const back = () => {
+    if (stack.length > 1) stack.pop()
+    else if (entry) return void closeWelcome()
+    draw()
+  }
 
   const draw = () => {
     const v = stack[stack.length - 1]!
@@ -359,7 +381,7 @@ export function openWelcome(ui: string) {
       t = title(s.title)
       box.appendChild(el('p', 'wl-sub', s.sub))
       const list = el('div', 'wl-doors')
-      const door = (d: Door, on: () => void) => {
+      const door = (d: Exclude<Door, 'five'>, on: () => void) => {
         const b = button('', on, 'wl-door')
         b.dataset.door = d
         b.append(el('span', 'wl-door-t', s.doors[d][0]), el('span', 'wl-door-s', s.doors[d][1]))
@@ -371,6 +393,18 @@ export function openWelcome(ui: string) {
       door('explore', () => { done('explore'); h.browse() })
       box.appendChild(list)
       nav(false)
+      // what the phone has decides two doors (read, so a moment after the screen shows): the 5M's, before "Just explore", and
+      // "Just explore" naming the Bible Stories when the phone has them
+      void Promise.all([fiveStories(h.packs()), h.packs()[0] ? obsPack(h.packs()[0]!).catch(() => null) : null]).then(([five, obs]) => {
+        if (!list.isConnected) return
+        const ex = list.querySelector('.wl-door[data-door="explore"]')
+        if (obs && ex) ex.children[1]!.textContent = s.exploreObs
+        if (!fiveOffered(five) || list.querySelector('.wl-door[data-door="five"]')) return
+        const b = button('', () => { done('five'); h.openFive() }, 'wl-door')
+        b.dataset.door = 'five'
+        b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m', five)), ui)))
+        list.insertBefore(b, ex)
+      }).catch(() => {})
     } else if (v.k === 'book') {
       t = title(s.whichBook)
       box.appendChild(el('p', 'wl-sub', s.bookNote))

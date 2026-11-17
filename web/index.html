@@ -465,6 +465,12 @@
   .ex-sec > summary > span:first-child { flex: 1; }
   .ex-count { font: 500 13px/1 system-ui, sans-serif; color: var(--muted); background: var(--line); border-radius: 999px; padding: 4px 8px; }
   .ex-sec .ex-rows { margin: 0 0 10px; padding-inline-start: 12px; }
+  /* guided modes (modes.ts, explore.ts): a section of rows over the tabs; the mark before a mode's name is a drawing the page turns in RTL */
+  .ex-modes { margin-bottom: 10px; }
+  .ex-mode-m { display: inline-block; margin-inline-end: 8px; color: var(--accent); vertical-align: -1px; }
+  [dir="rtl"] .ex-mode-m svg, .ex-modes[dir="rtl"] .ex-mode-m svg { transform: scaleX(-1); }
+  .ex-five-intro { margin: 4px 0 8px; }
+  .ex-five { margin-bottom: 6px; }
   .ex-busy { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--fg); }
   /* The conversation's graph (main.ts, graph.ts): "← Back to …" under an answer, the divider where the person went back, the Map */
   .follow.back-row { margin-bottom: -4px; }

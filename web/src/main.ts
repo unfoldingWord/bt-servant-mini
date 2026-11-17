@@ -33,6 +33,7 @@ import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, unde
 import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
 import { devOn, type Fixture, initDev } from './dev'
+import { fiveText } from './modes'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
@@ -1295,6 +1296,30 @@ setExploreHooks({
     renderPanel()
   },
   saved: () => { closeExplore(false); openSaved() },
+  // the guided modes (modes.ts): none opens while an answer is on its way or the app is locked; Browse then says so
+  mode: (id) => {
+    if (busy || locked()) return false
+    // (Browse closes first: the welcome puts the rest of the page out of reach, and Browse is part of it)
+    closeExplore(false)
+    openWelcome(nav, { at: id })
+    return true
+  },
+  // a story's session starts as if "5M OBS n" were typed, the way How to ask's [Try it] sends: read by code, kept, counted
+  ask5: (story) => {
+    if (busy || locked()) return false
+    const typed = input.value
+    input.value = fiveText(story)
+    form.requestSubmit()
+    input.value = typed
+    return true
+  },
+  saved5: () => savedSessions(),
+  resume5: (e) => {
+    if (busy || locked() || !fixture5()) return false
+    closeExplore(false)
+    resume5(e)
+    return true
+  },
 })
 // Saved items and notes (savedview.ts): what opening one asks the chat
 setSavedHooks({
@@ -1364,6 +1389,7 @@ setWelcomeHooks({
     runSheet(label, sheet, nav)
   },
   browse: () => openExplore('welcome'),
+  openFive: () => openExploreAt({ mode: 'obs5m', from: 'welcome' }),
   busy: () => busy,
 })
 

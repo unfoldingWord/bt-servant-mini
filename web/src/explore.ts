@@ -9,7 +9,12 @@ import { count } from './usage'
 import taSections from './data/ta-sections.json'
 import { addSaved, findSaved, MAX_ITEMS, personal, removeSaved, savedSummary, ST as SVT } from './saved'
 import { bibleLabel, obsLabel, obsPack, OW, type StoryEntry, storyList } from './obs'
-import { rtlLang } from './bidi'
+import { bidiLabel, rtlLang } from './bidi'
+import { type Five, fiveOffered, fiveStories, fiveViewTitle, type ModeId, modeCount, modesFor, modeSub, modeTitle, MT, dataOf } from './modes'
+import { langName, loadFixture5 } from './pipeline'
+import { type Saved5 } from './obs5mstore'
+import { stepPlace } from './obs5m'
+import { W5 } from './obs5mwords'
 
 // ------------------------------------------------------------------------------------------------------------------ data
 
@@ -245,6 +250,13 @@ export type ExploreHooks = {
   addLang: () => void
   /** the Saved view (savedview.ts), over Browse */
   saved?: () => void
+  /** a guided mode that is a screen of the welcome (the books, the two questions; welcome.ts `at`); false when it cannot now (an answer is on its way, the app is locked), true once it has closed Browse and opened it */
+  mode: (id: 'book' | 'learn') => boolean
+  /** the 5M session of a story starts as if "5M OBS n" were typed (`fiveText`); false when it cannot now. It does not close Browse */
+  ask5: (story: number) => boolean
+  /** the 5M sessions saved (the ones used last), and [Resume] one (the same as the welcome's); false when it cannot now */
+  saved5: () => Saved5[]
+  resume5: (e: Saved5) => boolean
 }
 let hooks: ExploreHooks | null = null
 export function setExploreHooks(h: ExploreHooks) {
@@ -257,6 +269,7 @@ type View =
   | { k: 'chapter'; code: string; lang: string; ch: number }
   | { k: 'manual'; m: Manual; lang: string }
   | { k: 'obs'; lang: string }
+  | { k: 'obs5m' }
 // kept while the app is open: Browse opens again where the person left it (the next verse is one tap away)
 const stack: View[] = []
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
@@ -282,6 +295,14 @@ function chevron(cls: string, back = false): HTMLElement {
   const s = el('span', cls)
   s.setAttribute('aria-hidden', 'true')
   s.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="${back ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'}"/></svg>`
+  return s
+}
+
+/** The mark before a mode's name, drawn (not "▶": a character does not turn in right-to-left text, the drawing is turned by the CSS). */
+function playMark(): HTMLElement {
+  const s = el('span', 'ex-mode-m')
+  s.setAttribute('aria-hidden', 'true')
+  s.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>'
   return s
 }
 
@@ -332,8 +353,13 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
   draw()
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
-export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean }) {
-  if (at.lang && at.obs) {
+export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; mode?: ModeId; from?: 'welcome' }) {
+  if (at.mode === 'obs5m') {
+    // a guided mode's own view, Browse's home behind it (Back goes there)
+    stack.length = 0
+    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs5m' })
+    count(modeCount('obs5m'))
+  } else if (at.lang && at.obs) {
     stack.length = 0
     stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang })
   } else if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
@@ -341,7 +367,7 @@ export function openExploreAt(at: { book?: string; manual?: string; lang?: strin
     stack.push({ k: 'home', tab: at.book ? 'bible' : 'academy' })
     stack.push(at.book ? { k: 'book', code: at.book, lang: at.lang } : { k: 'manual', m: at.manual as Manual, lang: at.lang })
   }
-  openExplore('answer')
+  openExplore(at.from ?? 'answer')
 }
 /** Closes Browse; the focus goes back to what opened it (not under the lock: `refocus` false). */
 export function closeExplore(refocus = true) {
@@ -362,22 +388,39 @@ export function backExplore(): boolean {
   return true
 }
 
-function ask(label: string, q: Ask) {
-  if (!hooks?.ask(label, q)) {
-    // an answer is still coming: say so where the person is looking, instead of a tap that does nothing
-    const b = ensure()
-    b.body.querySelector('.ex-busy')?.remove()
-    const note = el('p', 'ex-note ex-busy', XT(hooks?.ui() ?? 'en').busy)
-    note.setAttribute('role', 'status')
-    b.body.prepend(note)
-    b.body.scrollTop = 0
-    return
-  }
+/** An answer is still coming: said where the person is looking, instead of a tap that does nothing. */
+function busyNote() {
+  const b = ensure()
+  b.body.querySelector('.ex-busy')?.remove()
+  const note = el('p', 'ex-note ex-busy', XT(hooks?.ui() ?? 'en').busy)
+  note.setAttribute('role', 'status')
+  b.body.prepend(note)
+  b.body.scrollTop = 0
+}
+/** A help reached through Browse (counted once per opening of the app as a session). */
+function reachedHelp() {
   count('explore.answer')
   if (!reached) {
     reached = true
     count('explore.session')
   }
+}
+function ask(label: string, q: Ask) {
+  if (!hooks?.ask(label, q)) return busyNote()
+  reachedHelp()
+  closeExplore()
+}
+/** A guided mode that is a screen of the welcome: the hook closes Browse and opens it; refused, the busy note and nothing else. */
+function openMode(id: 'book' | 'learn') {
+  if (!hooks?.mode(id)) return busyNote()
+  count(modeCount(id))
+  closeExplore(false)
+}
+/** A story's 5M session: asked as if typed. */
+function openFive(story: number) {
+  if (!hooks?.ask5(story)) return busyNote()
+  count(modeCount('obs5m'))
+  reachedHelp()
   closeExplore()
 }
 
@@ -422,8 +465,29 @@ async function draw() {
       b.body.appendChild(button('ex-pill', s.addLang, () => { closeExplore(); hooks?.addLang() }))
       return
     }
-    const [books, manuals, stories] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null)])
+    const [books, manuals, stories, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null), fiveStories(packs).catch((): Five => 'unreadable')])
     if (!done()) return
+    // the guided modes the phone can run, before the tabs so they show with either tab (modes.ts: a mode that lacks what it needs is not there)
+    const modes = modesFor(dataOf(books.length, manuals.length, five))
+    if (modes.length) {
+      b.body.appendChild(el('h4', 'ex-sub', MT(ui).section))
+      const rows = el('div', 'ex-rows ex-modes')
+      rows.dir = rtlLang(ui) ? 'rtl' : 'ltr'
+      for (const id of modes) {
+        const row = button('ex-row', '', () => {
+          if (id !== 'obs5m') return openMode(id)
+          stack.push({ k: 'obs5m' })
+          count(modeCount('obs5m'))
+          draw()
+        })
+        row.dataset.mode = id
+        const t = el('span', 'ex-row-t')
+        t.append(playMark(), document.createTextNode(bidiLabel(modeTitle(ui, id, five), ui)))
+        row.append(t, el('span', 'ex-row-s', bidiLabel(modeSub(ui, id), ui)), chevron('ex-row-c'))
+        rows.appendChild(row)
+      }
+      b.body.appendChild(rows)
+    }
     // the two halves as tabs; one alone needs none
     if (books.length && manuals.length) {
       const tabs = el('div', 'ex-tabs')
@@ -473,6 +537,50 @@ async function draw() {
       }
       b.body.appendChild(list)
     }
+    return
+  }
+
+  if (v.k === 'obs5m') {
+    b.title.textContent = fiveViewTitle(ui)
+    const t = MT(ui)
+    const w = W5(ui)
+    const dir = rtlLang(ui) ? 'rtl' : 'ltr'
+    const [five, fx] = await Promise.all([fiveStories(packs).catch((): Five => 'unreadable'), loadFixture5().catch(() => null)])
+    if (!done()) return
+    // no test file in this build (a normal build does not carry it): said, never an empty screen
+    if (five === 'unreadable' || !fx) {
+      b.body.appendChild(el('p', 'ex-note', t.unreadable))
+      return
+    }
+    b.body.appendChild(el('p', 'ex-note ex-five-intro', t.intro))
+    // [Resume]: the sessions used last (up to 3), as the welcome has them; the same call
+    const rows = el('div', 'ex-rows ex-five')
+    rows.dir = dir
+    for (const e of hooks.saved5().filter((x) => x.story === fx.story).slice(0, 3)) {
+      const row = button('ex-row', '', () => (hooks?.resume5(e) ? closeExplore(false) : busyNote()))
+      row.dataset.resume = String(e.story)
+      row.append(el('span', 'ex-row-t', `↻ ${bidiLabel(w.resume.replace('{story}', `OBS ${e.story}`).replace('{place}', stepPlace(fx, e.s, ui)), ui)}`), chevron('ex-row-c'))
+      rows.appendChild(row)
+    }
+    if (rows.childElementCount) b.body.appendChild(rows)
+    b.body.appendChild(el('h4', 'ex-sub', t.stories))
+    const list = el('div', 'ex-rows ex-five')
+    list.dir = dir
+    for (const st of five.stories) {
+      const row = button('ex-row', '', () => openFive(st.story))
+      row.dataset.story = String(st.story)
+      const title = row.appendChild(el('span', 'ex-row-t', `OBS ${st.story}: ${st.title}`))
+      title.dir = rtlLang(st.titleLang) ? 'rtl' : 'ltr'
+      // the line under it: the Bible passage the story is told from, and the language of the session when it is not the app's
+      const lang = st.tfLang.split('-')[0] !== ui ? fill(w.inLang, { lang: langName(ui, st.tfLang) }) : ''
+      const sub = [st.reference.replace(/^[^:]*:\s*/, ''), lang].filter(Boolean).join(' \u00b7 ')
+      row.append(el('span', 'ex-row-s', bidiLabel(sub, ui)), chevron('ex-row-c'))
+      list.appendChild(row)
+    }
+    b.body.appendChild(list)
+    // what is missing, said in a line: the test version has one story; without Bible Stories on the phone, no helps beside the cards
+    if (five.source === 'test') b.body.appendChild(el('p', 'ex-note', t.onlyOne))
+    if (!five.obs) b.body.appendChild(el('p', 'ex-note', t.noObs))
     return
   }
 
