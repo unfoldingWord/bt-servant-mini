@@ -668,6 +668,12 @@ export function groupObsHelps(box: HTMLElement) {
   const notes = folds.filter((d) => d.querySelector(':scope > ol') && /\d+:\d+/.test(sum(d)))
   /** A list item as a fold: its first bold words (a quote, a question) the button, the rest inside. */
   const asItem = (li: HTMLElement, drop: RegExp) => {
+    // a story's question opens with its frame ("1:3 "): gone first (the fold it goes in says it)
+    const lead = li.firstChild
+    if (lead?.nodeType === Node.TEXT_NODE && drop.test(lead.textContent ?? '')) {
+      lead.textContent = (lead.textContent ?? '').replace(drop, '')
+      if (!lead.textContent.trim()) lead.remove()
+    }
     // (the bold words are the quote only when they open the item: a note without one may have bold words inside)
     const strong = li.firstChild === li.firstElementChild && li.firstElementChild?.tagName === 'STRONG' ? li.firstElementChild : null
     const head = strong ? strong.cloneNode(true) : noteHead('', li.textContent ?? '')

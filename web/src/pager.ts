@@ -207,7 +207,7 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
   const onPage = (at: string) => atOnPage(found.kind, pages[k]!.map((i) => units[i]!.label), at)
   const showHelps = () => {
     // (a range over chapters: the verse numbers repeat, so all of them)
-    if (!helps.length || found.kind === 'parts' || new Set(helps.map((h) => h.dataset.at!.split(':')[0])).size > 1) return
+    if (!helps.length || found.kind === 'parts' || new Set(helps.map((h) => h.dataset.at!.split(':')[0]!).filter((c) => /^\d+$/.test(c))).size > 1) return
     for (const h of helps) h.hidden = pages.length > 0 && !onPage(h.dataset.at!)
     for (const g of box.querySelectorAll<HTMLElement>('details.hgroup')) {
       const kids = [...g.querySelectorAll<HTMLElement>(':scope > [data-at]')]
