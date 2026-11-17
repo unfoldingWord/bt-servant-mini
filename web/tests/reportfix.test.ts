@@ -52,9 +52,9 @@ describe('a story by its section heading (storyfind.ts)', () => {
     for (const q of ['Quiero estudiar Rut', 'Rut en la BSB'])
       expect((await turn({ last: null }, { q, slots: book('Rut') }, 'es')).ref, q).toBe('rut')
   }, 120_000)
-  test('a verse that holds every word stays the answer, not its section', async () => {
-    const r = await turn({ last: null }, { q: 'love your enemies', slots: null }, 'en')
-    expect(r.ref).toMatch(/^mat 5:44$|^luk 6:(27|35)$/)
+  test('outside a book named, only a heading with every word: "love your enemies" is its section, "Jesus wept" its verse', async () => {
+    expect((await turn({ last: null }, { q: 'love your enemies', slots: null }, 'en')).ref).toMatch(/^mat 5:(38|43|44)|^luk 6:(27|35)/)
+    expect((await turn({ last: null }, { q: 'Jesus wept', slots: null }, 'en')).ref).toMatch(/^jhn 11:35$/)
   }, 60_000)
 })
 

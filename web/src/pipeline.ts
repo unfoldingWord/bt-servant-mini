@@ -2424,10 +2424,10 @@ ${x.meta}` },
           x.sheet = { ...x.sheet, intent: 'search', ref: null } as Sheet
         }
       }
-      // an event every word of a section's heading names, when no single verse holds them all, in the books of the verses
-      // found ("Salomón construye el templo": 1 Kings 6): that section, unless a where-question wants its verse or a kind of
-      // help was asked for ("amad a vuestros enemigos" stays Matthew 5:44)
-      if (!inBook && !kind0 && !has('where', q) && !asksWhere(q) && !res.strength?.full) {
+      // an event a section's heading names with every word of the question, in the books of the verses found ("Daniel foso
+      // leones": Daniel 6:10-24, "love your enemies": Matthew 5:43-48), unless a where-question wants its verse or a kind of
+      // help was asked for
+      if (!inBook && !kind0 && !has('where', q) && !asksWhere(q)) {
         const books = [...new Set(res.hits.map((h) => h.book))].slice(0, 6)
         if (await sectionFor(x, res.keywords, books, false, true)) return null
       }
