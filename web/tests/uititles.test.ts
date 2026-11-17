@@ -29,4 +29,14 @@ describe("titles in the app's language", () => {
     expect(labels).toContain('Academy: Introduction of New and Old Participants')
     expect(labels.some((l) => /^This part is told in OBS 2:\d+: Sin Enters the World$/.test(l))).toBe(true)
   })
+  test('Genesis 43:29 in Spanish: no button for the notes or the key terms the answer shows (Abel, Nov 17)', async () => {
+    const r = await turn({ last: null } as ConvState, { q: 'Génesis 43:29', slots: { intent: 'passage', book: 'gen', chapter: 43, verse_start: 29, what: ['text', 'notes'], lang: 'en' } }, 'es')
+    const labels = (r.reply.follow ?? []).map((x) => x.label)
+    const st = r.reply.study!
+    expect(st.notes.length).toBeGreaterThan(0)
+    expect(labels).not.toContain('Notas')
+    if (st.terms.length) expect(labels).not.toContain('Palabras clave')
+    if (st.questions.length) expect(labels).not.toContain('Preguntas')
+    expect(labels.some((l) => l.startsWith('Versículo anterior'))).toBe(true)
+  })
 })
