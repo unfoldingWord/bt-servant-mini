@@ -152,9 +152,11 @@ export const keepHistory = (): boolean => get(HISTORY) !== 'none'
 export function setKeepHistory(keep: boolean) {
   put(HISTORY, keep ? 'keep' : 'none')
   if (!keep) {
-    // what was kept goes now: the conversations (main.ts KEY), the saved items and notes (saved.ts SAVED_KEY)
+    // what was kept goes now: the conversations (main.ts KEY), the saved items and notes (saved.ts SAVED_KEY), and where 5M
+    // sessions were (obs5mstore.ts KEY5)
     put('btsm.conversations.v1', null)
     put(SAVED_KEY, null)
+    put('btsm.5m.v1', null)
   }
 }
 

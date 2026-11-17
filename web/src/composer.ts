@@ -47,6 +47,8 @@ export type Hooks = {
   ask: (label: string, sheet: Sheet, ui: string) => void
   /** Browse (the books there are) */
   browse: () => void
+  /** [Resume] a saved 5M session of this story (dev switch `obs5m`; main.ts) */
+  resume?: (story: number) => void
 }
 /** The box as the composer sees it: the textarea, or a plain object in the tests. */
 export type Box = { value: string; focus(): void; setSelectionRange?(a: number, b: number): void }
@@ -213,6 +215,11 @@ export class Composer {
     if (s.slots) {
       const { sheet, ui } = await buildSheet(`c${Date.now()}`, s.slots, env.helpsLang)
       this.hooks.ask(s.label, sheet, ui)
+      return this.clear()
+    }
+    // a saved 5M session: its conversation (or a new one) at its place
+    if (s.resume !== undefined) {
+      this.hooks.resume?.(s.resume)
       return this.clear()
     }
     // an article, the path's next step: asked as the button under an answer asks it

@@ -19,7 +19,7 @@
 //      another installed pack ("· en inglés"), exactly as buildSheet does
 import { bookCandidates, bookCode, fold, type Slots } from './sheet'
 import { rtlLang, strip as unmarked } from './bidi'
-import { type ConvState, directSheet, env, followUpPreview, pathLabel, pathSheet, previewable } from './pipeline'
+import { type ConvState, directSheet, env, followUpPreview, pathLabel, pathSheet, previewable, sessionChips, sessionUnderstood } from './pipeline'
 import { has, replyLang } from './commands'
 import { bookShown } from './firstuse'
 import { academyLabel, introLabel, whatWord } from './converse'
@@ -38,7 +38,9 @@ export type Kind = 'ok' | 'book' | 'help' | 'intro' | 'missing' | 'shape' | 'pla
  * button under an answer does, with `ask` as the question shown. `choose`: it lists the books (Passage). `missing`: nothing is
  * sent; the composer offers Browse.
  */
-export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true; slots?: Slots; book?: string; sheet?: Sheet; ask?: string; choose?: true }
+export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true; slots?: Slots; book?: string; sheet?: Sheet; ask?: string; choose?: true
+  /** a saved 5M session of this story: [Resume] (main.ts opens its conversation, or a new one, at its place) */
+  resume?: number }
 /** The chapter or verse strip: numbers 1…max; a tap writes `base + sep + n` in the box. */
 export type Strip = { unit: 'chapter' | 'verse'; max: number; base: string; sep: string; at?: number }
 /** `needs`: books to read before the row can say what they have (loadHelps); the composer reads them and makes the row again. */
@@ -316,6 +318,9 @@ export function suggest(text: string, ctx: Ctx): Row {
   const t = unmarked(text).replace(/^\s+/, '') // no bidi marks (text copied from the app or pasted from WhatsApp)
   // (the empty box: the composer shows startRow while the box has the focus)
   if (!t.trim()) return { items: [] }
+  // in a 5M session (dev switch): "notes", "next", a frame's number, read as its step's ("✓ OBS 1:5 · notes")
+  const five = sessionUnderstood(t, ctx.conv, ctx.ui)
+  if (five) return { items: [five] }
   if (t.length > 120 || !ctx.books || replyLang(t) || has('help', t)) return { items: [] }
   const ok = understood(t, ctx)
   if (ok?.needs) return { items: [], needs: ok.needs }
@@ -392,7 +397,10 @@ export function startRow(ctx: Ctx): Row {
   if (ctx.choosing) return ctx.books ? { items: [], pick: bookList('', ctx) } : { items: [] }
   const ui = ctx.ui
   const items: Suggestion[] = []
-  const first = pathOf(ctx) ?? placeOf(ctx)
+  // a 5M session (dev switch): its next step and frame, the way back to it, or [Resume] for one saved
+  const five = sessionChips(ctx.conv, ui)
+  if (five) items.push(...five.items)
+  const first = !five || five.rest === 'all' ? pathOf(ctx) ?? placeOf(ctx) : five.rest === 'place' ? placeOf(ctx) : null
   if (first) items.push(first)
   for (const shape of SHAPES_ORDER) {
     if (!shapeOffered(shape, ui)) continue

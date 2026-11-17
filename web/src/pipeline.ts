@@ -13,6 +13,7 @@ import { frameHelps, fromOtherLine, introLine, isObsRef, namedStory, type ObsFac
 import { devOn, type Fixture, loadFixture } from './dev'
 import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
 import { W5 } from './obs5mwords'
+import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2580,6 +2581,15 @@ const clip = (q: string, words = 6): string => { const w = q.replace(/[¿?¡!]/g
 export function placeLabel(n: GNode, ui: string): string {
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(n.sheet.ref ?? '')
   if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
+  // in a 5M session (dev switch): a step says where it is ("Movement 1 · observation · frame 5/16"), a frame's help what it
+  // shows ("OBS 1:5 · notes")
+  if (devOn('obs5m')) {
+    const fx = fx5v
+    const st = fx && n.kind === 'obs5m' ? sessionOfSheet(sheetOfNode(n), fx, null) : null
+    if (fx && st) return stepPlace(fx, st, ui)
+    const w = n.kind === 'passage' && parseObsRef(n.sheet.ref)?.f && n.sheet.what.length === 1 ? whatWord(ui, n.sheet.what[0]!) : null
+    if (w) return `${refLabelOf(ui, n.sheet.ref!)} · ${w.toLocaleLowerCase(ui)}`
+  }
   return (n.kind === 'passage') && n.sheet.ref ? refLabelOf(ui, n.sheet.ref) : n.label
 }
 /** A point's name in 2–5 words: the passage and what was shown ("Ruth 2:3 · Notes"), the article's title, else the question. */
@@ -2818,8 +2828,11 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
 // light path (paused meanwhile, never replaced). Its frame's helps are 2c's OBS answers; any other answer offers the way back.
 
 let fx5: Promise<Fixture> | null = null
+let fx5v: Fixture | null = null
 /** The story the session reads (the dev fixture: read once, when first needed). */
-const fixture5 = (): Promise<Fixture> => (fx5 ??= loadFixture().catch((e) => { fx5 = null; throw e }))
+const fixture5 = (): Promise<Fixture> => (fx5 ??= loadFixture().then((f) => (fx5v = f)).catch((e) => { fx5 = null; throw e }))
+/** The story's tables if read already (the composer and the labels cannot wait for them); null before */
+export const fixture5Now = (): Fixture | null => fx5v
 
 /**
  * Whether the conversation is at the session (R9): its current point is a step, or under one through `deeper` points only (the
@@ -2843,14 +2856,96 @@ function atSession(g: Graph): boolean {
  * questions?" (what to show of its frame), "next", "¿y el siguiente?" (its next step). Null otherwise (a typed reference, other
  * words: answered as usual), and always with the dev switch off or no session.
  */
-export function sessionAsks(q: string, c: ConvState): 'next' | string[] | null {
+export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { frame: number } | null {
   if (!c.graph?.session || !devOn('obs5m') || !atSession(c.graph)) return null
   const t = latinDigits(withoutWeak(q))
+  // a frame's number alone ("7"), in a part that goes frame by frame: that frame's step of the part
+  const num = /^\s*(\d{1,3})\s*[.?!؟]?\s*$/.exec(t)
+  if (num) return frameStep(c.graph.session, +num[1]!) ? { frame: +num[1]! } : null
   if (/\d/.test(t) || obsAsked(t)) return null
   const lang = guessLang(q)
   if (ownRef(t, { intent: 'unknown', lang } as Slots, lang)) return null
   if (keywords(strip(t, ['range', ...FU_WORDS])).length) return null
   return kindOf(t) ?? (has('next', t) ? 'next' : null)
+}
+
+/**
+ * A button of the composer's row in a 5M session (suggest.ts makes them Suggestions): `sheet` asks that step or help, `send`
+ * sends the box's text (read by code as sessionAsks reads it: the very sheet shown), `resume` resumes a saved session (main.ts).
+ */
+export type Chip5 = { kind: 'next' | 'place' | 'ok'; label: string; sheet?: Sheet; send?: true; resume?: number }
+/**
+ * The composer's empty row (state A) with the dev switch on: in a session, at its step, [Next: … ▸] then the step's frame
+ * [OBS 1:5 ▸]; away from it (a help, a branch), the way back to it first (`rest` 'place': the passage the conversation is on
+ * follows, never the paused light path); with no session here, [Resume OBS 1 · …] for the session used last, if one is saved
+ * (`rest` 'all': the usual first button follows).
+ * Null with the switch off, or before the story's tables are read.
+ */
+export function sessionChips(c: ConvState, ui: string): { items: Chip5[]; rest: 'all' | 'place' | null } | null {
+  const fx = fx5v
+  if (!devOn('obs5m')) return null
+  const g = c.graph
+  const s = g?.session
+  // (the story's tables not read yet: no session's button, and never the paused light path's)
+  if (!fx) return s ? { items: [], rest: 'place' } : null
+  const fwd = rtlArrow(ui)
+  if (!g || !s) {
+    const last = savedSessions().find((x) => x.story === fx.story && sessionOfSheet(sheetOf(fx, x.s, x.s.lang), fx, x.s))
+    if (!last) return null
+    return { items: [{ kind: 'next', label: W5(ui).resume.replace('{story}', obsLabel(last.story)).replace('{place}', stepPlace(fx, last.s, ui)), resume: last.story }], rest: 'all' }
+  }
+  if (!atSession(g)) {
+    return { items: [{ kind: 'next', label: `${ui === 'ar' ? '→' : '←'} ${W5(ui).back.replace('{place}', stepPlace(fx, s, ui))}`, sheet: sheetOf(fx, s, s.lang) }], rest: 'place' }
+  }
+  const items: Chip5[] = []
+  const nx = nextOf5(fx, s)
+  if (nx) items.push({ kind: 'next', label: `${W5(ui).next.replace('{place}', stepPlace(fx, nx, ui))} ${fwd}`, sheet: sheetOf(fx, nx, s.lang) })
+  const f = stepAt(fx, s)?.frame
+  if (f) {
+    const ref = obsRef(s.story, +f.split(':')[1]!)
+    items.push({ kind: 'place', label: `${refLabelOf(ui, ref)} ${fwd}`, sheet: { id: `f${Date.now()}`, intent: 'passage', ref, what: ['text'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: s.lang } })
+  }
+  return { items, rest: null }
+}
+const rtlArrow = (ui: string) => (ui === 'ar' ? '◂' : '▸')
+/**
+ * What a question typed in a 5M session reads as, for the composer's "✓" (state D): "notes" → "✓ OBS 1:5 · notes", "next" →
+ * "✓ Next: …", a frame's number in a part that goes frame by frame → "✓ frame 7". Its tap sends the box's text, which
+ * readQuestion reads the same way (sessionAsks). Null when it is none of these, or with the switch off.
+ */
+export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | null {
+  const asked = sessionAsks(q, c)
+  const s = c.graph?.session
+  const fx = fx5v
+  if (!asked || !s || !fx) return null
+  const w = W5(ui)
+  if (asked === 'next') {
+    const nx = nextOf5(fx, s)
+    return nx ? { kind: 'ok', label: `✓ ${w.next.replace('{place}', stepPlace(fx, nx, ui))}`, send: true, sheet: sheetOf(fx, nx, s.lang) } : null
+  }
+  if (!Array.isArray(asked)) {
+    const to = frameStep(s, asked.frame)
+    return to ? { kind: 'ok', label: `✓ ${w.frameN.replace('{n}', String(asked.frame))}`, send: true, sheet: sheetOf(fx, to, s.lang) } : null
+  }
+  const f = stepAt(fx, s)?.frame
+  const ref = f ? obsRef(s.story, +f.split(':')[1]!) : obsRef(s.story)
+  const word = asked.length === 1 ? whatWord(ui, asked[0]!) : null
+  const sheet: Sheet = { id: `f${Date.now()}`, intent: 'passage', ref, what: [...asked], version: null, concept: null, term: null, phrase: null, candidates: null, lang: s.lang }
+  return { kind: 'ok', label: `✓ ${refLabelOf(ui, ref)}${word ? ` · ${word.toLocaleLowerCase(ui)}` : ''}`, send: true, sheet }
+}
+
+/**
+ * The step of the session's part for frame `n` (a part that goes frame by frame: the frames, M1, drafting, checking), of the
+ * same kind as the current step (M1 has an observation and a translation step per frame); null elsewhere, or with no such frame.
+ */
+function frameStep(s: Session, n: number): Session | null {
+  const fx = fx5v
+  if (!fx || s.story !== fx.story || !['frames', 'm1', 'drafting', 'checking'].includes(s.part)) return null
+  const all = stepsOf5(fx, s.part)
+  const kind = all[s.at]?.kind
+  const f = `${s.story}:${n}`
+  const st = all.find((x) => x.frame === f && x.kind === kind) ?? all.find((x) => x.frame === f)
+  return st ? { ...s, at: st.at } : null
 }
 
 /** "5M OBS 1" (the session's words and a story), or a question about the session's step: its sheet, read by code. */
@@ -2878,6 +2973,9 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
   if (asked === 'next') {
     const nx = nextOf5(fx, s)
     sheet = nx ? sheetOf(fx, nx, s.lang) : null
+  } else if (!Array.isArray(asked)) {
+    const to = frameStep(s, asked.frame)
+    sheet = to ? sheetOf(fx, to, s.lang) : null
   } else {
     const f = stepAt(fx, s)?.frame
     const base: Sheet = { id: '', intent: 'passage', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: s.lang }
@@ -2885,7 +2983,7 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
   }
   if (!sheet) return null
   keepState(c, slotsOfSheet(sheet), { q })
-  return { sheet, ui, meta: `(in the 5M session, read by code: ${asked === 'next' ? 'its next step' : `its frame's ${asked.join(',')}`})`, q, inScope: 'a follow-up in the 5M session' }
+  return { sheet, ui, meta: `(in the 5M session, read by code: ${asked === 'next' ? 'its next step' : Array.isArray(asked) ? `its frame's ${asked.join(',')}` : `frame ${asked.frame} of its part`})`, q, inScope: 'a follow-up in the 5M session' }
 }
 
 /**

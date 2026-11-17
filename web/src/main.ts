@@ -32,6 +32,8 @@ import { devOn, type Fixture, initDev, loadFixture } from './dev'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
+import { obsLabel } from './obs'
+import { endSession, forgetSessions, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
 import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
@@ -630,6 +632,9 @@ function renderConv() {
       // few empty conversations; only once the languages are known
       const inv = INSTALLED.length ? offerFirst(nav, c.id, !convs.some((x) => x.msgs.length)) : null
       if (inv) w.appendChild(inv)
+      // a 5M session saved (dev switch): [Resume …], the ones used last
+      const r5 = resumeRow()
+      if (r5) w.appendChild(r5)
       const ex = el('div', 'examples')
       w.appendChild(ex)
       fillExamples(ex)
@@ -981,6 +986,7 @@ function eraseAll() {
   forgetHowto()
   forgetWelcome()
   eraseSaved() // and the saved items and notes
+  forgetSessions() // and where 5M sessions were
   newConv()
   renderConv()
 }
@@ -1161,6 +1167,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   updateMapBtn()
   c.updated = Date.now()
   save()
+  // a 5M session (dev switch): where it is now, to resume it from another conversation (only while conversations are kept)
+  if (devOn('obs5m') && c.graph?.session) saveSession(c.id, c.graph.session)
   // the row of suggestions shows where the conversation is now (and builds its word index at idle after the first answer)
   cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
@@ -1261,6 +1269,7 @@ setSavedHooks({
 const cmp = mountComposer(form, input, {
   ui: () => nav, conv: () => conv(), packs: () => INSTALLED, busy: () => busy || locked(),
   send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
+  resume: (story) => { const e = savedSessions().find((x) => x.story === story); if (e) resume5(e) },
 })
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
@@ -1355,7 +1364,7 @@ function fixture5(): Fixture | null {
   if (fx5 || !devOn('obs5m')) return fx5
   fx5p ??= loadFixture().then((f) => {
     fx5 = f
-    if (conv()?.msgs.some((m) => m.card)) renderConv()
+    if (conv()?.msgs.some((m) => m.card) || !conv()?.msgs.length) renderConv()
     else updateBar()
     return f
   }, () => { fx5p = null; return null })
@@ -1440,8 +1449,57 @@ function drawOutlineNow() {
       runStep(stepPlace(fx, to, nav), to)
     },
     how: () => {}, // "How the five movements work" ships after the licence check (decision 5): hidden in the mock
-    end: () => closeOutline(), // Task 6 ends the session here (endSession); the mock only closes the outline
+    end: () => end5(),
   }))
+}
+/** [End session]: the conversation leaves the session (its light path back); its notes stay, and so does [Resume] */
+function end5() {
+  closeOutline()
+  if (busy) return
+  endSession(conv())
+  save()
+  updateBar()
+  cmp.answered()
+}
+/** The resume buttons of the welcome: the sessions used last (up to 3) */
+function resumeRow(): HTMLElement | null {
+  const fx = fixture5()
+  if (!devOn('obs5m') || !fx) return null
+  const list = savedSessions().filter((e) => e.story === fx.story).slice(0, 3)
+  if (!list.length) return null
+  const row = el('div', 's5-resume')
+  row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  for (const e of list) {
+    const b = el('button', 's5-resume-btn', bidiLabel(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), nav)) as HTMLButtonElement
+    b.type = 'button'
+    b.onclick = () => resume5(e)
+    row.appendChild(b)
+  }
+  return row
+}
+/**
+ * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this
+ * one, where the saved place is put back and its step asked again. Its earlier consultations may be gone; its place is not.
+ */
+function resume5(e: Saved5) {
+  const fx = fixture5()
+  if (busy || locked() || !fx) return
+  const t = resumeTarget(e.conv, convs.map((c) => ({ id: c.id, empty: !c.msgs.length })), current, MAX)
+  if (t.k === 'open' || t.k === 'empty') current = t.id
+  else if (t.k === 'new' && !newConv()) return
+  const c = conv()
+  closePanel()
+  // its conversation, still at the session: shown as it was
+  const s = c.graph?.session
+  if (t.k === 'open' && s && s.story === e.s.story) {
+    save()
+    renderConv()
+    return
+  }
+  resumeIn(c, e.s)
+  save()
+  renderConv()
+  runStep(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), e.s)
 }
 function openOutline() {
   if (locked() || document.querySelector('#lock')) return
