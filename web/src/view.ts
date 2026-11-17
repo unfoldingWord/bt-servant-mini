@@ -293,7 +293,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   }
   /** One note folded: its quote as the button; inside, the note, a tap opens it in the panel as before (its words marked in the
    *  passage, its key term, its links). */
-  const noteFold = (i: number): HTMLElement => {
+  const noteFold = (i: number, withRef = false): HTMLElement => {
     const n = s.notes[i]!
     const body = el('button', 'nrow')
     body.type = 'button'
@@ -302,7 +302,10 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
       mark(box, null, [`n${i}`])
       openPanel({ kind: 'note', study: s, i, root: box })
     }
-    return itemFold(noteHead(n.said, first(n.note)), body, dirOf(n.note || n.said || ''))
+    // (a chapter's note asked about a word, above the passage: its verse first, "3:5 «…»")
+    const head = noteHead(n.said, first(n.note))
+    const h: Node = withRef ? (() => { const f = document.createDocumentFragment(); const r = el('span', 'nref', n.ref); r.dir = 'auto'; f.append(r, ' ', head); return f })() : head
+    return itemFold(h, body, dirOf(n.note || n.said || ''))
   }
   /** The notes not about the question: for a chapter per verse, for a verse in one group, each folded; asked for alone, the
    *  first few in sight and a button for the others. */
@@ -338,7 +341,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     const words = wordsOf(order.used, asked).map((w) => `«${w}»`).join(', ')
     box.appendChild(el('h4', 'focus', lbl(fill(heads.focus, { words, n: order.first.length, all: s.notes.length }))))
     // (each folded too: its quote the button)
-    for (const i of order.first) box.appendChild(noteFold(i))
+    for (const i of order.first) box.appendChild(noteFold(i, !!s.long))
     drawTexts()
     notes(order.rest, true)
     terms()
