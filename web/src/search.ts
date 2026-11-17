@@ -30,12 +30,12 @@ const STOP = new Set(
     'my me your his her their this that these those what which who whom whose where when why how there here about with from by as into ' +
     'verse verses bible book chapter passage say says said talk talks speak speaks tell tells story find show me please find where ' +
     // es
-    'el la los las un una unos unas de del en y o u que qué quien quién donde dónde cuando cuándo como cómo cual cuál es son fue era ' +
+    'el la los las un una unos unas de del en y o u que qué quien quién quienes quiénes donde dónde cuando cuándo como cómo cual cuál es son fue fueron era eran ser sido ' +
     'se su sus mi mis tu tus lo le les al por para con sin sobre hay habla hablan dice dicen versiculo versículo versiculos biblia libro ' +
     'capitulo capítulo pasaje parte cuenta historia encuentra muestra muestrame muéstrame donde aparece ' +
     // fr
     'le la les un une des de du d l et ou que qui quoi où quand comment est sont était se sa son ses mon ma mes dans sur pour par avec ' +
-    'parle parlent dit disent verset versets bible livre chapitre passage quel quelle il elle ils elles avec est été être par ' +
+    'parle parlent dit disent verset versets bible livre chapitre passage quel quelle il elle ils elles avec est été être par furent fut étaient ' +
     // id
     'yang di ke dari dan atau apa siapa mana kapan bagaimana adalah itu ini ada dalam pada untuk dengan tentang ayat ayatnya alkitab ' +
     'kitab pasal bagian berbicara mengatakan berkata cerita tunjukkan ' +
@@ -62,7 +62,7 @@ const STOP = new Set(
   ).split(/\s+/).map((w) => fold(w)),
 )
 // ar
-const AR_STOP = new Set('لا لم لن قد كل له لي به بها فيه فيها يا يوجد توجد أترجم نترجم ترجم بلادنا بلدنا عندنا لغتنا يذكر تذكر يذكره ذكر يحدث حدث حدثت وقع وقعت أسفار الأسفار يرد ترد في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
+const AR_STOP = new Set('هم هن كانوا لا لم لن قد كل له لي به بها فيه فيها يا يوجد توجد أترجم نترجم ترجم بلادنا بلدنا عندنا لغتنا يذكر تذكر يذكره ذكر يحدث حدث حدثت وقع وقعت أسفار الأسفار يرد ترد في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
 const HI_STOP = new Set('किन पुस्तकों किताबों पुस्तकें किताबें टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता हुआ हुई हुए होता होती गया गई वर्णन उल्लेख भी तो ही जो वो हो एक इस उस'.split(' '))
 
 /** The content words of a question, longest first within the question order (names usually survive). */
