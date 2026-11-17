@@ -10,10 +10,10 @@
    "oos": 0
   },
   "langs": {
-   "pass": 83,
+   "pass": 86,
    "total": 102,
    "known": 19,
-   "empty": 10,
+   "empty": 7,
    "oos": 3
   },
   "new18": {
@@ -24,22 +24,22 @@
    "oos": 0
   },
   "followup": {
-   "pass": 39,
+   "pass": 40,
    "total": 48,
    "known": 9,
-   "empty": 7,
+   "empty": 6,
    "oos": 0
   },
   "followup-code": {
-   "pass": 44,
+   "pass": 45,
    "total": 48,
    "known": 4,
-   "empty": 2,
+   "empty": 1,
    "oos": 0
   },
   "reports": {
-   "pass": 111,
-   "total": 111,
+   "pass": 121,
+   "total": 121,
    "known": 0,
    "empty": 0,
    "oos": 0
@@ -73,10 +73,10 @@
    "oos": 0
   },
   "followup-more": {
-   "pass": 108,
+   "pass": 109,
    "total": 109,
    "known": 1,
-   "empty": 14,
+   "empty": 13,
    "oos": 0
   },
   "guide": {
