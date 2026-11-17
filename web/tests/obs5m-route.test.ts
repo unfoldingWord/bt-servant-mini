@@ -288,6 +288,10 @@ describe('a 5M session (dev on)', () => {
     expect([node(c, rf).edge, node(c, rf).parent]).toEqual(['deeper', rv.node])
     expect(at(c)).toBe('m1/17')
     expect(backs(rf)[0]).toMatchObject({ toSession: true, back: rv.node })
+    // on that frame, a follow-up is about it, not the review step's (R15)
+    const rn: any = await turn(c, { q: 'and the notes?' }, 'en')
+    expect([rn.answered, rn.ref]).toEqual(['passage', 'obs 1:7'])
+    expect(at(c)).toBe('m1/17')
   }, 60_000)
 
   test('a story with no session says so; the obs unit missing keeps the card and the next step, no helps', async () => {

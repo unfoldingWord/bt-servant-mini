@@ -2827,12 +2827,13 @@ const fixture5 = (): Promise<Fixture> => (fx5 ??= loadFixture().catch((e) => { f
  * that point as everywhere else.
  */
 function atSession(g: Graph): boolean {
+  const own = sessionNode(g)?.sheet.ref ?? null
   for (let n = nodeOf(g, g.cur); n; n = nodeOf(g, n.parent)) {
     if (n.kind === 'obs5m') return true
     if (n.edge !== 'deeper') return false
-    // a Bible passage, even one the step offers (the story's range), is read as everywhere else (R11): only the frame's OBS helps
-    // and the articles under them are the session's
-    if (n.sheet.ref && !n.sheet.ref.startsWith('obs ')) return false
+    // only the step's own frame ('obs 1:5'; 'obs 1' for a frameless step) and the articles under it are the session's (R15):
+    // any other reference, a Bible passage the step offers (R11) or another frame the review shows again, is read as everywhere else
+    if (n.sheet.ref && n.sheet.ref !== own) return false
   }
   return false
 }
