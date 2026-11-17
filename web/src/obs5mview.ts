@@ -10,6 +10,7 @@ import { bidiLabel, dirOf, rtlLang } from './bidi'
 import { obsLabel, obsRef, parseObsRef } from './obs'
 import { type Card5, type Code, next, ORDER, prev, type Session, stepPlace, steps } from './obs5m'
 import { W5 } from './obs5mwords'
+import { fillPicture } from './obsimg'
 
 const fill = (t: string, v: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''))
 const dirUi = (ui: string): 'rtl' | 'ltr' => (rtlLang(ui) ? 'rtl' : 'ltr')
@@ -200,7 +201,10 @@ export function drawCard(card: Card5, ui: string, on?: CardHooks): HTMLElement {
   if (m.title) root.appendChild(el('h3', 's5-title', m.title))
   if (m.frame) {
     const fig = el('figure', 's5-frame')
-    if (m.frame.image) {
+    // the frame's picture (obsimg.ts): the phone's pack, else Door43's, else a placeholder; the fixture's URL only for a frame
+    // whose ref is not an OBS one
+    const p = parseObsRef(card.frame?.ref)
+    if (!p?.f && m.frame.image) {
       const img = el('img', 's5-img') as HTMLImageElement
       img.src = m.frame.image
       img.alt = m.frame.label
@@ -210,6 +214,7 @@ export function drawCard(card: Card5, ui: string, on?: CardHooks): HTMLElement {
     const cap = el('figcaption', 's5-frame-text')
     cap.append(el('b', '', `${m.frame.label} `), el('span', '', m.frame.text))
     fig.appendChild(cap)
+    if (p?.f) fillPicture(fig, p.n, p.f, m.frame.label, ui, 's5-img')
     root.appendChild(fig)
   }
   if (m.blocks.length) root.appendChild(mdBox(m.blocks))
