@@ -55,7 +55,6 @@ function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element }
         return { els: pic ? [pic, p] : [p], label }
       }),
     }
-    const n = /^(\d+):/.exec(frames[0]!.firstElementChild?.textContent ?? '')?.[1]
     return out
   }
   const study = box.classList.contains('study') ? box : box.querySelector<HTMLElement>('.study')
@@ -96,7 +95,8 @@ function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element }
     if (prev && /^H[1-6]$/.test(prev.els[prev.els.length - 1]!.tagName)) { prev.els.push(e); continue }
     units.push({ els: [e], label: '' })
   }
-  return units.length > 1 ? { kind: 'parts', units, last: blocks[blocks.length - 1]! } : null
+  // (the bar after a list cut between its items goes after the list, not in it)
+  return units.length > 1 ? { kind: 'parts', units, last: kids[kids.length - 1]! } : null
 }
 
 
@@ -247,7 +247,8 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
     const over = found.kind === 'parts' ? room * 1.3 : room
     let cut: number[][] = []
     // the answer's own content taller than the screen (its helps below, folded, do not count)
-    const main = after.getBoundingClientRect().bottom - box.getBoundingClientRect().top
+    // (from its first unit: notes asked about a word, drawn above the passage, do not count either)
+    const main = after.getBoundingClientRect().bottom - head(0).getBoundingClientRect().top
     if (!(fold && !old.length) && main > over) {
       // a fold opened in the part being read: it keeps its units; else (a picture loaded, the phone turned, the keyboard) cut
       // again from its first unit
