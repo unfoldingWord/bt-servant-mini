@@ -2,31 +2,24 @@
 // conversation was hard). Only how the bubble is drawn: the message's text and data are never touched, so sharing, saving,
 // online AI and the 5M session still get the whole answer. The units are never cut: a verse (in every version at once), an
 // OBS frame (with its picture, ms/obsimg), or a block of any other answer (a heading kept with what follows it).
-// Two ways, while Abel chooses (localStorage 'btsm-pager'): 'more' shows the first part and "Show more"; 'pages' (the
-// default) shows one part at a time with ◀ ▶ under it.
+// One part at a time, with ◀ ▶ and "Verses 4–6 of 22" under it (Abel chose this over "Show more", Nov 17).
 import { rtlLang } from './bidi'
 
 type L = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 type Words = {
-  verses: string; frames: string; parts: string
-  moreVerses: string; moreFrames: string; moreParts: string; less: string; prev: string; next: string
+  verses: string; frames: string; parts: string; prev: string; next: string
 }
 const W: Record<L, Words> = {
-  en: { verses: 'Verses {a}–{b} of {n}', frames: 'Frames {a}–{b} of {n}', parts: 'Part {a} of {n}', moreVerses: 'Show more (verses {a}–{b})', moreFrames: 'Show more (frames {a}–{b})', moreParts: 'Show the rest', less: 'Show less', prev: 'Previous part', next: 'Next part' },
-  es: { verses: 'Versículos {a}–{b} de {n}', frames: 'Cuadros {a}–{b} de {n}', parts: 'Parte {a} de {n}', moreVerses: 'Mostrar más (versículos {a}–{b})', moreFrames: 'Mostrar más (cuadros {a}–{b})', moreParts: 'Mostrar el resto', less: 'Mostrar menos', prev: 'Parte anterior', next: 'Parte siguiente' },
-  fr: { verses: 'Versets {a}–{b} sur {n}', frames: 'Images {a}–{b} sur {n}', parts: 'Partie {a} sur {n}', moreVerses: 'Afficher plus (versets {a}–{b})', moreFrames: 'Afficher plus (images {a}–{b})', moreParts: 'Afficher la suite', less: 'Afficher moins', prev: 'Partie précédente', next: 'Partie suivante' },
-  id: { verses: 'Ayat {a}–{b} dari {n}', frames: 'Bingkai {a}–{b} dari {n}', parts: 'Bagian {a} dari {n}', moreVerses: 'Tampilkan lagi (ayat {a}–{b})', moreFrames: 'Tampilkan lagi (bingkai {a}–{b})', moreParts: 'Tampilkan sisanya', less: 'Tampilkan lebih sedikit', prev: 'Bagian sebelumnya', next: 'Bagian berikutnya' },
-  hi: { verses: 'पद {a}–{b} (कुल {n})', frames: 'फ़्रेम {a}–{b} (कुल {n})', parts: 'भाग {a} (कुल {n})', moreVerses: 'और दिखाएँ (पद {a}–{b})', moreFrames: 'और दिखाएँ (फ़्रेम {a}–{b})', moreParts: 'बाकी दिखाएँ', less: 'कम दिखाएँ', prev: 'पिछला भाग', next: 'अगला भाग' },
-  ar: { verses: 'الآيات {a}–{b} من {n}', frames: 'الإطارات {a}–{b} من {n}', parts: 'الجزء {a} من {n}', moreVerses: 'عرض المزيد (الآيات {a}–{b})', moreFrames: 'عرض المزيد (الإطارات {a}–{b})', moreParts: 'عرض الباقي', less: 'عرض أقل', prev: 'الجزء السابق', next: 'الجزء التالي' },
+  en: { verses: 'Verses {a}–{b} of {n}', frames: 'Frames {a}–{b} of {n}', parts: 'Part {a} of {n}', prev: 'Previous part', next: 'Next part' },
+  es: { verses: 'Versículos {a}–{b} de {n}', frames: 'Cuadros {a}–{b} de {n}', parts: 'Parte {a} de {n}', prev: 'Parte anterior', next: 'Parte siguiente' },
+  fr: { verses: 'Versets {a}–{b} sur {n}', frames: 'Images {a}–{b} sur {n}', parts: 'Partie {a} sur {n}', prev: 'Partie précédente', next: 'Partie suivante' },
+  id: { verses: 'Ayat {a}–{b} dari {n}', frames: 'Bingkai {a}–{b} dari {n}', parts: 'Bagian {a} dari {n}', prev: 'Bagian sebelumnya', next: 'Bagian berikutnya' },
+  hi: { verses: 'पद {a}–{b} (कुल {n})', frames: 'फ़्रेम {a}–{b} (कुल {n})', parts: 'भाग {a} (कुल {n})', prev: 'पिछला भाग', next: 'अगला भाग' },
+  ar: { verses: 'الآيات {a}–{b} من {n}', frames: 'الإطارات {a}–{b} من {n}', parts: 'الجزء {a} من {n}', prev: 'الجزء السابق', next: 'الجزء التالي' },
 }
 const UIS: L[] = ['en', 'es', 'fr', 'id', 'hi', 'ar']
 export const PW = (ui: string): Words => W[(UIS as string[]).includes(ui.split('-')[0]!) ? (ui.split('-')[0] as L) : 'en']
 const fill = (t: string, v: Record<string, string | number>) => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''))
-
-export type PagerMode = 'more' | 'pages'
-export function pagerMode(): PagerMode {
-  try { return localStorage.getItem('btsm-pager') === 'more' ? 'more' : 'pages' } catch { return 'pages' }
-}
 
 /** Longer than this (characters of text), an answer is cut in parts; a part holds about this much (about a screen at 375 px). */
 export const LONG = 1500
@@ -129,7 +122,7 @@ const lastOf = (l: string) => l.split('-').pop()!
  * Cuts a long answer drawn in `box` in parts (none when it is short). `ui`: the app's language (the bar's words and its
  * direction: in Arabic "previous" is on the right and points right). Returns whether it did.
  */
-export function pageAnswer(box: HTMLElement, ui: string, mode: PagerMode = pagerMode()): boolean {
+export function pageAnswer(box: HTMLElement, ui: string): boolean {
   if (len(box) < LONG) return false
   const found = unitsOf(box)
   if (!found) return false
@@ -140,9 +133,9 @@ export function pageAnswer(box: HTMLElement, ui: string, mode: PagerMode = pager
   const n = parts.length
   const range = (p: Unit[]) => ({ a: first(p[0]!.label), b: lastOf(p[p.length - 1]!.label) })
   const total = lastOf(found.units[found.units.length - 1]!.label)
-  const show = (k: number | 'all') => parts.forEach((p, i) => p.forEach((u) => u.els.forEach((e) => { e.hidden = k !== 'all' && i !== k })))
+  const show = (k: number) => parts.forEach((p, i) => p.forEach((u) => u.els.forEach((e) => { e.hidden = i !== k })))
   const bar = document.createElement('div')
-  bar.className = `pager pager-is-${mode}`
+  bar.className = 'pager'
   bar.dir = rtl ? 'rtl' : 'ltr'
   found.last.after(bar)
   const top = () => {
@@ -156,24 +149,6 @@ export function pageAnswer(box: HTMLElement, ui: string, mode: PagerMode = pager
     b.textContent = text
     if (label) b.setAttribute('aria-label', label)
     return b
-  }
-  if (mode === 'more') {
-    const rest = parts.slice(1).flat()
-    const r = { a: first(rest[0]!.label), b: lastOf(rest[rest.length - 1]!.label) }
-    const more = found.kind === 'verses' ? fill(w.moreVerses, r) : found.kind === 'frames' ? fill(w.moreFrames, r) : w.moreParts
-    const b = button('pager-more', more)
-    let open = false
-    b.setAttribute('aria-expanded', 'false')
-    b.onclick = () => {
-      open = !open
-      show(open ? 'all' : 0)
-      b.textContent = open ? w.less : more
-      b.setAttribute('aria-expanded', String(open))
-      if (!open) top()
-    }
-    bar.appendChild(b)
-    show(0)
-    return true
   }
   let k = 0
   const prev = button('pager-btn', rtl ? '▶' : '◀', w.prev)

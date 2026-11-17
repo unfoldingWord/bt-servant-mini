@@ -2,7 +2,7 @@
 // the other parts, the buttons, Arabic's mirrored bar) is checked in the browser at 375 px (capturas-obsui/); this suite has
 // no DOM. The message's data is never touched: obswords.test.ts checks that what is shared is the whole answer.
 import { describe, expect, test } from 'bun:test'
-import { PART, PW, partsOf, pagerMode, type Unit } from '../src/pager'
+import { PART, PW, partsOf, type Unit } from '../src/pager'
 
 const u = (len: number, label = ''): Unit => ({ els: [], len, label })
 const sizes = (p: Unit[][]) => p.map((x) => x.map((y) => y.label).join(','))
@@ -38,8 +38,5 @@ describe("the bar's words", () => {
     }
     expect(PW('es-419').verses).toBe(PW('es').verses)
     expect(PW('pt').verses).toBe(en.verses)
-  })
-  test('pages unless the test switch says "more"', () => {
-    expect(pagerMode()).toBe('pages')
   })
 })
