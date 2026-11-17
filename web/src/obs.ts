@@ -11,7 +11,7 @@
 // that does not list it says plainly that its packs have no Open Bible Stories yet. Nothing here throws for a missing unit.
 import { BOOKS, bookNumber, type ObsModel, parseRef as v3Ref, verseId } from '@bt-synergy/language-pack-v3'
 import type { PackReader } from '@bt-synergy/language-pack-client'
-import { installedLangs, openLang, origin, PACK_NAMES } from './packs'
+import { installedLangs, openLang, origin, PACK_NAMES, uiLangs } from './packs'
 import { FOLD } from './focus'
 import { bidiLabel } from './bidi'
 import { keywords } from './search'
@@ -141,8 +141,8 @@ export const isObsRef = (ref: string | null | undefined): boolean => /^obs(\s|$)
 export const obsRef = (n: number, f?: number | null): string => (f ? `obs ${n}:${f}` : `obs ${n}`)
 /** "OBS 3:5", the same in every language (the product's name, as the app says "Translation Academy"). */
 export const obsLabel = (n: number, f?: number | null): string => (f ? `OBS ${n}:${f}` : `OBS ${n}`)
-/** "3. The Flood" -> "The Flood" (the packs keep the number in the title). */
-export const cleanTitle = (t: string | undefined): string => String(t ?? '').replace(/^\s*\d{1,2}\s*[.:)\-–]\s*/, '').trim()
+/** "3. The Flood" -> "The Flood" (the packs keep the number in the title; Arabic's "٢. …" too). */
+export const cleanTitle = (t: string | undefined): string => String(t ?? '').replace(/^\s*\p{Nd}{1,2}\s*[.:)\-–]\s*/u, '').trim()
 
 const BOOK_EN = (booknames as any).BOOK_EN as Record<string, string>
 const BOOK_ES = (booknames as any).BOOK_ES as Record<string, string>
@@ -279,6 +279,16 @@ async function entryOf(lang: string, n: number): Promise<StoryEntry | null> {
     if (e) return e
   }
   return null
+}
+/** A story's title from a pack in the app's language (not `had`, the one already read), or '' (none on the phone, no title). */
+async function uiTitle(n: number, ui: string, had: string): Promise<string> {
+  for (const l of uiLangs(ui, await installedLangs().catch(() => [] as string[]))) {
+    if (l === had) continue
+    const r = await read(l)
+    const e = r ? (await storyList(r).catch(() => [])).find((x) => x.n === n) : undefined
+    if (e?.title) return e.title
+  }
+  return ''
 }
 /** "OBS 3: The Flood", "OBS 3" without a title. */
 export const storyName = (e: { n: number; title: string }, f?: number | null): string => (e.title ? `${obsLabel(e.n, f)}: ${e.title}` : obsLabel(e.n, f))
@@ -662,7 +672,10 @@ export async function obsSteps(f: ObsFacts, lang: string, ui: string): Promise<O
 export async function storyStep(ref: string, lang: string, ui: string, text = ''): Promise<{ label: string; ref: string; lang: string } | null> {
   const t = await storyAt(ref, lang, text).catch(() => null)
   if (!t) return null
-  const label = fill(OW(ui).toldIn, { ref: obsLabel(t.n, t.f), title: t.title || obsLabel(t.n) }).replace(/: OBS \d+$/, '')
+  // the story's title in the app's language when a pack on the phone has it (Abel, Nov 17: "Sin Enters the World" in a Spanish
+  // app, the passage's pack being English), else the story pack's
+  const title = (await uiTitle(t.n, ui, t.lang)) || t.title
+  const label = fill(OW(ui).toldIn, { ref: obsLabel(t.n, t.f), title: title || obsLabel(t.n) }).replace(/: OBS \d+$/, '')
   const also = (t.also ?? []).map((x) => { const p = parseObsRef(x); return p ? obsLabel(p.n, p.f) : x })
   return { label: also.length ? `${label} ${fill(OW(ui).also, { refs: also.join(', ') })}` : label, ref: t.ref, lang: t.lang }
 }

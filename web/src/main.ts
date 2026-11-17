@@ -1,6 +1,6 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { passageContext, resetLangs, type Sheet } from './answer'
+import { isSourceLine, passageContext, resetLangs, type Sheet } from './answer'
 import { backPanel, fillTitles, groupObsHelps, linkFrameWords, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
@@ -332,6 +332,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   // online answer itself, last, with its badge (Abel, Nov 17: "primero es el contenido que viene de los datos"). It is drawn
   // the same while it is written ("Writing…" last) and when it arrives (fillAi puts it in that place).
   const host: HTMLElement = d
+  let sourceLine = ''
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.study) {
     const sb = host.appendChild(renderStudy(m.study, asked))
@@ -345,6 +346,12 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
     box.dir = mdDir(m.info)
     fillTitles(box, m.lang ?? 'en')
+    // the source line ("Fuente: es-419_gl/es-419/obs v2, …"), technical, goes into the "details" fold below (Abel, Nov 17)
+    const last = box.lastElementChild
+    if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isSourceLine(last.textContent ?? '')) {
+      sourceLine = last.textContent?.trim() ?? ''
+      last.remove()
+    }
     // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
     addObsPictures(box, m.meta, m.ui ?? nav)
     // an OBS story or frame: the words its notes and key terms quote, tappable as a passage's (obswords.ts)
@@ -453,10 +460,14 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(bar)
     draw()
   }
-  if (m.meta) {
+  if (m.meta || sourceLine) {
     const det = document.createElement('details')
-    det.appendChild(el('summary', '', bidiLabel(m.meta.split('\n')[0]!, m.ui ?? nav)))
-    det.appendChild(el('pre', '', m.meta.split('\n').slice(1).join('\n')))
+    det.appendChild(el('summary', '', bidiLabel(m.meta?.split('\n')[0] || T.details, m.ui ?? nav)))
+    if (sourceLine) {
+      const p = det.appendChild(el('p', 'src-line', sourceLine))
+      p.dir = 'auto'
+    }
+    if (m.meta) det.appendChild(el('pre', '', m.meta.split('\n').slice(1).join('\n')))
     d.appendChild(det)
   }
   return d

@@ -70,6 +70,14 @@ export function setQuestion(q: string | null | undefined, sheet?: { term?: strin
   QUESTION = q?.trim() || null
   NAMED = sheet ? [sheet.term, sheet.phrase] : []
 }
+/**
+ * Whether a line is an answer's source line ("Source: unfoldingWord/en/tn v91.", in any of the six languages): the app draws it
+ * in the answer's "details" fold, not under the answer (Abel, Nov 17); the message keeps it (sharing, saving, online AI).
+ */
+export function isSourceLine(t: string): boolean {
+  const s = t.trim()
+  return Object.values(templates).some((x) => { const pre = x.source?.split('{list}')[0]!.trim(); return !!pre && s.startsWith(pre) })
+}
 function tpl(lang: string): Record<string, string> {
   return templates[UI ?? (lang.startsWith('es') ? 'es' : 'en')]!
 }

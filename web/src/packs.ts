@@ -309,6 +309,8 @@ export function markPartial(lang: string, on: boolean) {
 
 // ------------------------------------------------------------------------------------------------------------ reading
 
+/** The packs on the phone in the app's language ("es" -> "es-419"), for the titles a button shows (OBS, Academy). */
+export const uiLangs = (ui: string, have: readonly string[]): string[] => have.filter((l) => l.split('-')[0] === ui.split('-')[0])
 export async function installedLangs(): Promise<string[]> {
   const [a, b] = await Promise.all([shipped(), addedLangs()])
   return [...new Set([...a, ...b])]

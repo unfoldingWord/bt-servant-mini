@@ -8,7 +8,7 @@ import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, 
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
 import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
-import { CANON, hasLang, installedLangs, openLang } from './packs'
+import { CANON, hasLang, installedLangs, openLang, uiLangs } from './packs'
 import { type ObsStudy, obsStudyOf } from './obswords'
 import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
 import { devOn, type Fixture, loadFixture } from './dev'
@@ -1321,7 +1321,14 @@ const passageSheet = (base: Sheet, ref: string, what: string[], l = base.lang): 
 async function taStep(base: Sheet, id: string, ui: string): Promise<Follow | null> {
   for (const l of new Set([base.lang, 'en', ...(await installedLangs())])) {
     if (!(await hasTa(l, id))) continue
-    const title = await nameIn(l, id)
+    // its title in the app's language when a pack on the phone has the article (Abel, Nov 17: "Academia: Introduction of New
+    // and Old Participants" in a Spanish app), else the found pack's; the article opens where it was found
+    let title = await nameIn(l, id)
+    for (const u of uiLangs(ui, await installedLangs())) {
+      if (u === l || !(await hasTa(u, id))) continue
+      title = (await nameIn(u, id).catch(() => null)) ?? title
+      break
+    }
     return title ? { label: academyLabel(ui, title), sheet: articleSheet(base, id, l) } : null
   }
   return null
