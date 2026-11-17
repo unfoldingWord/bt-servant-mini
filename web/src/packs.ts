@@ -19,6 +19,12 @@ export const PACK_NAMES: Record<string, string> = {
   en: 'English', 'es-419': 'Español (Latinoamérica)', id: 'Bahasa Indonesia', hi: 'हिन्दी', ar: 'العربية', fr: 'Français', bn: 'বাংলা',
   gu: 'ગુજરાતી', kn: 'ಕನ್ನಡ', mr: 'मराठी', ne: 'नेपाली', or: 'ଓଡ଼ିଆ', te: 'తెలుగు', fa: 'فارسی', ru: 'Русский', 'pt-br': 'Português', sw: 'Kiswahili',
 }
+/**
+ * The catalogs with no language in them (`zxx` = no linguistic content): installed in the same store, never listed or updated as a
+ * language. The Open Bible Stories pictures (obsimg.ts) are the only one.
+ */
+export const IMAGES_CATALOG = 'zxx-obsimg'
+const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx-')
 export const CANON = 'gen exo lev num deu jos jdg rut 1sa 2sa 1ki 2ki 1ch 2ch ezr neh est job psa pro ecc sng isa jer lam ezk dan hos jol amo oba jon mic nam hab zep hag zec mal mat mrk luk jhn act rom 1co 2co gal eph php col 1th 2th 1ti 2ti tit phm heb jas 1pe 2pe 1jn 2jn 3jn jud rev'.split(' ')
 
 // ------------------------------------------------------------------------------------------------------------ servers
@@ -257,15 +263,33 @@ function assetStore(lang: string): BlobStore {
 
 let idb: Promise<BlobStore> | null = null
 const added = () => (idb ??= indexedDbStore({ name: 'btsm-packs' }))
+// one object, shared by every client and check here (offerOf, newerOnly, addedClient): setTrustedKeys changes it in place
 const trust = { trustedKeys: trustedKeys() }
+/** Tests: trust these keys instead of the app's (no argument puts the app's back). */
+export function setTrustedKeys(list?: Record<string, Uint8Array>) {
+  trust.trustedKeys = list ?? trustedKeys()
+  commonCats.clear()
+}
 const addedSource = () => serverSource(servers, { accept: newerOnly(added) })
-const addedClient = async () => createClient({ store: await added(), source: addedSource(), trust })
+/** The client of the phone's own store (what was downloaded or loaded from a file). */
+export const addedClient = async () => createClient({ store: await added(), source: addedSource(), trust })
+/** The phone's own store. */
+export const addedStore = (): Promise<BlobStore> => added()
+/** A catalog of the phone's own store opened by name, not as a language (zxx-obsimg; openLang is only for languages). */
+export async function openAdded(name: string): Promise<PackReader> {
+  return (await addedClient()).open(name)
+}
+/** Tests: forget the store opened (the next use opens the page's IndexedDB again) and every reader. */
+export function resetAddedStore() {
+  idb = null
+  changed()
+}
 
-/** The languages with units in the phone's store, complete or not. */
+/** The languages with units in the phone's store, complete or not (not common, not a zxx-* catalog such as the pictures). */
 async function storedLangs(): Promise<string[]> {
   try {
     const st: any = await (await added()).getState()
-    return Object.keys(st?.active ?? {}).filter((l) => l !== 'common')
+    return Object.keys(st?.active ?? {}).filter((l) => !notALanguage(l))
   } catch {
     return []
   }
@@ -518,6 +542,54 @@ export async function downloadLang(
   }
 }
 
+/** What the server offers for a catalog that is not a language (the pictures): the size of `want`, its segments in install order. */
+export type CatalogOffer = { bytes: number; segments: string[]; sizes: Record<string, number> }
+/**
+ * Reads a catalog with no language around it (no `requires`: zxx-obsimg) and plans the install of `want` in it, as offerOf does
+ * for a language, so the size shown is the size downloaded. Null without internet or when no server has it.
+ */
+export async function catalogOffer(name: string, want: { units: string[]; defaults: false }, source: PackSource = serverSource()): Promise<CatalogOffer | null> {
+  try {
+    const got = await source.catalog(name, { signal: timeout(CATALOG_MS * Math.max(1, servers.length)) })
+    if (got === 'not-modified') return null
+    const cat = await verifyCatalogFile(got.bytes, trust, { from: 'network' })
+    if (cat.name !== name) return null
+    const plan = planInstall([cat], emptyState(), want, new Set())
+    const sizes: Record<string, number> = {}
+    for (const st of plan.steps) for (const x of st.segments) sizes[x.id] = x.size
+    return { bytes: plan.bytes, segments: Object.keys(sizes), sizes }
+  } catch {
+    return null
+  }
+}
+/**
+ * Downloads `want` of a catalog that is not a language into the phone, as downloadLang does (one request at a time from the
+ * client, `ahead` prefetched; what is in the store already counts as done from the start and is not fetched again; `signal`
+ * cancels, what arrived stays). No partial mark (a zxx-* catalog is never a language): the caller keeps its own.
+ */
+export async function downloadCatalog(
+  name: string, want: { units: string[]; defaults: false }, offer: CatalogOffer, onProgress?: (p: Progress) => void,
+  o: { signal?: AbortSignal; ahead?: number } = {},
+): Promise<{ bytes: number }> {
+  const http = addedSource()
+  const store = await added()
+  const have = new Set(await store.ids().catch(() => [] as string[]))
+  const before = offer.segments.filter((id) => have.has(id))
+  const already = before.reduce((n, id) => n + (offer.sizes[id] ?? 0), 0)
+  const order = offer.segments.filter((id) => !have.has(id))
+  const client = createClient({ store, source: prefetching(http, order, o.ahead ?? 6), trust })
+  try {
+    const report = await serial(() => client.install(name, want, {
+      concurrency: 1,
+      ...(o.signal ? { signal: o.signal } : {}),
+      onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
+    }))
+    return { bytes: report.bytes ?? 0 }
+  } finally {
+    changed()
+  }
+}
+
 // ------------------------------------------------------------------------------------------------------------ updating
 
 /** The shared units (articles) the server lists for a language and the phone does not have yet. */
@@ -648,10 +720,15 @@ function serial<T>(f: () => Promise<T>, inBackground = false): Promise<T> {
   return run
 }
 
-/** A .tcpack file (made by another phone, or by the team): its languages go into the phone. */
-export async function importPack(bytes: Uint8Array): Promise<{ langs: string[]; rejected: number }> {
+/**
+ * A .tcpack file (made by another phone, or by the team): its languages go into the phone, and the pictures when it has them
+ * (`images`: the file brought zxx-obsimg; it is not one of `langs`).
+ */
+export async function importPack(bytes: Uint8Array): Promise<{ langs: string[]; rejected: number; images?: true }> {
   const report = await serial(async () => (await addedClient()).importTransfer(bytes))
-  const langs = [...new Set(report.catalogs.map((c: any) => String(c.name ?? c.lang ?? '')).filter((l) => l && l !== 'common'))]
+  const names = report.catalogs.map((c: any) => String(c.name ?? c.lang ?? ''))
+  const langs = [...new Set(names.filter((l) => l && !notALanguage(l)))]
+  const images = names.includes(IMAGES_CATALOG)
   try {
     // a file with every book the language lists ends a download that had not (a file with part of them leaves it to continue)
     for (const l of partialLangs().filter((x) => langs.includes(x))) {
@@ -663,7 +740,7 @@ export async function importPack(bytes: Uint8Array): Promise<{ langs: string[]; 
   } finally {
     changed()
   }
-  return { langs, rejected: report.rejected.length }
+  return { langs, rejected: report.rejected.length, ...(images ? { images: true as const } : {}) }
 }
 
 /** A .tcpack with one language, whole (books, articles, maps), to pass to another phone. */

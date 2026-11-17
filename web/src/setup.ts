@@ -3,8 +3,10 @@
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { FU } from './firstuse'
 import { rtlLang } from './bidi'
-import { exportImages, imagesInstalled, imagesLine, installImages, isZip, IW, PACK_FILE, removeImages } from './obsimg'
-import { availableLangs, downloadLang, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
+import {
+  downloadImages, exportImages, fill, imagesCredit, imagesInstalled, imagesLine, imagesOffer, importedLine, IW, PACK_FILE, removeImages,
+} from './obsimg'
+import { availableLangs, downloadLang, exportPack, importPack, installedLangs, meteredNow, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
@@ -298,23 +300,16 @@ export async function languagesSection(lang: string, after: () => void): Promise
   }))
   const file = document.createElement('input')
   file.type = 'file'
-  file.accept = '.tcpack,.zip,application/octet-stream,application/zip'
+  file.accept = '.tcpack,application/octet-stream'
   file.hidden = true
   file.onchange = async () => {
     const f = file.files?.[0]
     if (!f) return
     alertish(box, s.working)
     try {
-      const bytes = new Uint8Array(await f.arrayBuffer())
-      // the Open Bible Stories pictures (a zip; a .tcpack starts otherwise): into their own place
-      if (isZip(bytes)) {
-        const got = await installImages(bytes, lang)
-        alertish(box, imagesLine(lang, got))
-        after()
-        return
-      }
-      const r = await importPack(bytes)
-      alertish(box, r.langs.length ? r.langs.map((l) => PACK_NAMES[l] ?? l).join(', ') + ' ✓' : `${s.failed} ${r.rejected}`)
+      // languages, the Open Bible Stories pictures (zxx-obsimg), or both: one kind of file
+      const r = await importPack(new Uint8Array(await f.arrayBuffer()))
+      alertish(box, importedLine(lang, r, r.images ? await imagesInstalled().catch(() => null) : null, s.failed))
       after()
     } catch (e) {
       alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
@@ -326,47 +321,67 @@ export async function languagesSection(lang: string, after: () => void): Promise
 }
 
 /**
- * The Open Bible Stories pictures (obsimg.ts): one pack for every language, from a file (SD card, USB, Bluetooth). What is on
- * the phone, the credit the license asks for, and load, share or remove.
+ * The Open Bible Stories pictures (obsimg.ts): their own catalog `zxx-obsimg`, for every language, below the languages and
+ * behaving like one. Without them: their size and "Download" (or "Continue" after a cut download) when the server answers,
+ * else how to get them; with them: their count and size, share and remove. Always the credit (the catalog's own once installed).
  */
 async function imagesSection(lang: string, box: HTMLElement, s: S, after: () => void): Promise<HTMLElement> {
   const w = IW(lang)
+  const f = FU(lang)
   const sec = el('div', 'obs-images')
   sec.appendChild(el('h2', '', w.title))
   const have = await imagesInstalled().catch(() => null)
   const row = el('div', 'row')
-  row.appendChild(el('span', 'grow', imagesLine(lang, have)))
-  if (have) {
+  const label = row.appendChild(el('span', 'grow', imagesLine(lang, have)))
+  const credit = el('p', 'note credit', w.credit)
+  if (have && 'bytes' in have) {
     row.appendChild(btn(w.share, async () => {
       alertish(box, s.working)
       try {
         const bytes = await exportImages()
-        const err = bytes ? await saveToDownloads(PACK_FILE, bytes, 'application/zip') : 'no pack'
-        alertish(box, err ? `${s.failed} ${err}` : `${s.saved} (${mb(bytes!.length)})`)
+        const err = await saveToDownloads(PACK_FILE, bytes, 'application/octet-stream')
+        alertish(box, err ? `${s.failed} ${err}` : `${s.saved} (${mb(bytes.length)})`)
       } catch (e) {
         alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
       }
     }, 'small'))
     row.appendChild(btn(w.remove, async () => { await removeImages(); after() }, 'small del'))
-  } else {
-    const file = document.createElement('input')
-    file.type = 'file'
-    file.accept = '.zip,application/zip'
-    file.hidden = true
-    file.onchange = async () => {
-      const f = file.files?.[0]
-      if (!f) return
-      alertish(box, s.working)
-      try {
-        alertish(box, imagesLine(lang, await installImages(new Uint8Array(await f.arrayBuffer()), lang)))
-        after()
-      } catch (e) {
-        alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
-      }
-    }
-    row.append(btn(w.load, () => file.click(), 'small'), file)
+    void imagesCredit().then((c) => { if (c) credit.textContent = c })
+  } else if (navigator.onLine !== false) {
+    // the size from the catalog (a few KB), read while the menu is already drawn
+    label.textContent = s.working
+    void imagesOffer().then((offer) => {
+      if (!sec.isConnected && !box.isConnected) return
+      if (!offer) return void (label.textContent = w.none)
+      const size = mb1(offer.bytes)
+      label.textContent = size
+      let asked = false
+      const go = btn(have ? w.resume : w.download, async () => {
+        // over mobile data the first tap asks, the second downloads (Android's WebView shows no confirm())
+        if (!asked && meteredNow() === true) {
+          asked = true
+          label.textContent = fill(w.metered, { mb: size })
+          return
+        }
+        const c = new AbortController()
+        const stop = btn(f.cancel, () => c.abort(new Error('canceled')), 'small')
+        go.replaceWith(stop)
+        label.textContent = w.downloading
+        try {
+          await downloadImages((p) => (label.textContent = `${mb1(p.bytes)} / ${mb1(p.totalBytes)}`), c.signal, offer)
+          after()
+        } catch (e) {
+          // what arrived stays: the button goes on from there
+          label.textContent = c.signal.aborted ? f.canceled : `${s.failed} ${e instanceof Error ? e.message : e}`
+          go.textContent = w.resume
+          asked = false
+          stop.replaceWith(go)
+        }
+      }, 'small')
+      row.appendChild(go)
+    })
   }
-  sec.append(row, el('p', 'note credit', w.credit))
+  sec.append(row, credit)
   return sec
 }
 
@@ -408,4 +423,4 @@ export const modelNewer = (lang: string) => str(lang).newer
 export const packsTitle = (lang: string) => str(lang).langs
 
 // desktop testing only (no Android bridge): reach the pack functions from the console
-if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, offers, openLang, installImages, removeImages, imagesInstalled }
+if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, offers, openLang, downloadImages, removeImages, imagesInstalled }
