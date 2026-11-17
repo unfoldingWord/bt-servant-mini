@@ -55,7 +55,10 @@ function foldsWith(box: HTMLElement, key: (ch: number, v: number) => Unit | unde
 
 /** The units of a bubble's answer, and where the bar goes (after `last`): OBS frames first, then a passage's verses, else blocks. */
 function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element } | null {
-  const frames = [...box.querySelectorAll<HTMLElement>('p.obs-fr')]
+  // an OBS story's frames: each paragraph that starts with its "**1:3**" (obsAnswer), the words tappable or not (m.obs gone)
+  const story = (p: HTMLElement) => (p.firstChild === p.firstElementChild && p.firstElementChild?.tagName === 'STRONG' ? /^(\d{1,2}):\d{1,2}$/.exec(p.firstElementChild.textContent?.trim() ?? '')?.[1] : undefined)
+  const all = [...box.querySelectorAll<HTMLElement>('p')].filter((p) => story(p))
+  const frames = all.filter((p) => story(p) === story(all[0]!))
   if (frames.length > 1) {
     const out: { kind: Kind; units: Unit[]; last: Element } = {
       kind: 'frames', last: frames[frames.length - 1]!,
@@ -87,7 +90,10 @@ function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element }
       last = p.closest('details.more-tx') ?? p.closest('.tx') ?? p
     }
     // a verse counts as long as its longest version (two versions make a part about twice as tall: a few verses each)
-    const units = [...byKey.values()]
+    // in verse order (a version that bridges "1-2" where the first has "1" and "2" falls in place, not at the end)
+    const units = [...byKey.entries()]
+      .sort(([a, x], [b, y]) => +a.split('#')[1]! - +b.split('#')[1]! || +first(x.label) - +first(y.label))
+      .map(([, u]) => u)
     if (units.length < 2 || !last) return null
     // a verse's notes fold ("1:3 · 4") with the first unit whose label holds that verse (one chapter: the usual long answer)
     foldsWith(study, (_ch, v) => units.find((u) => +first(u.label) <= v && v <= +lastOf(u.label)))
@@ -182,8 +188,9 @@ export function pageAnswer(box: HTMLElement, ui: string, mode: PagerMode = pager
     prev.disabled = k === 0
     next.disabled = k === n - 1
   }
-  prev.onclick = () => { if (k > 0) { k--; draw(); top() } }
-  next.onclick = () => { if (k < n - 1) { k++; draw(); top() } }
+  // at the first or the last part the button pressed is off: the focus goes to the other one (not lost)
+  prev.onclick = () => { if (k > 0) { k--; draw(); top(); if (prev.disabled) next.focus() } }
+  next.onclick = () => { if (k < n - 1) { k++; draw(); top(); if (next.disabled) prev.focus() } }
   bar.append(prev, label, next)
   draw()
   return true

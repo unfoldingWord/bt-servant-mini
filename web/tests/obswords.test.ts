@@ -25,6 +25,9 @@ describe('wordSpans', () => {
     expect(marked(t, [['THE UNIVERSE', 1, 'n1']])).toEqual(['the universe=n1'])
     expect(marked('Él creó el mundo', [['el creo', 1, 'n0']])).toEqual(['Él creó=n0'])
     expect(marked(t, [['begin', 1, 'n0'], ['the world', 1, 'n1'], ['', 1, 'n2']])).toEqual([])
+    // a word in single quotes is that word; an apostrophe inside a word keeps it one word
+    expect(marked('He said, ‘Peace’ to them.', [['Peace', 1, 'n0']])).toEqual(['Peace=n0'])
+    expect(marked('But God’s Spirit was there', [['God', 1, 't0'], ['God’s Spirit', 1, 'n0']])).toEqual(['God’s Spirit=n0'])
   })
   test('parts at & and …: the next match after the one before', () => {
     expect(marked(t, [['God & saw', 1, 'n0']])).toEqual(['God=n0', 'saw=n0'])

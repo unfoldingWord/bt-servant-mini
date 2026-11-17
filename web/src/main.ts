@@ -179,6 +179,7 @@ function load() {
 }
 function save() {
   // the interactive passage is kept for the last messages of each conversation; older ones show their text answer
+  // (an OBS story's helps too: a whole story's are a few KB, a Bible chapter's study tens of KB)
   for (const c of convs) c.msgs.slice(0, -8).forEach((m) => { delete m.study; delete m.obs })
   try {
     if (keepHistory()) localStorage.setItem(KEY, JSON.stringify({ convs, current }))

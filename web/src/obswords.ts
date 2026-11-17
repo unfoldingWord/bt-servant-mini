@@ -13,7 +13,8 @@ export type ObsQuote = [quote: string, occurrence: number, key: string]
 /** A story's helps for its words: the notes and terms the panel opens, and per frame the quotes that mark its words. */
 export type ObsStudy = { lang: string; n: number; notes: StudyNote[]; terms: StudyTerm[]; frames: Record<string, ObsQuote[]> }
 
-const WORD = /\p{L}[\p{L}\p{M}\p{N}'’-]*|\p{N}+/gu
+// an apostrophe or a hyphen only between letters: «‘Peace’» is the word «Peace», «God’s» one word
+const WORD = /\p{L}[\p{L}\p{M}\p{N}]*(?:['’-][\p{L}\p{M}\p{N}]+)*|\p{N}+/gu
 /**
  * Compared without case, Latin accents or Arabic vowel marks (only to compare: what is drawn keeps them). Not every mark, as
  * tc-study does: a Devanagari vowel sign is part of the word (बुरी and बुरा are two words).
@@ -104,7 +105,7 @@ export async function obsStudyOf(s: { ref: string | null; lang: string }): Promi
       const note = tidy(x.cols.note)
       if (!note) continue
       const quote = String(x.cols.quote ?? '').trim()
-      const i = notes.push({ said: quote, orig: '', note, concept: x.concept, ref: `${p.n}:${f}`, quotes: quote }) - 1
+      const i = notes.push({ said: quote, orig: '', note, concept: x.concept, ref: `${p.n}:${f}` }) - 1
       if (quote) qs.push([quote, occ(x.cols.occurrence), `n${i}`])
     }
     for (const x of fr.links) {
@@ -115,6 +116,6 @@ export async function obsStudyOf(s: { ref: string | null; lang: string }): Promi
       qs.push([words, occ(x.cols.occurrence), `t${i}`])
     }
   }
-  for (const t of terms) t.title = (await titleFor(at.lang, t.id).catch(() => '')) || cleanTitle(t.id.split('/').pop()!.replace(/[-_]/g, ' '))
+  await Promise.all(terms.map(async (t) => { t.title = (await titleFor(at.lang, t.id).catch(() => '')) || cleanTitle(t.id.split('/').pop()!.replace(/[-_]/g, ' ')) }))
   return { lang: at.lang, n: p.n, notes, terms, frames: out }
 }
