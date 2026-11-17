@@ -12,6 +12,8 @@ describe('who were the sons of Isaac', () => {
   test('the question words are not looked for', () => {
     expect(keywords('¿Quiénes fueron los hijos de Isaac?')).toEqual(['hijos', 'Isaac'])
     expect(keywords('¿Quiénes eran los hijos de Isaac?')).toEqual(['hijos', 'Isaac'])
+    // («eran» capitalized is a name: Eran, Numbers 26:36)
+    expect(keywords('¿Quién fue Eran?')).toEqual(['Eran'])
     expect(keywords('Qui étaient les fils d’Isaac ?').map((w) => w.toLowerCase())).not.toContain('étaient')
     expect(keywords('من هم أبناء إسحاق؟')).not.toContain('هم')
   })
@@ -23,6 +25,8 @@ describe('who were the sons of Isaac', () => {
       const info = r.reply.info ?? ''
       // every verse shown names Isaac (in the English text, or the Arabic)
       expect(info).toMatch(/Isaac|إِسْحَاقَ|إِسْحاقَ/)
+      // and a son of his (the English text, or the Arabic «ٱبْنَا»/«ابْنَهُ»)
+      expect(info).toMatch(/sons?|ٱبْنَا|ابْنَهُ|بَنُو|بني/)
       expect(r.reply.meta).toMatch(/findall: verses/)
       const { shown } = splitFollow(r.reply.follow ?? [], 0)
       expect(shown.some((f) => f.sheet?.concept === 'tw:names/isaac')).toBe(true)

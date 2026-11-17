@@ -65,6 +65,8 @@ const STOP = new Set(
 const AR_STOP = new Set('هم هن كانوا لا لم لن قد كل له لي به بها فيه فيها يا يوجد توجد أترجم نترجم ترجم بلادنا بلدنا عندنا لغتنا يذكر تذكر يذكره ذكر يحدث حدث حدثت وقع وقعت أسفار الأسفار يرد ترد في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
 const HI_STOP = new Set('किन पुस्तकों किताबों पुस्तकें किताबें टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता हुआ हुई हुए होता होती गया गई वर्णन उल्लेख भी तो ही जो वो हो एक इस उस'.split(' '))
 
+/** Words of how a question asks that are also names when capitalized: «¿quiénes eran…?», but Eran (Numbers 26:36). */
+const NAMES_TOO = new Set(['eran'])
 /** The content words of a question, longest first within the question order (names usually survive). */
 export function keywords(q: string): string[] {
   const toks = q
@@ -75,7 +77,7 @@ export function keywords(q: string): string[] {
   for (const t of toks) {
     const f = fold(t)
     // two letters are a word in Arabic (دم "blood"); not in Hindi, whose vowel signs the index leaves out (जौ would be ज)
-    if (/^\d+$/.test(f) || f.length < (/^[ء-ي]/.test(f) ? 2 : 3) || STOP.has(f) || HI_STOP.has(t) || AR_STOP.has(f) || AR_STOP.has(f.replace(/^(ال|و|ب|ل)/, ''))) continue
+    if (/^\d+$/.test(f) || f.length < (/^[ء-ي]/.test(f) ? 2 : 3) || (STOP.has(f) && !(NAMES_TOO.has(f) && /^\p{Lu}/u.test(t))) || HI_STOP.has(t) || AR_STOP.has(f) || AR_STOP.has(f.replace(/^(ال|و|ب|ل)/, ''))) continue
     // one Arabic word once, with or without its article (ثلج, الثلج)
     const key = f.replace(/^ال(?=[ء-ي]{2})/, '')
     if (!out.some((o) => fold(o).replace(/^ال(?=[ء-ي]{2})/, '') === key)) out.push(t)

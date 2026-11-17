@@ -37,11 +37,11 @@
     "नाव": "boat", "आंधी": "storm", "अंधा": "blind", "कब्र": "tomb", "क्रूस": "cross", "तारा": "star", "निगल": "swallow"
   },
   "ar": {
-    "البحر": "sea", "بحر": "sea", "الحوت": "fish", "حوت": "fish", "سمكة": "fish", "السمكة": "fish", "اسد": "lion", "الاسد": "lion",
+    "البحر": "sea", "بحر": "sea", "الحوت": "fish", "حوت": "fish", "سمكه": "fish", "السمكه": "fish", "اسد": "lion", "الاسد": "lion",
     "الاسود": "lion", "الجب": "den", "جب": "den", "الفلك": "ark", "فلك": "ark", "الطوفان": "flood", "طوفان": "flood",
     "النار": "fire", "نار": "fire", "الاتون": "furnace", "حجر": "stone", "الماء": "water", "ماء": "water", "النهر": "river",
-    "نهر": "river", "الجبل": "mountain", "جبل": "mountain", "البرية": "wilderness", "العليقة": "bush", "الحية": "serpent",
-    "الخروف": "lamb", "خبز": "bread", "الخبز": "bread", "خمر": "wine", "السفينة": "boat", "العاصفة": "storm", "اعمى": "blind",
+    "نهر": "river", "الجبل": "mountain", "جبل": "mountain", "البريه": "wilderness", "العليقه": "bush", "الحيه": "serpent",
+    "الخروف": "lamb", "خبز": "bread", "الخبز": "bread", "خمر": "wine", "السفينه": "boat", "العاصفه": "storm", "اعمي": "blind",
     "القبر": "tomb", "قبر": "tomb", "الصليب": "cross", "النجم": "star", "المذود": "manger", "البرج": "tower", "ابتلع": "swallow"
   }
 }
