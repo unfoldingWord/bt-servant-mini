@@ -147,6 +147,17 @@ function tall(e: HTMLElement): number {
   return r.height + (parseFloat(s.marginTop) || 0) + (parseFloat(s.marginBottom) || 0)
 }
 
+/** The bubbles measured again when the conversation's height changes (each says false once it is gone). */
+const onLog = new Set<() => boolean>()
+let logRO: ResizeObserver | null = null
+function watchLog(f: () => boolean) {
+  onLog.add(f)
+  const lg = document.getElementById('log')
+  if (logRO || !lg) return
+  logRO = new ResizeObserver(() => { for (const g of [...onLog]) if (!g()) onLog.delete(g) })
+  logRO.observe(lg)
+}
+
 /**
  * Cuts a long answer drawn in `box` in parts when it is taller than the conversation (measured once it is on the screen, and
  * again when it changes size). `ui`: the app's language (the bar's words and its direction: in Arabic "previous" is on the
@@ -259,13 +270,15 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
     seen = state(lg)
   }
   if (typeof ResizeObserver === 'function') {
-    // the bubble (a fold, a picture, the phone turned) and the conversation's height (the keyboard, split screen)
-    const ro = new ResizeObserver(() => measure())
-    ro.observe(box)
-    let lg: HTMLElement | null = null
-    // the conversation is known once the bubble is in it
-    new ResizeObserver(() => { if (!lg && (lg = log())) ro.observe(lg) }).observe(box)
-  } else addEventListener('resize', measure)
+    // the bubble (a fold, a picture, the phone turned); the conversation's height (the keyboard, split screen): one observer
+    // for all the bubbles, which forgets a bubble no longer on the screen
+    new ResizeObserver(() => measure()).observe(box)
+    let drawn = false // (made before it is put on the screen: forgotten only once it was there and is gone)
+    watchLog(() => { if (!box.isConnected) return !drawn; drawn = true; measure(); return true })
+  } else {
+    addEventListener('resize', measure)
+    setTimeout(measure, 0)
+  }
   /** To the new part: its first unit at the top of the conversation. */
   const go = (to: number) => {
     k = to
