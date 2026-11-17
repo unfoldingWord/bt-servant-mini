@@ -347,39 +347,45 @@ async function imagesSection(lang: string, box: HTMLElement, s: S, after: () => 
     }, 'small'))
     row.appendChild(btn(w.remove, async () => { await removeImages(); after() }, 'small del'))
     void imagesCredit().then((c) => { if (c) credit.textContent = c })
-  } else if (navigator.onLine !== false) {
+  } else {
+    // a download that did not end can always be removed (what arrived is kept by the store until then, even without internet)
+    const remove = btn(w.remove, async () => { await removeImages(); after() }, 'small del')
+    if (have) row.appendChild(remove)
     // the size from the catalog (a few KB), read while the menu is already drawn
-    label.textContent = s.working
-    void imagesOffer().then((offer) => {
-      if (!sec.isConnected && !box.isConnected) return
-      if (!offer) return void (label.textContent = w.none)
-      const size = mb1(offer.bytes)
-      label.textContent = size
-      let asked = false
-      const go = btn(have ? w.resume : w.download, async () => {
-        // over mobile data the first tap asks, the second downloads (Android's WebView shows no confirm())
-        if (!asked && meteredNow() === true) {
-          asked = true
-          label.textContent = fill(w.metered, { mb: size })
-          return
-        }
-        const c = new AbortController()
-        const stop = btn(f.cancel, () => c.abort(new Error('canceled')), 'small')
-        go.replaceWith(stop)
-        label.textContent = w.downloading
-        try {
-          await downloadImages((p) => (label.textContent = `${mb1(p.bytes)} / ${mb1(p.totalBytes)}`), c.signal, offer)
-          after()
-        } catch (e) {
-          // what arrived stays: the button goes on from there
-          label.textContent = c.signal.aborted ? f.canceled : `${s.failed} ${e instanceof Error ? e.message : e}`
-          go.textContent = w.resume
-          asked = false
-          stop.replaceWith(go)
-        }
-      }, 'small')
-      row.appendChild(go)
-    })
+    if (navigator.onLine !== false) {
+      if (!have) label.textContent = s.working
+      void imagesOffer().then((offer) => {
+        if (!offer) return void (label.textContent = imagesLine(lang, have))
+        const size = mb1(offer.bytes)
+        if (!have) label.textContent = size
+        let asked = false
+        const go = btn(have ? w.resume : w.download, async () => {
+          // over mobile data the first tap asks, the second downloads (Android's WebView shows no confirm())
+          if (!asked && meteredNow() === true) {
+            asked = true
+            label.textContent = fill(w.metered, { mb: size })
+            return
+          }
+          const c = new AbortController()
+          const stop = btn(f.cancel, () => c.abort(new Error('canceled')), 'small')
+          go.replaceWith(stop)
+          remove.remove()
+          label.textContent = w.downloading
+          try {
+            await downloadImages((p) => (label.textContent = `${mb1(p.bytes)} / ${mb1(p.totalBytes)}`), c.signal, offer)
+            after()
+          } catch (e) {
+            // what arrived stays: the button goes on from there, or it is removed
+            label.textContent = c.signal.aborted ? f.canceled : `${s.failed} ${e instanceof Error ? e.message : e}`
+            go.textContent = w.resume
+            asked = false
+            stop.replaceWith(go)
+            row.appendChild(remove)
+          }
+        }, 'small')
+        row.insertBefore(go, remove.isConnected ? remove : null)
+      })
+    }
   }
   sec.append(row, credit)
   return sec

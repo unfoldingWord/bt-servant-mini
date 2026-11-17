@@ -18,6 +18,8 @@ type Words = {
   /** the menu's section, what it says with and without the images, its buttons */
   title: string; have: string; none: string; credit: string; download: string; resume: string; downloading: string
   share: string; remove: string
+  /** a download that did not end (part of it on the phone, nothing shown yet) */
+  partial: string
   /** asked before a download over mobile data ({mb}: its size) */
   metered: string
   /** under a frame with no picture */
@@ -29,6 +31,7 @@ const W: Record<string, Words> = {
     none: 'Not on this phone. With internet they download here, or load a .tcpack file of pictures (SD card, USB, Bluetooth).',
     credit: 'Illustrations © Sweet Publishing, CC BY-SA 3.0.', download: 'Download', resume: 'Continue', downloading: 'Downloading…',
     share: 'Share', remove: 'Remove', metered: '{mb} over mobile data. Continue?',
+    partial: 'Download not finished: no picture shows yet. With internet it continues here; or remove what arrived.',
     missing: 'Picture not on this phone',
   },
   es: {
@@ -36,6 +39,7 @@ const W: Record<string, Words> = {
     none: 'No están en el teléfono. Con internet se bajan aquí, o carga un archivo .tcpack de imágenes (tarjeta SD, USB, Bluetooth).',
     credit: 'Ilustraciones © Sweet Publishing, CC BY-SA 3.0.', download: 'Bajar', resume: 'Seguir', downloading: 'Bajando…',
     share: 'Compartir', remove: 'Quitar', metered: '{mb} por datos móviles. ¿Seguir?',
+    partial: 'Bajada sin terminar: aún no se ve ninguna imagen. Con internet sigue aquí; o quita lo que llegó.',
     missing: 'La imagen no está en el teléfono',
   },
   pt: {
@@ -43,6 +47,7 @@ const W: Record<string, Words> = {
     none: 'Não estão no telefone. Com internet, baixe-as aqui, ou carregue um arquivo .tcpack de imagens (cartão SD, USB, Bluetooth).',
     credit: 'Ilustrações © Sweet Publishing, CC BY-SA 3.0.', download: 'Baixar', resume: 'Continuar', downloading: 'Baixando…',
     share: 'Compartilhar', remove: 'Remover', metered: '{mb} pelos dados móveis. Continuar?',
+    partial: 'Download não terminado: nenhuma imagem aparece ainda. Com internet, continue aqui; ou remova o que chegou.',
     missing: 'A imagem não está no telefone',
   },
   fr: {
@@ -50,6 +55,7 @@ const W: Record<string, Words> = {
     none: 'Elles ne sont pas sur le téléphone. Avec internet, téléchargez-les ici, ou chargez un fichier .tcpack d’images (carte SD, USB, Bluetooth).',
     credit: 'Illustrations © Sweet Publishing, CC BY-SA 3.0.', download: 'Télécharger', resume: 'Continuer', downloading: 'Téléchargement…',
     share: 'Partager', remove: 'Retirer', metered: '{mb} par les données mobiles. Continuer ?',
+    partial: 'Téléchargement inachevé : aucune image ne s’affiche encore. Avec internet, il continue ici ; ou retirez ce qui est arrivé.',
     missing: 'Image absente du téléphone',
   },
   id: {
@@ -57,6 +63,7 @@ const W: Record<string, Words> = {
     none: 'Belum ada di ponsel. Dengan internet, unduh di sini, atau muat berkas .tcpack gambar (kartu SD, USB, Bluetooth).',
     credit: 'Ilustrasi © Sweet Publishing, CC BY-SA 3.0.', download: 'Unduh', resume: 'Lanjutkan', downloading: 'Mengunduh…',
     share: 'Bagikan', remove: 'Hapus', metered: '{mb} lewat data seluler. Lanjutkan?',
+    partial: 'Unduhan belum selesai: belum ada gambar yang tampil. Dengan internet, lanjutkan di sini; atau hapus yang sudah masuk.',
     missing: 'Gambar tidak ada di ponsel',
   },
   hi: {
@@ -64,6 +71,7 @@ const W: Record<string, Words> = {
     none: 'ये फ़ोन पर नहीं हैं। इंटरनेट हो तो इन्हें यहीं डाउनलोड करें, या चित्रों की .tcpack फ़ाइल (SD कार्ड, USB, Bluetooth) लोड करें।',
     credit: 'चित्र © Sweet Publishing, CC BY-SA 3.0.', download: 'डाउनलोड करें', resume: 'जारी रखें', downloading: 'डाउनलोड हो रहा है…',
     share: 'साझा करें', remove: 'हटाएँ', metered: 'मोबाइल डेटा से {mb}। जारी रखें?',
+    partial: 'डाउनलोड पूरा नहीं हुआ: अभी कोई चित्र नहीं दिखता। इंटरनेट हो तो यहीं जारी रखें; या जो आया है उसे हटाएँ।',
     missing: 'चित्र फ़ोन पर नहीं है',
   },
   ar: {
@@ -71,6 +79,7 @@ const W: Record<string, Words> = {
     none: 'ليست على الهاتف. مع الإنترنت نزّلها من هنا، أو حمّل ملف ‎.tcpack للصور (بطاقة SD أو USB أو Bluetooth).',
     credit: 'الرسوم © Sweet Publishing، بترخيص CC BY-SA 3.0.', download: 'تنزيل', resume: 'متابعة', downloading: 'جارٍ التنزيل…',
     share: 'مشاركة', remove: 'إزالة', metered: '{mb} عبر بيانات الجوال. متابعة؟',
+    partial: 'لم يكتمل التنزيل: لا تظهر أي صورة بعد. مع الإنترنت يُتابَع من هنا؛ أو أزل ما وصل.',
     missing: 'الصورة ليست على الهاتف',
   },
 }
@@ -157,13 +166,15 @@ function dropOldZip(): Promise<void> {
   })
 }
 
-// The reader of the images' catalog, its own (never openLang: zxx-* is not a language), opened once and dropped on every change
+// The reader of the images' catalog, its own (never openLang: zxx-* is not a language), opened once and read again after every
+// change. The blob: URLs made from it are kept while the images stay on the phone (a language downloaded meanwhile must not
+// break a lazy picture drawn before and not loaded yet; a new revision comes only by removing them first) and let go when a
+// read finds them gone.
 let reader: Promise<PackReader | null> | null = null
-/** The blob: URLs made, per frame, for the current reader */
+/** The blob: URLs made, per frame */
 let urls = new Map<string, Promise<string | null>>()
 onPacksChanged(() => {
   reader = null
-  dropUrls()
 })
 function dropUrls() {
   for (const u of urls.values()) void u.then((x) => { try { if (x) URL.revokeObjectURL(x) } catch {} }, () => {})
@@ -175,9 +186,16 @@ function imagesReader(): Promise<PackReader | null> {
     const p: Promise<PackReader | null> = openAdded(IMAGES)
       .then((r) => (r.installed(UNIT) ? r : null))
       .catch((e) => {
-        if (!(e instanceof ClientError && e.code === 'E_NOT_INSTALLED') && reader === p) reader = null
+        if (!(e instanceof ClientError && e.code === 'E_NOT_INSTALLED')) {
+          if (reader === p) reader = null // a failed read: tried again next time, and the URLs stay
+          throw e
+        }
         return null
       })
+      .then((r) => {
+        if (!r) dropUrls() // not on the phone (removed): their URLs are let go
+        return r
+      }, () => null)
     reader = p
   }
   return reader
@@ -345,17 +363,17 @@ export function addObsPictures(box: HTMLElement, meta: string | undefined, ui: s
   return added
 }
 
-/** The menu's line: how many pictures and their size, or how to get them (no pictures, or a download not ended). */
+/** The menu's line: how many pictures and their size, a download not ended, or how to get them. */
 export const imagesLine = (ui: string, have: ImagesState): string =>
-  have && 'bytes' in have ? fill(IW(ui).have, { n: IMAGES_COUNT, mb: `${(have.bytes / 1048576).toFixed(1)} MB` }) : IW(ui).none
+  !have ? IW(ui).none : 'bytes' in have ? fill(IW(ui).have, { n: IMAGES_COUNT, mb: `${(have.bytes / 1048576).toFixed(1)} MB` }) : IW(ui).partial
 
 /**
- * What the menu says after a .tcpack was loaded: its languages, the pictures' line when it brought them (`have`: what the phone
- * has now), or `failed` with the number of entries turned down when it brought neither.
+ * What the menu says after a .tcpack was loaded: its languages, the pictures' line when it brought them and they are on the phone
+ * now (`have`), or `failed` with the number of entries turned down when it brought neither.
  */
 export function importedLine(ui: string, r: { langs: string[]; rejected: number; images?: boolean }, have: ImagesState, failed: string): string {
   const parts: string[] = []
   if (r.langs.length) parts.push(r.langs.map((l) => PACK_NAMES[l] ?? l).join(', ') + ' ✓')
-  if (r.images) parts.push(imagesLine(ui, have))
+  if (r.images && have && 'bytes' in have) parts.push(imagesLine(ui, have))
   return parts.length ? parts.join(' · ') : `${failed} ${r.rejected}`
 }

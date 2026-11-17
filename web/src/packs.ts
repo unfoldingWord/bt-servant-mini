@@ -565,7 +565,9 @@ export async function catalogOffer(name: string, want: { units: string[]; defaul
 /**
  * Downloads `want` of a catalog that is not a language into the phone, as downloadLang does (one request at a time from the
  * client, `ahead` prefetched; what is in the store already counts as done from the start and is not fetched again; `signal`
- * cancels, what arrived stays). No partial mark (a zxx-* catalog is never a language): the caller keeps its own.
+ * cancels, what arrived stays). No partial mark (a zxx-* catalog is never a language): the caller keeps its own. A catalog
+ * stored already (a cut download) is read again first, so the install follows the same revision as `offer` (else a revision
+ * published meanwhile would be planned from one catalog and installed from the other).
  */
 export async function downloadCatalog(
   name: string, want: { units: string[]; defaults: false }, offer: CatalogOffer, onProgress?: (p: Progress) => void,
@@ -579,11 +581,15 @@ export async function downloadCatalog(
   const order = offer.segments.filter((id) => !have.has(id))
   const client = createClient({ store, source: prefetching(http, order, o.ahead ?? 6), trust })
   try {
-    const report = await serial(() => client.install(name, want, {
-      concurrency: 1,
-      ...(o.signal ? { signal: o.signal } : {}),
-      onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
-    }))
+    const report = await serial(async () => {
+      const st: any = await store.getState().catch(() => undefined)
+      if (st?.published?.[name]) await client.refresh(name, o.signal ? { signal: o.signal } : {})
+      return client.install(name, want, {
+        concurrency: 1,
+        ...(o.signal ? { signal: o.signal } : {}),
+        onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
+      })
+    })
     return { bytes: report.bytes ?? 0 }
   } finally {
     changed()

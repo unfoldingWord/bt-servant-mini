@@ -17,7 +17,7 @@ import {
 } from '@bt-synergy/language-pack-v3'
 import { BTS_DIR } from './bts-dir'
 import {
-  downloadLang, importPack, installedLangs, openAdded, openLang, resetAddedStore, setPacksServers, setTrustedKeys,
+  addedStore, downloadLang, importPack, installedLangs, openAdded, openLang, reloadPacks, resetAddedStore, setPacksServers, setTrustedKeys,
 } from '../src/packs'
 import {
   downloadImages, exportImages, IMAGES, IMAGES_COUNT, imagesCredit, imagesInstalled, imagesLine, imagesOffer, importedLine, IW, localUrl,
@@ -147,8 +147,11 @@ afterAll(() => {
   setPacksServers()
   setTrustedKeys()
   resetAddedStore()
-  ;(globalThis as any).indexedDB = saved.indexedDB
-  ;(globalThis as any).localStorage = saved.localStorage
+  // as they were: a global bun did not have is deleted, not left as undefined
+  for (const k of ['indexedDB', 'localStorage'] as const) {
+    if (saved[k] === undefined) delete (globalThis as any)[k]
+    else (globalThis as any)[k] = saved[k]
+  }
 })
 
 /** Whether the unit is installed, as the client reads it (a catalog not active yet cannot be opened at all). */
@@ -158,6 +161,24 @@ async function unitInstalled(): Promise<boolean> {
   } catch {
     return false
   }
+}
+const storeIds = async () => new Set(await (await addedStore()).ids())
+/** Starts a download, lets the first segment in, holds the second, and cancels: what a person who taps Cancel leaves. */
+async function cutDownload() {
+  const offer = (await imagesOffer())!
+  holdId = offer.segments[1]!
+  asked.length = 0
+  const c = new AbortController()
+  let firstIn!: () => void
+  const gotFirst = new Promise<void>((r) => (firstIn = r))
+  const run = downloadImages((p) => { if (p.done >= 1) firstIn() }, c.signal, offer)
+  await gotFirst
+  // the prefetch asked for the second already: the server holds it, and the person cancels
+  expect(asked).toContain(offer.segments[1]!)
+  c.abort(new Error('canceled'))
+  await expect(run).rejects.toThrow()
+  holdId = null
+  return offer
 }
 const bytesAt = async (u: string | null) => (u ? [...new Uint8Array(await (await fetch(u)).arrayBuffer())] : null)
 
@@ -169,25 +190,25 @@ describe('zxx-obsimg, the pictures as a catalog', () => {
     expect([...offer!.segments].sort()).toEqual([...B.images].sort())
   })
 
+  test('a cut download can be removed: what arrived leaves the store, and the menu offers a new download', async () => {
+    const offer = await cutDownload()
+    expect(await imagesInstalled()).toEqual({ partial: true })
+    expect((await storeIds()).has(offer.segments[0]!)).toBe(true)
+    await removeImages()
+    expect(await imagesInstalled()).toBeNull()
+    const ids = await storeIds()
+    expect(offer.segments.some((id) => ids.has(id))).toBe(false)
+    expect(mem.has('btsm.obsimg.segments')).toBe(false)
+  }, 60000)
+
   test('a download cut after the first segment shows nothing; "Continue" fetches only what is missing', async () => {
-    const offer = (await imagesOffer())!
+    const offer = await cutDownload()
     const [first, second] = offer.segments
-    holdId = second!
-    asked.length = 0
-    const c = new AbortController()
-    let firstIn!: () => void
-    const gotFirst = new Promise<void>((r) => (firstIn = r))
-    const run = downloadImages((p) => { if (p.done >= 1) firstIn() }, c.signal, offer)
-    await gotFirst
-    // the prefetch asked for the second already: the server holds it, and the person cancels
-    expect(asked).toContain(second!)
-    c.abort(new Error('canceled'))
-    await expect(run).rejects.toThrow()
     expect(await unitInstalled()).toBe(false)
     expect(await imagesInstalled()).toEqual({ partial: true })
+    expect(imagesLine('es', { partial: true })).toBe(IW('es').partial)
     expect(await localUrl(1, 1)).toBeNull()
     // again: only the missing segment is asked for, and the pictures are whole
-    holdId = null
     asked.length = 0
     let last = { done: 0, total: 0 }
     const got = await downloadImages((p) => (last = p))
@@ -208,6 +229,17 @@ describe('zxx-obsimg, the pictures as a catalog', () => {
     expect(await bytesAt(await localUrl(2, 1))).toEqual([6, 7, 8, 9])
     expect(await localUrl(2, 2)).toBeNull()
     expect(await localUrl(3, 1)).toBeNull()
+    // another pack changes (a language downloaded, removed, updated): the URL drawn before still holds (a lazy picture loads)
+    reloadPacks()
+    expect(await localUrl(1, 2)).toBe(u)
+    // a failed read of the store is tried again, not kept as "no pictures"
+    const idb = (globalThis as any).indexedDB
+    ;(globalThis as any).indexedDB = undefined
+    resetAddedStore()
+    expect(await localUrl(1, 2)).toBeNull()
+    ;(globalThis as any).indexedDB = idb
+    resetAddedStore()
+    expect(await localUrl(1, 2)).toBe(u)
     expect(await imagesCredit()).toBe('Illustrations (c) Sweet Publishing, https://sweetpublishing.com · CC BY-SA 3.0')
   })
 
@@ -220,7 +252,16 @@ describe('zxx-obsimg, the pictures as a catalog', () => {
     await downloadLang(ES)
     expect(await installedLangs()).toContain(ES)
     expect((await openLang(ES)).installed('book:tit')).toBe(true)
+    const images = new Set(B.images)
+    const before = await storeIds()
+    // the language's and common's segments (the store also keeps each catalog's own file: the pictures' goes with them)
+    const others = [...before].filter((id) => B.segments.has(id) && !images.has(id))
+    expect(B.images.every((id) => before.has(id))).toBe(true)
+    expect(others.length).toBeGreaterThan(0)
     await removeImages()
+    const after = await storeIds()
+    expect(B.images.some((id) => after.has(id))).toBe(false)
+    expect(others.filter((id) => !after.has(id))).toEqual([]) // every segment of the language and common is still there
     expect(await imagesInstalled()).toBeNull()
     expect(await unitInstalled()).toBe(false)
     expect(await localUrl(1, 2)).toBeNull()
@@ -244,6 +285,8 @@ describe('zxx-obsimg, the pictures as a catalog', () => {
     expect(importedLine('es', r, have, failed)).toStartWith(`${IMAGES_COUNT} imágenes · `)
     expect(importedLine('es', { langs: [ES], rejected: 0, images: true }, have, failed)).toBe(`Español (Latinoamérica) ✓ · ${imagesLine('es', have)}`)
     expect(importedLine('es', { langs: [], rejected: 2 }, null, failed)).toBe(`${failed} 2`)
+    // a file that named the pictures but did not leave them on the phone is not reported as a success
+    expect(importedLine('es', { langs: [], rejected: 1, images: true }, null, failed)).toBe(`${failed} 1`)
     expect(await installedLangs()).toEqual([])
   }, 60000)
 })
@@ -286,6 +329,6 @@ describe('words', () => {
   test('the menu line: the pictures and their size, or how to get them', () => {
     expect(imagesLine('es', { bytes: 21076377 })).toBe('598 imágenes · 20.1 MB ✓')
     expect(imagesLine('en', null)).toBe(IW('en').none)
-    expect(imagesLine('en', { partial: true })).toBe(IW('en').none)
+    expect(imagesLine('en', { partial: true })).toBe(IW('en').partial)
   })
 })

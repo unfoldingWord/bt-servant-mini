@@ -119,7 +119,7 @@ describe('words', () => {
     expect(IW('sw')).toBe(en)
     expect(imagesLine('es', { bytes: 21076377 })).toBe('598 imágenes · 20.1 MB ✓')
     expect(imagesLine('en', null)).toBe(en.none)
-    expect(imagesLine('en', { partial: true })).toBe(en.none)
+    expect(imagesLine('en', { partial: true })).toBe(en.partial)
     // no zip any more: the pictures come here, or in a .tcpack; the question before mobile data names the size
     for (const ui of ['en', 'es', 'pt', 'fr', 'id', 'hi', 'ar']) {
       expect(IW(ui).none).toContain('.tcpack')
