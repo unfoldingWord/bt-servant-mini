@@ -74,7 +74,9 @@ export function watchedFetch(base: typeof fetch, headerMs: number, stallMs: numb
     } finally {
       clearTimeout(timer)
     }
-    if (!res.body) {
+    // no body to watch: none at all, or a status that cannot have one (a 304 to a refresh with its ETag: Chrome and Android's
+    // WebView give it an empty body, and a new Response with that status and a body throws)
+    if (!res.body || res.status === 204 || res.status === 205 || res.status === 304) {
       release()
       return res
     }

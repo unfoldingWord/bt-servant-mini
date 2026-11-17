@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { newerOnly, serverSource, packsServers, setPacksServers } from '../src/packs'
+import { newerOnly, serverSource, packsServers, setPacksServers, watchedFetch } from '../src/packs'
 import { PACKS_DIR } from './fs-packs'
 import { MINI_SERVER, PACKS_SERVERS, PREVIEW_SERVER, STAGING_KEYS, TRUSTED_KEYS, trustedKeys } from '../src/shared'
 
@@ -72,6 +72,20 @@ describe('serverSource', () => {
       const { f } = fakeFetch((server) => (server === A ? new Response('x', { status }) : ok('b')))
       expect(text(await serverSource([A, B], { fetch: f }).segment(SEG))).toBe('b')
     }
+  })
+  test('a 304 to a catalog asked with its ETag, with the empty body Chrome gives it: "not modified", not a failure', async () => {
+    // Chrome and Android's WebView hand a 304 over with a (empty) body; bun gives none. Wrapped again with that body, it threw,
+    // the server counted as failed, and the first server's "no pack" won (a cut download of the OBS pictures could not go on).
+    const chrome304 = () => {
+      const r = new Response(null, { status: 304 })
+      Object.defineProperty(r, 'body', { value: new ReadableStream() })
+      return r
+    }
+    const { f } = fakeFetch((server) => (server === A ? noCatalog() : chrome304()))
+    expect(await serverSource([A, B], { fetch: f }).catalog('zxx-obsimg', { etag: '"e1"' })).toBe('not-modified')
+    // (bun lets a 304 be built with a body, Chrome does not: what must hold is that it is handed over as it came, not rebuilt)
+    const res = chrome304()
+    expect(await watchedFetch(async () => res, 1000, 1000)('https://x/v3/packs/a/catalog')).toBe(res)
   })
   test('no catalog on the first server: the next one has it, and the first stays first', async () => {
     const { f, calls } = fakeFetch((server, path) => (server === A && path.includes('/hi/') ? noCatalog() : ok(server)))
