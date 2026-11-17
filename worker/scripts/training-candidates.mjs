@@ -9,14 +9,14 @@
 // --since <ISO date|last>: only the reports received after that moment (`last`: after the newest this script exported).
 // All reports are fetched in one `wrangler kv bulk get` (see fb-kv.mjs).
 import { writeFileSync } from 'node:fs'
-import { getReports, keysAfter, listKeys, parseArgs, saveMark, sinceMark, wrangler } from './fb-kv.mjs'
+import { countOf, getReports, keysAfter, listKeys, parseArgs, pick, saveMark, sinceMark, wrangler } from './fb-kv.mjs'
 
 const { positional, since } = parseArgs(process.argv.slice(2))
 const out = positional[0] ?? 'training-candidates.jsonl'
-const n = Number(positional[1] ?? (since == null ? 200 : Infinity))
+const n = countOf(positional[1], since == null ? 200 : Infinity) // with --since: every report after the mark, unless a count is given
 const where = process.env.LOCAL ? '--local' : '--remote' // LOCAL=1: the reports of a local `wrangler dev`
-const wr = wrangler(where)
-const keys = keysAfter(listKeys(wr, where), sinceMark(since, where === '--local' ? 'training-local' : 'training')).slice(0, n)
+const wr = wrangler()
+const keys = pick(keysAfter(listKeys(wr, where), sinceMark(since, where === '--local' ? 'training-local' : 'training')), n, since)
 
 /** From an answer's details: the model's slots (the JSON line after "model N ms") and the app's call sheet (the last JSON block). */
 function parseDetails(details = '') {
@@ -47,5 +47,6 @@ for (const { key: k, report: r } of got) {
   })
 }
 writeFileSync(out, rows.map((x) => JSON.stringify(x)).join('\n') + (rows.length ? '\n' : ''))
-saveMark(where === '--local' ? 'training-local' : 'training', got.map((g) => g.key))
+// (only `--since last` moves the mark: a plain run or a date shows reports without marking them seen)
+if (since === 'last') saveMark(where === '--local' ? 'training-local' : 'training', got.map((g) => g.key))
 console.log(`${rows.length} candidate(s) from ${keys.length} report(s) -> ${out}`)

@@ -1,19 +1,25 @@
 // Reading the answer reports (`fb:` keys in the USAGE KV) for feedback.mjs and training-candidates.mjs. Read-only on the KV.
 // The keys are listed once and fetched in one `wrangler kv bulk get` per 100 keys (one wrangler start instead of one per
-// report); if bulk get fails (it is an open beta), each key is fetched on its own as before.
-// `--since <ISO date|last>` keeps the reports received after that moment; `last` means after the newest report this script
-// already showed, kept in worker/.feedback-state.json (git-ignored: it holds only report keys, never their text).
+// report); a chunk whose bulk get fails (it is an open beta) is fetched one key at a time, as before.
+// `--since <ISO date|last>` keeps the reports received from that moment on (a date alone keeps that whole day); `last` means
+// after the newest report this script showed with `--since last`, kept in worker/.feedback-state.json (git-ignored: it holds
+// only report keys, never their text). With `last` and a count, the oldest reports after the mark come first, so the next
+// `--since last` goes on from there and none is skipped.
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-export const STATE_FILE = '.feedback-state.json'
+/** worker/.feedback-state.json, wherever the script is run from */
+export const STATE_FILE = fileURLToPath(new URL('../.feedback-state.json', import.meta.url))
 const BULK_MAX = 100 // keys per bulk get (the Cloudflare API limit)
 
-export function wrangler(where) {
+/** Runs wrangler (WRANGLER: a wrangler.js path; else npx through the shell, so an argument with spaces is quoted). */
+export function wrangler() {
+  const quote = (a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)
   return (...args) => {
-    const cmd = process.env.WRANGLER ? [process.execPath, [process.env.WRANGLER, ...args]] : ['npx', ['wrangler', ...args]]
+    const cmd = process.env.WRANGLER ? [process.execPath, [process.env.WRANGLER, ...args]] : ['npx', ['wrangler', ...args.map(quote)]]
     return execFileSync(cmd[0], cmd[1], {
       encoding: 'utf8', shell: !process.env.WRANGLER, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 512 * 1024 * 1024,
     })
@@ -32,8 +38,15 @@ export function parseArgs(argv) {
   }
   return { positional, since }
 }
+/** The count argument: a positive whole number, or `fallback` when absent. */
+export function countOf(arg, fallback) {
+  if (arg === undefined) return fallback
+  const n = Number(arg)
+  if (!Number.isInteger(n) || n < 1) throw new Error(`the count must be a positive whole number, got "${arg}"`)
+  return n
+}
 
-/** The moment after which reports are kept: an ISO date (or prefix of one), the saved mark for `last`, or null for all. */
+/** The moment from which reports are kept: an ISO date (or prefix of one), the saved mark for `last`, or null for all. */
 export function sinceMark(since, script, stateFile = STATE_FILE) {
   if (since == null) return null
   if (since === 'last') {
@@ -45,16 +58,21 @@ export function sinceMark(since, script, stateFile = STATE_FILE) {
   return `fb:${since}`
 }
 
-/** Keys newer than the mark (keys are `fb:<ISO time>:<id>`, so they sort by time). */
+/** Keys after the mark (keys are `fb:<ISO time>:<id>`, so they sort by time; a date alone keeps that whole day). */
 export function keysAfter(keys, mark) {
   return mark ? keys.filter((k) => k > mark) : keys
+}
+/** At most `n` of these keys (newest first): the newest `n`, or with `--since last` the oldest `n` after the mark. */
+export function pick(keys, n, since) {
+  if (!Number.isFinite(n) || keys.length <= n) return keys
+  return since === 'last' ? keys.slice(-n) : keys.slice(0, n)
 }
 
 export function readState(stateFile = STATE_FILE) {
   try { return JSON.parse(readFileSync(stateFile, 'utf8')) } catch { return {} }
 }
 
-/** Remembers the newest key this script showed, for the next `--since last`. */
+/** Remembers the newest key this script showed, for the next `--since last` (never moved back). */
 export function saveMark(script, keys, stateFile = STATE_FILE) {
   if (!keys.length) return
   const newest = [...keys].sort().at(-1)
@@ -85,19 +103,21 @@ export function parseBulk(text) {
 /** `{ key, report }` for these keys, in the same order (a key whose value is gone is skipped). */
 export function getReports(wr, where, keys) {
   if (!keys.length) return []
-  let got = new Map()
+  const got = new Map()
   const dir = mkdtempSync(join(tmpdir(), 'fb-'))
   try {
     for (let i = 0; i < keys.length; i += BULK_MAX) {
+      const chunk = keys.slice(i, i + BULK_MAX)
       const file = join(dir, `keys-${i}.json`)
-      writeFileSync(file, JSON.stringify(keys.slice(i, i + BULK_MAX)))
-      for (const [k, r] of parseBulk(wr('kv', 'bulk', 'get', file, '--binding', 'USAGE', where, '-c', 'wrangler.toml'))) got.set(k, r)
-    }
-  } catch (e) {
-    console.error(`bulk get failed (${String(e.message ?? e).split('\n')[0]}); fetching the reports one by one`)
-    got = new Map()
-    for (const k of keys) {
-      try { got.set(k, JSON.parse(wr('kv', 'key', 'get', k, '--binding', 'USAGE', where, '-c', 'wrangler.toml'))) } catch {}
+      writeFileSync(file, JSON.stringify(chunk))
+      try {
+        for (const [k, r] of parseBulk(wr('kv', 'bulk', 'get', file, '--binding', 'USAGE', where, '-c', 'wrangler.toml'))) got.set(k, r)
+      } catch (e) {
+        console.error(`bulk get failed (${String(e?.message ?? e).split('\n')[0]}); fetching ${chunk.length} report(s) one by one`)
+        for (const k of chunk) {
+          try { got.set(k, JSON.parse(wr('kv', 'key', 'get', k, '--binding', 'USAGE', where, '-c', 'wrangler.toml'))) } catch {}
+        }
+      }
     }
   } finally {
     rmSync(dir, { recursive: true, force: true })

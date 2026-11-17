@@ -1,18 +1,19 @@
 // The reports people sent about answers (the thumbs down in the app), newest first.
 //   node scripts/feedback.mjs [how many=20]      (run in worker/, with wrangler signed in to the unfoldingWord account)
 //   node scripts/feedback.mjs 20 --json          the reports as they are stored
-//   node scripts/feedback.mjs --since 2026-11-15 the reports received after that date (ISO date or date-time, UTC)
-//   node scripts/feedback.mjs --since last       the reports received after the newest one this script showed before
+//   node scripts/feedback.mjs --since 2026-11-15 the reports received from that date on (ISO date or date-time, UTC)
+//   node scripts/feedback.mjs --since last       the reports after the newest one shown by the last `--since last` (with
+//                                                a count, the oldest first: the next run goes on from there)
 // All reports are fetched in one `wrangler kv bulk get` (see fb-kv.mjs). Set WRANGLER to a wrangler.js path to use one
 // that is not on PATH. The reports hold people's questions: print them, never save them into the repo.
-import { getReports, keysAfter, listKeys, parseArgs, saveMark, sinceMark, wrangler } from './fb-kv.mjs'
+import { countOf, getReports, keysAfter, listKeys, parseArgs, pick, saveMark, sinceMark, wrangler } from './fb-kv.mjs'
 
 const { positional, since } = parseArgs(process.argv.slice(2))
-const n = Number(positional[0] ?? (since == null ? 20 : Infinity)) // with --since: every report after the mark
+const n = countOf(positional[0], since == null ? 20 : Infinity) // with --since: every report after the mark, unless a count is given
 const asJson = process.argv.includes('--json')
 const where = '--remote'
-const wr = wrangler(where)
-const keys = keysAfter(listKeys(wr, where), sinceMark(since, 'feedback')).slice(0, n)
+const wr = wrangler()
+const keys = pick(keysAfter(listKeys(wr, where), sinceMark(since, 'feedback')), n, since)
 const got = getReports(wr, where, keys)
 const reports = got.map((g) => g.report)
 if (asJson) {
@@ -30,4 +31,5 @@ if (asJson) {
   }
   console.log(`\n${reports.length} report(s)`)
 }
-saveMark('feedback', got.map((g) => g.key))
+// (only `--since last` moves the mark: a plain run or a date shows reports without marking them seen)
+if (since === 'last') saveMark('feedback', got.map((g) => g.key))

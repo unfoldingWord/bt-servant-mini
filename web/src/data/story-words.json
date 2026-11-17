@@ -1,6 +1,7 @@
 {
   "_": "Common words of Bible stories, to English, for searches in a language whose pack lacks the book (the question's words are then matched against the English text). Keys are folded: lowercase, no accents.",
   "es": {
+    "campo": "field", "espiga": "glean", "espigar": "glean", "espigando": "glean", "sembrador": "sower", "prodigo": "prodigal",
     "construye": "build", "construyo": "build", "construir": "build", "construyen": "build", "edifica": "build", "edifico": "build", "templo": "temple",
     "mar": "sea", "pez": "fish", "peces": "fish", "ballena": "fish", "leon": "lion", "leones": "lion", "foso": "den",
     "arca": "ark", "diluvio": "flood", "gigante": "giant", "piedra": "stone", "piedras": "stone", "fuego": "fire",
@@ -13,6 +14,7 @@
     "becerro": "calf", "tablas": "tablets", "honda": "sling", "cabello": "hair", "pozo": "well", "escalera": "ladder"
   },
   "fr": {
+    "champ": "field", "glaner": "glean", "glane": "glean", "semeur": "sower", "prodigue": "prodigal",
     "construit": "build", "construire": "build", "batit": "build", "batir": "build",
     "mer": "sea", "poisson": "fish", "poissons": "fish", "baleine": "fish", "lion": "lion", "lions": "lion", "fosse": "den",
     "arche": "ark", "deluge": "flood", "geant": "giant", "pierre": "stone", "pierres": "stone", "feu": "fire",

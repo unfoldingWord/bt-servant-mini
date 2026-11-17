@@ -53,7 +53,7 @@ export function headingsOfText(book: string, t: { pieces?: unknown[]; events?: [
     return { book, ch: h.ch, v: h.v, end: Math.max(h.v, end), title: h.title, lang }
   })
 }
-/** A book's sections, from the first installed pack whose text has headings (English first: BSB has them). */
+/** A book's sections, from the first installed pack whose text has headings (English first: BSB has them); kept until the packs change. */
 export function sectionsIn(book: string): Promise<Section[]> {
   if (!cache.has(book)) {
     const p = (async () => {
@@ -71,7 +71,6 @@ export function sectionsIn(book: string): Promise<Section[]> {
       return []
     })().catch(() => [] as Section[])
     cache.set(book, p)
-    p.then((s) => { if (!s.length && cache.get(book) === p) cache.delete(book) })
   }
   return cache.get(book)!
 }
@@ -79,22 +78,24 @@ export function sectionsIn(book: string): Promise<Section[]> {
 /** Two words alike enough: the same, one the start of the other (lion ~ lions), or one root (templo ~ temple, construye ~ construction). */
 export function alike(a: string, b: string): boolean {
   if (a === b) return true
-  if (a.length >= 4 && b.startsWith(a)) return true
-  if (b.length >= 4 && a.startsWith(b)) return true
+  // (a start a few letters short: lion ~ lions, build ~ builds; not rest ~ restoration)
+  if (a.length >= 4 && b.startsWith(a) && b.length - a.length <= 3) return true
+  if (b.length >= 4 && a.startsWith(b) && a.length - b.length <= 3) return true
   let i = 0
   while (i < a.length && i < b.length && a[i] === b[i]) i++
-  return i >= 4 && i >= Math.min(a.length, b.length) - 2
+  return i >= 4 && i >= Math.min(a.length, b.length) - 2 && i >= Math.max(a.length, b.length) / 2
 }
 
 /**
- * The sections of these books whose heading has the question's words: every word, or all but one of three or more. Best
+ * The sections of these books whose heading has the question's words: every word, or all but one of three or more (not with
+ * `every`). Best
  * first (more words, then fewer other words in the heading). `words`: the question's content words, in `lang`.
  */
-export async function findSections(words: string[], lang: string, books: string[]): Promise<SectionHit[]> {
+export async function findSections(words: string[], lang: string, books: string[], every = false): Promise<SectionHit[]> {
   const ws = [...new Set(words.filter((w) => w.length >= 2))]
   if (!ws.length || !books.length) return []
   const forms = await Promise.all(ws.map(async (w) => (await englishForms(w, lang).catch(() => [fold(w)])).map(fold)))
-  const need = ws.length >= 3 ? ws.length - 1 : ws.length
+  const need = ws.length >= 3 && !every ? ws.length - 1 : ws.length
   const out: SectionHit[] = []
   for (const book of books) {
     for (const s of await sectionsIn(book)) {
@@ -121,7 +122,8 @@ export async function findStories(words: string[], lang: string): Promise<{ n: n
   for (const e of await storyList(at.r).catch(() => [])) {
     const toks = tokens(e.title).filter((t) => !SMALL.has(t))
     const matched = ws.filter((_, i) => forms[i]!.some((f) => toks.some((t) => alike(f, t))))
-    if (e.title && matched.length >= need) out.push({ n: e.n, title: e.title, lang: at.lang, matched, extra: toks.length - matched.length })
+    const used = toks.filter((t) => forms.some((fs) => fs.some((f) => alike(f, t)))).length
+    if (e.title && matched.length >= need) out.push({ n: e.n, title: e.title, lang: at.lang, matched, extra: toks.length - used })
   }
   return out.sort((a, b) => b.matched.length - a.matched.length || a.extra - b.extra).map(({ extra: _, ...e }) => e)
 }

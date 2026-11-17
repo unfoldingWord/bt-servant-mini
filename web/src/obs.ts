@@ -240,7 +240,10 @@ export const obsServer = {
   size: (lang: string): Promise<number | null> => serverUnitSize(lang, 'obs'),
   origin: (lang: string): Promise<'added' | 'shipped' | null> => origin(lang),
 }
-export async function obsMissing(lang: string): Promise<ObsMissing | null> {
+/** What the server said per language this session: asked once, not under every answer (no answer is asked again later). */
+const serverSaid = new Map<string, Promise<number | null>>()
+/** `ask`: may ask the packs server (an answer about OBS itself; never the buttons under a passage, storyAt). */
+export async function obsMissing(lang: string, ask = false): Promise<ObsMissing | null> {
   const langs = await order(lang)
   for (const l of langs) {
     const r = await read(l)
@@ -249,10 +252,12 @@ export async function obsMissing(lang: string): Promise<ObsMissing | null> {
   // no pack here lists them (installed before the server had them, a report of Nov 17: "OBS 1" said there were none and online
   // AI answered): the server may have them for the question's language or English, when this phone downloaded that language
   // (its unit can be added on a tap: addUnit)
-  if (!obsServer.allowed()) return null
+  if (!ask || !obsServer.allowed()) return null
   for (const l of langs.filter((x) => x === lang || x === 'en')) {
     if ((await obsServer.origin(l).catch(() => null)) !== 'added') continue
-    const bytes = await obsServer.size(l).catch(() => null)
+    if (!serverSaid.has(l)) serverSaid.set(l, obsServer.size(l).catch(() => null))
+    const bytes = await serverSaid.get(l)!
+    if (bytes === null) serverSaid.delete(l)
     if (bytes) return { lang: l, bytes, canAdd: true }
   }
   return null
@@ -507,7 +512,7 @@ export async function obsAnswer(s: { ref: string | null; what: string[]; lang: s
   if (entry) Object.assign(facts, { title: entry.title, refs: entry.refs })
   const at = await obsPack(s.lang)
   if (!at) {
-    const miss = await obsMissing(s.lang)
+    const miss = await obsMissing(s.lang, true)
     const told = entry?.refs.length ? `\n\n${entry.title ? `**${storyName(entry)}** — ` : ''}${entry.refs.map((r) => bibleLabel(ui, r)).join('; ')}` : ''
     if (miss) {
       facts.state = 'missing'

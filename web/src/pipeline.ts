@@ -543,8 +543,10 @@ export function guessLang(q: string): string {
  * words (a tie with the app's language is the app's; any other tie, or no such word, says nothing).
  */
 export function langByWords(q: string): string | null {
-  if (/[؀-ۿ]/.test(q)) return 'ar'
-  if (/[ऀ-ॿ]/.test(q)) return 'hi'
+  // a script, when most of the letters are in it ("¿Qué significa الله?" is still Spanish)
+  const letters = (q.match(/\p{L}/gu) ?? []).length || 1
+  if ((q.match(/[؀-ۿ]/g) ?? []).length / letters > 0.5) return 'ar'
+  if ((q.match(/[ऀ-ॿ]/g) ?? []).length / letters > 0.5) return 'hi'
   const n = Object.entries(COMMON).map(([l, re]) => [l, q.match(re)?.length ?? 0] as const).filter(([, k]) => k > 0)
   const most = Math.max(0, ...n.map(([, k]) => k))
   const top = n.filter(([, k]) => k === most).map(([l]) => l)
@@ -952,7 +954,8 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   if (target && given?.lang && packCode(given.lang) === packCode(target)) given.lang = guessLang(q)
   // the reader's language against the question's own words (a report of Nov 16: "¿Dónde se tragó a Jonás un gran pez?" read
   // as French on a phone in Spanish got a French sentence and English verses): the words win when they say another language
-  else if (given?.lang) {
+  // (only over a language the word lists know: a Portuguese reading of "O que significa graça?" stays Portuguese)
+  else if (given?.lang && ['en', 'es', 'fr', 'id', 'ar', 'hi'].includes(baseOf(given.lang))) {
     const said = langByWords(q)
     if (said && baseOf(said) !== baseOf(given.lang)) given.lang = said
   }
@@ -1237,7 +1240,8 @@ export async function academyFor(q: string, packs: string[], ui = 'en', needCue 
   // a book named in the question's language or English ("How do I start translating Ruth?"): the passage and book routes
   // know better (not any language's: "nombres" is Numbers in French)
   const tables = bookTables as Record<string, Record<string, string>>
-  if (q.split(/[^\p{L}\p{M}\d]+/u).some((w) => w.length > 2 && [ui, 'en'].some((l) => tables[l]?.[fold(w)]))) return null
+  // (not a small word of the question: the "est" of "Qu'est-ce" is no Esther)
+  if (q.split(/[^\p{L}\p{M}\d]+/u).some((w) => w.length > 2 && !TA_STOP.has(taStem(w)) && [ui, 'en'].some((l) => tables[l]?.[fold(w)]))) return null
   const asked = new Set(taContent(toks))
   const twName = new Map<string, boolean>()
   const namesTw = async (w: string) => {
@@ -1961,12 +1965,12 @@ async function findBeyondVerses(x: Ctx, words: string[]): Promise<boolean> {
  * An event or story by a section's heading (storyfind.ts): the best section of these books becomes the sheet (its passage; the
  * steps after answer it, with x.lead naming the heading); the next sections and an Open Bible Story whose title has the words
  * are buttons. With no heading, a story title that has every word is the answer. `one`: a single word is enough when exactly
- * one heading has it (in the book the question names). False when nothing fits (the verses are searched as before).
+ * one heading has it (in the book the question names); `every`: the heading must have every word (no book named). False when nothing fits (the verses are searched as before).
  */
-async function sectionFor(x: Ctx, words: string[], books: string[], one: boolean): Promise<boolean> {
+async function sectionFor(x: Ctx, words: string[], books: string[], one: boolean, every = false): Promise<boolean> {
   if (!words.length || (words.length < 2 && !one)) return false
   const lang = x.sheet.lang ?? env.nav
-  const hits = await findSections(words, lang, books).catch(() => [] as SectionHit[])
+  const hits = await findSections(words, lang, books, every).catch(() => [] as SectionHit[])
   const stories = await findStories(words, lang).catch(() => [])
   const lone = words.length < 2
   const base = { ...x.sheet, candidates: null, term: null, phrase: null } as Sheet
@@ -2383,7 +2387,7 @@ ${x.meta}` },
     run: async (x) => {
       const { c, ui } = x
       const q = x.q!
-      const scope = x.sheet.ref && /^[1-3]?[a-z]{2,3}$/.test(x.sheet.ref) ? x.sheet.ref : null
+      let scope = x.sheet.ref && /^[1-3]?[a-z]{2,3}$/.test(x.sheet.ref) ? x.sheet.ref : null
       // a story in a book ("Daniel en el foso de los leones" read as Daniel, isOpen): searched in that book only, without its
       // name; unless a verse there fits well, the book itself as the reader read it (the sheet route answers it), never the
       // weaker answers below (an article, an introduction, notes elsewhere: "Quiero leer Rut" is Ruth)
@@ -2397,19 +2401,34 @@ ${x.meta}` },
       if (inBook) {
         const s0 = res.strength
         if (!res.hits.length || (s0 && !s0.full && s0.coverage < GOOD)) {
-          // never the whole book for a story (reports of Nov 15 and 17: "Salomón construye el templo" read as 1 Kings got all
-          // of it): the question searched in the whole Bible, as an open question
-          x.searched = `\nsearch in ${inBook}: ${JSON.stringify(res.keywords)}, nothing fits well (coverage ${(s0?.coverage ?? 0).toFixed(2)}): the whole Bible`
+          // a story the book does not tell well (a report of Nov 17: "Salomón construye el templo" read as 1 Kings): the
+          // question in the whole Bible, when a section or verses there fit well; otherwise (nothing fits, or a kind of help
+          // asked for) the book as the reader read it: "Quiero estudiar Rut", "Rut en la BSB" ask for the book
+          const told = storyWords(q, inBook)
+          const all = kind0 ? null : await searchVerses(told.join(' '), null, x.sheet.lang)
+          const fits = !!all && all.hits.length > 0 && (!all.strength || all.strength.full || all.strength.coverage >= GOOD)
+          const why = `\nsearch in ${inBook}: ${JSON.stringify(res.keywords)}, nothing fits well (coverage ${(s0?.coverage ?? 0).toFixed(2)})`
+          if (all && !fits && (await sectionFor(x, told, [...new Set(all.hits.map((h) => h.book))].slice(0, 6), false))) {
+            x.searched = `${why}: the whole Bible${x.searched}`
+            return null
+          }
+          if (!all || !fits) {
+            x.searched = `${why}: the book`
+            return null
+          }
+          x.searched = `${why}: the whole Bible`
           inBook = null
-          res = await searchVerses(q, x.sheet.term, x.sheet.lang)
+          scope = null
+          res = all
           x.sheet = { ...x.sheet, intent: 'search', ref: null } as Sheet
         }
       }
-      // an event named by every word of a section's heading, in the books of the verses found ("Solomon builds the temple":
-      // 1 Kings 6, 2 Chronicles 3): that section, unless a where-question wants its verse or a kind of help was asked for
-      if (!inBook && !kind0 && !has('where', q) && !asksWhere(q)) {
+      // an event every word of a section's heading names, when no single verse holds them all, in the books of the verses
+      // found ("Salomón construye el templo": 1 Kings 6): that section, unless a where-question wants its verse or a kind of
+      // help was asked for ("amad a vuestros enemigos" stays Matthew 5:44)
+      if (!inBook && !kind0 && !has('where', q) && !asksWhere(q) && !res.strength?.full) {
         const books = [...new Set(res.hits.map((h) => h.book))].slice(0, 6)
-        if (await sectionFor(x, res.keywords, books, false)) return null
+        if (await sectionFor(x, res.keywords, books, false, true)) return null
       }
       const st = res.strength
       const cover = st ? st.coverage : 1

@@ -10,7 +10,7 @@ import { obsAnswer, obsMissing, obsServer } from '../src/obs'
 import { fullPhone, turn } from './harness'
 import { installPacks } from './fs-packs'
 // @ts-expect-error a plain ES module of the worker's scripts
-import { keysAfter, parseArgs, parseBulk, saveMark, sinceMark } from '../../worker/scripts/fb-kv.mjs'
+import { countOf, keysAfter, parseArgs, parseBulk, pick, saveMark, sinceMark } from '../../worker/scripts/fb-kv.mjs'
 
 beforeAll(async () => {
   await fullPhone()
@@ -25,6 +25,7 @@ describe('a story by its section heading (storyfind.ts)', () => {
     expect(alike('construye', 'constant')).toBe(false)
     expect(alike('den', 'daniel')).toBe(false)
     expect(alike('pez', 'peace')).toBe(false)
+    expect(alike('rest', 'restoration')).toBe(false)
   })
   test("a text's headings, each to the verse before the next one, within its chapter", () => {
     const pieces = [['Head A', false], ['v1', false], ['v2', false], ['Head B', false], ['v3', false], ['v4', false], ['v1', false]]
@@ -42,10 +43,18 @@ describe('a story by its section heading (storyfind.ts)', () => {
     expect((await findStories(['diluvio'], 'es'))[0]?.n).toBe(3)
     expect(await findStories(['Jonás', 'pez'], 'es')).toEqual([])
   }, 60_000)
-  test('never the whole book: a story read as a book with nothing in it is searched in the whole Bible', async () => {
-    const c: ConvState = { last: null }
-    const r = await turn(c, { q: 'Rut y la tormenta en el mar', slots: { intent: 'passage', book: 'Rut', lang: 'es', what: ['text'] } as any }, 'es')
-    expect(r.ref).not.toBe('rut')
+  const book = (b: string) => ({ intent: 'passage', book: b, lang: 'es', what: ['text'] }) as any
+  test('a story the book does not tell: the whole Bible, when something there fits well', async () => {
+    const r = await turn({ last: null }, { q: 'Rut y David contra Goliat', slots: book('Rut') }, 'es')
+    expect(r.ref).toMatch(/^1sa 17/)
+  }, 60_000)
+  test('the book asked for, with a word more: still the book (review of 7541534)', async () => {
+    for (const q of ['Quiero estudiar Rut', 'Rut en la BSB'])
+      expect((await turn({ last: null }, { q, slots: book('Rut') }, 'es')).ref, q).toBe('rut')
+  }, 120_000)
+  test('a verse that holds every word stays the answer, not its section', async () => {
+    const r = await turn({ last: null }, { q: 'love your enemies', slots: null }, 'en')
+    expect(r.ref).toMatch(/^mat 5:44$|^luk 6:(27|35)$/)
   }, 60_000)
 })
 
@@ -58,6 +67,7 @@ describe("the reply's language: the question's words over the reader's guess", (
     expect(langByWords('Who is Jonah?')).toBe('en')
     expect(langByWords('Jonás pez')).toBe(null)
     expect(langByWords('ما هي النعمة؟')).toBe('ar')
+    expect(langByWords('¿Qué significa الله en este versículo?')).toBe('es') // a word in another script: still Spanish
   })
 })
 
@@ -78,7 +88,7 @@ describe('Open Bible Stories the packs server has and the packs here do not list
     obsServer.allowed = () => true
     obsServer.origin = async () => 'added'
     obsServer.size = async () => 150_000
-    expect(await obsMissing('es-419')).toEqual({ lang: 'es-419', bytes: 150_000, canAdd: true })
+    expect(await obsMissing('es-419', true)).toEqual({ lang: 'es-419', bytes: 150_000, canAdd: true })
     const { answer, facts } = await obsAnswer({ ref: 'obs 1', what: ['text'], lang: 'es-419' }, 'es')
     expect(facts.add).toEqual({ lang: 'es-419', bytes: 150_000 })
     expect(answer).toContain('Toca abajo')
@@ -86,11 +96,19 @@ describe('Open Bible Stories the packs server has and the packs here do not list
     const r = await turn(c, { q: 'OBS 1', slots: null }, 'es')
     expect((r.reply.follow ?? []).some((f: any) => f.add?.unit === 'obs' && /147 KB|146 KB|150 KB/.test(f.label))).toBe(true)
   }, 60_000)
+  test('never from the buttons under a passage (storyAt): only an answer about OBS asks', async () => {
+    obsServer.allowed = () => true
+    obsServer.origin = async () => 'added'
+    let asked = 0
+    obsServer.size = async () => { asked++; return 150_000 }
+    expect(await obsMissing('es-419')).toBeNull()
+    expect(asked).toBe(0)
+  })
   test('a language that came with the app: not offered (its unit comes with the app)', async () => {
     obsServer.allowed = () => true
     obsServer.origin = async () => 'shipped'
     obsServer.size = async () => 150_000
-    expect(await obsMissing('es-419')).toBeNull()
+    expect(await obsMissing('es-419', true)).toBeNull()
   })
 })
 
@@ -100,6 +118,14 @@ describe('the report scripts (worker/scripts/fb-kv.mjs)', () => {
     expect(parseArgs(['--since=2026-11-15'])).toEqual({ positional: [], since: '2026-11-15' })
     expect(keysAfter(['fb:2026-11-17T1:a', 'fb:2026-11-15T2:b', 'fb:2026-11-14T9:c'], sinceMark('2026-11-15', 'x'))).toEqual(['fb:2026-11-17T1:a', 'fb:2026-11-15T2:b'])
     expect(() => sinceMark('yesterday', 'x')).toThrow()
+    expect(countOf(undefined, 20)).toBe(20)
+    expect(() => countOf('abc', 20)).toThrow()
+  })
+  test('a count with --since last: the oldest after the mark, so none is skipped next time', () => {
+    const keys = ['fb:5', 'fb:4', 'fb:3', 'fb:2', 'fb:1'] // newest first
+    expect(pick(keys, 2, 'last')).toEqual(['fb:2', 'fb:1'])
+    expect(pick(keys, 2, null)).toEqual(['fb:5', 'fb:4'])
+    expect(pick(keys, Infinity, 'last')).toEqual(keys)
   })
   test('the mark of the newest report shown, per script', () => {
     const dir = mkdtempSync(join(tmpdir(), 'fbstate-'))
