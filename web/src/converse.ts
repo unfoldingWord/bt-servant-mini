@@ -140,7 +140,9 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
  */
 export type Browse = { book?: string; manual?: string; lang?: string
   /** the list of Open Bible Stories (obs.ts) */
-  obs?: boolean }
+  obs?: boolean
+  /** a guided mode's own view (modes.ts): the stories that have a 5M session */
+  mode?: 'obs5m' }
 /** What "Try again" asks again: the question as the person typed it, or the button's sheet (with its label) */
 export type Again = { q?: string; sheet?: Sheet; label?: string }
 /**

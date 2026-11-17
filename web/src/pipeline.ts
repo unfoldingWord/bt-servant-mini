@@ -2478,6 +2478,11 @@ ${x.meta}` },
         const ta = (await Promise.all((h?.academy ?? []).slice(0, 2).map((id) => taStep(sheet, id, ui).catch(() => null)))).filter((t): t is Follow => !!t)
         follow.splice(Math.min(2 + terms.length, follow.length), 0, ...ta)
       }
+      // the story's own 5M session, when it has one (dev switch `obs5m`; not in a session already: that one would start over)
+      if (devOn('obs5m') && !x.c.graph?.session && f.state === 'ok') {
+        const st = await sessionButton(parseObsRef(sheet.ref)?.n ?? 0, sheet.lang, ui).catch(() => null)
+        if (st) follow.splice(Math.min(2 + terms.length, follow.length), 0, st)
+      }
       if (!follow.length) follow.push(browseStep(ui))
       const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
       // the frames' words tied to their notes and key terms (obswords.ts), tappable when drawn
@@ -3036,6 +3041,14 @@ function frameStep(s: Session, n: number): Session | null {
   return st ? { ...s, at: st.at } : null
 }
 
+/** [5M session for this story], under an Open Bible Story that has a session: a button's sheet at the session's first step. Null when it has none. */
+async function sessionButton(n: number, lang: string, ui: string): Promise<Follow | null> {
+  const fx = await fixture5()
+  const first = ORDER5.find((x) => stepsOf5(fx, x).length)
+  if (n !== fx.story || !first) return null
+  return { label: W5(ui).startStory, sheet: sheetOf(fx, { story: fx.story, part: first, at: 0, lang, tfLang: fx.tfLang, started: Date.now(), done: [] }, lang) }
+}
+
 /** "5M OBS 1" (the session's words and a story), or a question about the session's step: its sheet, read by code. */
 async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefer: string | null): Promise<Made | null> {
   const ui = env.nav
@@ -3091,6 +3104,8 @@ async function step5(x: Ctx): Promise<Done | null> {
   if (!s) {
     const n = parseObsRef(sheet.ref)?.n ?? 0
     const follow: Follow[] = n >= 1 && n <= 50 ? [{ label: obsLabel(n), sheet: passageSheet(sheet, obsRef(n), ['text', 'notes']) }] : []
+    // the way to the stories that do have one (Browse's 5M view)
+    follow.push({ label: W5(ui).seeStories, browse: { mode: 'obs5m' } })
     return { answered: 'nosession', ref: null, concept: null, found: 0,
       reply: { info: W5(ui).noSession.replace('{lang}', langName(ui, sheet.lang)), follow, ui, meta: `${meta}\n5m: no session for this story` } }
   }
