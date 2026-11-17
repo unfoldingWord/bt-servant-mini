@@ -244,7 +244,7 @@ export const downloading = () => st.phase === 'downloading'
 
 export type Example = { label: string; lang: string; intent: 'passage' | 'article'; ref?: string; what?: string[]; concept?: string }
 /** Verses that make good first questions, in the order they are tried; a pack without any of them gets its first book's 1:1. */
-const VERSES = ['rut 1:16', 'jon 1:3', 'tit 1:1', 'jhn 3:16', 'mrk 1:1', 'gen 1:1', 'mat 5:3', 'act 1:8', 'rom 1:1', 'eph 2:8', '3jn 1:4', 'psa 23:1']
+const VERSES = ['rut 1:16', 'jon 1:3', 'tit 1:1', 'act 1:8', 'jhn 3:16', 'mrk 1:1', 'gen 1:1', 'mat 5:3', 'rom 1:1', 'eph 2:8', '3jn 1:4', 'psa 23:1']
 const TERMS = ['tw:kt/grace', 'tw:kt/faith', 'tw:kt/love', 'tw:kt/covenant']
 const TOPICS = ['ta:translate/figs-metaphor', 'ta:translate/figs-idiom', 'ta:translate/translate-unknown']
 
@@ -274,7 +274,22 @@ export async function examplesFor(ui: string, lang: string): Promise<Example[]> 
   }
   const s = FU(ui)
   const out: Example[] = [{ label: label(refs[0]!), lang, intent: 'passage', ref: refs[0]!, what: ['text', 'notes'] }]
-  const second = refs[1] ?? refs[0]!
+  // the notes of a verse whose book has notes in this pack (the Hindi one has them for Acts only, not for Jonah or Ruth)
+  const hasNotes = async (ref: string) => {
+    try {
+      const rows = (((await r.book(ref.split(' ')[0]!)) as any)?.notes?.rows ?? []) as any[]
+      return rows.some((x) => !(x?.cols?.isIntro === true || x?.cols?.isIntro === 'true'))
+    } catch {
+      return false
+    }
+  }
+  let second = refs[1] ?? refs[0]!
+  for (const ref of [...refs.slice(1), refs[0]!]) {
+    if (await hasNotes(ref)) {
+      second = ref
+      break
+    }
+  }
   out.push({ label: s.notes.replace('{ref}', label(second)), lang, intent: 'passage', ref: second, what: ['notes'] })
   const titled = async (ids: string[]) => {
     for (const id of ids) {

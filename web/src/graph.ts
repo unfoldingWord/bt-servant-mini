@@ -3,6 +3,8 @@
 // key term, the Academy article its note cites, its book's or chapter's introduction) or leaves for something else
 // (`branch`). The person creates nothing; they see the graph (Map), and a tap on a point goes back there to go on from it.
 // No DOM here (main.ts draws it), so the decisions are tested under bun.
+import type { Learn } from './learn'
+import type { Session } from './obs5m'
 
 export type Edge = 'start' | 'line' | 'deeper' | 'branch'
 /** The compact sheet of a turn: what re-opens it (`lang`, `what`) and what the next turn is compared with (`ref`, `concept`). */
@@ -35,7 +37,16 @@ export type GNode = {
  * `path`: the light path the person started through a book ("Voy a traducir Rut"), and where it is; `pathBefore`: the path it
  * replaced, while the answer that started the new one offers a new conversation (moved there, the old one comes back)
  */
-export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path }
+export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefore?: Path
+  /** the step after `path`, when the last answer was on it (the button "Next: …" under it; the composer offers it too) */
+  pathNext?: Path
+  /** the learning path through Translation Academy the person started from the welcome (learn.ts), and where it is */
+  learn?: Learn
+  /**
+   * the 5M study session in progress (obs5m.ts; dev switch `obs5m`) and its current step: its steps are points of kind `obs5m`,
+   * its frame's helps go deeper from them; `pathPaused`: a light path was on when it started, kept and not offered meanwhile
+   */
+  session?: Session; pathPaused?: boolean }
 
 export const newGraph = (): Graph => ({ nodes: [], cur: null })
 export const nodeOf = (g: Graph | undefined, id: string | null | undefined): GNode | undefined =>
@@ -43,7 +54,16 @@ export const nodeOf = (g: Graph | undefined, id: string | null | undefined): GNo
 
 /** A point where the person was reading: a passage or an introduction, or the verses a search found. */
 const isPassage = (n: GNode) => (n.kind === 'passage' || n.kind === 'intro') && !!n.sheet.ref
-const isPlace = (n: GNode) => isPassage(n) || (n.kind === 'search' && !!n.sheet.ref)
+// (a step of a 5M session too: the way back from its helps stops there; pipeline.ts sessionStep makes it the way back to the session)
+const isPlace = (n: GNode) => isPassage(n) || (n.kind === 'search' && !!n.sheet.ref) || n.kind === 'obs5m'
+/** The point of a 5M session's current step (its latest), if the conversation has one. */
+export function sessionNode(g: Graph | undefined): GNode | undefined {
+  const s = g?.session
+  if (!s) return undefined
+  const id = `obs5m:${s.story}/${s.part}/${s.at}`
+  for (let i = g.nodes.length - 1; i >= 0; i--) if (g.nodes[i]!.kind === 'obs5m' && g.nodes[i]!.sheet.concept === id) return g.nodes[i]
+  return undefined
+}
 
 /** "rut 2:3" -> { book: rut, ch: 2 }; "rut front:intro" -> { book: rut, ch: null, intro }; "rut" -> { book: rut, ch: null } */
 export function place(ref: string | null): { book: string; ch: number | null; intro: boolean } | null {
@@ -78,6 +98,13 @@ export function branchOf(g: Graph, id: string, n = 3): GNode[] {
   return out
 }
 
+/** Whether a passage ref ("gen 6:1-8:22", a story's range) holds the chapter of a place (Genesis 7). */
+function inChapters(ref: string, N: { book: string; ch: number | null }): boolean {
+  const m = /^([0-9a-z]{3}) (\d+)(?::\d+)?(?:-(?:(\d+):)?\d+)?$/.exec(ref)
+  if (!m || m[1] !== N.book || N.ch === null) return false
+  return N.ch >= +m[2]! && N.ch <= (m[3] ? +m[3] : +m[2]!)
+}
+
 /** What is compared: the new turn's kind, its sheet, and what it links to. */
 export type Turn = { kind: string; sheet: NodeSheet; links?: string[] }
 
@@ -104,6 +131,15 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
   if (!c) return { edge: 'start', parent: null }
   const deeper = { edge: 'deeper' as const, parent: c.id }
   const branch = { edge: 'branch' as const, parent: c.id }
+  // in a 5M session: its steps follow each other on one line (from the current step, wherever the conversation is); a help of
+  // the current step's frame (its `links`: key terms, the Academy articles its notes cite, its OBS frame, its Bible passage)
+  // goes deeper from that step, or from the current point when that point offered it (the Academy article of the frame's notes)
+  if (g.session) {
+    const st = sessionNode(g)
+    if (t.kind === 'obs5m' && (st || c.kind === 'obs5m')) return { edge: 'line', parent: (st ?? c).id }
+    const key = [t.sheet.concept, t.sheet.ref].find((k) => k && st?.links?.includes(k))
+    if (st && key) return c.links?.includes(key) ? deeper : { edge: 'deeper', parent: st.id }
+  }
   const p = passageAt(g, c.id)
   const P = place(p?.sheet.ref ?? null)
   const N = place(t.sheet.ref)
@@ -116,6 +152,14 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
       if (A && sameLine(A, N)) return { edge: 'line', parent: a.id }
     }
     if (N.intro && P && N.book === P.book) return deeper
+    // Open Bible Stories (obs.ts): a story is a point linked to its passages. The story a passage is told in ("This part is
+    // told in OBS 3", `obs:3` in the passage's links), and a passage a story is told from (the story's links hold its ranges)
+    if (N.book === 'obs' && N.ch !== null) {
+      const story = `obs:${N.ch}`
+      if (c.links?.includes(story)) return deeper
+      if (p?.links?.includes(story)) return { edge: 'deeper', parent: p.id }
+    }
+    if (c.kind !== 'obs5m' && c.sheet.ref?.startsWith('obs ') && c.links?.some((l) => l === t.sheet.ref || inChapters(l, N))) return deeper
     return branch
   }
   const id = t.sheet.concept
@@ -143,6 +187,8 @@ export function addNode(g: Graph, t: Turn & { label: string; copy?: boolean; fou
 export type MapRow =
   | { k: 'node'; node: GNode; depth: number; cur: boolean }
   | { k: 'more'; n: number; key: string; depth: number }
+  /** a 5M session: "OBS 1 · 5M", its steps one step in under it (`key`: its first step's id) */
+  | { k: 'group'; label: string; key: string; depth: number }
 /** A line of more `line` points than this in a row shows its first and last two and "… N more" between. */
 export const LINE_FOLD = 5
 
@@ -158,6 +204,12 @@ export function mapRows(g: Graph, open: Set<string> = new Set()): MapRow[] {
   }
   const rows: MapRow[] = []
   const walk = (n: GNode, depth: number) => {
+    // the first step of a 5M session: its group row, the steps under it
+    if (n.kind === 'obs5m' && nodeOf(g, n.parent)?.kind !== 'obs5m') {
+      const story = /^obs5m:(\d+)\//.exec(n.sheet.concept ?? '')?.[1]
+      rows.push({ k: 'group', label: `OBS ${story ?? ''} · 5M`, key: n.id, depth })
+      depth++
+    }
     rows.push({ k: 'node', node: n, depth, cur: n.id === g.cur })
     const ks = kids.get(n.id) ?? []
     for (const x of ks.filter((x) => x.edge !== 'line')) walk(x, depth + 1)
@@ -225,7 +277,20 @@ export type Sec = [number, number]
  * the section's text, its key terms, its notes, its comprehension questions), the section (from step 2), the pack it reads,
  * and the task the person announced.
  */
-export type Path = { book: string; ch: number | null; step: number; sec: Sec | null; lang: string; task: 'translate' | 'review' }
+export type Path = { book: string; ch: number | null; step: number; sec: Sec | null; lang: string; task: 'translate' | 'review'
+  /**
+   * the steps the packs on the phone can answer for this book: the introduction and the sections always; the key terms, the
+   * notes, the questions only when a pack has them for it (the Hindi pack has no questions for Acts). None: all five (a path
+   * kept from before this was known).
+   */
+  has?: number[]
+  /** the app's language when the path started: where its steps take a missing kind of help from, after English (helpsPack) */
+  app?: string }
+/** The five steps of a path, in order; `pathSteps`: those the packs can answer for its book. */
+export const ALL_STEPS = [1, 2, 3, 4, 5]
+export const pathSteps = (p: Path): number[] => (p.has?.length ? p.has : ALL_STEPS)
+/** Whether a step is the last one of its section (then the next section follows). */
+export const lastOfSection = (p: Path): boolean => p.step >= 2 && p.step === Math.max(...pathSteps(p))
 
 const secRef = (ch: number, [a, b]: Sec) => (a === b ? `${ch}:${a}` : `${ch}:${a}-${b}`)
 /** The passage and helps of a step: the introduction; then the section's text, its key terms, its notes, its questions. */
@@ -250,20 +315,24 @@ export function stepOf(p: Path, ref: string | null, what: string[], secs: Sec[])
   if (!sec) return null
   const only = (k: string) => what.length === 1 && what[0] === k
   const step = what.includes('text') ? 2 : only('terms') ? 3 : only('notes') ? 4 : only('questions') ? 5 : 0
-  return step ? { ...p, step, ch, sec } : null
+  // (a step the packs cannot answer for this book is not on the path: "questions" asked anyway is a question of its own)
+  return step && pathSteps(p).includes(step) ? { ...p, step, ch, sec } : null
 }
 
 /**
  * The step after this one: after an introduction, the first section of its chapter (`secs`: the sections of the path's chapter,
- * chapter 1 before any); then the section's key terms, its notes, its questions; then the next section's text, or the first of
- * the next chapter (`nextSecs`). Null at the end of the book.
+ * chapter 1 before any); then the section's key terms, its notes, its questions (those the packs can answer: `has`); then the
+ * next section's text, or the first of the next chapter (`nextSecs`). Null at the end of the book.
  */
 export function nextStep(p: Path, secs: Sec[], nextSecs: Sec[]): Path | null {
   if (p.step === 1) return secs[0] ? { ...p, step: 2, ch: p.ch ?? 1, sec: secs[0] } : null
   if (!p.sec || !p.ch) return null
-  if (p.step < 5) return { ...p, step: p.step + 1 }
-  const i = secs.findIndex(([a]) => a === p.sec![0])
-  if (i >= 0 && secs[i + 1]) return { ...p, step: 2, sec: secs[i + 1]! }
+  const later = pathSteps(p).find((s) => s > p.step)
+  if (later) return { ...p, step: later }
+  // the first section that ends after this one: a section the list does not have (a path saved with the guessed sections, a
+  // range typed by hand) goes on from where it ended, without skipping verses
+  const n = secs.find(([, b]) => b > p.sec![1])
+  if (n) return { ...p, step: 2, sec: n }
   return nextSecs[0] ? { ...p, step: 2, ch: p.ch + 1, sec: nextSecs[0] } : null
 }
 
@@ -311,27 +380,27 @@ export type GuideWords = {
 const GW: Record<L, GuideWords> = {
   en: { scope: 'I help with Bible translation: passages and their notes, key terms and Translation Academy. Try one of these:', term: 'Key term: {t}',
     drift: 'Shall we start a new conversation for this?', newConv: 'New conversation', stay: 'Continue here', full: 'You already have 3 conversations. Delete one in the menu to start another, or continue here.',
-    steps: ['introduction', 'sections', 'key terms', 'notes', 'questions'], mark: '{place} · step {n} of 5: {step}', start: 'A path through {book}: introduction → sections → key terms → notes → questions. Ask anything along the way.',
+    steps: ['introduction', 'sections', 'key terms', 'notes', 'questions'], mark: '{place} · step {n} of {m}: {step}', start: 'A path through {book}: {steps}. Ask anything along the way.',
     next: 'Next: {place} · {step}', toPath: 'Back to the path: {place} · {step}', resume: 'Continue the path: {place} · {step}' },
   es: { scope: 'Te ayudo con la traducción de la Biblia: pasajes y sus notas, palabras clave y Translation Academy. Prueba una de estas:', term: 'Palabra clave: {t}',
     drift: '¿Empezamos una conversación nueva para esto?', newConv: 'Nueva conversación', stay: 'Seguir aquí', full: 'Ya tienes 3 conversaciones. Borra una en el menú para empezar otra, o sigue aquí.',
-    steps: ['introducción', 'secciones', 'palabras clave', 'notas', 'preguntas'], mark: '{place} · paso {n} de 5: {step}', start: 'Un camino por {book}: introducción → secciones → palabras clave → notas → preguntas. Puedes preguntar cualquier cosa en el camino.',
+    steps: ['introducción', 'secciones', 'palabras clave', 'notas', 'preguntas'], mark: '{place} · paso {n} de {m}: {step}', start: 'Un camino por {book}: {steps}. Puedes preguntar cualquier cosa en el camino.',
     next: 'Siguiente: {place} · {step}', toPath: 'Volver al camino: {place} · {step}', resume: 'Seguir el camino: {place} · {step}' },
   fr: { scope: "J'aide à traduire la Bible : passages et leurs notes, mots clés et Translation Academy. Essayez l'un de ceux-ci :", term: 'Mot clé : {t}',
     drift: 'On commence une nouvelle conversation pour ceci ?', newConv: 'Nouvelle conversation', stay: 'Continuer ici', full: 'Vous avez déjà 3 conversations. Supprimez-en une dans le menu pour en commencer une autre, ou continuez ici.',
-    steps: ['introduction', 'sections', 'mots clés', 'notes', 'questions'], mark: '{place} · étape {n} sur 5 : {step}', start: 'Un parcours de {book} : introduction → sections → mots clés → notes → questions. Posez toute question en chemin.',
+    steps: ['introduction', 'sections', 'mots clés', 'notes', 'questions'], mark: '{place} · étape {n} sur {m} : {step}', start: 'Un parcours de {book} : {steps}. Posez toute question en chemin.',
     next: 'Suite : {place} · {step}', toPath: 'Revenir au parcours : {place} · {step}', resume: 'Continuer le parcours : {place} · {step}' },
   id: { scope: 'Saya membantu penerjemahan Alkitab: perikop dan catatannya, istilah kunci, dan Translation Academy. Coba salah satu ini:', term: 'Istilah kunci: {t}',
     drift: 'Mulai percakapan baru untuk ini?', newConv: 'Percakapan baru', stay: 'Lanjut di sini', full: 'Anda sudah punya 3 percakapan. Hapus satu di menu untuk memulai yang lain, atau lanjut di sini.',
-    steps: ['pengantar', 'bagian', 'istilah kunci', 'catatan', 'pertanyaan'], mark: '{place} · langkah {n} dari 5: {step}', start: 'Jalur melalui {book}: pengantar → bagian → istilah kunci → catatan → pertanyaan. Tanyakan apa saja di sepanjang jalan.',
+    steps: ['pengantar', 'bagian', 'istilah kunci', 'catatan', 'pertanyaan'], mark: '{place} · langkah {n} dari {m}: {step}', start: 'Jalur melalui {book}: {steps}. Tanyakan apa saja di sepanjang jalan.',
     next: 'Berikutnya: {place} · {step}', toPath: 'Kembali ke jalur: {place} · {step}', resume: 'Lanjutkan jalur: {place} · {step}' },
   hi: { scope: 'मैं बाइबल अनुवाद में मदद करता हूँ: भाग और उनकी टिप्पणियाँ, मुख्य शब्द और Translation Academy। इनमें से कोई आज़माएँ:', term: 'मुख्य शब्द: {t}',
     drift: 'क्या इसके लिए नई बातचीत शुरू करें?', newConv: 'नई बातचीत', stay: 'यहीं जारी रखें', full: 'आपके पास पहले से 3 बातचीत हैं। दूसरी शुरू करने के लिए मेनू में एक मिटाएँ, या यहीं जारी रखें।',
-    steps: ['परिचय', 'खंड', 'मुख्य शब्द', 'टिप्पणियाँ', 'प्रश्न'], mark: '{place} · चरण {n}/5: {step}', start: '{book} का मार्ग: परिचय → खंड → मुख्य शब्द → टिप्पणियाँ → प्रश्न। रास्ते में कुछ भी पूछें।',
+    steps: ['परिचय', 'खंड', 'मुख्य शब्द', 'टिप्पणियाँ', 'प्रश्न'], mark: '{place} · चरण {n}/{m}: {step}', start: '{book} का मार्ग: {steps}। रास्ते में कुछ भी पूछें।',
     next: 'आगे: {place} · {step}', toPath: 'मार्ग पर लौटें: {place} · {step}', resume: 'मार्ग जारी रखें: {place} · {step}' },
   ar: { scope: 'أساعد في ترجمة الكتاب المقدس: المقاطع وملاحظاتها، والكلمات الرئيسية، وTranslation Academy. جرّب واحدًا من هذه:', term: 'كلمة رئيسية: {t}',
     drift: 'هل نبدأ محادثة جديدة لهذا؟', newConv: 'محادثة جديدة', stay: 'المتابعة هنا', full: 'لديك 3 محادثات بالفعل. احذف واحدة من القائمة لتبدأ أخرى، أو تابع هنا.',
-    steps: ['المقدمة', 'المقاطع', 'الكلمات الرئيسية', 'الملاحظات', 'الأسئلة'], mark: '{place} · الخطوة {n} من 5: {step}', start: 'مسار عبر {book}: المقدمة ← المقاطع ← الكلمات الرئيسية ← الملاحظات ← الأسئلة. اسأل عن أي شيء في الطريق.',
+    steps: ['المقدمة', 'المقاطع', 'الكلمات الرئيسية', 'الملاحظات', 'الأسئلة'], mark: '{place} · الخطوة {n} من {m}: {step}', start: 'مسار عبر {book}: {steps}. اسأل عن أي شيء في الطريق.',
     next: 'التالي: {place} · {step}', toPath: 'العودة إلى المسار: {place} · {step}', resume: 'متابعة المسار: {place} · {step}' },
 }
 export const GD = (ui: string): GuideWords => GW[(ui in GW ? ui : 'en') as L]
@@ -339,8 +408,12 @@ const fillIn = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g,
 /** "Ruth 1:6–18 · step 4 of 5: notes" (`kind`: the marker, the next step's button, the way back to it, the Map's row). */
 export function pathWords(ui: string, p: Path, book: string, kind: 'mark' | 'next' | 'toPath' | 'resume'): string {
   const w = GD(ui)
-  const text = fillIn(w[kind], { place: stepPlace(p, book), n: String(p.step), step: w.steps[p.step - 1] ?? '' })
+  // "step 4 of 4" when the packs have no questions for the book: the steps it has, counted
+  const steps = pathSteps(p)
+  const n = steps.indexOf(p.step) + 1 || p.step
+  const text = fillIn(w[kind], { place: stepPlace(p, book), n: String(n), m: String(steps.length), step: w.steps[p.step - 1] ?? '' })
   return kind === 'toPath' ? `${ui === 'ar' ? '→' : '←'} ${text}` : text
 }
-/** "A path through Ruth: introduction → sections → …", the line that proposes a path when it starts. */
-export const pathStartLine = (ui: string, book: string): string => fillIn(GD(ui).start, { book })
+/** "A path through Ruth: introduction → sections → …", the line that proposes a path when it starts (`has`: its steps). */
+export const pathStartLine = (ui: string, book: string, has: number[] = ALL_STEPS): string =>
+  fillIn(GD(ui).start, { book, steps: has.map((n) => GD(ui).steps[n - 1]).join(ui === 'ar' ? ' ← ' : ' → ') })

@@ -2,8 +2,10 @@
 // would give are part of the case (gold slots, or none = code only), or the case starts from a gold call sheet.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ALL_PACKS, installPacks } from './fs-packs'
-import { answer, env, type ConvState, type Made, questionOf, readQuestion } from '../src/pipeline'
+import { ALL_PACKS, installedPacks, installPacks } from './fs-packs'
+import { withObs } from './obs-fixture'
+import { answer, codeReads, env, type ConvState, type Made, questionOf, readQuestion } from '../src/pipeline'
+import { has } from '../src/commands'
 import type { Sheet } from '../src/answer'
 import type { Slots } from '../src/sheet'
 
@@ -47,20 +49,31 @@ export type Outcome = {
 }
 
 let installed = ''
-/** The full build: every pack on disk. */
+/**
+ * The full build: every pack on disk, the English one with Open Bible Stories (as Mini's server has it: obs-fixture.ts).
+ * OBS=none: without them, as the packs on disk are (`OBS=none bun test tests/answers.test.ts`: the sets answer as before OBS).
+ */
 export async function fullPhone() {
-  if (installed === 'all') return
-  await installPacks(ALL_PACKS)
-  installed = 'all'
+  // (another test file may have left fewer installed since: then all again)
+  if (!(installed === 'all' && installedPacks().length === ALL_PACKS.length)) {
+    await installPacks(ALL_PACKS)
+    installed = 'all'
+  }
+  if (ALL_PACKS.includes('en')) await withObs('en', process.env.OBS === 'none' ? 'none' : 'installed')
 }
 
-/** One turn as main.ts runs it: the question, the reading step (from slots) or a ready sheet, then the answer. */
+/**
+ * One turn as main.ts runs it: the question, the reading step (from slots) or a ready sheet, then the answer. A question code
+ * reads by itself (codeReads: a reference, or a follow-up the composer shows with a "✓") gets no slots, as main.ts skips the
+ * readers for it: the case's slots stand for what a reader would have said, and no reader runs.
+ */
 export async function turn(c: ConvState, t: Turn, lang: string) {
   env.nav = lang
   const { q, target } = questionOf(t.q, c)
+  const byCode = !t.sheet && !has('help', q) && codeReads(q, c)
   const made: Made = t.sheet
     ? { sheet: { ...t.sheet, id: 'gold' }, ui: lang, meta: '(gold sheet)', q }
-    : await readQuestion(q, { slots: t.slots ? { ...t.slots } : null, raw: '', ms: 0 }, c, target)
+    : await readQuestion(q, { slots: t.slots && !byCode ? { ...t.slots } : null, raw: '', ms: 0 }, c, target)
   return answer(c, made, performance.now())
 }
 

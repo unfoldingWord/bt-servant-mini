@@ -7,10 +7,10 @@ import glossary from './data/kt-glossary.json'
 import booknames from './data/booknames.json'
 import books from './data/books.json'
 import { installedLangs, openLang } from './packs'
-import { bookExact, fold } from './sheet'
+import { bookExact, bookNameWords, fold } from './sheet'
 import storyWords from './data/story-words.json'
 import storyWordsMore from './data/story-words-more.json'
-import { rankVerses, resetIndexes, searchIndex, searchIntros, type RankedVerse, type Ranking, type Term } from './textindex'
+import { rankVerses, resetIndexes, searchIndex, searchIntros, type RankedVerse, type Ranking, type Term, verseText } from './textindex'
 
 /** Common story words of a question in English ("mar" -> "sea"), to match the English text when the language's pack lacks the book. */
 const LEX: Record<string, Record<string, string>> = Object.fromEntries(Object.entries(storyWords as unknown as Record<string, Record<string, string>>)
@@ -98,7 +98,7 @@ const lang = async (l: string): Promise<{ r: Reader; maps: any }> => {
  * The article names of a pack: the core of its `map` unit alone, not all its maps (the word links of every book, read again
  * by every pack). Same names as `(await r.maps()).map.core.names`, which is still asked when the core does not read.
  */
-async function namesOf(r: Reader): Promise<Record<string, string[]>> {
+export async function namesOf(r: Reader): Promise<Record<string, string[]>> {
   try {
     for (const seg of (await r.segments('map')) ?? []) {
       if ((seg as any).h?.part !== 'core') continue
@@ -128,6 +128,9 @@ function names(): Promise<Map<string, string[]>> {
 async function readNames(): Promise<Map<string, string[]>> {
   const m = new Map<string, string[]>()
   const put = (k: string, id: string) => {
+    // a two-letter key term ("fe", faith) only for a question that asks about it (articleForQuestion), under "2:": never a
+    // word of a search (conceptOf reads the plain keys)
+    if (k.length === 2 && id.startsWith('tw:kt/')) k = `2:${k}`
     if (k.length >= 3 && !m.get(k)?.includes(id)) m.set(k, [...(m.get(k) ?? []), id])
   }
   // "John (the Baptist)": both "john" and "john the baptist"
@@ -417,7 +420,7 @@ function termsFor(kw: string[], phrases: string[][], pl: string, packLang: strin
  * words it holds (rankVerses). The first pack whose best verse fits well (every word, or GOOD_COVERAGE of their rarity)
  * answers; otherwise the pack whose best verse holds the most. Up to six verses, one per passage, none much weaker than the best.
  */
-async function rankedSearch(kw: string[], phrases: string[][], packLang: string, m: Map<string, string[]>): Promise<{ hits: (Found & { snippet: string })[]; strength: Strength }> {
+async function rankedSearch(kw: string[], phrases: string[][], packLang: string, m: Map<string, string[]>, book?: string): Promise<{ hits: (Found & { snippet: string })[]; strength: Strength }> {
   let best: { pl: string; looked: Looked[]; shown: RankedVerse[]; s: Strength } | null = null
   const texts = new Map<RankedVerse, { text: string; snippet: string }>()
   const textOf = async (h: RankedVerse) => { let t = texts.get(h); if (!t) texts.set(h, (t = await h.more())); return t }
@@ -425,7 +428,7 @@ async function rankedSearch(kw: string[], phrases: string[][], packLang: string,
     const r = await reader(pl)
     const looked = termsFor(kw, phrases, pl, packLang, m)
     if (!looked.length) continue
-    const ranking = await rankVerses(r, looked.map((l) => l.term), { limit: 40, skipRes: SKIP_TEXT, mainRes: MAIN_TEXT })
+    const ranking = await rankVerses(r, looked.map((l) => l.term), { limit: 40, skipRes: SKIP_TEXT, mainRes: MAIN_TEXT, book })
     // the verses that can be shown: found by words their shown text has (hi GST has Jonah's words under Matthew 1:16), and
     // with a text in this pack. How well the pack fits is said by the first of them, not by a verse it cannot show (es-419:
     // "matrimonio" in a verse with no main text stopped the search before English)
@@ -549,6 +552,15 @@ export async function searchHelps(question: string, packLang: string, limit = 4)
  * Translation Words article, the article (or the articles that share the name) instead of a verse search.
  */
 const ASKS: RegExp[] = [
+  // "What does grace mean?" (the welcome's own example), "¿Qué quiere decir fe?", "Que veut dire grâce ?", "Apa makna iman?",
+  // "प्रेम का क्या अर्थ है?", "ما معنى المحبة؟": the meaning asked of a word (before the shapes below, which would take "does grace mean")
+  /^what does\s+(?:the\s+word\s+)?(.+?)\s+mean$/i,
+  /^what is the meaning of\s+(?:the\s+word\s+)?(.+)$/i,
+  /^(?:qu[eé]\s+(?:quiere\s+decir|se\s+entiende\s+por)|cu[aá]l\s+es\s+el\s+significado\s+de)\s+(?:la\s+palabra\s+)?(?:el\s+|la\s+|los\s+|las\s+)?(.+)$/i,
+  /^(?:que\s+veut\s+dire|quel\s+est\s+le\s+sens\s+de)\s+(?:le\s+mot\s+)?(?:le\s+|la\s+|les\s+|l'|l’)?(.+)$/i,
+  /^apa\s+(?:maksud|makna|artinya)\s+(?:dari\s+)?(?:kata\s+)?(.+)$/i,
+  /^(.+?)\s+का\s+(?:क्या\s+)?(?:अर्थ|मतलब)\s+(?:क्या\s+)?है$/,
+  /^ما\s+(?:هو\s+)?معنى\s+(?:كلمة\s+)?(.+)$/,
   /^(?:who|what)(?:'s| is| was| were| are)?\s+(?:the\s+|a\s+|an\s+)?(.+)$/i,
   /^(?:tell me about|explain)\s+(?:the\s+)?(.+)$/i,
   /^(?:qui[eé]n(?:es)?|qu[eé]|cu[aá]l)\s+(?:es|era|fue|son|eran|fueron|significa)\s+(?:el\s+|la\s+|los\s+|las\s+|un\s+|una\s+)?(.+)$/i,
@@ -575,6 +587,7 @@ export async function articleForQuestion(q: string): Promise<string[] | null> {
     if (!hit?.[1]) continue
     const k = fold(hit[1]).replace(/[«»"“”']/g, '').replace(/\s+/g, ' ').trim()
     const ids = m.get(k) ?? m.get(k.replace(/^(el|la|los|las|the|le|les|l)\s+/, '')) ?? m.get(k.replace(/^ال/, ''))
+      ?? (k.length === 2 ? m.get(`2:${k}`) : null) // "¿Qué significa fe?"
       ?? (!k.includes(' ') ? conceptOf(k, m) : null) // one name with a close spelling: Moïse ~ Moses
     if (ids?.length) return ids.filter((id) => id.startsWith('tw:'))
   }
@@ -585,8 +598,23 @@ export async function articleForQuestion(q: string): Promise<string[] | null> {
   return null
 }
 
-export async function searchVerses(question: string, term: string | null, packLang: string): Promise<SearchResult> {
-  const kw = keywords(question)
+/** The texts of these verses from a pack (else English, else any pack that has the book): the same verses in another language. */
+export async function textsOfVerses(hits: { book: string; ch: number; v: number }[], packLang: string): Promise<string[]> {
+  const order = [...new Set([packLang, 'en', ...(await installedLangs().catch(() => []))])]
+  return Promise.all(hits.map(async (h) => {
+    for (const pl of order) {
+      const r = await reader(pl).catch(() => null)
+      if (!r?.installed(`book:${h.book}`)) continue
+      const t = await verseText(r, h.book, h.ch, h.v, MAIN_TEXT, SKIP_TEXT)
+      if (t) return t
+    }
+    return ''
+  }))
+}
+/** `book`: only that book's verses, the words of its names left out ("Daniel en el foso de los leones": "foso", "leones" in Daniel). */
+export async function searchVerses(question: string, term: string | null, packLang: string, book?: string): Promise<SearchResult> {
+  const own = book ? bookNameWords(book) : null
+  const kw = keywords(question).filter((w) => !own?.has(fold(w)))
   if (term) for (const t of keywords(term)) if (!kw.some((k) => fold(k) === fold(t))) kw.push(t)
   const phrases = quotedPhrases(question)
   const m = await names()
@@ -600,7 +628,7 @@ export async function searchVerses(question: string, term: string | null, packLa
     }
   }
   if (!kw.length && !phrases.length) return { keywords: kw, concepts, hits: [], how: 'none' }
-  const { hits, strength } = await rankedSearch(kw, phrases, packLang, m)
+  const { hits, strength } = await rankedSearch(kw, phrases, packLang, m, book)
   // a word that names an article (a name, a key term): the verses that mention it, whole; else the words in context
   const how = !hits.length ? 'none' : concepts.length && !phrases.length ? 'concepts' : 'text'
   // a list shows the words found in context for a text search, the whole verse for names and key terms

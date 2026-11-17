@@ -547,6 +547,13 @@ function vocabWord(x: Index, id: number): string {
   return a[id]!
 }
 const refIs = (ref: string, v: number) => { const m = /^(\d+):(\d+)/.exec(ref); return !!m && Number(m[1]) * 1000 + Number(m[2]) === v % 1_000_000 }
+/** A verse's text in a pack, from the first main text that has it ("" when none: the book or the verse is not there). */
+export async function verseText(r: PackReader, book: string, ch: number, v: number, mainRes: RegExp, skipRes?: RegExp): Promise<string> {
+  const rows = await rowsOfBook(r, book).catch(() => [])
+  const id = ch * 1000 + v
+  const row = rows.find((pr) => pr.kind === 'text' && mainRes.test(pr.res) && !skipRes?.test(pr.res) && refIs(pr.ref, id))
+  return row ? row.body.replace(/\s+/g, ' ').trim() : ''
+}
 /** Whether a text holds one of the words (a snippet needs one to center on). */
 const holds = (body: string, phrases: string[][]) => { const ws = new Set(tokensOf(body)); return phrases.some((p) => ws.has(p[0]!)) }
 
@@ -556,8 +563,10 @@ const holds = (body: string, phrases: string[][]) => { const ws = new Set(tokens
  * all in its verses gets the verses it got before. `skipRes`: texts that do not count (Arabic ARST is the English UST);
  * `mainRes`: the texts a verse is shown from.
  */
-export async function rankVerses(r: PackReader, terms: Term[], f: { limit: number; skipRes?: RegExp; mainRes: RegExp }): Promise<Ranking> {
+export async function rankVerses(r: PackReader, terms: Term[], f: { limit: number; skipRes?: RegExp; mainRes: RegExp; book?: string }): Promise<Ranking> {
   const x = await indexOf(r)
+  // only one book's verses (a story asked in a book): the rarity of the words stays the pack's
+  const only = f.book ? verseId(f.book, 0, 0) : null
   const resKind = new Map<number, number>() // res string -> 0 skip, 1 counts, 2 counts and is a main text
   const kindOfRes = (s: number) => {
     let k = resKind.get(s)
@@ -619,6 +628,7 @@ export async function rankVerses(r: PackReader, terms: Term[], f: { limit: numbe
   const weight = (mask: number) => { let s = 0; for (let i = 0; i < idf.length; i++) if (mask & (1 << i)) s += idf[i]!; return s }
   const scored: { v: number; score: number; own: number; text: number; near: number; tie: number; order: number }[] = []
   for (const [v, mask] of own) {
+    if (only !== null && Math.floor(v / 1_000_000) * 1_000_000 !== only) continue
     let near = 0
     for (const d of [-2, -1, 1, 2]) near |= own.get(v + d) ?? 0
     near &= ~mask

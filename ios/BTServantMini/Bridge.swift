@@ -6,10 +6,10 @@ import Foundation
 enum Bridge {
     static let handler = "btsm"
 
-    static func script(version: String, status: String, online: Bool) -> String {
+    static func script(version: String, status: String, online: Bool, metered: Bool) -> String {
         """
         (() => {
-          const S = window.__iosState = { version: \(js(version)), status: \(js(status)), online: \(online) }
+          const S = window.__iosState = { version: \(js(version)), status: \(js(status)), online: \(online), metered: \(metered) }
           const post = (m) => window.webkit.messageHandlers.\(handler).postMessage(m)
           const no = 'not available on iPhone yet'
           window.Android = {
@@ -20,6 +20,7 @@ enum Bridge {
             flavor: () => 'lite',
             version: () => S.version,
             online: () => S.online,
+            metered: () => S.metered,
             share: (text) => post({ op: 'share', text: String(text) }),
             downloadModel: (url, sha, size) => post({ op: 'download', url: String(url), sha: String(sha), size: String(size) }),
             pickModel: () => {},

@@ -1,19 +1,27 @@
 // The decisions between the question and the answer, without the page: what a question asks for once its slots are known,
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
 import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQuestion, setUiLang, type Sheet, type Study, studyOf } from './answer'
-import { bookCode, bookExact, buildSheet, fold, type Slots } from './sheet'
+import { bookCode, bookExact, bookNameWords, buildSheet, endsLongName, fold, idsOf, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
-import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf } from './search'
+import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf, textsOfVerses } from './search'
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
-import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, stepOf, stepTarget } from './graph'
+import { learnStep } from './learn'
+import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
+import { frameHelps, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
+import { devOn, type Fixture, loadFixture } from './dev'
+import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
+import { W5 } from './obs5mwords'
+import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
+import { count } from './usage'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
 import guideWords from './data/guide.json'
 import shapes from './data/shapes.json'
+import versification from './data/versification.json'
 
 /**
  * What the page tells the decisions: the app's language (the fallback for a question's), the helps language chosen in the
@@ -23,11 +31,20 @@ export const env = { nav: 'en', helpsLang: null as string | null, details: 'deta
 
 export type Hit = { book: string; ch: number; v: number }
 /** What a conversation keeps for the next question (main.ts adds its messages and title). */
+/** The verses a free search found, and the words it says it found them by: "say it in English" keeps them (repeatOf). */
+export type Found = { hits: Hit[]; how: string; used: string[]; words?: string[] }
 export type ConvState = { last: Sheet | null; found?: Hit[]
   /** the compact state of the last question (its sheet, book as a code) that a follow-up is read with, and when */
   state?: { s: Record<string, unknown>; at: number }
   /** the last question asked (without its "reply in …"), to ask it again in another language ("repeat that in Indonesian") */
   prevQ?: string
+  /**
+   * What the last answer was asked for, once resolved (keepState): the slots (a follow-up already moved to its verse), the
+   * button's sheet when it came from a button, and the question typed (none for a button). "In English" asks it again.
+   */
+  prevResolved?: { slots: Slots; sheet?: Sheet; q?: string; ui?: string; found?: Found }
+  /** questionOf made this question a repeat of prevResolved: readQuestion builds it from there, and no reader runs (codeReads) */
+  again?: string
   /** the conversation's points and how they join (graph.ts): made by `answer`, saved with the conversation */
   graph?: Graph }
 
@@ -121,7 +138,7 @@ const TERM_NAME: Record<string, string> = {
 }
 export const TT = (ui: string) => ({ ...(TERM_T[ui] ?? TERM_T.en!), name: TERM_NAME[ui] ?? TERM_NAME.en! })
 /** "jon 1:17" as the person reads it: "Jonás 1:17". */
-export const refLabelOf = (ui: string, ref: string): string => { const [code, rest] = ref.split(' '); return `${bookLabel(ui, code!)}${rest ? ' ' + rest.replace(/^front:intro$/, '') : ''}`.trim() }
+export const refLabelOf = (ui: string, ref: string): string => { const [code, rest] = ref.split(' '); if (code === 'obs') { const o = parseObsRef(ref); return o ? obsLabel(o.n, o.f) : 'OBS' } return `${bookLabel(ui, code!)}${rest ? ' ' + rest.replace(/^front:intro$/, '') : ''}`.trim() }
 /**
  * The one Translation Words article the question's words name, leaving out book names: two words together first ("pez
  * grande"), then each word, exact names before a close spelling ("jueces" ~ "juez").
@@ -197,7 +214,8 @@ export function stateLine(c: ConvState): string {
   if (!c.state || Date.now() - c.state.at > STATE_MS) return ''
   return `STATE ${JSON.stringify(c.state.s)}`
 }
-export function keepState(c: ConvState, s: Slots) {
+export function keepState(c: ConvState, s: Slots, from: { q?: string; sheet?: Sheet; ui?: string } = {}) {
+  c.prevResolved = { slots: { ...s }, ...from }
   if (!['passage', 'count', 'article', 'advice', 'rank'].includes(s.intent ?? '')) {
     delete c.state
     return
@@ -440,6 +458,8 @@ export function boundsOf(code: string): Promise<Map<number, number> | null> {
 export function resetBooks() {
   boundsCache.clear()
   headsCache.clear()
+  mapCache.clear()
+  HAS.clear()
 }
 /**
  * A follow-up's numbers checked against the book: "the next verse" at a chapter's end is the first of the next chapter, "the
@@ -493,16 +513,17 @@ export const followUpByCode = (q: string, c: ConvState): boolean =>
 const COMMON: Record<string, RegExp> = {
   // with no reader (no model yet, offline), these words alone tell the language: also a translator's own words ("Voy a
   // empezar a traducir Jonás" was answered in English on a phone in English)
-  en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says|translate|translating|want|start)\b/gi,
-  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice|traducir|traduzco|traduce|voy|vamos|empezar|empiezo|quiero|necesito|libro|puedo|debo)\b/gi,
-  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|verset|notes?|dit|traduire|traduis|livre|je|veux|dois|peux|commencer)\b/gi,
+  en: /\b(the|what|who|how|where|which|does|is|was|help|me|please|verse|notes?|say|says|translate|translating|want|start|on|of)\b/gi,
+  es: /\b(el|la|los|las|qu[eé]|qui[eé]n|c[oó]mo|d[oó]nde|cu[aá]l|es|era|ay[uú]dame|por favor|vers[ií]culo|notas?|dice|traducir|traduzco|traduce|voy|vamos|empezar|empiezo|quiero|necesito|libro|puedo|debo|puedes|podr[ií]as|dime|d[ií]melo|decir(?:lo|me)?|mu[eé]strame|mostrar|significa|del|dios|y(?!\s+a\b)|con|por)\b/gi,
+  fr: /\b(le|la|les|que|qui|comment|o[uù]|quel|est|était|aide|moi|versets?|notes?|dit|traduire|traduis|traduit|livre|je|veux|dois|peux|commencer|signifie|veut|dire|du|des|et|dieu|il|dans|combien|pourquoi|sur|avec)\b/gi,
   id: /\b(apa|siapa|bagaimana|di mana|yang|adalah|tolong|ayat|catatan|kata|dalam|itu|terjemahkan|menerjemahkan|saya|mau|ingin|kitab|mulai)\b/gi,
 }
 export function guessLang(q: string): string {
   if (/[؀-ۿ]/.test(q)) return 'ar'
   if (/[ऀ-ॿ]/.test(q)) return 'hi'
+  // a tie stays in the app's language ("Que signifie grâce ?" has "que" in French and in Spanish)
   let best = env.nav
-  let most = 0
+  let most = COMMON[env.nav] ? (q.match(COMMON[env.nav]!)?.length ?? 0) : 0
   for (const [l, re] of Object.entries(COMMON)) {
     const n = q.match(re)?.length ?? 0
     if (n > most) {
@@ -590,16 +611,29 @@ export function introAsked(q: string, lang: string): Slots | null {
   const t = q.replace(/[¿?!¡.,;:«»"“”؟]/g, ' ').replace(/[०-९]/g, (d) => String('०१२३४५६७८९'.indexOf(d))).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
   const words = t.split(/\s+/).filter(Boolean)
   const chFirst = chapterNumber(t)
-  for (let i = 0; i < words.length; i++)
-    for (let k = 3; k >= 1; k--) {
-      const code = bookCode(lang, words.slice(i, i + k).join(' '))
+  // a book's name starts at a word of content or a number ("1 Juan"), never at a small word that is also an abbreviation
+  // somewhere: "¿Quién es el autor de Rut?" read "es" as Isaiah (French "Es")
+  // (or a name of the question's own language that is also a small word there: "متى", Matthew and "when")
+  const content = new Set(keywords(t).map((w) => fold(w)))
+  const own = (bookTables as Record<string, Record<string, string>>)[lang] ?? {}
+  for (let i = 0; i < words.length; i++) {
+    const w = fold(words[i]!)
+    if (!/^\d+$/.test(w) && !content.has(w) && !(w.length >= 3 && own[w])) continue
+    // a name of several words exactly as a table has it, longest first (as refInText reads one: "Introducción a Hechos de los
+    // apóstoles", "प्रेरितों के काम का परिचय"), then up to three words read loosely
+    for (let k = Math.min(BOOK_WORDS, words.length - i); k >= 1; k--) {
+      const name = words.slice(i, i + k).join(' ')
+      const code = k > 3 ? (endsLongName(words[i + k - 1]!) ? bookExact(name) : null) : bookCode(lang, name)
       if (!code) continue
       const ch = /^\d+$/.test(words[i + k] ?? '') ? Number(words[i + k]) : chFirst
       return { intent: 'passage', book: code, chapter: ch, verse_start: null, verse_end: null, what: ['intro'], lang } as Slots
     }
+  }
   return null
 }
 
+/** The most words a book's name has in the tables ("cantar de los cantares"), and room for a "le livre de" before it. */
+const BOOK_WORDS = Math.max(...Object.values(bookTables as Record<string, Record<string, string>>).flatMap((t) => Object.keys(t).map((n) => n.split(' ').length))) + 3
 /** A reference written in the question ("Rut 1:16", "1 Juan 3:2") that the model missed: read it by code. */
 export function refInText(slots: Slots, q: string): Slots {
   if (slots.book && bookCode(slots.lang ?? env.nav, slots.book) && slots.chapter)
@@ -625,6 +659,17 @@ export function refInText(slots: Slots, q: string): Slots {
         continue
       }
     }
+    // a name of several words, exactly as a table has it, longest first: the pattern takes one word before the number, so
+    // "प्रेरितों के काम 1:8" was "काम", "رؤيا يوحنا 1:1" was John and "Kisah Para Rasul 1:1" nothing. Only when that word ends
+    // such a name: this runs on every keystroke (the composer), and most references are one word
+    const before = t.slice(0, m.index + m[1]!.length).split(/\s+/).filter(Boolean)
+    for (let k = endsLongName(before[before.length - 1] ?? '') ? Math.min(BOOK_WORDS, before.length) : 0; k >= 2 && !code; k--) {
+      const n = before.slice(-k).join(' ')
+      if (bookExact(n)) {
+        name = n
+        code = bookCode(lang, n)
+      }
+    }
     const words = m[1]!.trim().split(/\s+/)
     for (let k = Math.min(3, words.length); k >= 1 && !code; k--) {
       name = words.slice(-k).join(' ')
@@ -637,6 +682,51 @@ export function refInText(slots: Slots, q: string): Slots {
   return slots
 }
 
+// The words that may stand next to a book's name in a question that asks for the book itself ("Lee Daniel", "el libro de
+// Daniel", "Show me the whole book of Ruth", "la historia de Rut", "Quiero leer Rut", "¿Cuántos capítulos tiene Rut?",
+// "Primera carta a los Corintios", "Evangelio de Juan"): no story to search for. With REF_FILLER, SAY_FILLER and the command
+// words (storyWords strips those); a plural is read as its singular.
+const BOOK_FILLER = new Set((
+  'read show open see view whole all complete entire full book books story bible text chapter please now want wants need ' +
+  'give get have has contains count number many much first second third gospel letter epistle apostle apostles solomon ' +
+  'lee leer leeme ver muestra muestrame mostrarme ensename abre abrir todo toda entero entera completo completa libro historia ' +
+  'biblia texto capitulo por favor ahora quiero queremos quisiera necesito dame tiene tienen hay para cuantos cuantas cuanto ' +
+  'numero primera primer primero segunda segundo tercera tercero evangelio carta epistola apostol apostoles salomon ' +
+  'lis lire montre ouvre voir tout toute entier entiere complet complete livre histoire bible texte chapitre maintenant veux ' +
+  'voudrais combien nombre premiere premier deuxieme seconde troisieme evangile lettre epitre apotre apotres ' +
+  'baca bacakan buka lihat tampilkan semua seluruh lengkap kitab buku cerita kisah alkitab teks pasal sekarang mau ingin ' +
+  'berapa jumlah ada pertama kedua ketiga injil surat rasul ' +
+  'पढ़ें पढ़ो पढ़िए दिखाओ दिखाइए पूरा पूरी पुस्तक किताब कहानी बाइबल पाठ अध्याय कितने कितनी पहला पहली दूसरा दूसरी तीसरा पत्र सुसमाचार चाहता चाहती ' +
+  'اقرأ اعرض أرني افتح كل كامل كاملا سفر كتاب قصة المقدس نص أصحاح كم عدد أريد اريد الأولى الاولى الثانية الثالثة رسالة إنجيل انجيل'
+).split(' ').map(fold))
+const STORY_STRIP: Command[] = ['intro', 'overview', 'about', 'tell', 'notes', 'questions', 'terms', 'text', 'whole', 'chapter', 'verse', 'bookWord', 'howMany', 'again', 'replyVerb', 'this', 'here', 'also']
+const isFiller = (w: string): boolean => {
+  const f = fold(w)
+  // a plural as its singular ("capítulos", "apóstoles"), never down to a small word: "toes" is not "to" ("Daniel toes" is no book)
+  const singular = [f.replace(/es$/, ''), f.replace(/s$/, '')].filter((x) => x !== f && x.length >= 4)
+  return [f, ...singular].some((x) => BOOK_FILLER.has(x) || SAY_FILLER.has(x) || REF_FILLER.has(x) || START_FILLER.has(x))
+}
+/**
+ * The words of a question beyond the books it names and the words that ask for a book ("Lee Daniel" has none; "Daniel en el
+ * foso de los leones" has "foso", "leones"). `code`: the book read; every word of its names in any language goes too
+ * ("Hechos de los apóstoles", "Gospel of John", "Kisah Para Rasul").
+ */
+export function storyWords(q: string, code?: string): string[] {
+  const words = latinDigits(q).replace(/[¿?!¡.,;:«»"“”؟،()]/g, ' ').split(/\s+/).filter(Boolean)
+  const own = code ? bookNameWords(code) : new Set<string>()
+  const book = words.map((w) => own.has(fold(w)) || own.has(fold(w).replace(/^ال/, '')))
+  for (let i = 0; i < words.length; i++)
+    // (a name of several words only when its last word ends one: the longest-name reading of refInText)
+    for (let k = Math.min(BOOK_WORDS, words.length - i); k >= 1; k--)
+      if (k === 1 || endsLongName(words[i + k - 1]!))
+        if (bookExact(words.slice(i, i + k).join(' '))) { for (let j = i; j < i + k; j++) book[j] = true; break }
+  const rest = strip(words.filter((_, i) => !book[i]).join(' '), STORY_STRIP)
+  return keywords(rest).filter((w) => !isFiller(w) && !/^\d+$/.test(w))
+}
+/** A passage read as a whole book (no chapter) whose question names more than the book: a story to find in it. */
+const bookStory = (q: string, sheet: Sheet): boolean =>
+  sheet.intent === 'passage' && !!sheet.ref && /^[1-3]?[a-z]{2,3}$/.test(sheet.ref) && storyWords(q, sheet.ref).length >= 1
+
 /** An open question: the model said search, or there is no reference and the question names things ("where does Abraham…"). */
 export function isOpen(q: string, sheet: Sheet): boolean {
   if (sheet.intent === 'search') return true
@@ -644,6 +734,9 @@ export function isOpen(q: string, sheet: Sheet): boolean {
   // the verse): where in the book, when the question names more than the book
   if (sheet.ref && /^[1-3]?[a-z]{2,3}$/.test(sheet.ref) && sheet.intent === 'passage' && has('where', q))
     return keywords(q).filter((w) => !bookExact(w)).length >= 1
+  // "Daniel en el foso de los leones" read as the book of Daniel (a report of Nov 15: the whole book came, 357 verses): a story
+  // in the book, searched there (the search route falls back to the book when it finds nothing there)
+  if (bookStory(q, sheet)) return true
   if (sheet.ref) return false
   if (has('where', q)) return keywords(q).length >= 1
   if (kindOf(q) && keywords(q).length >= 2) return true // "notes about Abraham sacrificing Isaac"
@@ -656,13 +749,40 @@ export function isOpen(q: string, sheet: Sheet): boolean {
 
 // ------------------------------------------------------------------------------------------------------------ the question
 
-/** "… Reply in Indonesian" (the answer's language, the rest read as usual); "Repeat your last answer in Indonesian" (the last question again). */
+// What may stand around "in English" when the person only asks to have the last answer in that language ("¿Me lo puedes decir
+// en inglés?", "Puedes decirlo en inglés", "Can you say that in Spanish?", "Tu peux me le dire en anglais ?", "Bisa katakan itu
+// dalam bahasa Inggris?", "क्या आप इसे अंग्रेज़ी में बता सकते हैं?", "هل يمكنك أن تقولها بالإنجليزية؟"): a report of Nov 16 searched «puedes»
+const SAY_FILLER = new Set((
+  'can could would you please say it that this tell me show give write answer reply now again same the and ok in to ' +
+  'me lo la eso esto puedes puede podrias podria podes decir decirlo decirmelo dimelo dilo dime decirme mostrar mostrarlo muestramelo escribir escribelo escribirlo ' +
+  'repetir repitelo darmelo damelo ahora tambien y por favor en otra vez de nuevo lo mismo se ' +
+  'repites repiteme repetirlo repetirmelo dices das explicas explicalo explicamelo explicar explicarlo explain explaining repeat ' +
+  'tu vous peux pouvez pourrais pourriez le dire me moi dis dites montre montrez ecris ecrivez ca cela s il te plait et maintenant aussi en ' +
+  'explique expliquez expliquer redis redites redire repete repetez ' +
+  'bisa bisakah dapatkah tolong katakan katakanlah sampaikan tulis tuliskan itu ini jawab kamu anda coba ulangi lagi dan sekarang dalam juga ' +
+  'क्या आप तुम इसे यह वह बता बताइए बताओ बताएँ बताएं सकते सकती हैं हो कहें कहिए कहो लिखें लिखिए फिर से मुझे कृपया और भी ' +
+  'هل يمكنك ممكن تستطيع أن ان تقول تقولها تقوله قل قلها قله لي ذلك هذا هذه اكتب اكتبها اكتبه من فضلك أعد اعد مرة أخرى اخرى و أيضا ايضا'
+).split(' ').map(fold))
+/** Nothing left but the words of "can you say it" (each folded word is in SAY_FILLER): only a request to say it again. */
+const onlySayIt = (q: string): boolean => q.replace(/[¿?!¡.,;:«»"“”'’()؟،-]/g, ' ').split(/\s+/).filter(Boolean).every((w) => SAY_FILLER.has(fold(w)))
+
+/**
+ * "… Reply in Indonesian", "Ruth 2:3 in English" (the helps in that language, the rest read as usual); "Repeat your last answer
+ * in Indonesian", "¿Me lo puedes decir en inglés?", "in English?" (the last question again, its helps in that language). The
+ * reply's own words stay in the question's language: a language named is the helps' (a report of Nov 16 came out in English).
+ */
 export function questionOf(q0: string, c: ConvState): { q: string; target: string | null } {
   const target = replyLang(q0)
-  let q = target ? withoutReply(q0) || q0 : q0
-  // ("and the notes in Spanish?" is not a repeat: it asks for the notes)
-  if (target && c.prevQ && (has('again', q) || (!keywords(q).length && !kindOf(q)))) q = c.prevQ
-  else c.prevQ = q
+  const rest = target ? withoutReply(q0) : q0
+  let q = rest || q0
+  // ("and the notes in Spanish?" is not a repeat: it asks for the notes; "Dímelo en francés" leaves nothing: it is one). The
+  // last answer may have come from a button: then there is no question to repeat, only what it was asked for (prevResolved)
+  if (target && (c.prevQ || c.prevResolved) && (!rest || has('again', q) || onlySayIt(q) || (!keywords(q).length && !kindOf(q))))
+    q = c.again = c.prevResolved?.q ?? c.prevQ ?? q
+  else {
+    c.prevQ = q
+    delete c.again
+  }
   return { q, target }
 }
 
@@ -677,10 +797,123 @@ export type Made = { sheet: Sheet; ui: string; meta: string; q?: string
   /** the language the reader said the question is in (the out-of-scope reply is in it) */
   qLang?: string
   /** what code answers by itself, with no sheet to answer: past a book's end, how many verses or chapters */
-  note?: { text: string; fromText: boolean } }
+  note?: { text: string; fromText: boolean }
+  /** the helps were asked for in a language that is not on the phone, or lacks this: said before the answer (helpsIn) */
+  langNote?: string
+  /** the question named the language of its helps ("…in Hindi", "repeat it in English"): their pack, which a missing kind of
+   * help is never silently taken from another pack for (helps-elsewhere offers it as a button instead) */
+  wanted?: string
+  /** the last search again in another language: these verses, not a new search (ROUTES 'found-again') */
+  keep?: Found }
+/**
+ * The reader's article names a term the question does not have (no word of it, nor one that starts like it: "concubinas" is
+ * «concubina»), the conversation was not about it either, and no article of it is one the question names in its own words
+ * ("Háblame del arca del pacto" read as "ark of the covenant", "ما هي النعمة؟" as "grace" are kept): a report of Nov 16 read
+ * "¿Puedes decirlo?" as «metáfora». Only a bare article reading (no book, no other language asked about): a passage's or
+ * advice's term names a figure or a key term of the verse ("Anak Domba Allah" → metafora), and a follow-up's term comes from
+ * the conversation.
+ */
+export async function strayTerm(s: Slots, q: string, c: ConvState): Promise<boolean> {
+  if (s.intent !== 'article' || !s.term || s.book || s.other_language) return false
+  const ws = (t: string) => fold(t).split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean)
+  // a word's start: "concubin" for "concubinas", the whole of a short one ("paz")
+  const stem = (w: string) => (w.length <= 4 ? w : w.slice(0, Math.max(4, w.length - 3)))
+  const said = ws(q)
+  const inQ = (t: string) => ws(t).some((w) => said.some((u) => u.startsWith(stem(w)) || (u.length >= 4 && w.startsWith(stem(u)))))
+  if (fold(q).includes(fold(s.term).trim()) || inQ(s.term)) return false
+  const before = freshState(c)?.term
+  if (before && (fold(before) === fold(s.term) || inQ(before))) return false
+  // the term's articles, and the ones the question's words name (a few of them together: "arca del pacto"), in the packs the
+  // answer reads from: the helps language chosen, the question's and the app's language, English (each a map lookup: sheet.ts
+  // nameIndex; reading every pack's names took 3.4 s cold)
+  const have = await installedLangs().catch(() => ['en'])
+  const packs = [...new Set([env.helpsLang, packCode(s.lang ?? env.nav), packCode(env.nav), 'en'])].filter((l): l is string => !!l && have.includes(l))
+  const its = (await idsOf(s.term, packs).catch(() => null)) ?? []
+  if (!its.length) return true
+  const named = new Set<string>([...((await articleForQuestion(q).catch(() => null)) ?? []), ...(await articlesNamed(keywords(q)).catch(() => new Set<string>()))])
+  const one = await termArticle(q, s.lang ?? env.nav).catch(() => null)
+  if (one) named.add(one)
+  if (its.some((id) => named.has(id))) return false
+  const kw = new Set(keywords(q).map((w) => fold(w)))
+  const words = q.replace(/[¿?!¡.,;:«»"“”؟،()]/g, ' ').split(/\s+/).filter(Boolean)
+  const content = (w: string) => kw.has(fold(w)) || kw.has(fold(w).replace(/^ال/, ''))
+  for (let i = 0; i < words.length; i++) {
+    if (!content(words[i]!)) continue
+    for (let k = 1; k <= 4 && i + k <= words.length; k++) {
+      if (!content(words[i + k - 1]!)) continue
+      const w = words.slice(i, i + k).join(' ')
+      for (const x of new Set([w, w.replace(/^ال/, '')]))
+        if (((await idsOf(x, packs).catch(() => null)) ?? []).some((id) => its.includes(id))) return false
+    }
+  }
+  return true
+}
+
+// "Dímelo en francés" with no French helps on the phone: said plainly before the answer, which comes in the language there is
+const HELPS_IN: Record<string, { absent: string; lacks: string }> = {
+  en: { absent: 'There are no helps in {lang} on this phone, so this is in {have}.', lacks: 'The helps in {lang} on this phone do not have this, so this is in {have}.' },
+  es: { absent: 'No hay ayudas en {lang} en este teléfono, así que esto está en {have}.', lacks: 'Las ayudas en {lang} de este teléfono no tienen esto, así que está en {have}.' },
+  fr: { absent: "Il n'y a pas d'aides en {lang} sur ce téléphone : voici donc la réponse en {have}.", lacks: "Les aides en {lang} de ce téléphone n'ont pas cela : voici donc la réponse en {have}." },
+  id: { absent: 'Tidak ada bahan bantu dalam bahasa {lang} di ponsel ini, jadi ini dalam bahasa {have}.', lacks: 'Bahan bantu dalam bahasa {lang} di ponsel ini tidak memuat ini, jadi ini dalam bahasa {have}.' },
+  hi: { absent: 'इस फ़ोन पर {lang} में सहायता नहीं है, इसलिए यह {have} में है।', lacks: 'इस फ़ोन पर {lang} की सहायता में यह नहीं है, इसलिए यह {have} में है।' },
+  ar: { absent: 'لا توجد مساعدات باللغة {lang} على هذا الهاتف، لذا هذا باللغة {have}.', lacks: 'المساعدات باللغة {lang} على هذا الهاتف ليس فيها هذا، لذا هذا باللغة {have}.' },
+}
+/** The helps asked in a language (`target`, an app language) that the sheet could not be answered from: what to say first. */
+async function helpsIn(target: string | null, sheet: Sheet, ui: string): Promise<{ langNote?: string; wanted?: string }> {
+  const want = target ? packCode(target) : null
+  if (!want) return {}
+  if (sheet.lang === want) return { wanted: want }
+  const names = LANG_NAMES[ui] ?? LANG_NAMES.en!
+  const name = (l: string) => names[l.startsWith('es') ? 'es' : l] ?? env.packName(l)
+  const t = HELPS_IN[ui] ?? HELPS_IN.en!
+  const text = ((await hasLang(want).catch(() => false)) ? t.lacks : t.absent).replace('{lang}', name(want)).replace('{have}', name(sheet.lang))
+  return { langNote: text, wanted: want }
+}
+
+/**
+ * The last answer again, its helps in another language ("¿Me lo puedes decir en inglés?", "in English" after a button): what it
+ * was asked for as it was resolved (a follow-up is not moved again: "¿y el siguiente?" then "en inglés" stays on that verse), no
+ * reader (codeReads). A button's sheet stays that sheet, from the pack asked for when the phone has it (and, for a passage, its
+ * book; for an Academy article, the article).
+ */
+async function repeatOf(p: NonNullable<ConvState['prevResolved']>, target: string | null, prefer: string | null, raw: string, ms: number): Promise<Made> {
+  const meta = `model ${ms} ms\n${raw}\n(the last answer again${target ? ` with the helps in ${target}` : ''}, as it was resolved)`
+  const inScope = 'the last answer again'
+  if (p.sheet) {
+    const ui = p.ui ?? env.nav
+    let sheet: Sheet = { ...p.sheet, id: `r${Date.now()}` }
+    if (prefer && (await hasLang(prefer).catch(() => false))) {
+      if (sheet.concept) {
+        if (!sheet.concept.startsWith('ta:') || (await hasTa(prefer, sheet.concept))) sheet = { ...sheet, lang: prefer }
+      } else if (sheet.ref) {
+        const b = await buildSheet(sheet.id, { ...slotsOfSheet(p.sheet), lang: ui }, prefer)
+        sheet = { ...sheet, lang: b.sheet.lang }
+      } else sheet = { ...sheet, lang: prefer }
+    }
+    return { sheet, ui, meta, inScope, ...(await helpsIn(target, sheet, ui)) }
+  }
+  const { sheet, ui } = await buildSheet(`q${Date.now()}`, p.slots, prefer)
+  return { sheet, ui, meta, ...(p.q !== undefined ? { q: p.q } : {}), inScope, ...(p.found ? { keep: p.found } : {}), ...(await helpsIn(target, sheet, ui)) }
+}
+
 /** The reading step once the slots are known (from the phone's model, the online one, or none): code reads what they missed. */
 export async function readQuestion(q: string, read: { slots: Slots | null; raw: string; ms: number }, c: ConvState, target: string | null): Promise<Made> {
-  const { slots, raw, ms } = read
+  const { raw, ms } = read
+  // a language named for the answer ("… in English"): its pack for the helps; the reply's own words stay in the question's language
+  const prefer = target ? packCode(target) : env.helpsLang
+  const again = c.again === q ? c.prevResolved : undefined
+  delete c.again
+  if (again) return repeatOf(again, target, prefer, raw, ms)
+  // the 5M study session (dev switch `obs5m`): "5M OBS 1" starts it; in a session, "and the notes?" and "next" are about its step
+  const five = devOn('obs5m') ? await session5Asked(q, read.slots, c, prefer).catch(() => null) : null
+  if (five) return { ...five, meta: `model ${ms} ms\n${raw}\n${five.meta}` }
+  const given = read.slots ? { ...read.slots } : null
+  // "and the notes in Spanish?": the reader may take the language named for the question's own; the reply's words stay in
+  // the language of the rest of the question
+  if (target && given?.lang && packCode(given.lang) === packCode(target)) given.lang = guessLang(q)
+  // an article the question does not name (a report of Nov 16: "Puedes decirlo" read as «metáfora»): read by code instead
+  const slots = given && (await strayTerm(given, q, c)) ? ({ intent: 'unknown', lang: given.lang } as Slots) : given
+  const stray = slots !== given ? `\n(the reader's term «${given!.term}» is not in the question: read by code)` : ''
   // never out of scope (ROUTES 'out-of-scope') over a reading of the question (a book, a term, a known intent: the phone's or the
   // online reader), nor over a follow-up code read from the conversation ("thanks, and the next verse?"); on a passage, "What is
   // the weather tomorrow?" is out of scope (its first button goes back to the passage), not a search that finds junk
@@ -704,41 +937,40 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
     // checked against the book: past its ends it says so ("Ruth 4:22 is the last verse of Ruth")
     const checked = await boundsCheck(fu, fu.slots.lang ?? env.nav)
     if (checked.note !== undefined) {
-      const { sheet, ui } = await buildSheet(`q${Date.now()}`, fu.slots, env.helpsLang)
+      c.prevResolved = { slots: { ...fu.slots }, q }
+      const { sheet, ui } = await buildSheet(`q${Date.now()}`, fu.slots, prefer)
       return { sheet, ui, meta: `model ${ms} ms
-${raw}
+${raw}${stray}
 (follow-up by code: ${fu.how}, checked against the book)`, q, note: { text: checked.note, fromText: !!fu.counted }, ...followed }
     }
-    let s = target ? { ...checked.slots, lang: target } : checked.slots
+    let s = checked.slots
     // "who is speaking here?" names no article: the passage with its notes, not its key terms
     if (fu.how === 'meaning here' && !(await termArticle(q, s.lang ?? env.nav))) {
       s = { ...s, what: ['text', 'notes'], term: null }
       fu.how += ' (no article: the passage)'
     }
-    keepState(c, s)
-    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : env.helpsLang)
+    keepState(c, s, { q })
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, prefer)
     // "how many times does lamb appear in this chapter?": the article a word names exactly (not "appear")
     const named = fu.termWords ? [...(await articlesNamed(fu.termWords))].filter((id) => id.startsWith('tw:')) : []
     if (named.length === 1) Object.assign(sheet, { concept: named[0]!, candidates: null, what: ['terms'] })
-    return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up by code: ${fu.how})`, q, ...followed }
+    return { sheet, ui, meta: `model ${ms} ms\n${raw}${stray}\n(follow-up by code: ${fu.how})`, q, ...followed, ...(await helpsIn(target, sheet, ui)) }
   }
   const picked = pickFound(q, s0, c)
   if (picked) {
     const p = passageOf(picked.hit, picked.what, s0.lang ?? env.nav)
     keepState(c, p)
-    const { sheet, ui } = await buildSheet(`q${Date.now()}`, p, env.helpsLang)
-    return { sheet, ui, meta: `model ${ms} ms\n${raw}\n(follow-up on the search results)` }
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, p, prefer)
+    return { sheet, ui, meta: `model ${ms} ms\n${raw}${stray}\n(follow-up on the search results)`, ...(await helpsIn(target, sheet, ui)) }
   }
   // a task announced on a book ("Estoy revisando Jonás 2"): its introduction, where the path starts
   const path = pathStart(q) ?? undefined
   const asked = introAsked(q, s0.lang ?? env.nav) ??
     (path ? ({ intent: 'passage', book: path.book, chapter: path.ch, verse_start: null, verse_end: null, what: ['intro'] } as Slots) : null)
-  let s = asked ? { ...asked, lang: s0.lang ?? env.nav } : withContext(s0, c.last, q)
-  // asked in one language, wanted in another: the book by its code, then the other language's pack and words
-  if (target) s = { ...s, book: s.book ? bookCode(s.lang ?? env.nav, s.book) ?? s.book : s.book, lang: target }
-  keepState(c, s)
-  const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, target ? null : env.helpsLang)
-  return { sheet, ui, meta: `model ${ms} ms\n${raw}`, q, ...(path ? { path } : {}), ...scope, ...(slots?.lang ? { qLang: slots.lang } : {}) }
+  const s = asked ? { ...asked, lang: s0.lang ?? env.nav } : withContext(s0, c.last, q)
+  keepState(c, s, { q })
+  const { sheet, ui } = await buildSheet(`q${Date.now()}`, s, prefer)
+  return { sheet, ui, meta: `model ${ms} ms\n${raw}${stray}`, q, ...(path ? { path } : {}), ...scope, ...(slots?.lang ? { qLang: slots.lang } : {}), ...(await helpsIn(target, sheet, ui)) }
 }
 
 // What may stand next to a reference that is only a reference ("muéstrame Rut 2:3", "montre-moi Ruth 2:3 s'il te plaît")
@@ -794,16 +1026,70 @@ export function directSheet(q: string, c: ConvState = { last: null }): Slots | n
   for (const k of SHOW_KINDS) rest = rest.replace(new RegExp(pattern(k).source, 'giu'), ' ')
   const words = rest.replace(/[¿?!¡.,;«»"“”'’()؟،-]/g, ' ').split(/\s+/).filter(Boolean)
   if (!words.every((w) => /^[\d०-९٠-٩:.–-]+$/.test(w) || name.has(fold(w)) || bookExact(w) === code || REF_FILLER.has(fold(w)))) return null
-  // what readQuestion does with no slots, without its effects (the conversation's state is not kept here)
+  const s0 = unreadSlots(q)
+  if (ordinalPick(q) === undefined && followUp(withoutWeak(q), s0, c)) return null
+  if (pickFound(q, s0, c) || pathStart(q)) return null
+  const asked = introAsked(q, s0.lang ?? env.nav)
+  return asked ? { ...asked, lang: s0.lang ?? env.nav } : withContext(s0, c.last, q)
+}
+
+/** What readQuestion starts from when no reader ran (slots null), without its effects (the conversation's state is not kept). */
+function unreadSlots(q: string): Slots {
   const s0 = refInText({ intent: 'unknown', lang: guessLang(q) }, q)
   if (/[؀-ۿ]/.test(q)) s0.lang = 'ar'
   else if (/[ऀ-ॿ]/.test(q)) s0.lang = 'hi'
   const shown = kindOf(q)
   if (shown && s0.book && s0.chapter && !(s0.what ?? []).includes(shown[0]!)) Object.assign(s0, { intent: 'passage', what: shown })
-  if (ordinalPick(q) === undefined && followUp(withoutWeak(q), s0, c)) return null
-  if (pickFound(q, s0, c) || pathStart(q)) return null
-  const asked = introAsked(q, s0.lang ?? env.nav)
-  return asked ? { ...asked, lang: s0.lang ?? env.nav } : withContext(s0, c.last, q)
+  return s0
+}
+/**
+ * The follow-up code reads from this conversation ("notas", "siguiente", "5" after Rut 2:3), as readQuestion reads it when no
+ * reader ran, without its effects (no state kept, no book read, the book's ends not checked). Null when the question is not
+ * one, picks a search result, or has a word that may name a book ("العدد 5" after Rut 2:3 is Numbers 5 to a reader, verse 5
+ * to the follow-up: the reader decides, as decided on Nov 15 for fu-ar-numbers-read).
+ */
+export function followUpPreview(q: string, c: ConvState): FollowUp | null {
+  if (ordinalPick(q) !== undefined) return null
+  const lang = /[؀-ۿ]/.test(q) ? 'ar' : /[ऀ-ॿ]/.test(q) ? 'hi' : guessLang(q)
+  if (refInText({ intent: 'unknown', lang }, q).book) return null
+  return followUp(withoutWeak(q), unreadSlots(q), c)
+}
+const VERSES = versification as Record<string, number[]>
+/**
+ * A follow-up whose answer is only its slots, so the composer may show it ("✓ Rut 2:3 · notas") and the send may skip the
+ * readers: a passage (another verse, chapter or help of it), not a count, a term "here" or advice (their answers read more
+ * than the slots), within the book's chapters and verses as data/versification.json has them (readQuestion moves "the next
+ * verse" past a chapter's end, or says there is none: those go the usual way).
+ */
+export function previewable(f: FollowUp): boolean {
+  const s = f.slots
+  if (f.counted || f.termWords || s.intent !== 'passage' || s.term || !s.book || f.how.startsWith('meaning')) return false
+  const vs = VERSES[s.book]
+  const ch = s.chapter ?? null
+  if (!vs || ch === null || ch < 1 || ch > vs.length) return false
+  const max = vs[ch - 1]!
+  const v = s.verse_start ?? null, end = s.verse_end ?? null
+  if (v === null) return end === null
+  return v >= 1 && v <= max && (end === null || (end > v && end <= max))
+}
+/**
+ * Whether code alone reads the question: only a reference in this conversation (directSheet with it, as the composer's "✓"
+ * reads it), or a follow-up of this conversation the composer shows with a "✓" (followUpPreview, previewable). Then main.ts
+ * skips the readers (the phone's model, about 4 s; the online one) and readQuestion reads it with no slots: the very reading
+ * the "✓" showed. Other follow-ups ("what does lamb mean here?", "how many times … here?", "how do I translate this?") still
+ * go to the readers, and so does a reference that is also a follow-up here ("العدد 5" after Ruth 2:3: directRef alone reads
+ * Numbers 5, but with no slots readQuestion would read verse 5 of Ruth).
+ */
+export function codeReads(q: string, c: ConvState): boolean {
+  // the last answer again in another language ("en inglés"): readQuestion builds it from what it was asked for (repeatOf)
+  if (c.again === q) return true
+  if (directSheet(q, c)) return true
+  // a story of Open Bible Stories by its number ("historia 34", "OBS 3:5"): the obs-question step reads it (obs.ts)
+  if (obsAsked(q)) return true
+  // in a 5M session: "and the notes?", "next" (its step's frame, its next step)
+  if (sessionAsks(q, c)) return true
+  const fu = followUpPreview(q, c)
+  return !!fu && previewable(fu)
 }
 
 // ------------------------------------------------------------------------------------- training questions -> Translation Academy
@@ -1084,18 +1370,18 @@ async function bookSteps(base: Sheet, ui: string): Promise<Follow[]> {
 // A report of Nov 15 ("Voy a empezar a traducir el libro de Rut"): after an introduction, one studies a chapter a section at a
 // time ("Rut 1:1–5"), not only the whole chapter or one verse. And "Introduction to Numbers 6" (the English notes have no
 // Numbers, only its BSB text): say so plainly and offer what there is, with the passage the person was on.
-const SEC_T: Record<string, { first: string; next: string; back: string; noIntro: string; noNotes: string }> = {
-  en: { first: 'First section: {ref}', next: 'Next section: {ref}', back: 'Back to {ref}', noIntro: 'The helps on this phone have no introduction to {what}.',
+const SEC_T: Record<string, { first: string; next: string; around: string; back: string; noIntro: string; noNotes: string }> = {
+  en: { first: 'First section: {ref}', next: 'Next section: {ref}', around: 'Its section: {ref}', back: 'Back to {ref}', noIntro: 'The helps on this phone have no introduction to {what}.',
     noNotes: 'The Translation Notes here do not cover {book} yet, so it has no introductions; its text is here.' },
-  es: { first: 'Primera sección: {ref}', next: 'Sección siguiente: {ref}', back: 'Volver a {ref}', noIntro: 'Las ayudas de este teléfono no tienen introducción a {what}.',
+  es: { first: 'Primera sección: {ref}', next: 'Sección siguiente: {ref}', around: 'Su sección: {ref}', back: 'Volver a {ref}', noIntro: 'Las ayudas de este teléfono no tienen introducción a {what}.',
     noNotes: 'Las Notas de traducción de aquí todavía no cubren {book}, así que no tiene introducciones; su texto sí está.' },
-  fr: { first: 'Première section : {ref}', next: 'Section suivante : {ref}', back: 'Revenir à {ref}', noIntro: "Les aides de ce téléphone n'ont pas d'introduction à {what}.",
+  fr: { first: 'Première section : {ref}', next: 'Section suivante : {ref}', around: 'Sa section : {ref}', back: 'Revenir à {ref}', noIntro: "Les aides de ce téléphone n'ont pas d'introduction à {what}.",
     noNotes: "Les Notes de traduction d'ici ne couvrent pas encore {book} : pas d'introductions, mais son texte est là." },
-  id: { first: 'Bagian pertama: {ref}', next: 'Bagian berikutnya: {ref}', back: 'Kembali ke {ref}', noIntro: 'Bahan bantu di ponsel ini tidak punya pengantar untuk {what}.',
+  id: { first: 'Bagian pertama: {ref}', next: 'Bagian berikutnya: {ref}', around: 'Bagiannya: {ref}', back: 'Kembali ke {ref}', noIntro: 'Bahan bantu di ponsel ini tidak punya pengantar untuk {what}.',
     noNotes: 'Catatan Terjemahan di sini belum mencakup {book}, jadi tidak ada pengantarnya; teksnya ada.' },
-  hi: { first: 'पहला खंड: {ref}', next: 'अगला खंड: {ref}', back: '{ref} पर लौटें', noIntro: 'इस फ़ोन की सहायता में {what} का कोई परिचय नहीं है।',
+  hi: { first: 'पहला खंड: {ref}', next: 'अगला खंड: {ref}', around: 'इसका खंड: {ref}', back: '{ref} पर लौटें', noIntro: 'इस फ़ोन की सहायता में {what} का कोई परिचय नहीं है।',
     noNotes: 'यहाँ की अनुवाद टिप्पणियाँ अभी {book} को शामिल नहीं करतीं, इसलिए इसका कोई परिचय नहीं है; इसका पाठ यहाँ है।' },
-  ar: { first: 'المقطع الأول: {ref}', next: 'المقطع التالي: {ref}', back: 'العودة إلى {ref}', noIntro: 'لا توجد في مساعدات هذا الهاتف مقدمة لـ {what}.',
+  ar: { first: 'المقطع الأول: {ref}', next: 'المقطع التالي: {ref}', around: 'مقطعها: {ref}', back: 'العودة إلى {ref}', noIntro: 'لا توجد في مساعدات هذا الهاتف مقدمة لـ {what}.',
     noNotes: 'ملاحظات الترجمة هنا لا تغطي {book} بعد، فلا مقدمات له؛ لكن نصه موجود.' },
 }
 const ST = (ui: string) => SEC_T[ui] ?? SEC_T.en!
@@ -1129,18 +1415,141 @@ const LANG_NAMES: Record<string, Record<string, string>> = {
   hi: { en: 'अंग्रेज़ी', es: 'स्पेनिश', fr: 'फ़्रेंच', id: 'इंडोनेशियाई', hi: 'हिंदी', ar: 'अरबी' },
   ar: { en: 'الإنجليزية', es: 'الإسبانية', fr: 'الفرنسية', id: 'الإندونيسية', hi: 'الهندية', ar: 'العربية' },
 }
+// ("Questions in English, from the English pack.": a step of a path, or a question, answered by another pack: helpsElsewhere)
 const FROM_T: Record<string, string> = {
-  en: 'Notes in {notes}, from the {pack} pack.', es: 'Notas en {notes}, del paquete de {pack}.', fr: 'Notes en {notes}, du paquet {pack}.',
-  id: 'Catatan dalam bahasa {notes}, dari paket bahasa {pack}.', hi: '{notes} में टिप्पणियाँ, {pack} पैकेज से।', ar: 'ملاحظات باللغة {notes}، من حزمة اللغة {pack}.',
+  en: '{what} in {notes}, from the {pack} pack.', es: '{what} en {notes}, del paquete de {pack}.', fr: '{what} en {notes}, du paquet {pack}.',
+  id: '{what} dalam bahasa {notes}, dari paket bahasa {pack}.', hi: '{notes} में {what}, {pack} पैकेज से।', ar: '{what} باللغة {notes}، من حزمة اللغة {pack}.',
 }
-function fromPack(ui: string, pack: string, text: string): string {
+export type HelpKind = 'notes' | 'questions' | 'terms'
+const FROM_WHAT: Record<string, Record<HelpKind, string>> = {
+  en: { notes: 'Notes', questions: 'Questions', terms: 'Key terms' }, es: { notes: 'Notas', questions: 'Preguntas', terms: 'Palabras clave' },
+  fr: { notes: 'Notes', questions: 'Questions', terms: 'Mots clés' }, id: { notes: 'Catatan', questions: 'Pertanyaan', terms: 'Istilah kunci' },
+  hi: { notes: 'टिप्पणियाँ', questions: 'प्रश्न', terms: 'मुख्य शब्द' }, ar: { notes: 'ملاحظات', questions: 'أسئلة', terms: 'كلمات رئيسية' },
+}
+function fromPack(ui: string, pack: string, text: string, kind?: HelpKind, said?: string): string {
   const names = LANG_NAMES[ui] ?? LANG_NAMES.en!
   const base = (l: string) => (l.startsWith('es') ? 'es' : l.startsWith('pt') ? 'pt' : l)
   const name = (l: string) => names[base(l)] ?? env.packName(l)
   // the notes' own language: by their script, else by their words (the Arabic pack's notes of Numbers are English)
+  // (helps from another pack: the language their own rows are written in, helpKinds; an introduction: read from the answer)
   const body = text.replace(/^[#*].*$/gm, ' ')
-  const notes = /[؀-ۿ]{3}/.test(body) ? 'ar' : /[ऀ-ॿ]{3}/.test(body) ? 'hi' : guessLang(body.slice(0, 600))
-  return (FROM_T[ui] ?? FROM_T.en!).replace('{notes}', name(notes)).replace('{pack}', name(pack))
+  const notes = said ?? (/[؀-ۿ]{3}/.test(body) ? 'ar' : /[ऀ-ॿ]{3}/.test(body) ? 'hi' : guessLang(body.slice(0, 600)))
+  return (FROM_T[ui] ?? FROM_T.en!).replace('{what}', (FROM_WHAT[ui] ?? FROM_WHAT.en!)[kind ?? 'notes']).replace('{notes}', name(notes)).replace('{pack}', name(pack))
+}
+
+// ----------------------------------------------------------------------------------------- helps from another pack
+// The Hindi pack has notes for Acts only and no questions at all. A step of a path ("Ruth 1:1–5 · notes") or a question asking
+// for one kind of help ("notes Ruth 2:3") is answered by the pack it is asked in when that pack has that kind of help for the
+// book; else by another installed pack that has it (English first), and the answer says so ("Notes in English, from the
+// English pack."). One function decides it, for the steps a path counts (stepsHad) and for the answer (the helps-elsewhere
+// route), so a counted step is always one that is answered.
+type Kinds = Record<HelpKind, boolean> & { said: Record<'notes' | 'questions', string> }
+const HAS = new Map<string, Promise<Kinds | null>>()
+/** The base language of a pack ("es-419" -> "es"). */
+const baseOf = (pack: string) => (pack.startsWith('es') ? 'es' : pack.startsWith('pt') ? 'pt' : pack.split('-')[0]!)
+/**
+ * The language a pack's notes or questions are written in, from their own text (`sample`): the Arabic pack's notes of Numbers
+ * are English. The quotes in the original languages (Hebrew, Greek, and the parentheses around them) and the links are left out;
+ * then the script (Arabic, Devanagari); then the common words, on 200 letters at least; else the pack's own language.
+ */
+export function helpsLangOf(sample: string, pack: string): string {
+  const t = sample
+    .replace(/\[\[[^\]]*\]\]|\[[^\]]*\]\([^)]*\)|\[[^\]]*\]|rc:\/\/\S+/g, ' ')
+    .replace(/\([^)]*[\u0590-\u05ff\u0370-\u03ff\u1f00-\u1fff][^)]*\)/g, ' ')
+    .replace(/[\u0590-\u05ff\u0370-\u03ff\u1f00-\u1fff\u2060]+/g, ' ')
+  if (/[\u0600-\u06ff]{3}/.test(t)) return 'ar'
+  if (/[\u0900-\u097f]{3}/.test(t)) return 'hi'
+  const own = baseOf(pack)
+  if (t.replace(/[^\p{L}]+/gu, '').length < 200) return own
+  let best = own
+  let most = COMMON[own] ? (t.match(COMMON[own]!)?.length ?? 0) : 0
+  for (const [l, re] of Object.entries(COMMON)) {
+    const n = t.match(re)?.length ?? 0
+    if (n > most) { most = n; best = l }
+  }
+  return best
+}
+/**
+ * What kinds of helps a pack has for a book (not its introductions), and the language its notes and questions are written in;
+ * read once. Null: the pack does not have the book. A read that fails is not kept (the next one tries again).
+ */
+function helpKinds(lang: string, book: string): Promise<Kinds | null> {
+  const key = `${lang}|${book}`
+  let p = HAS.get(key)
+  if (!p) {
+    const read: Promise<Kinds | null> = (async () => {
+      const r = await openLang(lang)
+      if (!r.installed(`book:${book}`)) return null
+      const m: any = await r.book(book)
+      const rows = (t: any) => ((t?.rows ?? []) as any[]).filter((x) => !(x.cols?.isIntro === true || x.cols?.isIntro === 'true'))
+      const notes = rows(m?.notes), questions = rows(m?.questions)
+      const sample = (xs: any[], cols: string[]) => xs.slice(0, 40).map((x) => cols.map((c) => String(x.cols?.[c] ?? '')).join(' ')).join(' ')
+      return {
+        terms: rows(m?.links).some((x) => x.concept), notes: notes.length > 0, questions: questions.length > 0,
+        said: { notes: helpsLangOf(sample(notes, ['note']), lang), questions: helpsLangOf(sample(questions, ['question', 'response']), lang) },
+      }
+    })()
+    p = read.catch(() => {
+      if (HAS.get(key) === p) HAS.delete(key)
+      return null
+    })
+    HAS.set(key, p)
+  }
+  return p
+}
+/** The pack of each app language (the app's own language is the second place a missing kind of help is taken from). */
+const UI_PACKS: Record<string, string> = { en: 'en', es: 'es-419', fr: 'fr', id: 'id', hi: 'hi', ar: 'ar' }
+/**
+ * The pack that answers a book's notes, questions or key terms asked in `lang`: that pack when it has them for the book, else
+ * the English pack, else the pack of the app's language (`ui`), when installed and they have them; null when none does. Not any
+ * other pack: someone reading in Hindi with Spanish on the phone does not get Spanish notes.
+ */
+export async function helpsPack(book: string, kind: HelpKind, lang: string, ui: string): Promise<string | null> {
+  const installed = await installedLangs().catch(() => [] as string[])
+  for (const l of new Set([lang, ...['en', UI_PACKS[ui] ?? ''].filter((x) => installed.includes(x))])) {
+    if ((await helpKinds(l, book))?.[kind]) return l
+  }
+  return null
+}
+/** The one kind of help a passage sheet asks for (a path's step, "notes Ruth 2:3"), or null (its text, or several kinds). */
+export function helpKindOf(sheet: Sheet): HelpKind | null {
+  if (sheet.intent !== 'passage' || !sheet.ref || /:intro$/.test(sheet.ref) || sheet.what.length !== 1) return null
+  const k = sheet.what[0]
+  return k === 'notes' || k === 'questions' || k === 'terms' ? k : null
+}
+/**
+ * The pack other than the sheet's that answers its one kind of help (helpsPack), with the language those helps are written in;
+ * or null: the sheet's own, none, or a sheet in a language not on the phone.
+ */
+export async function helpsElsewhere(sheet: Sheet, ui: string): Promise<{ lang: string; kind: HelpKind; said: string } | null> {
+  const kind = helpKindOf(sheet)
+  // (asked in a language that is not on the phone, "Dímelo en francés": the answer says so, as before; never another pack)
+  if (!kind || !(await installedLangs().catch(() => [] as string[])).includes(sheet.lang)) return null
+  const book = sheet.ref!.slice(0, 3)
+  const l = await helpsPack(book, kind, sheet.lang, ui)
+  if (!l || l === sheet.lang) return null
+  const k = await helpKinds(l, book)
+  return { lang: l, kind, said: kind === 'terms' ? baseOf(l) : k?.said[kind] ?? baseOf(l) }
+}
+// The question named the language of its helps and that pack lacks this kind for the book: said plainly, and the other
+// pack's offered as a button ("Ver las notas en inglés"), never taken silently
+const NONE_T: Record<string, { none: string; see: string; what: Record<HelpKind, string>; whatSee?: Record<HelpKind, string> }> = {
+  en: { none: 'The {lang} helps on this phone have no {what} for {book}.', see: 'See the {what} in {other}', what: { notes: 'notes', questions: 'questions', terms: 'key terms' } },
+  es: { none: 'Las ayudas en {lang} de este teléfono no tienen {what} para {book}.', see: 'Ver las {what} en {other}', what: { notes: 'notas', questions: 'preguntas', terms: 'palabras clave' } },
+  fr: { none: "Les aides en {lang} de ce téléphone n'ont pas de {what} pour {book}.", see: 'Voir les {what} en {other}', what: { notes: 'notes', questions: 'questions', terms: 'mots clés' } },
+  id: { none: 'Bahan bantu dalam bahasa {lang} di ponsel ini tidak memuat {what} untuk {book}.', see: 'Lihat {what} dalam bahasa {other}', what: { notes: 'catatan', questions: 'pertanyaan', terms: 'istilah kunci' } },
+  hi: { none: 'इस फ़ोन पर {lang} की सहायता में {book} के लिए {what} नहीं हैं।', see: '{other} में {what} देखें', what: { notes: 'टिप्पणियाँ', questions: 'प्रश्न', terms: 'मुख्य शब्द' } },
+  ar: { none: 'المساعدات باللغة {lang} على هذا الهاتف ليس فيها {what} لسفر {book}.', see: 'عرض {what} باللغة {other}', what: { notes: 'ملاحظات', questions: 'أسئلة', terms: 'كلمات رئيسية' },
+    whatSee: { notes: 'الملاحظات', questions: 'الأسئلة', terms: 'الكلمات الرئيسية' } },
+}
+const langName = (ui: string, l: string) => (LANG_NAMES[ui] ?? LANG_NAMES.en!)[baseOf(l)] ?? env.packName(l)
+/** "Las ayudas en hindi de este teléfono no tienen notas para Rut." and its button "Ver las notas en inglés". */
+export function noneInWords(ui: string, sheetLang: string, other: string, kind: HelpKind, book: string): { none: string; see: string } {
+  const t = NONE_T[ui] ?? NONE_T.en!
+  return {
+    none: t.none.replace('{lang}', langName(ui, sheetLang)).replace('{what}', t.what[kind]).replace('{book}', book),
+    see: t.see.replace('{what}', (t.whatSee ?? t.what)[kind]).replace('{other}', langName(ui, other)),
+  }
 }
 /** An introduction the sheet's pack does not have, from another installed pack that has it (null: none has it). */
 export async function introElsewhere(sheet: Sheet): Promise<string | null> {
@@ -1208,10 +1617,56 @@ async function outlineStarts(code: string, ch: number, l: string, last: number):
   }
   return []
 }
-/** A chapter's sections as [first verse, last verse]: from the text's headings, else its introduction's outline, else 5 verses each. */
+/**
+ * A book's section map from the packs (`reader.sections`: the `\ts\*` chunks of the English ULT, the same for every language, in
+ * the common catalog's `xtopics`), as [first, last] verse ids; null when no pack on the phone has it for the book (an older common
+ * catalog, a book without an entry, no `xtopics`). The pack of `l` is asked first, then English, then any other.
+ */
+const mapCache = new Map<string, Promise<[number, number][] | null>>()
+function mapSectionsOf(code: string, l: string): Promise<[number, number][] | null> {
+  if (!mapCache.has(code)) {
+    const p = (async () => {
+      let failed: unknown = null
+      for (const x of new Set([l, 'en', ...(await installedLangs())])) {
+        try {
+          if (!(await hasLang(x))) continue
+          const a = await (await openLang(x)).sections(code)
+          const list = a.data?.sections ?? []
+          if (a.data && a.coverage?.[a.data.source] === 'count' && list.length) return list.map((s): [number, number] => [s.first, s.last])
+        } catch (e) {
+          failed = e
+        }
+      }
+      // a pack that could not be read is asked again next time; "no map" is kept until the packs change (resetBooks)
+      if (failed) throw failed
+      return null
+    })()
+    mapCache.set(code, p)
+    p.catch(() => { if (mapCache.get(code) === p) mapCache.delete(code) })
+  }
+  return mapCache.get(code)!
+}
+/**
+ * A chapter's part of a book's section map, as [first verse, last verse] up to `last` (the chapter's last verse). A section that
+ * crosses into the chapter starts it at verse 1, one that runs past it ends at `last`: each chapter's sections cover it whole.
+ */
+export function mapChapter(map: readonly [number, number][], ch: number, last: number): [number, number][] {
+  const chOf = (id: number) => Math.floor(id / 1000) % 1000
+  const starts = new Set([1])
+  for (const [a, b] of map) if (chOf(a) <= ch && ch <= chOf(b)) starts.add(chOf(a) === ch ? a % 1000 : 1)
+  const s = [...starts].filter((v) => v >= 1 && v <= last).sort((a, b) => a - b)
+  return s.map((v, i) => [v, (s[i + 1] ?? last + 1) - 1])
+}
+/**
+ * A chapter's sections as [first verse, last verse]: from the packs' section map (`mapSectionsOf`), else the text's headings,
+ * else its introduction's outline, else 5 verses each. Every place that shows sections (First / Next section, Its section, the
+ * path's sections step) reads them here, so they agree.
+ */
 export async function sectionsOf(code: string, ch: number, l: string): Promise<[number, number][]> {
   const last = (await boundsOf(code).catch(() => null))?.get(ch)
   if (!last) return []
+  const map = await mapSectionsOf(code, l).catch(() => null)
+  if (map && map.some(([a, b]) => Math.floor(a / 1000) % 1000 <= ch && ch <= Math.floor(b / 1000) % 1000)) return mapChapter(map, ch, last)
   // (a source that leaves the whole chapter as one section is no help: the next one)
   const splits = (s: number[]) => s.filter((v) => v > 1 && v <= last).length > 0
   let starts = (await headsOf(code).catch(() => null))?.get(ch) ?? []
@@ -1232,7 +1687,7 @@ export async function sectionsOf(code: string, ch: number, l: string): Promise<[
 }
 const secRef = (ch: number, [a, b]: [number, number]) => (a === b ? `${ch}:${a}` : `${ch}:${a}-${b}`)
 /** "First section: Ruth 1:1–5" (or "Next section: …"), a button to its text and notes. */
-function sectionStep(base: Sheet, code: string, ch: number, sec: [number, number], ui: string, kind: 'first' | 'next'): Follow {
+function sectionStep(base: Sheet, code: string, ch: number, sec: [number, number], ui: string, kind: 'first' | 'next' | 'around'): Follow {
   const label = ST(ui)[kind].replace('{ref}', `${bookLabel(ui, code)} ${secRef(ch, sec).replace('-', '–')}`)
   return { label, sheet: passageSheet(base, `${code} ${secRef(ch, sec)}`, ['text', 'notes']) }
 }
@@ -1241,11 +1696,25 @@ async function firstSection(base: Sheet, code: string, ch: number, ui: string): 
   const secs = await sectionsOf(code, ch, base.lang).catch(() => [])
   return secs[0] && secs.length > 1 ? sectionStep(base, code, ch, secs[0], ui, 'first') : null
 }
-/** Under a passage that is one section ("Ruth 1:1-5"): the next one, in this chapter or the first of the next. */
+/**
+ * A verse in its place, as buttons: the section it is in ("Its section: Esther 2:12–18", when the chapter has more than one and
+ * the section is more than the verse) and its chapter ("Read Esther 2"). `base`: the verse's own sheet (its pack).
+ * The section is the packs' section map's when they have it (sectionsOf).
+ */
+async function placeSteps(base: Sheet, h: Hit, ui: string): Promise<Follow[]> {
+  const out: Follow[] = []
+  const secs = await sectionsOf(h.book, h.ch, base.lang).catch(() => [])
+  const sec = secs.length > 1 ? secs.find(([a, b]) => a <= h.v && h.v <= b) : undefined
+  if (sec && sec[0] < sec[1]) out.push(sectionStep(base, h.book, h.ch, sec, ui, 'around'))
+  out.push({ label: nextWords(ui).read.replace('{ref}', `${bookLabel(ui, h.book)} ${h.ch}`), sheet: passageSheet(base, `${h.book} ${h.ch}`, ['text', 'notes']) })
+  return out
+}
+/** Under a passage that is one section ("Ruth 1:1-5", or "Ruth 1:22" alone): the next one, in this chapter or the first of the next. */
 async function nextSection(base: Sheet, ui: string): Promise<Follow | null> {
-  const m = /^([0-9a-z]{3}) (\d+):(\d+)-(\d+)$/.exec(base.ref ?? '')
+  const m = /^([0-9a-z]{3}) (\d+):(\d+)(?:-(\d+))?$/.exec(base.ref ?? '')
   if (!m) return null
-  const [code, ch, v1, v2] = [m[1]!, +m[2]!, +m[3]!, +m[4]!]
+  const [code, ch, v1] = [m[1]!, +m[2]!, +m[3]!]
+  const v2 = m[4] ? +m[4] : v1
   const secs = await sectionsOf(code, ch, base.lang).catch(() => [])
   const i = secs.findIndex(([a, b]) => a === v1 && b === v2)
   if (i < 0) return null
@@ -1288,7 +1757,7 @@ async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
   const seen = new Set<string>()
   const out: Follow[] = []
   for (const f of follow) {
-    const key = f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''}` : `again ${f.again?.q ?? f.again?.label ?? ""}`
+    const key = (f.add ? `add ${f.add.lang} ${f.add.unit} ` : '') + (f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''} ${f.browse.obs ? 'obs' : ''}` : `again ${f.again?.q ?? f.again?.label ?? ""}`)
     if (seen.has(key)) continue
     seen.add(key)
     if (f.browse?.book) {
@@ -1334,6 +1803,10 @@ export type Reply = {
   pathBack?: Follow
   /** the conversation drifted far from its topic: offer a new conversation for this question (main.ts, while it is the last answer) */
   drift?: boolean
+  /** a step of a 5M session (dev switch `obs5m`): where it is ("Movement 1 · observation · frame 5/16"), and its card (obs5m.ts) */
+  sessionMark?: string; card?: Card5
+  /** in a 5M session, any other answer: "← Back to the session: …", the way back to its current step (first on the row of the way back) */
+  sessionBack?: Follow
 }
 /** The answer, what kind it was (for the usage counts), and what tests check: the route-table step that made it, its target, how many sources it shows. */
 export type Answered = {
@@ -1354,6 +1827,10 @@ type Ctx = Made & {
   r?: Result
   /** where the answer's notes come from when another pack had them ("Notes in English, from the Arabic pack.") */
   from?: string
+  /** `from` says it all: the answer's own "nothing found" sentence is left out (the other pack has them; a button offers them) */
+  fromOnly?: boolean
+  /** a 5M session's step answered (route `obs5m`): the session there, and its point's links (sessionStep) */
+  five?: { s: Session; links: string[] }
 }
 type Done = Omit<Answered, 'route' | 'sheet' | 'node'>
 /** A step of the answer: when it applies, and what it does. A step returns the answer, or null to let the next step go on. */
@@ -1564,6 +2041,63 @@ async function outOfScope(x: Ctx): Promise<Done> {
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
   {
+    // a step of the 5M study session (obs5m.ts; dev switch `obs5m`): its card from the story's tables, the next step first, then
+    // the frame's helps (its OBS answers), its Bible passage and the Academy articles its notes cite; a story with no session says so
+    name: 'obs5m',
+    when: (x) => x.sheet.intent === 'obs5m' && devOn('obs5m'),
+    run: (x) => step5(x),
+  },
+  {
+    // Open Bible Stories asked for (obs.ts): by number ("¿qué dice OBS 3:5?", "historia 34", "story 3, frame 4", "القصة 34"),
+    // or by what the story is about when one story clearly is it ("the story of Noah"); the sheet becomes that story or frame,
+    // answered by the `sheet` and `obs` steps (a question about a book, "la historia de Jonás", goes on as before)
+    name: 'obs-question',
+    when: (x) => x.q !== undefined && !x.at && !x.keep?.hits.length && x.sheet.intent !== 'obs5m',
+    run: async (x) => {
+      const q = x.q!
+      const o = obsAsked(q) ?? (x.sheet.ref && !isObsRef(x.sheet.ref) ? null : await namedStory(q, x.sheet.lang).catch(() => null))
+      if (!o) return null
+      x.sheet = { ...x.sheet, intent: 'passage', ref: o.ref, what: o.what, concept: null, term: null, phrase: null, candidates: null, version: null }
+      x.note = undefined
+      x.searched += `\nobs: ${o.ref}`
+      return null
+    },
+  },
+  {
+    // "¿Me lo puedes decir en inglés?" after a free search: the verses it found, from the pack asked for (a new search there
+    // found others: Esther 2:14 became 2:17), each a button as before; the notes and questions with the question's words, and
+    // the articles they name ("Ester", "Concubina"), from that pack
+    name: 'found-again',
+    when: (x) => !!x.keep?.hits.length,
+    run: async (x) => {
+      const { c, ui } = x
+      const k = x.keep!
+      const hits = k.hits.slice(0, 6)
+      const texts = await textsOfVerses(hits, x.sheet.lang).catch(() => hits.map(() => ''))
+      const lines = hits.map((h, i) => (texts[i] ? `**${hitLabel(ui, h)}** — ${texts[i]}` : '')).filter(Boolean)
+      if (!lines.length) return null
+      c.found = hits
+      const at = (h: Hit, what: string[]) => passageSheet(x.sheet, `${h.book} ${h.ch}:${h.v}`, what)
+      const follow: Follow[] = hits.slice(0, 4).map((h) => ({ label: hitLabel(ui, h), sheet: at(h, ['text', 'notes']) }))
+      follow.splice(1, 0, ...(await placeSteps(follow[0]!.sheet!, hits[0]!, ui)))
+      const words = k.words ?? k.used
+      for (const id of [...(await articlesNamed(words).catch(() => new Set<string>()))].filter((i) => i.startsWith('tw:')).slice(0, 2)) {
+        const f = await twStep(x.sheet, id).catch(() => null)
+        if (f) follow.push(f)
+      }
+      const helps = x.q ? await searchHelps(x.q, x.sheet.lang).catch(() => []) : []
+      const groups = (['note', 'question'] as const).map((kd) => ({
+        head: (kd === 'note' ? HT().notes : HT().questions).replace('{w}', words.join(' ')),
+        items: helps.filter((h) => h.kind === kd).map((h) => ({ ...h, snippet: plainSnippet(h.snippet), ref: hitLabel(ui, h) })),
+      })).filter((g) => g.items.length)
+      return {
+        answered: 'search', ref: `${hits[0]!.book} ${hits[0]!.ch}:${hits[0]!.v}`, concept: null, found: lines.length + helps.length,
+        reply: { ui, follow, intro: searchIntro(k.how, k.used, ui), info: lines.join('\n\n'), helps: groups.length ? groups : undefined,
+          meta: `${env.details} · ${secs(x)} s\n${x.meta}\nthe same verses (${hits.map((h) => `${h.book} ${h.ch}:${h.v}`).join(', ')})` },
+      }
+    },
+  },
+  {
     // what code answered by itself (readQuestion): past a book's end ("Ruth 4:22 is the last verse of Ruth"), or how many
     // verses or chapters the passage has, from the text
     name: 'note',
@@ -1667,7 +2201,8 @@ ${x.meta}` },
     // "¿Qué significa «redentor» en Rut 4?": the article of the term and where it is in the passage, not the whole passage
     // (not when it quotes a phrase of the verse: "Rut 3:9 qué quiere decir «extiende tu manto…»" wants the notes on that phrase)
     name: 'meaning',
-    when: ({ q, sheet }) => q !== undefined && !!sheet.ref && has('meaning', q) && ['passage', 'advice'].includes(sheet.intent) && !(sheet.intent === 'advice' && sheet.phrase),
+    // (not over an introduction asked for: "¿Quién es el autor de Rut?" is no meaning of «autor»)
+    when: ({ q, sheet }) => q !== undefined && !!sheet.ref && !/:intro$/.test(sheet.ref) && !isObsRef(sheet.ref) && has('meaning', q) && ['passage', 'advice'].includes(sheet.intent) && !(sheet.intent === 'advice' && sheet.phrase),
     run: async (x) => {
       const { sheet, ui } = x
       const id = await termArticle(x.q!, ui)
@@ -1729,10 +2264,21 @@ ${x.meta}` },
     run: async (x) => {
       const { c, ui } = x
       const q = x.q!
-      const res = await searchVerses(q, x.sheet.term, x.sheet.lang)
-      // a where-question read as a book ("¿Dónde fue tragado Jonás…?" -> Jonah): that book's verses first
       const scope = x.sheet.ref && /^[1-3]?[a-z]{2,3}$/.test(x.sheet.ref) ? x.sheet.ref : null
-      if (scope && res.hits.some((h) => h.book === scope)) res.hits = [...res.hits.filter((h) => h.book === scope), ...res.hits.filter((h) => h.book !== scope)]
+      // a story in a book ("Daniel en el foso de los leones" read as Daniel, isOpen): searched in that book only, without its
+      // name; unless a verse there fits well, the book itself as the reader read it (the sheet route answers it), never the
+      // weaker answers below (an article, an introduction, notes elsewhere: "Quiero leer Rut" is Ruth)
+      const inBook = scope && x.sheet.intent === 'passage' && !has('where', q) ? scope : null
+      const res = inBook ? await searchVerses(storyWords(q, inBook).join(' '), null, x.sheet.lang, inBook) : await searchVerses(q, x.sheet.term, x.sheet.lang)
+      // a where-question read as a book ("¿Dónde fue tragado Jonás…?" -> Jonah): that book's verses first
+      if (scope && !inBook && res.hits.some((h) => h.book === scope)) res.hits = [...res.hits.filter((h) => h.book === scope), ...res.hits.filter((h) => h.book !== scope)]
+      if (inBook) {
+        const s0 = res.strength
+        if (!res.hits.length || (s0 && !s0.full && s0.coverage < GOOD)) {
+          x.searched = `\nsearch in ${inBook}: ${JSON.stringify(res.keywords)}, nothing fits well (coverage ${(s0?.coverage ?? 0).toFixed(2)}): the book`
+          return null
+        }
+      }
       const st = res.strength
       const cover = st ? st.coverage : 1
       const good = res.hits.length > 0 && (!st || st.full || cover >= GOOD)
@@ -1745,7 +2291,7 @@ ${x.meta}` },
       }
       const usable = good || (res.hits.length > 0 && cover >= RELAX)
       // the notes and questions that contain the same words, each a button to its verse's notes or questions
-      const helps0 = usable && kind ? [] : await searchHelps(q, x.sheet.lang).catch(() => [])
+      const helps0 = (usable && kind) || inBook ? [] : await searchHelps(q, x.sheet.lang).catch(() => [])
       // no verse fits: the notes and questions that hold every word, before verses with only some of them
       const helpsFirst = !good && helps0.some((h) => h.all)
       // nothing has the words well ("cebada" with "pueblo" and "traduzco"): the article one of them names, with its verses
@@ -1772,9 +2318,14 @@ ${x.meta}` },
         return null
       }
       const used = res.how === 'concepts' ? (st?.matched.length ? st.matched : res.concepts) : res.how === 'text' ? (hits[0]?.why.slice(5).split(' ') ?? res.keywords) : res.keywords
+      // "say it in English" after this answer: these verses again, not a search in the other pack (repeatOf)
+      if (hits.length && c.prevResolved && c.prevResolved.q === q) c.prevResolved.found = { hits: hits.map((h) => ({ book: h.book, ch: h.ch, v: h.v })), how: res.how, used, words: res.keywords }
       const follow: Follow[] = []
       for (const h of hits.slice(0, 4)) follow.push({ label: hitLabel(ui, h), sheet: await hitSheet(h, ['text', 'notes'], ui) })
-      const line = (h: (typeof hits)[number], whole = false) => `**${hitLabel(ui, h)}** — ${(whole ? h.full ?? h.text : h.text).replace(/\s+/g, ' ').trim()}`
+      // the best verse in its place: its section and its chapter, right after it ("Ester concubinas" found Esther 2:14: a report
+      // of Nov 16 wanted Esther 2 and the verses around 2:14)
+      if (follow[0]?.sheet) follow.splice(1, 0, ...(await placeSteps(follow[0].sheet, hits[0]!, ui)))
+      const line =(h: (typeof hits)[number], whole = false) => `**${hitLabel(ui, h)}** — ${(whole ? h.full ?? h.text : h.text).replace(/\s+/g, ' ').trim()}`
       // "where does it happen?": the verse it happens in first, whole, then the others
       // one verse as THE answer only when the question names two things or more and that verse is clearly ahead of the next
       // one shown (read as a book, "Jonah": the next one of that book)
@@ -1794,8 +2345,11 @@ ${x.meta}` },
       const want = packCode(ui) // the question's language (the sheet's is the pack it fell back to)
       const have = await installedLangs()
       const absent = !hits.length && !helps.length && !have.includes(want)
+      // the frames of Open Bible Stories that hold every word (obs.ts): under the verses, the first one a button
+      const stories = kind ? [] : await searchObs(q, x.sheet.lang).catch(() => [])
+      const storyLines = stories.map((h) => `**${h.label}** — ${h.snippet}`)
       // nothing fits well: what was searched, and ways to ask again
-      if (!absent && !hits.length && !helps.length) {
+      if (!absent && !hits.length && !helps.length && !stories.length) {
         const named = res.keywords.map((w) => bookExact(w)).find((b): b is string => !!b)
         const t = noFit(ui, res.keywords, st?.rarest ?? null, `${bookLabel(ui, named ?? 'jon')} ${named ? '1:1' : '1:17'}`)
         return {
@@ -1813,18 +2367,20 @@ ${x.meta}` },
         const f = await twStep(x.sheet, id).catch(() => null)
         if (f) follow.push(f)
       }
+      if (stories[0]) follow.push({ label: stories[0].label, sheet: passageSheet(x.sheet, stories[0].ref, ['text', 'notes', 'questions', 'terms'], stories[0].lang) })
       // nothing to tap yet (the language asked in is not on the phone): the ways forward
       if (!follow.length) follow.push(...(await wayForward(x.sheet, ui)))
       const first = hits[0]
       const partial = !good && hits.length > 0
+      const shown = [info, storyLines.length ? `### ${OW(ui).inStories}\n\n${storyLines.join('\n\n')}` : ''].filter(Boolean).join('\n\n')
       return {
-        answered: absent ? 'nopack' : 'search', ref: first ? `${first.book} ${first.ch}:${first.v}` : null, concept: null, found: hits.length + helps.length,
+        answered: absent ? 'nopack' : 'search', ref: first ? `${first.book} ${first.ch}:${first.v}` : stories[0]?.ref ?? null, concept: null, found: hits.length + helps.length + stories.length,
         reply: { ui, follow, packs: absent || undefined,
           intro: absent ? NP(ui).missing.replaceAll('{lang}', env.packName(want)).replace('{have}', have.map((l) => env.packName(l)).join(', '))
             : where ? FT(ui).where.replace('{ref}', hitLabel(ui, first!))
             : partial ? FT(ui).partial.replace('{all}', words).replace('{some}', (st?.matched ?? []).join(' '))
-            : hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words),
-          info: info || undefined, helps: groups.length ? groups : undefined,
+            : hits.length || helps.length || !stories.length ? (hits.length || !helps.length ? searchIntro(res.how, used, ui) : HT().onlyHelps.replace('{w}', words)) : null,
+          info: shown || undefined, helps: groups.length ? groups : undefined,
           meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}${helps.length ? `\nhelps: ${helps.length}` : ''}` },
       }
     },
@@ -1836,6 +2392,40 @@ ${x.meta}` },
     run: async (x) => {
       x.r = await answerSheet(x.sheet)
       return null
+    },
+  },
+  {
+    // Open Bible Stories (obs.ts): the story or frame the sheet's answer showed, or what is missing; its next frame, the whole
+    // story, its key terms, its Bible passages, the list of stories, and the way to add the unit when this phone can
+    name: 'obs',
+    when: (x) => x.sheet.intent === 'passage' && isObsRef(x.sheet.ref),
+    run: async (x) => {
+      const { sheet, ui } = x
+      const f = facts as ObsFacts
+      if (f?.kind !== 'obs') return null
+      const follow: Follow[] = []
+      for (const s of await obsSteps(f, sheet.lang, ui).catch(() => [])) {
+        if (s.k === 'obs') follow.push({ label: s.label, sheet: passageSheet(sheet, s.ref, s.what) })
+        else if (s.k === 'bible') follow.push({ label: s.label, sheet: passageSheet(sheet, s.ref, ['text', 'notes'], (await packWithBook(s.ref.slice(0, 3), sheet.lang).catch(() => null)) ?? sheet.lang) })
+        else if (s.k === 'add') follow.push({ label: s.label, sheet: { ...sheet, id: `o${Date.now()}` }, add: { lang: s.lang, unit: 'obs' } })
+        else follow.push({ label: s.label, browse: { obs: true, lang: f.pack ?? sheet.lang } })
+      }
+      // the frame's key terms (two of them), after the next frame and the whole story
+      const terms = (await Promise.all(f.terms.slice(0, 2).map((id) => twStep(sheet, id).catch(() => null)))).filter((t): t is Follow => !!t)
+      follow.splice(Math.min(2, follow.length), 0, ...terms)
+      // in a 5M session (dev switch): the Academy articles the frame's notes cite, after its key terms (its step offers them too)
+      if (devOn('obs5m') && x.c.graph?.session && f.f && f.state === 'ok') {
+        const h = await frameHelps(sheet.ref!, sheet.lang, ui).catch(() => null)
+        const ta = (await Promise.all((h?.academy ?? []).slice(0, 2).map((id) => taStep(sheet, id, ui).catch(() => null)))).filter((t): t is Follow => !!t)
+        follow.splice(Math.min(2 + terms.length, follow.length), 0, ...ta)
+      }
+      if (!follow.length) follow.push(browseStep(ui))
+      const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
+      return {
+        answered: 'passage', ref: sheet.ref, concept: null, found: x.r?.cites.length ?? 0,
+        reply: { intro: said, info: x.r?.answer, follow: [...x.others, ...follow].slice(0, MAX_FOLLOW), ui, lang: f.pack ?? sheet.lang,
+          meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nobs: ${f.state}${f.pack ? ` (${f.pack} pack)` : ''}\n${JSON.stringify(sheet, null, 1)}` },
+      }
     },
   },
   {
@@ -1860,6 +2450,34 @@ ${x.meta}` },
       facts.intro = what
       x.r = r
       x.from = fromPack(x.ui, l, r.answer)
+      return null
+    },
+  },
+  {
+    // one kind of help the sheet's pack lacks for the book and another installed pack has (helpsPack: English first): from that
+    // one, saying so. A path's "questions" step in Hindi, "notes Ruth 2:3" on a phone with the Hindi and English packs
+    name: 'helps-elsewhere',
+    when: (x) => !!helpKindOf(x.sheet),
+    run: async (x) => {
+      // (the app's language, not the reply's: an English question in the Arabic app still tries the Arabic pack; on a path's
+      // book, the app language the path started with, so its answers match the steps it counted)
+      const path = x.c.graph?.path
+      const app = (path && x.sheet.ref?.startsWith(`${path.book} `) ? path.app : undefined) ?? env.nav
+      const e = await helpsElsewhere(x.sheet, app).catch(() => null)
+      if (!e) return null
+      // the question named the language ("रूत 2:3 के नोट्स हिंदी में"): never taken silently from another pack; said, and offered
+      if (x.wanted) {
+        const w = noneInWords(x.ui, x.sheet.lang, e.lang, e.kind, bookLabel(x.ui, x.sheet.ref!.slice(0, 3)))
+        x.from = w.none
+        x.fromOnly = true
+        x.others.unshift({ label: w.see, sheet: { ...x.sheet, id: `f${Date.now()}`, lang: e.lang } })
+        return null
+      }
+      // only the helps come from there: the sheet (and every button under the answer) stays in the person's pack
+      const r = await answerSheet({ ...x.sheet, lang: e.lang })
+      if (!r.cites.length) return null
+      x.r = r
+      x.from = fromPack(x.ui, e.lang, r.answer, e.kind, e.said)
       return null
     },
   },
@@ -1899,7 +2517,7 @@ ${x.meta}` },
       // an introduction the helps do not have: say so, and offer what there is (the passage before this one among it)
       const none = sheet.intent === 'passage' && !found.intro ? await noIntro(sheet, ui, x.c.last).catch(() => null) : null
       if (none) said = none.said
-      if (x.from) said = [said, x.from].filter(Boolean).join(' ')
+      if (x.from) said = x.fromOnly ? x.from : [said, x.from].filter(Boolean).join(' ')
       const study = await studyOf(sheet).catch(() => null)
       const steps = await packSteps(sheet, study, ui).catch(() => [])
       const bounds = sheet.intent === 'passage' && sheet.ref ? await boundsOf(sheet.ref.slice(0, 3)).catch(() => null) : null
@@ -1923,6 +2541,12 @@ ${x.meta}` },
           const f = await nextSection({ ...sheet, lang: pack }, ui).catch(() => null)
           if (f) follow.unshift(f)
         }
+      }
+      // the story of Open Bible Stories this passage is told in, at its nearest frame (obs.ts), after the first steps
+      if (sheet.intent === 'passage' && pack && !none && follow.length && sheet.ref) {
+        const text = study?.texts[0]?.verses.map((v) => v.p.map((p) => p[0]).join('')).join(' ') ?? ''
+        const st = await storyStep(sheet.ref, sheet.lang, ui, text).catch(() => null)
+        if (st) follow.splice(Math.min(3, follow.length), 0, { label: st.label, sheet: passageSheet(sheet, st.ref, st.ref.includes(':') ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'], st.lang) })
       }
       // a passage with nothing to go on from (the version asked for is not here): the ways forward, its book first
       if (sheet.intent === 'passage' && !follow.length) follow.push(...(await wayForward(sheet, ui, pack ? sheet.ref!.slice(0, 3) : null)))
@@ -1958,10 +2582,25 @@ const clip = (q: string, words = 6): string => { const w = q.replace(/[¿?¡!]/g
 export function placeLabel(n: GNode, ui: string): string {
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(n.sheet.ref ?? '')
   if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
+  // in a 5M session (dev switch): a step says where it is ("Movement 1 · observation · frame 5/16"), a frame's help what it
+  // shows ("OBS 1:5 · notes")
+  if (devOn('obs5m')) {
+    const fx = fx5v
+    const st = fx && n.kind === 'obs5m' ? sessionOfSheet(sheetOfNode(n), fx, null) : null
+    if (fx && st) return stepPlace(fx, st, ui)
+    const w = n.kind === 'passage' && parseObsRef(n.sheet.ref)?.f && n.sheet.what.length === 1 ? whatWord(ui, n.sheet.what[0]!) : null
+    if (w) return `${refLabelOf(ui, n.sheet.ref!)} · ${w.toLocaleLowerCase(ui)}`
+  }
   return (n.kind === 'passage') && n.sheet.ref ? refLabelOf(ui, n.sheet.ref) : n.label
 }
 /** A point's name in 2–5 words: the passage and what was shown ("Ruth 2:3 · Notes"), the article's title, else the question. */
 async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | undefined): Promise<string> {
+  // a 5M session's step: "OBS 1 · M1 · f5"
+  if (kind === 'obs5m') {
+    const fx = await fixture5().catch(() => null)
+    const st = fx ? sessionOfSheet({ ...s, id: '', version: null, phrase: null, candidates: null }, fx, null) : null
+    if (fx && st) return stepShort(fx, st, ui)
+  }
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')
   if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
   if (kind === 'passage' && s.ref) {
@@ -1996,15 +2635,19 @@ async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: str
     const links = [
       ...(reply.study?.terms.map((t) => t.id) ?? []), ...(reply.study?.notes.map((n) => n.concept ?? '') ?? []),
       ...(reply.sources?.map((s) => s.id) ?? []), ...(reply.ctx ? [reply.ctx] : []),
-      ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' ? f.sheet.concept ?? '' : kind === 'search' ? f.sheet?.ref ?? '' : '')),
+      ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' ? f.sheet.concept ?? '' : kind === 'search' || isObsRef(sheet.ref) ? f.sheet?.ref ?? '' : '')),
+      // the story a passage is told in (obs.ts "This part is told in OBS 3"): going there goes deeper (graph.ts classify)
+      ...(reply.follow ?? []).map((f) => { const o = parseObsRef(f.sheet?.ref); return o ? `obs:${o.n}` : '' }),
     ].filter(Boolean)
     // a search keeps the verses it found, in order: going back to it, "the second one" is its second verse
     const found = kind === 'search' ? (c.found ?? []).map((h) => `${h.book} ${h.ch}:${h.v}`) : undefined
     // only the sheet's own answer is asked again from the sheet; the others needed the typed question: shown again as they were
-    const n = addNode(g, { kind, sheet, links: [...(found ?? []), ...links], found, label: await pointLabel(kind, sheet, x.ui, made.q), copy: step !== 'reply' || undefined })
+    // (a 5M session's step is asked again from its sheet: going back to it moves the session there)
+    const n = addNode(g, { kind, sheet, links: [...(found ?? []), ...links], found, label: await pointLabel(kind, sheet, x.ui, made.q), copy: (step !== 'reply' && step !== 'obs5m') || undefined })
     id = n.id
     // far from where the conversation started: offer once to go on in a new conversation (main.ts, under this answer)
-    if (drifts(g, n)) {
+    // (never in a 5M session: the session is the topic)
+    if (!g.session && kind !== 'obs5m' && drifts(g, n)) {
       n.drift = 'offered'
       reply.drift = true
     }
@@ -2021,6 +2664,16 @@ async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: str
     reply.follow = reply.follow.map(({ back, ...f }) => f)
   }
   return id
+}
+
+/**
+ * The sheet whose passage context online AI is given (answer.ts passageContext): the answer's own, else, when the branch the
+ * answer is on goes through a story of Open Bible Stories (an article tapped under it), that story: its plain text.
+ */
+export function contextSheet(c: ConvState, r: Pick<Answered, 'sheet' | 'node'>): Sheet | null {
+  if (r.sheet?.intent === 'passage' && r.sheet.ref) return r.sheet
+  const p = c.graph && r.node ? passageAt(c.graph, r.node) : undefined
+  return p && isObsRef(p.sheet.ref) ? sheetOfNode(p) : r.sheet
 }
 
 /**
@@ -2077,8 +2730,10 @@ export function moveOut<M extends Moved>(c: ConvState & { msgs: M[] }, m: M, ui:
   const graph: Graph = { nodes: [{ ...n, parent: null, edge: 'start', drift: 'moved', msg: msgs.length - 1 }], cur: n.id }
   if (m.pathLine && c.graph.path) {
     graph.path = c.graph.path
+    if (c.graph.pathNext) graph.pathNext = c.graph.pathNext
     if (c.graph.pathBefore) c.graph.path = c.graph.pathBefore
     else delete c.graph.path
+    delete c.graph.pathNext
   }
   delete c.graph.pathBefore
   const q = moved[0]?.who === 'me' ? (moved[0] as { text?: string }).text : undefined
@@ -2086,6 +2741,17 @@ export function moveOut<M extends Moved>(c: ConvState & { msgs: M[] }, m: M, ui:
 }
 
 // ------------------------------------------------------------------------------------------------- the path, per answer
+/**
+ * The steps of a path through a book that the packs can answer, as the answer will (helpsPack): the introduction and the
+ * sections always; its key terms, its notes, its questions when the path's pack (`lang`) has them for the book, else another
+ * the English pack or the app language's pack does (its answer then says so). A Hindi-only phone's path through Acts has four
+ * steps; with English too, five.
+ */
+export async function stepsHad(book: string, lang: string, ui: string): Promise<number[]> {
+  const out = [1, 2]
+  for (const [step, kind] of [[3, 'terms'], [4, 'notes'], [5, 'questions']] as const) if (await helpsPack(book, kind, lang, ui)) out.push(step)
+  return out
+}
 /** The sections of a book's chapter (none when it has no such chapter or no text on the phone). */
 const secsOf = (p: Path, ch: number | null): Promise<Sec[]> => (ch ? sectionsOf(p.book, ch, p.lang).catch(() => []) : Promise.resolve([]))
 /** A step of the path as a call sheet (the next step's button, the way back to it, the Map's "Continue the path"). */
@@ -2112,18 +2778,26 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   delete g.pathBefore
   let at: Path | null = null
   if (made.path && P?.book === made.path.book) {
-    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null }
-    reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book))
+    // (the app's language now, kept with the path: its steps and their answers use the same one)
+    const app = env.nav
+    const has = await stepsHad(made.path.book, x.sheet.lang, app)
+    // (a book's path replaces the lessons: its steps are not "away from the lessons")
+    delete g.learn
+    at = { book: made.path.book, ch: made.path.ch, task: made.path.task, lang: x.sheet.lang, step: 1, sec: null, has, app }
+    reply.pathLine = pathStartLine(x.ui, bookLabel(x.ui, at.book), has)
     if (reply.drift && g.path) g.pathBefore = g.path
   } else if (g.path) at = stepOf(g.path, ref, x.sheet.what ?? [], await secsOf(g.path, P?.ch ?? null))
   const p = g.path
+  // (the next step is kept only while the last answer is on the path)
+  delete g.pathNext
   if (at) {
     g.path = at
     reply.pathMark = pathLabel(x.ui, at, 'mark')
     const ch = at.ch ?? 1
-    const nx = nextStep(at, await secsOf(at, ch), at.step === 5 ? await secsOf(at, ch + 1) : [])
+    const nx = nextStep(at, await secsOf(at, ch), lastOfSection(at) ? await secsOf(at, ch + 1) : [])
     const sheet = nx ? pathSheet(nx, x.sheet) : null
     if (nx && sheet) {
+      g.pathNext = nx
       // the next step first; a button to the same passage with those helps is that step ("First section: Ruth 1:1–5", "Notes")
       const same = (f: Follow) => f.sheet?.intent === 'passage' && f.sheet.ref === sheet.ref && sheet.what.every((w) => f.sheet!.what.includes(w))
       reply.follow = [{ label: pathLabel(x.ui, nx, 'next'), sheet, pathNext: true },...(reply.follow ?? []).filter((f) => !same(f))].slice(0, MAX_FOLLOW)
@@ -2149,13 +2823,314 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
   if (sheet) reply.pathBack = { label: pathLabel(x.ui, p, 'toPath'), sheet, toPath: true }
 }
 
+// ------------------------------------------------------------------------------------------------- the 5M study session
+// A study session through one Open Bible Story in the manual's five movements (obs5m.ts, the design of Nov 16), behind the dev
+// switch `obs5m`: every step is a turn (a sheet with intent 'obs5m', route `obs5m`), kept in the graph as `g.session` beside the
+// light path (paused meanwhile, never replaced). Its frame's helps are 2c's OBS answers; any other answer offers the way back.
+
+let fx5: Promise<Fixture> | null = null
+let fx5v: Fixture | null = null
+/** The story the session reads (the dev fixture: read once, when first needed). */
+const fixture5 = (): Promise<Fixture> => (fx5 ??= loadFixture().then((f) => (fx5v = f)).catch((e) => { fx5 = null; throw e }))
+/** The story's tables if read already (the composer and the labels cannot wait for them); null before */
+export const fixture5Now = (): Fixture | null => fx5v
+/**
+ * The one loader of the story's tables (the phone's window reads them through it too, with the dev switch on): the composer's
+ * session buttons and the labels read what it loaded. `resetFixture5` forgets it (tests).
+ */
+export const loadFixture5 = (): Promise<Fixture> => fixture5()
+export function resetFixture5(): void { fx5 = null; fx5v = null }
+
+/**
+ * Whether the conversation is at the session (R9): its current point is a step, or under one through `deeper` points only (the
+ * frame's notes, an Academy article opened from them). On a `branch` (a typed verse) and what goes on from it, follow-ups read
+ * that point as everywhere else.
+ */
+function atSession(g: Graph): boolean {
+  const own = sessionNode(g)?.sheet.ref ?? null
+  for (let n = nodeOf(g, g.cur); n; n = nodeOf(g, n.parent)) {
+    if (n.kind === 'obs5m') return true
+    if (n.edge !== 'deeper') return false
+    // only the step's own frame ('obs 1:5'; 'obs 1' for a frameless step) and the articles under it are the session's (R15):
+    // any other reference, a Bible passage the step offers (R11) or another frame the review shows again, is read as everywhere else
+    if (n.sheet.ref && n.sheet.ref !== own) return false
+  }
+  return false
+}
+
+/**
+ * In a 5M session, a short question about its step with no reference of its own: "and the notes?", "the key terms?", "the
+ * questions?" (what to show of its frame), "next", "¿y el siguiente?" (its next step). Null otherwise (a typed reference, other
+ * words: answered as usual), and always with the dev switch off or no session.
+ */
+export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { frame: number } | null {
+  if (!c.graph?.session || !devOn('obs5m') || !atSession(c.graph)) return null
+  const t = latinDigits(withoutWeak(q))
+  // a frame's number alone ("7"), in a part that goes frame by frame: that frame's step of the part
+  const num = /^\s*(\d{1,3})\s*[.?!؟]?\s*$/.exec(t)
+  if (num) return frameStep(c.graph.session, +num[1]!) ? { frame: +num[1]! } : null
+  if (/\d/.test(t) || obsAsked(t)) return null
+  const lang = guessLang(q)
+  if (ownRef(t, { intent: 'unknown', lang } as Slots, lang)) return null
+  if (keywords(strip(t, ['range', ...FU_WORDS])).length) return null
+  const k = kindOf(t)
+  // (R18) on a checking step the frame's questions are not shown: their responses are what the card hides; the typed words read as
+  // no help of the frame (as with a step that has none), and the question goes on as everywhere else
+  if (k && c.graph.session.part === 'checking') {
+    const rest = k.filter((x) => x !== 'questions')
+    return rest.length ? rest : null
+  }
+  return k ?? (has('next', t) ? 'next' : null)
+}
+
+/**
+ * A button of the composer's row in a 5M session (suggest.ts makes them Suggestions): `sheet` asks that step or help, `send`
+ * sends the box's text (read by code as sessionAsks reads it: the very sheet shown), `resume` resumes a saved session (main.ts).
+ */
+export type Chip5 = { kind: 'next' | 'place' | 'ok'; label: string; sheet?: Sheet; send?: true; resume?: number }
+/**
+ * The composer's empty row (state A) with the dev switch on: in a session, at its step, [Next: … ▸] then the step's frame
+ * [OBS 1:5 ▸]; away from it (a help, a branch), the way back to it first (`rest` 'place': the passage the conversation is on
+ * follows, never the paused light path); with no session here, [Resume OBS 1 · …] for the session used last, if one is saved
+ * (`rest` 'all': the usual first button follows).
+ * Null with the switch off, or before the story's tables are read.
+ */
+export function sessionChips(c: ConvState, ui: string): { items: Chip5[]; rest: 'all' | 'place' | null } | null {
+  const fx = fx5v
+  if (!devOn('obs5m')) return null
+  const g = c.graph
+  const s = g?.session
+  // (the story's tables not read yet: no session's button, and never the paused light path's)
+  if (!fx) return s ? { items: [], rest: 'place' } : null
+  const fwd = rtlArrow(ui)
+  if (!g || !s) {
+    const last = savedSessions().find((x) => x.story === fx.story && sessionOfSheet(sheetOf(fx, x.s, x.s.lang), fx, x.s))
+    if (!last) return null
+    return { items: [{ kind: 'next', label: W5(ui).resume.replace('{story}', obsLabel(last.story)).replace('{place}', stepPlace(fx, last.s, ui)), resume: last.story }], rest: 'all' }
+  }
+  if (!atSession(g)) {
+    return { items: [{ kind: 'next', label: `${ui === 'ar' ? '→' : '←'} ${W5(ui).back.replace('{place}', stepPlace(fx, s, ui))}`, sheet: sheetOf(fx, s, s.lang) }], rest: 'place' }
+  }
+  const items: Chip5[] = []
+  const nx = nextOf5(fx, s)
+  if (nx) items.push({ kind: 'next', label: `${W5(ui).next.replace('{place}', stepPlace(fx, nx, ui))} ${fwd}`, sheet: sheetOf(fx, nx, s.lang) })
+  const f = stepAt(fx, s)?.frame
+  if (f) {
+    const ref = obsRef(s.story, +f.split(':')[1]!)
+    items.push({ kind: 'place', label: `${refLabelOf(ui, ref)} ${fwd}`, sheet: { id: `f${Date.now()}`, intent: 'passage', ref, what: ['text'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: s.lang } })
+  }
+  return { items, rest: null }
+}
+const rtlArrow = (ui: string) => (ui === 'ar' ? '◂' : '▸')
+/**
+ * What a question typed in a 5M session reads as, for the composer's "✓" (state D): "notes" → "✓ OBS 1:5 · notes", "next" →
+ * "✓ Next: …", a frame's number in a part that goes frame by frame → "✓ frame 7". Its tap sends the box's text, which
+ * readQuestion reads the same way (sessionAsks). Null when it is none of these, or with the switch off.
+ */
+export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | null {
+  const asked = sessionAsks(q, c)
+  const s = c.graph?.session
+  const fx = fx5v
+  if (!asked || !s || !fx) return null
+  const w = W5(ui)
+  if (asked === 'next') {
+    const nx = nextOf5(fx, s)
+    return nx ? { kind: 'ok', label: `✓ ${w.next.replace('{place}', stepPlace(fx, nx, ui))}`, send: true, sheet: sheetOf(fx, nx, s.lang) } : null
+  }
+  if (!Array.isArray(asked)) {
+    const to = frameStep(s, asked.frame)
+    return to ? { kind: 'ok', label: `✓ ${w.frameN.replace('{n}', String(asked.frame))}`, send: true, sheet: sheetOf(fx, to, s.lang) } : null
+  }
+  const f = stepAt(fx, s)?.frame
+  const ref = f ? obsRef(s.story, +f.split(':')[1]!) : obsRef(s.story)
+  const word = asked.length === 1 ? whatWord(ui, asked[0]!) : null
+  const sheet: Sheet = { id: `f${Date.now()}`, intent: 'passage', ref, what: [...asked], version: null, concept: null, term: null, phrase: null, candidates: null, lang: s.lang }
+  return { kind: 'ok', label: `✓ ${refLabelOf(ui, ref)}${word ? ` · ${word.toLocaleLowerCase(ui)}` : ''}`, send: true, sheet }
+}
+
+/**
+ * The step of the session's part for frame `n` (a part that goes frame by frame: the frames, M1, drafting, checking), of the
+ * same kind as the current step (M1 has an observation and a translation step per frame); null elsewhere, or with no such frame.
+ */
+function frameStep(s: Session, n: number): Session | null {
+  const fx = fx5v
+  if (!fx || s.story !== fx.story || !['frames', 'm1', 'drafting', 'checking'].includes(s.part)) return null
+  const all = stepsOf5(fx, s.part)
+  const kind = all[s.at]?.kind
+  const f = `${s.story}:${n}`
+  const st = all.find((x) => x.frame === f && x.kind === kind) ?? all.find((x) => x.frame === f)
+  return st ? { ...s, at: st.at } : null
+}
+
+/** "5M OBS 1" (the session's words and a story), or a question about the session's step: its sheet, read by code. */
+async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefer: string | null): Promise<Made | null> {
+  const ui = env.nav
+  const o = has('obs5m', q) ? obsAsked(q) : null
+  const p = o ? parseObsRef(o.ref) : null
+  if (p) {
+    const fx = await fixture5()
+    const lang = prefer ?? packCode(slots?.lang ?? env.nav)
+    const first = ORDER5.find((x) => stepsOf5(fx, x).length)
+    // a story with no session (the mock has story 1): the route says so
+    const sheet: Sheet = p.n === fx.story && first
+      ? sheetOf(fx, { story: fx.story, part: first, at: 0, lang, tfLang: fx.tfLang, started: Date.now(), done: [] }, lang)
+      : { id: `q${Date.now()}`, intent: 'obs5m', ref: obsRef(p.n), what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang }
+    keepState(c, slotsOfSheet(sheet), { sheet, ui })
+    if (p.n === fx.story && first) count('5m.start')
+    return { sheet, ui, meta: '(a 5M session asked for, read by code)', q, inScope: 'a 5M session' }
+  }
+  const s = c.graph?.session
+  const unread = !slots || !slots.intent || slots.intent === 'unknown' || (slots.intent === 'passage' && !slots.book)
+  const asked = s && unread ? sessionAsks(q, c) : null
+  if (!s || !asked) return null
+  const fx = await fixture5()
+  let sheet: Sheet | null = null
+  if (asked === 'next') {
+    const nx = nextOf5(fx, s)
+    sheet = nx ? sheetOf(fx, nx, s.lang) : null
+  } else if (!Array.isArray(asked)) {
+    const to = frameStep(s, asked.frame)
+    sheet = to ? sheetOf(fx, to, s.lang) : null
+  } else {
+    const f = stepAt(fx, s)?.frame
+    const base: Sheet = { id: '', intent: 'passage', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: s.lang }
+    sheet = passageSheet(base, f ? obsRef(s.story, +f.split(':')[1]!) : obsRef(s.story), asked, s.lang)
+  }
+  if (!sheet) return null
+  keepState(c, slotsOfSheet(sheet), { q })
+  return { sheet, ui, meta: `(in the 5M session, read by code: ${asked === 'next' ? 'its next step' : Array.isArray(asked) ? `its frame's ${asked.join(',')}` : `frame ${asked.frame} of its part`})`, q, inScope: 'a follow-up in the 5M session' }
+}
+
+/**
+ * A step's answer: its card (obs5m.ts `cardOf`; the manual's answers ride on it for the view to hide, never in the text), the
+ * next step first, then the frame's helps that its OBS answer has (notes, key terms, questions: 2c's sheets for "obs 1:5"), its
+ * Bible passages and up to 2 Academy articles its notes cite; those only when the obs unit is on the phone. A story with no
+ * session: said, with the story one tap away.
+ */
+async function step5(x: Ctx): Promise<Done | null> {
+  const { sheet, ui } = x
+  const fx = await fixture5()
+  const meta = `${env.details} · ${secs(x)} s\n${x.meta}`
+  // (no session in this conversation, e.g. after [End session]: the saved place of the story is the base, never a blank one)
+  const base = x.c.graph?.session ?? savedSessions().find((e) => e.story === fx.story)?.s ?? null
+  const s = sheet.concept ? sessionOfSheet(sheet, fx, base) : null
+  if (!s) {
+    const n = parseObsRef(sheet.ref)?.n ?? 0
+    const follow: Follow[] = n >= 1 && n <= 50 ? [{ label: obsLabel(n), sheet: passageSheet(sheet, obsRef(n), ['text', 'notes']) }] : []
+    return { answered: 'nosession', ref: null, concept: null, found: 0,
+      reply: { info: W5(ui).noSession.replace('{lang}', langName(ui, sheet.lang)), follow, ui, meta: `${meta}\n5m: no session for this story` } }
+  }
+  const st = stepAt(fx, s)!
+  const fref = st.frame ? obsRef(s.story, +st.frame.split(':')[1]!) : null
+  const helps = fref ? await frameHelps(fref, s.lang, ui).catch(() => null) : null
+  const card = cardOf(fx, s, helps, ui)!
+  const follow: Follow[] = []
+  const nx = nextOf5(fx, s)
+  // the end of M1's observation frames: the optional review, or straight on to the translation questions
+  const skip = nx && stepAt(fx, nx)?.kind === 'review' ? nextOf5(fx, nx) : null
+  if (nx && skip) follow.push({ label: W5(ui).reviewOffer, sheet: sheetOf(fx, nx, s.lang), sessionNext: true }, { label: W5(ui).reviewSkip, sheet: sheetOf(fx, skip, s.lang) })
+  else if (nx) follow.push({ label: W5(ui).next.replace('{place}', stepPlace(fx, nx, ui)), sheet: sheetOf(fx, nx, s.lang), sessionNext: true })
+  const links: string[] = []
+  if (helps && fref && st.frame) {
+    const w = W5(ui).helps
+    const lab = refLabelOf(ui, fref)
+    if (helps.notes) follow.push({ label: `${w.tn} · ${lab}`, sheet: passageSheet(sheet, fref, ['notes'], s.lang) })
+    if (helps.facts.terms.length) follow.push({ label: `${w.twl} · ${lab}`, sheet: passageSheet(sheet, fref, ['terms'], s.lang) })
+    if (helps.questions && st.kind !== 'check') follow.push({ label: `${w.tq} · ${lab}`, sheet: passageSheet(sheet, fref, ['questions'], s.lang) })
+    // the Bible passages the story is told from (2c's, as under its answers)
+    const bible = (await obsSteps(helps.facts, s.lang, ui).catch((): ObsStep[] => [])).filter((b): b is Extract<ObsStep, { k: 'bible' }> => b.k === 'bible')
+    for (const b of bible) {
+      const l = (await packWithBook(b.ref.slice(0, 3), s.lang).catch(() => null)) ?? s.lang
+      follow.push({ label: b.label, sheet: passageSheet(sheet, b.ref, ['text', 'notes'], l) })
+      links.push(b.ref)
+    }
+    for (const id of helps.academy.slice(0, 2)) {
+      const a = await taStep(sheet, id, ui).catch(() => null)
+      if (a) follow.push(a)
+    }
+    links.unshift(...frameLinks(helps, st.frame))
+  }
+  // the review shows any frame again (R14): each frame's OBS answer is a help of the review step
+  if (st.kind === 'review') links.push(...fx.frames.map((f) => obsRef(s.story, +f.ref.split(':')[1]!)))
+  x.five = { s, links }
+  return {
+    answered: 'obs5m', ref: fref ?? obsRef(s.story), concept: stepId(s), found: 1,
+    reply: { card, text: card.blocks.join('\n\n') || undefined, follow: follow.slice(0, MAX_FOLLOW), ui, lang: s.lang,
+      meta: `${meta}\n5m: ${stepId(s)}${fref && !helps ? ' (no OBS helps for this frame)' : ''}` },
+  }
+}
+
+/** Which help a point under a session's step is, for the usage counts: the frame's notes, questions or terms, a Bible passage, an article */
+function helpKind5(n: GNode): 'tn' | 'tq' | 'twl' | 'passage' | 'academy' | null {
+  if (n.kind === 'article') return n.sheet.concept?.startsWith('ta:') ? 'academy' : n.sheet.concept?.startsWith('tw:') ? 'twl' : null
+  if (n.kind !== 'passage') return null
+  if (!parseObsRef(n.sheet.ref)?.f) return isObsRef(n.sheet.ref ?? '') ? null : 'passage'
+  const w = n.sheet.what
+  return w.length !== 1 ? null : w[0] === 'notes' ? 'tn' : w[0] === 'questions' ? 'tq' : w[0] === 'terms' ? 'twl' : null
+}
+
+/** Whether a point is under a session's step through `deeper` points only (not under a typed branch's term or article) */
+function underStep(g: Graph, pt: GNode): boolean {
+  for (let n: GNode | undefined = pt; n; n = nodeOf(g, n.parent)) {
+    if (n.kind === 'obs5m') return true
+    if (n.edge !== 'deeper') return false
+  }
+  return false
+}
+
+/**
+ * After an answer, in a 5M session (dev switch `obs5m`): a step moves the session there (`g.session`), says where it is
+ * (`sessionMark`), keeps its frame's links on its point, and pauses a light path (`pathPaused`: kept, not offered); any other
+ * answer offers the way back to the current step first (`sessionBack`), which is also where the graph's way back to a step of the
+ * session went (that one is left out), and no other button to that step.
+ */
+async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<void> {
+  const g = c.graph
+  if (!g || !devOn('obs5m')) return
+  const reply = done.reply
+  if (done.answered === 'obs5m' && x.five) {
+    const fx = await fixture5()
+    const { s, links } = x.five
+    g.session = s
+    // usage (counts only, no text): a step, the way back to one, the review
+    count(x.at ? '5m.back' : '5m.step')
+    if (stepAt(fx, s)?.kind === 'review') count('5m.review')
+    g.pathPaused = !!g.path
+    delete g.pathNext
+    const n = nodeOf(g, g.cur)
+    if (n?.kind === 'obs5m' && n.sheet.concept === stepId(s)) {
+      if (links.length) n.links = [...new Set(links)].slice(0, 40)
+      else delete n.links
+    }
+    reply.sessionMark = stepPlace(fx, s, x.ui)
+    return
+  }
+  const s = g.session
+  if (!s) return
+  delete g.pathNext
+  const fx = await fixture5()
+  // a frame's help ("OBS 1:5 · notes"): says what it shows, as the Map and the way back do (placeLabel)
+  const pt = nodeOf(g, g.cur)
+  if (pt?.kind === 'passage' && parseObsRef(pt.sheet.ref)?.f && pt.sheet.what.length === 1) reply.sessionMark = placeLabel(pt, x.ui)
+  // usage (counts only): a help opened from the step
+  if (pt && pt.edge === 'deeper' && !x.at && underStep(g, pt)) {
+    const h = helpKind5(pt)
+    if (h) count(`5m.help.${h}`)
+  }
+  const st = sessionNode(g)
+  const to = sheetOf(fx, s, s.lang)
+  if (reply.back && nodeOf(g, reply.back.back)?.kind === 'obs5m') delete reply.back
+  reply.follow = (reply.follow ?? []).filter((f) => !(f.sheet?.intent === 'obs5m' && f.sheet.concept === to.concept))
+  reply.sessionBack = { label: `${x.ui === 'ar' ? '→' : '←'} ${W5(x.ui).back.replace('{place}', stepPlace(fx, s, x.ui))}`, sheet: to, toSession: true, ...(st ? { back: st.id } : {}) }
+}
+
 /** The answer to what a question asks for: the first route that gives one (the conversation keeps the last passage and search results). */
 export async function answer(c: ConvState, made: Made, t0: number): Promise<Answered> {
   setUiLang(made.ui)
   // the words the question asks about put their notes first (focus.ts); none for a button press (no question)
   setQuestion(made.q, made.sheet)
   // a button (no question: a ready sheet, no reading step) moves the conversation too: "and the notes?" after it is about it
-  if (made.q === undefined) keepState(c, slotsOfSheet(made.sheet))
+  if (made.q === undefined) keepState(c, slotsOfSheet(made.sheet), { sheet: made.sheet, ui: made.ui })
   const x: Ctx = { ...made, c, t0, others: [], searched: '' }
   for (const route of ROUTES) {
     if (!route.when(x)) continue
@@ -2163,6 +3138,8 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     if (!done) continue
     // every answer offers next steps: each once, Browse where the book is; and when an answer has none, ways forward
     const reply = done.reply
+    // ("Dímelo en francés" with no French helps here: said first)
+    if (made.langNote) reply.intro = [made.langNote, reply.intro].filter(Boolean).join(' ')
     reply.follow = await tidy(reply.follow ?? [], x.sheet.lang).catch(() => reply.follow ?? [])
     // (a language that is not on the phone: "Add languages" first, then these)
     if (!reply.follow.length) {
@@ -2173,8 +3150,13 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     }
     // the answer's point in the conversation's graph, and under a point that left the passage, the way back to it
     const node = await graphStep(c, made, done, x, route.name).catch(() => null)
+    // in a 5M session (dev switch): where its step is, or the way back to it; a light path waits meanwhile (kept, not offered)
+    await sessionStep(c, made, done, x).catch(() => {})
     // on a light path: where it is and its next step first; off it, the way back to it
-    await pathStep(c, made, done, x).catch(() => {})
+    if (!(devOn('obs5m') && c.graph?.session)) await pathStep(c, made, done, x).catch(() => {})
+    // on a learning path (learn.ts): where it is, the next article and a verse to try; off it, the way back to it
+    // (not in a 5M session either: its next step and its way back come first)
+    if (!(devOn('obs5m') && c.graph?.session)) await learnStep(c, done, x.sheet, x.ui).catch(() => {})
     return { ...done, route: route.name, sheet: x.r ? x.sheet : null, node }
   }
   throw new Error('no route answered') // `reply` always answers

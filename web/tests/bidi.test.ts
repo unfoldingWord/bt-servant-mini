@@ -3,6 +3,7 @@
 import { describe, expect, test } from 'bun:test'
 import { bidiLabel, dirOf, FSI, hasRtl, isolate, PDI, rtlLang, strip, textDir } from '../src/bidi'
 import { followups, nextWords } from '../src/converse'
+import { buildReport } from '../src/feedback'
 import { md, mdDir } from '../src/md'
 import { directRef, env } from '../src/pipeline'
 import { shareText } from '../src/share'
@@ -114,6 +115,11 @@ describe('strip: what is typed, pasted or copied back', () => {
     const pasted = C(0x200f) + 'يونان 1:3' + C(0x200e) + ' ' + C(0x202b) + 'ملاحظات' + C(0x202c) + C(0x061c)
     expect(strip(pasted)).toBe('يونان 1:3 ملاحظات')
     expect(directRef(strip(pasted))).toBe(true)
+  })
+  test('a report\'s comment is sent without marks (feedback.ts buildReport)', () => {
+    const r = buildReport([{ who: 'bot', text: 'x' }], ['wrong'], ` ${C(0x200f)}كنت أتوقع ${I('Ruth 1:16')}${C(0x202b)} هنا${C(0x202c)} `, false)
+    expect(r.comment).toBe('كنت أتوقع Ruth 1:16 هنا')
+    expect(MARKS.test(r.comment) || r.comment.includes(C(0x061c))).toBe(false)
   })
 })
 

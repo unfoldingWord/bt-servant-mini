@@ -11,6 +11,8 @@
 // The worker's contract is unchanged: one `helps` string, the history and the sources. No DOM here: tested under bun.
 import type { GNode, Graph } from './graph'
 import { focusWords, hits, unfold } from './focus'
+import type { Fixture } from './dev'
+import { cardOf, type Session, stepPlace } from './obs5m'
 
 /** The online service cuts the helps it is sent to this size (MAX_CONTEXT in worker/wrangler.toml). */
 export const MAX_CONTEXT = 9500
@@ -233,6 +235,11 @@ export type Input = {
   lang: string
   read?: ReadArticle
   max?: number
+  /**
+   * A 5M session (dev switch `obs5m`; main.ts gives these only with it on): the story's tables and the question ids whose answers
+   * were revealed on the current card. With `graph.session` the context starts with the step. Never read from a message's card.
+   */
+  fx?: Fixture; ui?: string; revealed?: Set<string>
 }
 export type Built = { helps: string; history: HTurn[]; sources: { id: string; title?: string }[]
   /** what went in, for the tests and the measure */
@@ -279,6 +286,27 @@ function excerpt(md: string, stems: string[], room: number): string {
   const head = paras.find((p) => /^#{1,3} /.test(p))
   // (its headings as plain lines: under the backlink's own heading they would read as new sections)
   return clipTo([...(head && !keep.includes(head) ? [head] : []), ...(keep.length ? keep : paras.slice(0, 2))].map((p) => p.replace(/^#{1,6} /gm, '')).join('\n\n'), room)
+}
+
+/** What the model is told about a 5M session's step. */
+export const SESSION_RULES = "Facilitate; never quiz; quote manual text only from this context; never write the team's draft."
+const SESSION = 2800
+/**
+ * A 5M session's current step for the model: its part and blocks, the frame's text, the questions on the card and the team's
+ * key terms, the rules line, and the manual's answer only of a question revealed on that card. Made from the tables (`fx`),
+ * never from a card kept in the conversation (which carries every answer).
+ */
+export function sessionContext(fx: Fixture, s: Session, revealed: Set<string>, ui: string): string {
+  const c = cardOf(fx, s, null, ui)
+  if (!c) return ''
+  const out = [`# Study session (5M): ${stepPlace(fx, s, ui)}`, SESSION_RULES, `Part: ${c.title}`]
+  if (c.blocks.length) out.push(c.blocks.join('\n\n'))
+  if (c.frame) out.push(`Frame (${c.frame.ref}): ${c.frame.text}`)
+  if (c.questions.length) out.push(`Questions on this card:\n${c.questions.map((q) => `- ${q.q}`).join('\n')}`)
+  const shown = fx.questions.filter((q) => revealed.has(q.id) && q.a)
+  if (shown.length) out.push(`Answers the team revealed on this card:\n${shown.map((q) => `- ${q.q}\n  ${q.a}`).join('\n')}`)
+  if (c.terms.length) out.push(`Key terms to translate:\n${c.terms.map((x) => `- ${x.term}: ${x.text}`).join('\n')}`)
+  return clipTo(out.join('\n\n'), SESSION)
 }
 
 /**
@@ -352,7 +380,9 @@ export async function buildContext(i: Input): Promise<Built> {
   // The room, in order: the phone's answer first (as before 2b: up to 5000 characters, and a share for the passage's context),
   // then the path, the linked articles and the earlier points, each whole or cut at its own end with "…"; what is left goes
   // to the rest of the passage's context. Never more than `max`.
-  let left = max
+  // (a 5M session: its step comes first and keeps its room)
+  const session = graph?.session && i.fx ? sessionContext(i.fx, graph.session, i.revealed ?? new Set(), i.ui ?? 'en') : ''
+  let left = max - (session ? session.length + 2 : 0)
   const take = (t: string, room: number): string => {
     const x = clipTo(t, Math.min(t.length, room))
     // a cut that leaves almost nothing is left out
@@ -396,7 +426,7 @@ export async function buildContext(i: Input): Promise<Built> {
   }
   parts.current = current.length
   parts.path = pathIn.length
-  const helps = [current, ...extra, ...(pathIn ? [pathIn] : [])].join('\n\n')
+  const helps = [...(session ? [session] : []), current, ...extra, ...(pathIn ? [pathIn] : [])].filter((x) => x !== '').join('\n\n')
   return { helps, history, sources, parts }
 }
 

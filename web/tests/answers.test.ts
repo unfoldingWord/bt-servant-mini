@@ -12,6 +12,13 @@ import { type Case, check, loadCases, offersNext, type Outcome, runCase } from '
 const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall', 'guide']
 // ANSWERS=fast (build.py's default): only the cases marked fast, a minute at most; the scores are compared on a full run
 const FAST = process.env.ANSWERS === 'fast'
+/**
+ * OBS=none (harness.ts fullPhone): the packs without Open Bible Stories, as on disk. The cases that need them are known-open
+ * then, and their sets may be that many below their baseline (right answers and empty ones); no baseline is written.
+ */
+const NO_OBS = process.env.OBS === 'none'
+const NEEDS_OBS: Record<string, string> = { 'obs-3-5-text': 'OBS=none: no Open Bible Stories on this phone', 'obs-notes-3-4': 'OBS=none: no Open Bible Stories on this phone' }
+const obsKnown: Record<string, number> = {}
 const BASELINE = join(import.meta.dir, 'baseline.json')
 type Score = { pass: number; total: number; known: number; must?: number; empty?: number; oos?: number }
 const baseline: Record<string, Score> = JSON.parse(readFileSync(BASELINE, 'utf-8')).sets
@@ -55,6 +62,10 @@ for (const f of FILES)
     for (const k of loadCases(`${f}.jsonl`) as (Case & { must?: string[][]; fast?: boolean })[]) {
       sizes[k.set] = (sizes[k.set] ?? 0) + 1
       if (FAST && !k.fast) continue
+      if (NO_OBS && NEEDS_OBS[k.id] && !k.known) {
+        k.known = NEEDS_OBS[k.id]
+        obsKnown[k.set] = (obsKnown[k.set] ?? 0) + 1
+      }
       test(k.known ? `${k.id} (known)` : k.id, async () => {
         const t = performance.now()
         const o = await runCase(k).catch((e): Outcome => ({ route: 'failed', step: 'error', ref: null, concept: null, text: String(e), found: 0, useful: false, reply: null }))
@@ -99,7 +110,8 @@ test('every set keeps its baseline score', () => {
   if (knownFails.length) console.log(`\nKnown-open (${knownFails.length}):\n${knownFails.join('\n')}`)
   if (nowPassing.length) console.warn(`\nKnown cases that pass now (drop their "known" in tests/make_cases.py):\n${nowPassing.join('\n')}`)
   if (FAST) return
-  if (process.env.UPDATE_BASELINE && Object.entries(sizes).every(([set, n]) => scores[set]?.total === n)) {
+  if (NO_OBS && process.env.UPDATE_BASELINE) console.warn('OBS=none: the baseline is not written (it is the score with Open Bible Stories)')
+  if (process.env.UPDATE_BASELINE && !NO_OBS && Object.entries(sizes).every(([set, n]) => scores[set]?.total === n)) {
     // a baseline only goes up: a lower score keeps the old one, unless ALLOW_LOWER=1 says the drop is meant
     const next: Record<string, Score> = { ...baseline }
     for (const [set, s] of Object.entries(scores)) {
@@ -116,7 +128,8 @@ test('every set keeps its baseline score', () => {
   // only whole sets count (a run filtered with -t has part of them)
   for (const [set, s] of Object.entries(scores)) {
     if (s.total !== sizes[set]) continue
-    expect(s.pass, `${set} fell below its baseline`).toBeGreaterThanOrEqual(baseline[set]?.pass ?? 0)
-    if (baseline[set]?.empty !== undefined) expect(s.empty ?? 0, `${set} has more empty answers than its baseline`).toBeLessThanOrEqual(baseline[set]!.empty!)
+    const off = NO_OBS ? obsKnown[set] ?? 0 : 0
+    expect(s.pass, `${set} fell below its baseline`).toBeGreaterThanOrEqual((baseline[set]?.pass ?? 0) - off)
+    if (baseline[set]?.empty !== undefined) expect(s.empty ?? 0, `${set} has more empty answers than its baseline`).toBeLessThanOrEqual(baseline[set]!.empty! + off)
   }
 })

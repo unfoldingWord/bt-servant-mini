@@ -1,5 +1,5 @@
 // The app is one WKWebView with the same page as the Android app (web/src, built by web/build.py into www). Links to other
-// sites open in Safari; the connection (for online AI and the connection notice) comes from NWPathMonitor.
+// sites open in Safari; the connection (for online AI, the connection notice and whether it is metered) comes from NWPathMonitor.
 import Network
 import UIKit
 import WebKit
@@ -8,6 +8,8 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
     private var web: WKWebView!
     private let monitor = NWPathMonitor()
     private var online = true
+    /// mobile data, a personal hotspot or Low Data Mode: the daily pack update waits (metered until the monitor's first look)
+    private var metered = true
     private var selfTestStarted = false
     private static let background = UIColor(red: 0x26 / 255.0, green: 0x26 / 255.0, blue: 0x24 / 255.0, alpha: 1)
 
@@ -19,7 +21,7 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         config.websiteDataStore = .default()
         let content = WKUserContentController()
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0") + "-mini-ios"
-        content.addUserScript(WKUserScript(source: Bridge.script(version: version, status: Engine.shared.status, online: online),
+        content.addUserScript(WKUserScript(source: Bridge.script(version: version, status: Engine.shared.status, online: online, metered: metered),
                                            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.add(WeakHandler(self), name: Bridge.handler)
         config.userContentController = content
@@ -50,6 +52,11 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         monitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
                 guard let self else { return }
+                let costly = path.isExpensive || path.isConstrained
+                if costly != self.metered {
+                    self.metered = costly
+                    self.set("metered", String(costly))
+                }
                 let up = path.status == .satisfied
                 guard up != self.online else { return }
                 self.online = up
@@ -122,6 +129,7 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         // what changed while the page was loading (the model may have finished starting)
         set("status", Bridge.js(Engine.shared.status))
         set("online", String(online))
+        set("metered", String(metered))
         if SelfTest.enabled && !selfTestStarted {
             selfTestStarted = true
             webView.evaluateJavaScript(SelfTest.script)

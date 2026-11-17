@@ -358,6 +358,8 @@ export type Offer = {
   lang: string; books: string[]; bytes: number; segments: string[]; sizes: Record<string, number>
   /** a download of it started and did not end: what arrived stays, the next one goes on from there */
   partial?: boolean
+  /** whether Open Bible Stories come with it (the catalog lists them, OBS_MAX or less) */
+  obs?: boolean
 }
 /** A signal that aborts after `ms` (AbortSignal.timeout where the WebView has it). */
 function timeout(ms: number): AbortSignal {
@@ -373,6 +375,28 @@ export const HEADER_MS = 30000
 /** How long a download may go without a single new byte before the next server is asked (slow is fine; stopped is not). */
 export const STALL_MS = 60000
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+/**
+ * The map units a language installs with its books: the client's default units as they were up to bt-synergy c68e3622. Since
+ * #86 the client's defaults also bring `obs` (Open Bible Stories); Mini names its units itself (`defaults: false`).
+ */
+export const MAP_UNITS = ['xmap', 'map', 'xtopics', 'topics']
+/**
+ * Open Bible Stories (Abel, Nov 15–16): with the language when the unit is OBS_MAX or less (the obs units are 60–288 KB, Nov
+ * 2026), never downloaded by itself over mobile data, and in the full APK. A language that does not list it installs as before
+ * (the client skips a unit its catalog does not have). A phone that installed a language before gets it from the daily update
+ * (`updateLang`, not on a metered connection), or on a tap under an OBS answer (`addUnit`).
+ */
+export const OBS_UNIT = 'obs'
+/** The largest obs unit that comes with its language (Abel: 3 MB); a larger one is left out of the download. */
+export const OBS_MAX = 3 * 1024 * 1024
+/**
+ * What `offerOf` plans and `downloadLang` installs: the map units, the books, the shared articles, in the order the client's
+ * defaults gave them (defaults, then books, then units); Open Bible Stories with the defaults, where the client puts them,
+ * unless `obs` is false (its unit is over OBS_MAX).
+ */
+export function installWant(books: readonly string[], obs = true): { defaults: false; units: string[] } {
+  return { defaults: false, units: [...MAP_UNITS, ...(obs ? [OBS_UNIT] : []), ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
+}
 const commonCats = new Map<string, Promise<VerifiedCatalog | null>>()
 /**
  * Reads the language's catalog (a few KB) and the common catalog it names, and plans the same install `downloadLang` runs, so the
@@ -402,10 +426,14 @@ export async function offerOf(lang: string, source: PackSource = serverSource())
     }
     const listed = new Set(cat.catalog.units.map((u) => u.id))
     const books = CANON.filter((b) => listed.has(`book:${b}`))
-    const plan = planInstall(catalogs, emptyState(), { books, defaults: true, units: SHARED_UNITS }, new Set())
+    // Open Bible Stories with the language only when they are OBS_MAX or less (what the plan says they weigh)
+    let plan = planInstall(catalogs, emptyState(), installWant(books), new Set())
+    const obsStep = plan.steps.find((st) => st.key.endsWith(`/${OBS_UNIT}`))
+    const obs = !!obsStep && obsStep.segments.reduce((n, x) => n + x.size, 0) <= OBS_MAX
+    if (obsStep && !obs) plan = planInstall(catalogs, emptyState(), installWant(books, false), new Set())
     const sizes: Record<string, number> = {}
     for (const st of plan.steps) for (const x of st.segments) sizes[x.id] = x.size
-    return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, ...(partialLangs().includes(lang) ? { partial: true } : {}) }
+    return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, obs, ...(partialLangs().includes(lang) ? { partial: true } : {}) }
   } catch {
     return null
   }
@@ -477,7 +505,7 @@ export async function downloadLang(
   try {
     // one request at a time from the client (it asks 4 at once by default): the prefetch above already keeps `ahead` in flight,
     // and more at once can trip the fallback's timeouts on a slow link
-    const report = await serial(() => client.install(lang, { books: offer.books, defaults: true, units: SHARED_UNITS }, {
+    const report = await serial(() => client.install(lang, installWant(offer.books, offer.obs !== false), {
       concurrency: 1,
       ...(o.signal ? { signal: o.signal } : {}),
       onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
@@ -496,17 +524,58 @@ export async function downloadLang(
 export function missingUnits(r: { listed(u: string): boolean; installed(u: string): boolean }, units: readonly string[] = SHARED_UNITS): string[] {
   return units.filter((u) => r.listed(u) && !r.installed(u))
 }
+/**
+ * Whether the connection costs the person (mobile data, a metered hotspot) or they asked to save data: true or false, null when
+ * the app cannot tell (a browser without the Network Information API). From the Android and iOS apps (Android.metered(); the
+ * iOS app's says metered until its first look at the connection).
+ */
+export function meteredNow(): boolean | null {
+  const g = globalThis as any
+  try {
+    if (g.navigator?.connection?.saveData) return true
+    if (typeof g.Android?.metered === 'function') return !!g.Android.metered()
+  } catch {}
+  const type = g.navigator?.connection?.type
+  if (type === 'cellular') return true
+  return typeof type === 'string' && type !== 'unknown' ? false : null
+}
+/** The common units the daily update brings to their newer revision (the section map is in xtopics), and the most it fetches for them. */
+const COMMON_UPDATES = ['xtopics', 'xmap']
+export const COMMON_UPDATE_MAX = 1024 * 1024
 type Updater = {
-  refresh(lang: string, o?: { signal?: AbortSignal }): Promise<unknown>
-  open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean }>
+  refresh(lang: string, o?: { signal?: AbortSignal }): Promise<{ updates?: { key: string; from: number; to: number; bytes: number }[] } | void>
+  open(lang: string): Promise<{ listed(u: string): boolean; installed(u: string): boolean; size(u: string): number }>
   install(lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal; concurrency?: number }): Promise<unknown>
 }
-/** Brings one language's shared units up to SHARED_UNITS: reads its catalog again, installs only what is missing. The units installed. */
-export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal): Promise<string[]> {
-  await client.refresh(lang, signal ? { signal } : {})
-  const missing = missingUnits(await client.open(lang), units)
-  if (missing.length) await client.install(lang, { units: missing, defaults: false }, { concurrency: 1, ...(signal ? { signal } : {}) })
-  return missing
+/**
+ * Brings one language up to date: reads its catalog again and installs the shared units (SHARED_UNITS) it lacks; Open Bible
+ * Stories when the catalog lists them and the phone lacks them (OBS_MAX or less, not on a metered connection); then, when the
+ * refresh lists a newer common `xtopics` or `xmap` (a few hundred KB: the section map came that way), those too, up to
+ * COMMON_UPDATE_MAX together, and never on a metered connection (`metered`: true; null, unknown, updates as if not). The units
+ * installed.
+ */
+export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal,
+  metered: boolean | null = meteredNow()): Promise<string[]> {
+  const report = await client.refresh(lang, signal ? { signal } : {})
+  const r = await client.open(lang)
+  const missing = missingUnits(r, units)
+  const opts = { concurrency: 1, ...(signal ? { signal } : {}) }
+  if (missing.length) await client.install(lang, { units: missing, defaults: false }, opts)
+  // Open Bible Stories for a language installed before they came with it: OBS_MAX or less, never on a metered connection
+  const obs = metered !== true && r.listed(OBS_UNIT) && !r.installed(OBS_UNIT) && typeof r.size === 'function' && r.size(OBS_UNIT) <= OBS_MAX ? [OBS_UNIT] : []
+  if (obs.length) await client.install(lang, { units: obs, defaults: false }, opts)
+  const common: string[] = []
+  let bytes = 0
+  for (const id of metered === true ? [] : COMMON_UPDATES) {
+    // (a real upgrade only: a language built against an older common lists the installed newer one as `from: 3, to: 2`)
+    const u = report?.updates?.find((x) => x.key.slice(x.key.indexOf('/') + 1) === id && x.to > x.from)
+    if (u && bytes + u.bytes <= COMMON_UPDATE_MAX) {
+      common.push(u.key)
+      bytes += u.bytes
+    }
+  }
+  if (common.length) await client.install(lang, { units: common, defaults: false }, opts)
+  return [...missing, ...obs, ...common]
 }
 const CHECKED = 'btsm.packs.checked'
 /**
@@ -605,6 +674,24 @@ export async function exportPack(lang: string): Promise<Uint8Array> {
   const books = CANON.filter((b) => r.installed(`book:${b}`))
   // only what this language has: a language installed before a unit was added to SHARED_UNITS lacks it, and asking for it fails
   return client.exportTransfer({ lang, mode: 'full', books, units: SHARED_UNITS.filter((u) => r.installed(u)) })
+}
+
+/**
+ * One unit the person asked for with a tap (Open Bible Stories under an answer that says they are missing), into a language
+ * this phone downloaded: the catalog read again, the unit and what it needs installed, verified as a download is. A shipped
+ * language cannot take it (its store is the app's): it comes with the next app.
+ */
+export async function addUnit(lang: string, unit: string, signal?: AbortSignal): Promise<void> {
+  if ((await origin(lang)) !== 'added') throw new Error(`${lang} came with the app: ${unit} comes with its next version`)
+  try {
+    await serial(async () => {
+      const client = await addedClient()
+      await client.refresh(lang, signal ? { signal } : {})
+      await client.install(lang, { units: [unit], defaults: false }, { concurrency: 1, ...(signal ? { signal } : {}) })
+    })
+  } finally {
+    changed()
+  }
 }
 
 /** Removes an added language (the shipped ones stay). */

@@ -62,6 +62,8 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
   return existsSync(f) ? new Response(readFileSync(f)) : new Response(null, { status: 404 })
 }) as typeof fetch
 
+/** The languages installed now (the last installPacks). */
+export const installedPacks = (): readonly string[] => langs
 /** Makes exactly these languages installed (as if shipped in the app) and drops every cache that holds pack readers. */
 export async function installPacks(l: string[]) {
   const missing = l.filter((x) => !ALL_PACKS.includes(x))

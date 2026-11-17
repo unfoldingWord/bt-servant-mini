@@ -29,12 +29,48 @@ function normBook(s: string): string {
   s = s.replace(/\s+/g, ' ').trim().replace(/^(kitab |injil |le livre de |livre de |l'evangile selon |l'evangile de |evangile selon |evangile de |سفر |انجيل |رساله )/, '')
   return s.replace(/\s+/g, ' ').trim()
 }
+const exactMemo = new Map<string, string | null>()
 /** A book named exactly (any language's table), without guessing from a prefix or a misspelling: for scanning a sentence word by word. */
 export function bookExact(name: string): string | null {
+  if (exactMemo.has(name)) return exactMemo.get(name)!
+  if (exactMemo.size > 4000) exactMemo.clear()
   const k = normBook(name)
-  for (const t of Object.values(books as Record<string, Record<string, string>>)) if (t[k]) return t[k]!
-  return null
+  let c: string | null = null
+  for (const t of Object.values(books as Record<string, Record<string, string>>)) if (t[k]) { c = t[k]!; break }
+  exactMemo.set(name, c)
+  return c
 }
+const NAME_WORDS = new Map<string, Set<string>>()
+/** Every word of every name a book has in any language's table, folded ("cantar", "de", "los", "cantares", "song", "kidung"…). */
+export function bookNameWords(code: string): Set<string> {
+  let s = NAME_WORDS.get(code)
+  if (!s) {
+    s = new Set([code])
+    for (const t of Object.values(books as Record<string, Record<string, string>>))
+      for (const [n, c] of Object.entries(t)) if (c === code) for (const w of n.split(/\s+/)) if (w) s.add(fold(w))
+    NAME_WORDS.set(code, s)
+  }
+  return s
+}
+let LAST_WORDS: Set<string> | undefined
+/**
+ * Whether a word is the last of a book name of several words ("काम" of "प्रेरितों के काम", "الأولى", "rasul", "cantiques"), so
+ * the words before it may belong to the name. A number and one word ("1 juan") is left out: the reading takes that digit anyway.
+ */
+export function endsLongName(word: string): boolean {
+  LAST_WORDS ??= new Set(
+    Object.values(books as Record<string, Record<string, string>>).flatMap((t) => Object.keys(t)).map(normBook)
+      .filter((n) => n.includes(' ') && !/^[1-3] \S+$/.test(n)).map((n) => n.slice(n.lastIndexOf(' ') + 1)),
+  )
+  let v = lastMemo.get(word)
+  if (v === undefined) {
+    if (lastMemo.size > 4000) lastMemo.clear()
+    v = LAST_WORDS.has(normBook(word))
+    lastMemo.set(word, v)
+  }
+  return v
+}
+const lastMemo = new Map<string, boolean>()
 let CODES: Set<string> | undefined
 const codeMemo = new Map<string, string | null>()
 /** A book's code from its name in any language: exact, else a prefix, else one or two letters off ("Mathew"). Remembered (pure). */
@@ -180,7 +216,7 @@ for (const [id, byLang] of Object.entries(glossary as Record<string, Record<stri
   }
 
 /** Article ids whose name is the term, in the pack of `lang` and then English (tW first, then tA: all four manuals). */
-async function idsOf(term: string | null, packLangs: string[]): Promise<string[] | null> {
+export async function idsOf(term: string | null, packLangs: string[]): Promise<string[] | null> {
   if (!term) return null
   const f = fold(term).replace(/[«»"“”'?¿!¡.]/g, '').replace(/\s+/g, ' ').trim()
   const fig = (figs as Record<string, string>)[f]
@@ -188,21 +224,39 @@ async function idsOf(term: string | null, packLangs: string[]): Promise<string[]
   const g = GLOSS.get(f)
   if (g) return g
   for (const pl of packLangs) {
-    let m: any
-    try {
-      m = await (await openLang(pl)).maps()
-    } catch {
-      continue
-    }
-    const names: Record<string, string[]> = m.map?.core?.names ?? {}
-    const exact: string[] = []
-    for (const [id, ns] of Object.entries(names)) {
-      if (!(id.startsWith('tw:') || id.startsWith('ta:'))) continue
-      if (ns.some((n) => fold(String(n).replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim() === f)) exact.push(id)
-    }
-    if (exact.length) return exact.sort((a, b) => (a.startsWith('tw:') ? 0 : 1) - (b.startsWith('tw:') ? 0 : 1))
+    const exact = (await nameIndex(pl).catch(() => null))?.get(f)
+    if (exact?.length) return [...exact]
   }
   return null
+}
+/**
+ * A pack's Translation Words and Academy articles by each of their names, folded ("paz" → tw:kt/peace), Words first: built once
+ * per pack reader (a pack added, updated or removed opens a new reader, so a new index), then a name is one map lookup.
+ */
+const NAME_INDEX = new WeakMap<object, Promise<Map<string, string[]>>>()
+async function nameIndex(pl: string): Promise<Map<string, string[]>> {
+  const r = await openLang(pl)
+  let p = NAME_INDEX.get(r)
+  if (!p) {
+    p = (async () => {
+      const m: any = await r.maps()
+      const out = new Map<string, string[]>()
+      for (const [id, ns] of Object.entries<string[]>(m.map?.core?.names ?? {})) {
+        if (!(id.startsWith('tw:') || id.startsWith('ta:'))) continue
+        for (const n of ns) {
+          const k = fold(String(n).replace(/\(.*?\)/g, ' ')).replace(/\s+/g, ' ').trim()
+          const l = out.get(k)
+          if (!l) out.set(k, [id])
+          else if (!l.includes(id)) l.push(id)
+        }
+      }
+      for (const l of out.values()) l.sort((a, b) => (a.startsWith('tw:') ? 0 : 1) - (b.startsWith('tw:') ? 0 : 1))
+      return out
+    })()
+    NAME_INDEX.set(r, p)
+    p.catch(() => { if (NAME_INDEX.get(r) === p) NAME_INDEX.delete(r) })
+  }
+  return p
 }
 
 const LANG_NAMES: Record<string, string> = {
@@ -222,7 +276,10 @@ export async function buildSheet(qid: string, d: Slots, prefer: string | null = 
   let lang = 'en'
   for (const c of [prefer, UI_PACK[ui], 'en']) if (c && (await hasLang(c))) { lang = c; break }
   if (!(await hasLang(lang))) lang = (await installedLangs())[0] ?? 'en'
-  const packLangs = lang === 'en' ? ['en'] : [lang, 'en']
+  // a term is named in the question's language even when the helps come from another pack ("¿Qué es la paz?" with the
+  // helps in English: «paz» is tw:kt/peace)
+  const own = UI_PACK[ui] && UI_PACK[ui] !== lang && (await hasLang(UI_PACK[ui]!)) ? [UI_PACK[ui]!] : []
+  const packLangs = [...new Set([lang, ...own, 'en'])]
   const sheet: Sheet = {
     id: qid, intent: d.intent ?? 'unknown', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang,
   }

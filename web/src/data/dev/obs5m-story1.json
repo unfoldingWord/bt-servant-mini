@@ -1,0 +1,1280 @@
+{
+ "about": "OBS 5M, phase 0 draft: story 1 of en_obs-tf v4 in the drafted tables of the obs segment (logical rows; the segment stores them as columns). Not published. Frame text, title and refs come from the obs unit (en_obs v9) and are shown under \"obs\" only so a mockup can run without a pack.",
+ "resources": [
+  {
+   "key": "unfoldingWord/en/obs",
+   "release": "v9",
+   "role": "frames, title, refs, images"
+  },
+  {
+   "key": "unfoldingWord/en/obs-tf",
+   "release": "v4",
+   "license": "CC-BY-SA-4.0",
+   "rights": "unfoldingWord",
+   "attribution": "unfoldingWord and Formation Stories"
+  }
+ ],
+ "codes": {
+  "parts": [
+   "intro",
+   "frames",
+   "community",
+   "m1",
+   "m2",
+   "drafting",
+   "m3",
+   "checking",
+   "m4",
+   "m5",
+   "conclusion"
+  ],
+  "lists": [
+   "observation",
+   "terms",
+   "discourse",
+   "theology",
+   "journal"
+  ]
+ },
+ "coverage": {
+  "lang": "en",
+  "stories": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47,
+   48,
+   49,
+   50
+  ],
+  "of": 50
+ },
+ "obs": {
+  "n": 1,
+  "title": "The Creation",
+  "reference": "A Bible story from: Genesis 1-2",
+  "frames": [
+   {
+    "id": 101,
+    "ref": "1:1",
+    "text": "This is how God made everything in the beginning. He created the universe and everything in it in six days. After God created the earth it was dark and empty because he had not yet formed anything in it. But God’s Spirit was there over the water.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-01.jpg"
+   },
+   {
+    "id": 102,
+    "ref": "1:2",
+    "text": "Then God said, “Let there be light!” And there was light. God saw that the light was good and called it “day.” He separated it from the darkness, which he called “night.” God created the light on the first day of creation.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-02.jpg"
+   },
+   {
+    "id": 103,
+    "ref": "1:3",
+    "text": "On the second day of creation, God said, “Let there be an expanse above the waters.” And there was an expanse. God called this expanse “sky.”",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-03.jpg"
+   },
+   {
+    "id": 104,
+    "ref": "1:4",
+    "text": "On the third day, God said, “Let the water come together in one place and the dry land appear.” He called the dry land “earth,” and he called the water “seas.” God saw that what he had created was good.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-04.jpg"
+   },
+   {
+    "id": 105,
+    "ref": "1:5",
+    "text": "Then God said, “Let the earth produce all kinds of trees and plants.” And that is what happened. God saw that what he had created was good.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-05.jpg"
+   },
+   {
+    "id": 106,
+    "ref": "1:6",
+    "text": "On the fourth day of creation, God said, “Let there be lights in the sky.” And the sun, the moon, and the stars appeared. God made them to give light to the earth and to mark day and night, seasons and years. God saw that what he had created was good.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-06.jpg"
+   },
+   {
+    "id": 107,
+    "ref": "1:7",
+    "text": "On the fifth day, God said, “Let living things fill the waters, and birds fly in the sky.” This is how he made everything that swims in the water and all the birds. God saw that it was good, and he blessed them.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-07.jpg"
+   },
+   {
+    "id": 108,
+    "ref": "1:8",
+    "text": "On the sixth day of creation, God said, “Let there be all kinds of land animals!” And it happened just like God said. Some were farm animals, some crawled on the ground, and some were wild. And God saw that it was good.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-08.jpg"
+   },
+   {
+    "id": 109,
+    "ref": "1:9",
+    "text": "Then God said, “Let us make human beings in our image to be like us. They will rule over the earth and all the animals.”",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-09.jpg"
+   },
+   {
+    "id": 110,
+    "ref": "1:10",
+    "text": "So God took some soil, formed it into a man, and breathed life into him. This man’s name was Adam. God planted a large garden where Adam could live, and put him there to care for it.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-10.jpg"
+   },
+   {
+    "id": 111,
+    "ref": "1:11",
+    "text": "In the middle of the garden, God planted two special trees—the tree of life and the tree of the knowledge of good and evil. God told Adam that he could eat from any tree in the garden except from the tree of the knowledge of good and evil. If he ate from this tree, he would die.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-11.jpg"
+   },
+   {
+    "id": 112,
+    "ref": "1:12",
+    "text": "Then God said, “It is not good for man to be alone.” But none of the animals could be Adam’s helper.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-12.jpg"
+   },
+   {
+    "id": 113,
+    "ref": "1:13",
+    "text": "So God made Adam fall into a deep sleep. Then God took one of Adam’s ribs and made it into a woman and brought her to him.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-13.jpg"
+   },
+   {
+    "id": 114,
+    "ref": "1:14",
+    "text": "When Adam saw her, he said, “At last! This one is like me! Let her be called ‘Woman,’ for she was made from Man.” This is why a man leaves his father and mother and becomes one with his wife.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-14.jpg"
+   },
+   {
+    "id": 115,
+    "ref": "1:15",
+    "text": "God made man and woman in his own image. He blessed them and told them, “Have many children and grandchildren and fill the earth!” And God saw that everything he had made was very good, and he was very pleased with all of it. This all happened on the sixth day of creation.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-15.jpg"
+   },
+   {
+    "id": 116,
+    "ref": "1:16",
+    "text": "When the seventh day came, God had finished all the work that he had been doing. He blessed the seventh day and made it holy because on this day he stopped creating things. This is how God created the universe and everything in it.",
+    "image": "https://cdn.door43.org/obs/jpg/360px/obs-en-01-16.jpg"
+   }
+  ]
+ },
+ "tf-parts": [
+  {
+   "story": 1,
+   "part": "intro",
+   "title": "Introduction",
+   "text": "### Key Idea\nThe story of creation teaches us that God is the sovereign creator of all things.\n\n### Creedal Verse\n\"By faith we understand that the universe was created by God's command, so that what is visible was not made out of things that were visible.\" Hebrews 11:3\n\n### Metanarrative Summary\nThe eternal God created all things in six days.\nGod made a good and perfect world.\nHe made humans in his image to fill the earth and rule over creation."
+  },
+  {
+   "story": 1,
+   "part": "frames"
+  },
+  {
+   "story": 1,
+   "part": "community",
+   "shared": "obs-devotionals-unit-3#Community Study: The Practice of Worship—Praising God as a Community"
+  },
+  {
+   "story": 1,
+   "part": "m1",
+   "title": "Biblical Interpretation: Observing the Details of the Story",
+   "text": "After reading the crafted biblical story, answer the following questions to familiarize yourself with the details of the story."
+  },
+  {
+   "story": 1,
+   "part": "m1",
+   "list": "observation",
+   "title": "Observation Questions",
+   "text": "Answer the following observation questions to gain a basic understanding of the story. Read the story as a community and answer these questions as a group."
+  },
+  {
+   "story": 1,
+   "part": "m1",
+   "list": "terms",
+   "title": "Translation Questions",
+   "text": "Use the following translation questions to understand specific details of the passage. Discuss how you might translate these specific elements of the story."
+  },
+  {
+   "story": 1,
+   "part": "m2",
+   "title": "Theological Dialogue: Discussing the Meaning of the Story",
+   "text": "Take time to explore the meaning of this story together as a community. Use the following discussions as a way to grasp what truth the story teaches."
+  },
+  {
+   "story": 1,
+   "part": "m2",
+   "list": "discourse",
+   "title": "Discourse Questions",
+   "text": "Use the following discourse questions to understand the meaning of the story. Pay attention to how the story itself addresses each question or theme."
+  },
+  {
+   "story": 1,
+   "part": "m2",
+   "list": "theology",
+   "title": "Theological Questions",
+   "text": "Answer the following theology questions as a community. Discuss what truths this story teaches."
+  },
+  {
+   "story": 1,
+   "part": "drafting",
+   "shared": "movement_2_drafting"
+  },
+  {
+   "story": 1,
+   "part": "m3",
+   "title": "Personal Reflection: Following the Teaching of the Story",
+   "text": "Take a moment to allow this story to evaluate your own life and to consider how God would have you respond. After this reflection, use the quality checking questions to check your translation draft among the translation team."
+  },
+  {
+   "story": 1,
+   "part": "m3",
+   "list": "journal",
+   "title": "Journal Reflection",
+   "text": "Prayerfully think about the following personal reflection questions. Write/Record your answers and/or discuss them as a group."
+  },
+  {
+   "story": 1,
+   "part": "checking",
+   "shared": "movement_3_checking"
+  },
+  {
+   "story": 1,
+   "part": "m4",
+   "shared": "movement_4"
+  },
+  {
+   "story": 1,
+   "part": "m5",
+   "shared": "movement_5"
+  },
+  {
+   "story": 1,
+   "part": "conclusion",
+   "shared": "conclusion"
+  }
+ ],
+ "tf-questions": [
+  {
+   "id": "1/m1/1",
+   "part": "m1",
+   "list": "observation",
+   "k": 1,
+   "frames": [
+    {
+     "id": 101,
+     "ref": "1:1"
+    }
+   ],
+   "q": "Where did everything in the universe come from?",
+   "a": "God created everything."
+  },
+  {
+   "id": "1/m1/2",
+   "part": "m1",
+   "list": "observation",
+   "k": 2,
+   "frames": [
+    {
+     "id": 101,
+     "ref": "1:1"
+    }
+   ],
+   "q": "How long did it take God to create everything?",
+   "a": "God took six days."
+  },
+  {
+   "id": "1/m1/3",
+   "part": "m1",
+   "list": "observation",
+   "k": 3,
+   "frames": [
+    {
+     "id": 101,
+     "ref": "1:1"
+    }
+   ],
+   "q": "Before God formed his world, what was it like?",
+   "a": "The earth was dark and empty."
+  },
+  {
+   "id": "1/m1/4",
+   "part": "m1",
+   "list": "observation",
+   "k": 4,
+   "frames": [
+    {
+     "id": 101,
+     "ref": "1:1"
+    }
+   ],
+   "q": "Who was over the water?",
+   "a": "God's Spirit was over the water."
+  },
+  {
+   "id": "1/m1/5",
+   "part": "m1",
+   "list": "observation",
+   "k": 5,
+   "frames": [
+    {
+     "id": 102,
+     "ref": "1:2"
+    }
+   ],
+   "q": "What did God create on the first day?",
+   "a": "On the first day, God created light."
+  },
+  {
+   "id": "1/m1/6",
+   "part": "m1",
+   "list": "observation",
+   "k": 6,
+   "frames": [
+    {
+     "id": 102,
+     "ref": "1:2"
+    }
+   ],
+   "q": "How did God create the light?",
+   "a": "God created light by speaking. He said, \"Let there be light.\""
+  },
+  {
+   "id": "1/m1/7",
+   "part": "m1",
+   "list": "observation",
+   "k": 7,
+   "frames": [
+    {
+     "id": 102,
+     "ref": "1:2"
+    }
+   ],
+   "q": "When God separated light and darkness, what did he call them?",
+   "a": "God called the light \"day\" and the darkness \"night.\""
+  },
+  {
+   "id": "1/m1/8",
+   "part": "m1",
+   "list": "observation",
+   "k": 8,
+   "frames": [
+    {
+     "id": 102,
+     "ref": "1:2"
+    }
+   ],
+   "q": "What was God's response to the day and night he created on the first day?",
+   "a": "God said they were good."
+  },
+  {
+   "id": "1/m1/9",
+   "part": "m1",
+   "list": "observation",
+   "k": 9,
+   "frames": [
+    {
+     "id": 103,
+     "ref": "1:3"
+    }
+   ],
+   "q": "What did God create on the second day?",
+   "a": "On the second day, God created the sky."
+  },
+  {
+   "id": "1/m1/10",
+   "part": "m1",
+   "list": "observation",
+   "k": 10,
+   "frames": [
+    {
+     "id": 104,
+     "ref": "1:4"
+    }
+   ],
+   "q": "What did God create on the third day?",
+   "a": "On the third day, God created dry land."
+  },
+  {
+   "id": "1/m1/11",
+   "part": "m1",
+   "list": "observation",
+   "k": 11,
+   "frames": [
+    {
+     "id": 104,
+     "ref": "1:4"
+    }
+   ],
+   "q": "What names did God give to the dry land and the gathered waters?",
+   "a": "God named the dry land \"earth\" and the gathered waters \"seas.\""
+  },
+  {
+   "id": "1/m1/12",
+   "part": "m1",
+   "list": "observation",
+   "k": 12,
+   "frames": [
+    {
+     "id": 104,
+     "ref": "1:4"
+    }
+   ],
+   "q": "What was God's response to the earth and the seas he created on the third day?",
+   "a": "He said they were good."
+  },
+  {
+   "id": "1/m1/13",
+   "part": "m1",
+   "list": "observation",
+   "k": 13,
+   "frames": [
+    {
+     "id": 105,
+     "ref": "1:5"
+    }
+   ],
+   "q": "What else did God create on the third day?",
+   "a": "On the third day, God also created trees and plants."
+  },
+  {
+   "id": "1/m1/14",
+   "part": "m1",
+   "list": "observation",
+   "k": 14,
+   "frames": [
+    {
+     "id": 105,
+     "ref": "1:5"
+    }
+   ],
+   "q": "What was God's response to the trees and plants he created on the third day?",
+   "a": "He said they were good."
+  },
+  {
+   "id": "1/m1/15",
+   "part": "m1",
+   "list": "observation",
+   "k": 15,
+   "frames": [
+    {
+     "id": 106,
+     "ref": "1:6"
+    }
+   ],
+   "q": "What did God create on the fourth day?",
+   "a": "On the fourth day, God created lights in the sky: the sun, moon, and stars."
+  },
+  {
+   "id": "1/m1/16",
+   "part": "m1",
+   "list": "observation",
+   "k": 16,
+   "frames": [
+    {
+     "id": 106,
+     "ref": "1:6"
+    }
+   ],
+   "q": "What was the purpose of these lights?",
+   "a": "The lights gave light to the earth and marked time."
+  },
+  {
+   "id": "1/m1/17",
+   "part": "m1",
+   "list": "observation",
+   "k": 17,
+   "frames": [
+    {
+     "id": 106,
+     "ref": "1:6"
+    }
+   ],
+   "q": "What was God's response to the sun, moon, and stars he created on the fourth day?",
+   "a": "He said they were good."
+  },
+  {
+   "id": "1/m1/18",
+   "part": "m1",
+   "list": "observation",
+   "k": 18,
+   "frames": [
+    {
+     "id": 107,
+     "ref": "1:7"
+    }
+   ],
+   "q": "What did God create on the fifth day?",
+   "a": "On the fifth day, God made living creatures that swam in the water and flew in the sky."
+  },
+  {
+   "id": "1/m1/19",
+   "part": "m1",
+   "list": "observation",
+   "k": 19,
+   "frames": [
+    {
+     "id": 107,
+     "ref": "1:7"
+    }
+   ],
+   "q": "What was God's response to the things in the seas and the birds he created on the fifth day?",
+   "a": "He said they were good, and he blessed them."
+  },
+  {
+   "id": "1/m1/20",
+   "part": "m1",
+   "list": "observation",
+   "k": 20,
+   "frames": [
+    {
+     "id": 108,
+     "ref": "1:8"
+    }
+   ],
+   "q": "What did God create on the sixth day?",
+   "a": "On the sixth day, God made land animals."
+  },
+  {
+   "id": "1/m1/21",
+   "part": "m1",
+   "list": "observation",
+   "k": 21,
+   "frames": [
+    {
+     "id": 108,
+     "ref": "1:8"
+    }
+   ],
+   "q": "What kind of land animals did God create?",
+   "a": "God made farm animals, crawling animals, and wild animals."
+  },
+  {
+   "id": "1/m1/22",
+   "part": "m1",
+   "list": "observation",
+   "k": 22,
+   "frames": [
+    {
+     "id": 108,
+     "ref": "1:8"
+    }
+   ],
+   "q": "What was God's response to the land animals he created on the sixth day?",
+   "a": "God said they were good."
+  },
+  {
+   "id": "1/m1/23",
+   "part": "m1",
+   "list": "observation",
+   "k": 23,
+   "frames": [
+    {
+     "id": 109,
+     "ref": "1:9"
+    }
+   ],
+   "q": "What else did God create on the sixth day?",
+   "a": "On the sixth day, God also created humans."
+  },
+  {
+   "id": "1/m1/24",
+   "part": "m1",
+   "list": "observation",
+   "k": 24,
+   "frames": [
+    {
+     "id": 109,
+     "ref": "1:9"
+    }
+   ],
+   "q": "In what way did God make man different than the animals?",
+   "a": "God made man in his image and in his likeness."
+  },
+  {
+   "id": "1/m1/25",
+   "part": "m1",
+   "list": "observation",
+   "k": 25,
+   "frames": [
+    {
+     "id": 109,
+     "ref": "1:9"
+    }
+   ],
+   "q": "What did God say would be the responsibility of the human beings?",
+   "a": "They would have authority over the earth and over the animals, and would care for them."
+  },
+  {
+   "id": "1/m1/26",
+   "part": "m1",
+   "list": "observation",
+   "k": 26,
+   "frames": [
+    {
+     "id": 110,
+     "ref": "1:10"
+    }
+   ],
+   "q": "How did God make the first man?",
+   "a": "God formed him from the soil."
+  },
+  {
+   "id": "1/m1/27",
+   "part": "m1",
+   "list": "observation",
+   "k": 27,
+   "frames": [
+    {
+     "id": 110,
+     "ref": "1:10"
+    }
+   ],
+   "q": "How did the man become alive?",
+   "a": "God breathed life into him."
+  },
+  {
+   "id": "1/m1/28",
+   "part": "m1",
+   "list": "observation",
+   "k": 28,
+   "frames": [
+    {
+     "id": 110,
+     "ref": "1:10"
+    }
+   ],
+   "q": "What was the name of the man?",
+   "a": "His name was Adam."
+  },
+  {
+   "id": "1/m1/29",
+   "part": "m1",
+   "list": "observation",
+   "k": 29,
+   "frames": [
+    {
+     "id": 110,
+     "ref": "1:10"
+    }
+   ],
+   "q": "Where did God put Adam?",
+   "a": "God put Adam in a garden that God planted for Adam to care for the garden."
+  },
+  {
+   "id": "1/m1/30",
+   "part": "m1",
+   "list": "observation",
+   "k": 30,
+   "frames": [
+    {
+     "id": 111,
+     "ref": "1:11"
+    }
+   ],
+   "q": "From which special tree was Adam not allowed to eat?",
+   "a": "Adam could not eat from the tree of the knowledge of good and evil."
+  },
+  {
+   "id": "1/m1/31",
+   "part": "m1",
+   "list": "observation",
+   "k": 31,
+   "frames": [
+    {
+     "id": 111,
+     "ref": "1:11"
+    }
+   ],
+   "q": "What would happen if Adam ate from the tree of the knowledge of good and evil?",
+   "a": "Adam would die."
+  },
+  {
+   "id": "1/m1/32",
+   "part": "m1",
+   "list": "observation",
+   "k": 32,
+   "frames": [
+    {
+     "id": 112,
+     "ref": "1:12"
+    }
+   ],
+   "q": "Why was Adam alone when there were all kinds of animals?",
+   "a": "The animals were not able to be a helper for Adam."
+  },
+  {
+   "id": "1/m1/33",
+   "part": "m1",
+   "list": "observation",
+   "k": 33,
+   "frames": [
+    {
+     "id": 113,
+     "ref": "1:13"
+    }
+   ],
+   "q": "How did God make the woman?",
+   "a": "God formed the woman from Adam's rib."
+  },
+  {
+   "id": "1/m1/34",
+   "part": "m1",
+   "list": "observation",
+   "k": 34,
+   "frames": [
+    {
+     "id": 114,
+     "ref": "1:14"
+    }
+   ],
+   "q": "What did the name woman mean to Adam?",
+   "a": "The name woman meant that she was made from man."
+  },
+  {
+   "id": "1/m1/35",
+   "part": "m1",
+   "list": "observation",
+   "k": 35,
+   "frames": [
+    {
+     "id": 114,
+     "ref": "1:14"
+    }
+   ],
+   "q": "What happens when a man and woman become husband and wife?",
+   "a": "The man and the woman become one and start a family."
+  },
+  {
+   "id": "1/m1/36",
+   "part": "m1",
+   "list": "observation",
+   "k": 36,
+   "frames": [
+    {
+     "id": 115,
+     "ref": "1:15"
+    }
+   ],
+   "q": "Who was created in God's image?",
+   "a": "Both man and woman were created in God's image."
+  },
+  {
+   "id": "1/m1/37",
+   "part": "m1",
+   "list": "observation",
+   "k": 37,
+   "frames": [
+    {
+     "id": 115,
+     "ref": "1:15"
+    }
+   ],
+   "q": "What did God say when he blessed humans?",
+   "a": "God blessed humans and told them to have many children and fill the earth."
+  },
+  {
+   "id": "1/m1/38",
+   "part": "m1",
+   "list": "observation",
+   "k": 38,
+   "frames": [
+    {
+     "id": 115,
+     "ref": "1:15"
+    }
+   ],
+   "q": "What did God say about his creation when he finished it?",
+   "a": "God said it was very good."
+  },
+  {
+   "id": "1/m1/39",
+   "part": "m1",
+   "list": "observation",
+   "k": 39,
+   "frames": [
+    {
+     "id": 116,
+     "ref": "1:16"
+    }
+   ],
+   "q": "What did God do on the seventh day?",
+   "a": "God finished all his work, blessed the seventh day, and made it holy."
+  },
+  {
+   "id": "1/m2/1",
+   "part": "m2",
+   "list": "discourse",
+   "k": 1,
+   "frames": [
+    {
+     "id": 101,
+     "ref": "1:1"
+    },
+    {
+     "id": 102,
+     "ref": "1:2"
+    }
+   ],
+   "q": "How did God create all things? What repeated things happened in creation?",
+   "a": "God made everything. God caused everything to exist. God existed for all time: God has no beginning and no end. God brought all things into existence. (01-01)\n\nGod made all things in six days. (01-01)\n\nWhen God created the earth, the Spirit was over the water. God has control and authority over all his creation. (01-01)\n\nGod created by speaking. God's word was so powerful that when God spoke, things came into existence. (01-02)\n\nGod saw that his creation was good. Everything that God made was beautiful, good, and perfect. God was pleased with what he made. (01-02)\n\nGod gave things he created names. God gives each thing a purpose and a place in his creation. (01-02)\n\nGod separated some created things from other created things so that there was order and structure. (01-02)"
+  },
+  {
+   "id": "1/m2/2",
+   "part": "m2",
+   "list": "discourse",
+   "k": 2,
+   "frames": [
+    {
+     "id": 102,
+     "ref": "1:2"
+    },
+    {
+     "id": 103,
+     "ref": "1:3"
+    },
+    {
+     "id": 104,
+     "ref": "1:4"
+    },
+    {
+     "id": 105,
+     "ref": "1:5"
+    },
+    {
+     "id": 106,
+     "ref": "1:6"
+    },
+    {
+     "id": 107,
+     "ref": "1:7"
+    },
+    {
+     "id": 108,
+     "ref": "1:8"
+    }
+   ],
+   "q": "What is important about the order of creation?",
+   "a": "When God created the earth, it was dark, empty, and unformed. On the first day of creation, God created light. On the first three days of creation, God shaped/formed the earth. On the next three days of creation, God filled the earth. (01-02, 01-03, 01-04, 01-05, 01-06, 01-07, 01-08)\n\nOn day 1, God separated light and darkness. On day 2, God separated the sky and water. On day 3, God separated dry land and seas. On day 3, God filled his earth with plants and trees. On day 4, God filled the sky with the sun, moon, and stars. On day 5, God filled the waters with water animals and the sky with flying animals. On day 6, God filled the earth with land animals and humans. (01-02, 01-03, 01-04, 01-05, 01-06, 01-07, 01-08)"
+  },
+  {
+   "id": "1/m2/3",
+   "part": "m2",
+   "list": "discourse",
+   "k": 3,
+   "frames": [
+    {
+     "id": 109,
+     "ref": "1:9"
+    },
+    {
+     "id": 110,
+     "ref": "1:10"
+    },
+    {
+     "id": 111,
+     "ref": "1:11"
+    },
+    {
+     "id": 112,
+     "ref": "1:12"
+    },
+    {
+     "id": 113,
+     "ref": "1:13"
+    },
+    {
+     "id": 114,
+     "ref": "1:14"
+    },
+    {
+     "id": 115,
+     "ref": "1:15"
+    }
+   ],
+   "q": "What was special/unique about how God created humans?",
+   "a": "When God created humans, he spoke to himself and said \"Let us make.\" Because humans were special part of God's creation, God took time to express what he was going to do. (01-09)\n\nGod made humans in his image. Humans were created to be God's special representatives in creation. (01-09)\n\nGod created humans to rule over the created world. (01-09)\n\nGod made humans out of the dust of the ground. He fashioned man like a potter would fashion clay into a piece of pottery. (01-10)\n\nGod made a special garden for man. He put the man in the garden and put him there to take care of it. God gave the man a purpose on the earth. (01-10)\n\nGod placed two special trees in the garden: the tree of the knowledge of good and evil and the tree of life. God told Adam that he could eat from any tree in the garden except the tree of the knowledge of good and evil. God created humans to follow God's commands. Life works best when we follow God's commands. (01-11)\n\nAt first, the man was alone. No animal could be man's helper. God created woman from man's rib. The woman was the man's special companion. God created humans to enjoy fellowship with other humans. When God created man and woman he considered it very good. (01-12, 01-13, 01-14, 01-15)\n\nGod told man and woman to have children and grandchildren and fill the earth. God made humans to spread across the earth. (01-15)"
+  },
+  {
+   "id": "1/m2/4",
+   "part": "m2",
+   "list": "discourse",
+   "k": 4,
+   "frames": [
+    {
+     "id": 116,
+     "ref": "1:16"
+    }
+   ],
+   "q": "Why is the seventh day important?",
+   "a": "After the sixth day, God finished creating everything. God stopped working on the seventh day. (01-16)\n\nGod blessed the seventh day and made it a holy day that was set apart to himself. (01-16)"
+  },
+  {
+   "id": "1/m2/5",
+   "part": "m2",
+   "list": "theology",
+   "k": 5,
+   "frames": [],
+   "q": "What does the story of creation teach us about God?"
+  },
+  {
+   "id": "1/m2/6",
+   "part": "m2",
+   "list": "theology",
+   "k": 6,
+   "frames": [],
+   "q": "How does this story help us understand what creation should be like?"
+  },
+  {
+   "id": "1/m2/7",
+   "part": "m2",
+   "list": "theology",
+   "k": 7,
+   "frames": [],
+   "q": "From the story of creation, what do we learn about what it means to be human?"
+  },
+  {
+   "id": "1/m3/1",
+   "part": "m3",
+   "list": "journal",
+   "k": 1,
+   "frames": [],
+   "q": "How can we express gratitude and praise to God for his work of creation?"
+  },
+  {
+   "id": "1/m3/2",
+   "part": "m3",
+   "list": "journal",
+   "k": 2,
+   "frames": [],
+   "q": "How is your present experience in the world different from what the world was originally created to be?"
+  },
+  {
+   "id": "1/m3/3",
+   "part": "m3",
+   "list": "journal",
+   "k": 3,
+   "frames": [],
+   "q": "When you hear about how the world was originally created, what kinds of longings and desires do you have for that perfect world?"
+  },
+  {
+   "id": "1/m3/4",
+   "part": "m3",
+   "list": "journal",
+   "k": 4,
+   "frames": [],
+   "q": "What kinds of hopes, desires, and longings do you have for the world? What are the ways you wish the world could be?"
+  },
+  {
+   "id": "1/m3/5",
+   "part": "m3",
+   "list": "journal",
+   "k": 5,
+   "frames": [],
+   "q": "How should you live your life differently now that you know how and why God created humans?"
+  }
+ ],
+ "tf-terms": [
+  {
+   "id": "1:1/1",
+   "frame": 101,
+   "k": 1,
+   "term": "God",
+   "text": "**God** The term **God** refers to the eternal being who created the universe out of nothing. **God** exists as Father, Son, and Holy Spirit. What words in your language mean **God** as in the eternal, powerful, and supreme creator of all things?",
+   "ref": "1:1"
+  },
+  {
+   "id": "1:1/2",
+   "frame": 101,
+   "k": 2,
+   "term": "In the beginning",
+   "text": "**In the beginning** God has always existed, even before all creation. The world did not always exist. God created the world out of nothing. This marked the beginning of all created things. How would you phrase **in the beginning** to mean the beginning of all things (before anything existed except God)?",
+   "ref": "1:1"
+  },
+  {
+   "id": "1:1/3",
+   "frame": 101,
+   "k": 3,
+   "term": "created",
+   "text": "**created** God made all things out of nothing. What words in your language mean **created** as in God made all things from nothing?",
+   "ref": "1:1"
+  },
+  {
+   "id": "1:1/4",
+   "frame": 101,
+   "k": 4,
+   "term": "dark and empty",
+   "text": "**dark and empty** At this time the earth had no light and was empty. How would you say that the earth was **dark** to mean the earth was completely dark without light? How would you say that the earth was **empty** as in God had not yet created anything except for the bare earth covered by water?",
+   "ref": "1:1"
+  },
+  {
+   "id": "1:1/5",
+   "frame": 101,
+   "k": 5,
+   "term": "God's",
+   "text": "**God's** Spirit The Spirit of God, sometimes called the Holy Spirit, was present in the beginning. He is God and not a lesser spirit. The Holy Spirit was moving freely over the earth in order to create all that The Holy Spirit had planned to do. How would you say **God's** Spirit as in he who is equal to God and not a lesser spirit?",
+   "ref": "1:1"
+  },
+  {
+   "id": "1:2/1",
+   "frame": 102,
+   "k": 1,
+   "term": "Let there be light",
+   "text": "**Let there be light** God created things by speaking commands. How would you say **Let there be light** to mean God commanded the light to exist?",
+   "ref": "1:2"
+  },
+  {
+   "id": "1:2/2",
+   "frame": 102,
+   "k": 2,
+   "term": "there was light",
+   "text": "**there was light** When God commanded the light to exist, it came into existence. How would you say **there was light** to mean that light came into existence as a result of God's command?",
+   "ref": "1:2"
+  },
+  {
+   "id": "1:2/3",
+   "frame": 102,
+   "k": 3,
+   "term": "separated",
+   "text": "**separated** When God **separated** light from darkness God made a distinction between them. What words in your language mean **separated** as in to distinguish or make a distinction between things?",
+   "ref": "1:2"
+  },
+  {
+   "id": "1:2/4",
+   "frame": 102,
+   "k": 4,
+   "term": "God saw that the light was good",
+   "text": "**God saw that the light was good** When God created things, they were pleasing to him and accomplished his plan and purpose. How would you phrase **God saw that the light was good** to mean God was pleased with the light he created?",
+   "ref": "1:2"
+  },
+  {
+   "id": "1:2/5",
+   "frame": 102,
+   "k": 5,
+   "term": "first day",
+   "text": "**first day** God's work of creation was orderly, purposeful, and sequential. God made all things in six days. God created light on the **first day** in a sequence of six days. How would you refer to the the **first day** as in the day one of a sequence of six days?",
+   "ref": "1:2"
+  },
+  {
+   "id": "1:3/1",
+   "frame": 103,
+   "k": 1,
+   "term": "expanse",
+   "text": "**expanse** An **expanse** is a large empty space. This **expanse** is named the sky. What words in your language mean **expanse** as in a large empty space?",
+   "ref": "1:3"
+  },
+  {
+   "id": "1:3/2",
+   "frame": 103,
+   "k": 2,
+   "term": "sky",
+   "text": "**sky** The **sky** refers to the space above the earth, including the air we breathe and the heavens. How would you refer to the **sky** as in the space above the earth?",
+   "ref": "1:3"
+  },
+  {
+   "id": "1:4/1",
+   "frame": 104,
+   "k": 1,
+   "term": "Let the water come together in one place and the dry land appear",
+   "text": "**Let the water come together in one place and the dry land appear** God created the dry land by commanding the waters to gather together. When this happened, dry land became visible. How would you express the command **Let the water come together in one place and the dry land appear** to mean God ordered the waters to gather together and he ordered the dry land to become visible?",
+   "ref": "1:4"
+  },
+  {
+   "id": "1:5/1",
+   "frame": 105,
+   "k": 1,
+   "term": "Let the earth produce all kinds of trees and plants",
+   "text": "**Let the earth produce all kinds of trees and plants** God commanded the earth to produce trees and plants. How would you express the command **Let the earth produce all kinds of trees and plants** to mean God ordered the earth to sprout many different kinds of trees and plants?",
+   "ref": "1:5"
+  },
+  {
+   "id": "1:6/1",
+   "frame": 106,
+   "k": 1,
+   "term": "Let there be lights in the sky",
+   "text": "**Let there be lights in the sky** God commanded lights to exist in the sky. These lights are shining objects that give light to the earth. These lights are the sun, the moon, and the stars. How would you express the phrase **Let there be lights in the sky** to mean God created shining objects in the sky by giving a command?",
+   "ref": "1:6"
+  },
+  {
+   "id": "1:7/1",
+   "frame": 107,
+   "k": 1,
+   "term": "Let living things fill the waters, and birds fly in the sky",
+   "text": "**Let living things fill the waters, and birds fly in the sky** God created water creatures and birds by commanding them to exist. How would you express **Let living things fill the waters, and birds fly in the sky** as a command in which God orders living creatures to fill waters and birds to fly in the sky?",
+   "ref": "1:7"
+  },
+  {
+   "id": "1:7/2",
+   "frame": 107,
+   "k": 2,
+   "term": "blessed",
+   "text": "**blessed** When God **blessed** the living creatures, God spoke his intent that these creatures prosper and that things would go well for them in the world in which he had placed them. What words in your language mean **blessed** as in to cause to prosper or to intend that good things happen?",
+   "ref": "1:7"
+  },
+  {
+   "id": "1:8/1",
+   "frame": 108,
+   "k": 1,
+   "term": "Let there be all kinds of land animals",
+   "text": "**Let there be all kinds of land animals** God created land all kinds of animals that live on the land. He created farm animals, crawling animals, and wild animals. How would you express the command **Let there be all kinds of land animals** to mean that God ordered land animals to come into existence?",
+   "ref": "1:8"
+  },
+  {
+   "id": "1:9/1",
+   "frame": 109,
+   "k": 1,
+   "term": "Let us make",
+   "text": "**Let us make** There is only one God. God is using a plural to refer to himself. Some think that God is using the plural to express his majesty and others think that God is speaking to the Spirit and the Son. God is one God who exists as three persons: God the Father, God the Son, and God the Holy Spirit. How would you phrase **Let us make** to mean God is making a deliberate, willful decision to create man in a particular way for a particular purpose?",
+   "ref": "1:9"
+  },
+  {
+   "id": "1:9/2",
+   "frame": 109,
+   "k": 2,
+   "term": "in our image to be like us",
+   "text": "**in our image to be like us** God created humans in God's image. An image is a physical representation that displays the qualities or traits of something or someone else. How would you phrase **in our image to be like us** to mean God created humans to be very much like God, although not exactly the same?",
+   "ref": "1:9"
+  },
+  {
+   "id": "1:9/3",
+   "frame": 109,
+   "k": 3,
+   "term": "rule over",
+   "text": "**rule over** God gave humans the right and power to manage, guide, and oversee his creation. What words in your language mean **rule over** as in to exercise authority over as a king would have authority over his kingdom?",
+   "ref": "1:9"
+  },
+  {
+   "id": "1:10/1",
+   "frame": 110,
+   "k": 1,
+   "term": "formed",
+   "text": "**formed** God created man by personally fashioning the man in the same way that a person shapes something with his hands. This is a different word than create. What words in your language mean **formed** as in to shape or fashion something?",
+   "ref": "1:10"
+  },
+  {
+   "id": "1:10/2",
+   "frame": 110,
+   "k": 2,
+   "term": "to care for it",
+   "text": "**to care for it** God put Adam in the garden to maintain it by preparing soil, planting, tending, and harvesting. What words in your language me **to care for it** as in to look after and tend to as a farmer would cultivate his land?",
+   "ref": "1:10"
+  },
+  {
+   "id": "1:11/1",
+   "frame": 111,
+   "k": 1,
+   "term": "the tree of the knowledge of good and evil",
+   "text": "**the tree of the knowledge of good and evil** God prohibited humans from eating from this tree. The fruit of this tree could enable a person to know both good and evil. How would you phrase **the tree of the knowledge of good and evil** to mean that this tree could enable a person to know both good and evil?",
+   "ref": "1:11"
+  },
+  {
+   "id": "1:12/1",
+   "frame": 112,
+   "k": 1,
+   "term": "helper",
+   "text": "**helper** None of the animals were similar enough to Adam to be able to help Adam do what God wanted him to do. A **helper** is someone who can assist someone else in fulfilling a purpose or a task. What words in your language mean **helper** as in someone who can help someone else accomplish a task or a purpose?",
+   "ref": "1:12"
+  },
+  {
+   "id": "1:13/1",
+   "frame": 113,
+   "k": 1,
+   "term": "deep sleep",
+   "text": "**deep sleep** God caused Adam to fall asleep so that he was unaware of what was happening. What words in your language mean **deep sleep** as in a heavy sleep when one is not aware of what is going on?",
+   "ref": "1:13"
+  },
+  {
+   "id": "1:14/1",
+   "frame": 114,
+   "k": 1,
+   "term": "like me",
+   "text": "**like me** Woman was created from Adam's rib. She was like Adam but not identical. How would you phrase **like me** to mean the woman was the same kind of being as Adam, even though she was not exactly the same as Adam was?",
+   "ref": "1:14"
+  },
+  {
+   "id": "1:15/1",
+   "frame": 115,
+   "k": 1,
+   "term": "very good",
+   "text": "**very good** After the creation of humans, God finished making everything. At this time, God considered it **very good** because he had completed his creation. How would you phrase **very good** to mean God was very pleased with his creation?",
+   "ref": "1:15"
+  },
+  {
+   "id": "1:16/1",
+   "frame": 116,
+   "k": 1,
+   "term": "made it holy",
+   "text": "**made it holy** God set the seventh day apart from the other days. God did not want people to use it the same way as the other six days of the week. What words in your language mean **made it holy** to mean God set it apart or called it his own?",
+   "ref": "1:16"
+  }
+ ],
+ "tf-shared": [
+  {
+   "key": "obs-devotionals-unit-3#Community Study: The Practice of Worship—Praising God as a Community",
+   "title": "Community Study: The Practice of Worship—Praising God as a Community",
+   "text": "- **Key Idea**: declaring God's greatness and glory\n- **Key Passage**: Revelation 4:11\n- **Main Session**: OBS 1 (Creation)\n\n### Recite the Creedal Verse (3-5 minutes)\nThe verse below summarizes the teaching of the current passage. Read the verse out loud as a community. Read it again several times as a group until the whole community can recite it from memory.\n\n> \"The everlasting God, Yahweh, the Creator of the ends of the earth, does not get tired or weary; there is no limit to his understanding.\" Isaiah 40:28\n\n### Explore the Idea (10-15 minutes)\nRead the passage below. Discuss the following questions as a community.\n\n > \"Worthy are you, our Lord and our God, to receive glory and honor and power, for you created all things, and by your will they existed and were created.\" Revelation 4:11\n\n1. What does this passage teach us about God as the Creator of all things?\n2. What are some things about God that make you want to praise him?\n3. How has God done powerful things in your own life?\n4. What are the different ways that we can praise God?\n\n### Write a Song (5-10 minutes)\nAs a group, read the following verse again. Take time as a group to put this verse to a chant, tune, beat, or melody. Use this song to praise God as a community.\n\n > \"Worthy are you, our Lord and our God, to receive glory and honor and power, for you created all things, and by your will they existed and were created.\" Revelation 4:11\n\n### Pray to God (3-5 minutes)\nBreak up into groups of 2-3 people. Have each person pray a prayer of praise to God."
+  },
+  {
+   "key": "movement_2_drafting",
+   "title": "Translation Draft",
+   "text": "Work as a translation team to draft each panel of this story. Pay attention to any specific translation issues that are challenging or significant.\n\n#### Make Translation Draft\nMake a draft for each section of this story.\n\n#### Discuss and Revise\nAfter drafting the story, discuss any translation issues that you think need a special explanation.\n\n#### Drafting Summary Reflection\nSummarize any noteworthy translation decisions and the rationale/reasoning behind these translation decisions. In the final movement of this class, you will use these observations to give an account (i.e., chronicle/narrate) of how your translation improved through the checking process."
+  },
+  {
+   "key": "movement_3_checking",
+   "title": "Team Check",
+   "text": "*The following activity will help you check the clarity, accuracy, and naturalness of your draft. Read the passage aloud and discuss the checking questions with other members of your translation community. You might need to reread portions (or the whole) of the biblical passage multiple times as you answer each of these questions. Record answers to these questions below.*\n\n#### Team Checking Questions\n*Use the following questions to check your translation draft for accuracy, clarity, and naturalness.*\n\n1.  **Accurate**: Has anything been **added** to your translation of this passage that is not a part of the meaning of the source text? *If additions exist, are they only added to clarify meaning (such as implied information)?*\n2.  **Accurate**: Is anything **missing** from your translation of this passage that is a part of the meaning of the source text? *If some part of the meaning is missing from your translation, add it.*\n3.  **Accurate**: Does any meaning in your translation of this passage appear to be **different** than the meaning of the source text? *If the meaning is different, try changing your translation so that the meaning remains the same.*\n4.  **Natural**: Does anything sound **unnatural** to how you would say it in your language? *If portions of the passage sound unnatural in your language, try to make them sound the way you would say them in your language while staying true to the meaning of the source text.*\n5.  **Clear**: Is anything **unclear** or **confusing** in your translation that confuses the meaning of the source text? *If portions of the passage are unclear or confusing, revise them to clearly communicate the meaning of the source text.*\n6.  **Consistent**: How **consistent** is your translation within the passage and with other passages? *If portions of the passage need to be made consistent or if you need to revise translations of other passages, make these adjustments.*\n\n#### Record Feedback\n*After discussing the checking questions above as a translation community, record any feedback on your translation draft. Pay attention to parts of your translation that are translated well and parts of your translation that need correction.*\n\n#### Discuss and Revise\n*After gathering feedback on your draft, discuss it together with your translation community and make appropriate revisions to your translation.*\n\n#### Record Translation Decisions\n*As a community, discuss some of the most noteworthy translation decisions in your draft. Summarize each decision and explain the reasons your community decided on that translation. You should update these decisions each time you check your draft with various groups of people.*\n\nYou should **measure** the quality of your translation draft. You can **record translation decisions** to make it clear why you translated things a certain way. Translation decisions can help your translation team and the surrounding community be a part of the translation process.\n\nHow can you know the quality of your translation?\n\n1. **Measure** the translation by marks/standards of quality (i.e., clear, accurate, natural, church-approved)\n2. **Test** the translation with others and record feedback and conversations from in the field (i.e., church and community check)\n3. **Compare** and **contrast** the translation with the source text (i.e., meaning of text and notes) and alternatives (i.e., other translation choices)\n4. **Explain** the reasons why you translated a particular portion of the text.\n\n**Example Sentences That Help Explain Your Translation Decision**\nUse the following example sentences to help explain your translation decisions:\n\n1. The original text literally **says/means**, so we translated the term in this way…\n2. We originally decided to translate **the biblical term** with **this term**, but we changed it because…\n3. When our translation team discussed **the biblical term**, this is what we talked about…\n4. **The term** is \\[clear, accurate, natural, consistent] because…\n5. The community understands **this term** to mean…\n6. We considered these other terms. We did not use **these terms** because…\n7. When we checked this in the church, we learned…\n8. When we checked this in the community, we learned…\n\n**Example of Translation Decision**\n\nIn OBS 01-07 we decided to translate **blessed** like this: \\[actual translation]. We decided on this translation because of these reasons:\n\n1. The word \\[actual translation] means to cause good things to happen to someone or something. This term is used when a person desires someone or something to prosper or flourish. This term does not refer to magic or witchcraft.\n2. When we checked this word with other believers, they said it describes God showing his kindness and favor on someone or something. These are some of the terms that we did not decide to use...\n3. Many of our people will understand this word. When we discussed this phrase with the surrounding community, we discovered it was a natural way to describe God causing good and beneficial things to happen."
+  },
+  {
+   "key": "movement_4",
+   "title": "Ministry Practice: Serving the Church with the Story",
+   "text": "Now that you have a draft of this story, consider how this story can encourage other believers in their faith. After ministering this story to others, you will also perform a community check of your translation draft.\n\n### Church Ministry\nReflect on how this story can edify and mature the Christian community. Design a way to minister this story to your church community.\n\n**Ministry Preparation**: Take time to consider how you could minister this story to others. Record some ministry ideas below.\n\n**Ministry Implementation**: Minister this story to a group of believers as you had planned. Use the information in this study to help develop a teaching/lesson or lead a discussion of this story with other believers. Record your ministry plan below.\n\n**Ministry Reflection**: Think about what you learned from ministering this story to other believers. Reflect on your experience below.\n\n### Church Community Check\nAfter teaching or ministering this story to the church, check the translation quality with the church community. Record any feedback from your checking experience.\n\n#### Create Checking Questions\nYou can use **Translation Questions** to check your draft. Each **Translation Question** explains the meaning of a specific part of the story and asks you to consider how you would translate that part of the story in your own language. Change each **Translation Question** into a **Checking Question** by asking the following questions. The first question asks you to identify how each specific phrase was translated into your language. The second question asks people in the church to determine if your translation of the phrase expresses the meaning clearly, accurately, and naturally. Look at the following examples to see how to change **Translation Questions** into **Checking Questions**:  \n\n#### Translation Question Example 1\n**to proclaim the good news about Jesus** Paul and Silas traveled to Philippi for the purpose of preaching the gospel. The gospel is the good news that Jesus saves people from their sins if they will believe in Jesus. How would you express **to proclaim the good news about Jesus** to mean to tell other people the message about how Jesus can save people from their sins?\n\n#### Translation Question Example 2\n**a merchant** Paul and Silas met a woman named Lydia at the place by the river. She owned a business and sold items to make money. How would you express **a merchant** to mean a business owner who sells items for a profit?\n\n#### Translation Question Example 3\n**so Paul and Silas baptized them** The jailer and his whole family followed Paul's instructions. They believed in Jesus. The result of this was Paul and Silas baptized them. How would you express **so Paul and Silas baptized them** to mean the result of the jailer and his family believing in Jesus that Paul and Silas baptized all of them?  \n\nYou can change these into **Checking Questions** like this: \n\n#### Checking Question Example 1\n**to proclaim the good news about Jesus** How did you translate **to proclaim the good news about Jesus**? Does it mean to tell other people the message about how Jesus can save people from their sins?\n\n#### Checking Question Example 2\n**a merchant** How did you translate **a merchant**? Does it mean a business owner who sells items for a profit?\n\n#### Checking Question Example 3\n**so Paul and Silas baptized them** How did you translate **so Paul and Silas baptized them**? Does it mean the result of the jailer and his family believing in Jesus that Paul and Silas baptized all of them?\n\n#### Record Feedback\n*Discuss the **Checking Questions** with your church community, and record any feedback on your translation draft. Pay attention to parts of your translation that are translated well and parts of your translation that need correction.*\n\n#### Discuss and Revise\n*After gathering feedback on your draft, discuss it together with your translation community and make appropriate revisions to your translation.*\n\n#### Record Translation Decisions\n*Update your translation decisions and record any new and noteworthy observations on the quality of your draft."
+  },
+  {
+   "key": "movement_5",
+   "title": "Missional Outreach: Sharing the Truth of the Story",
+   "text": "*After sharing this story with others, check the translation quality with the wider language community. Record any feedback from your checking experience.*\n\n### Mission Engagement  \n*Consider how you will witness this story to unbelievers. Design a way to share this story and engage them in what it teaches about Christianity and the gospel.*\n\n**Witness Preparation**: Take time to consider how you will witness this narrative to unbelievers. Record some ideas below.\n\n**Witness Implementation**: Share this story with an unbeliever. Use the information in this study to help develop a teaching/lesson or lead a discussion of this story with other believers. Record your ministry plan below.\n\n**Witness Reflection**: Think about what you learned from ministering this story to unbelievers. Reflect on your experience below.\n\n### Sociolinguistic Check  \n After sharing this story with the language community, check your translation draft with the surrounding community. Record your observations.\n\n#### Checking Approach\nAfter witnessing this story to unbelievers, use one of the following methods to check the translation of this story. Consider using the **Observation Questions** to check your translation draft or come up with your own quality checking questions.\n\n**Read-Retell Check:** Read your draft to those in the community and ask them to retell the passage. Be attentive to any portions of the passage that are unclear, unnatural, or inaccurate.\n\n**Comprehension Questions Checklist:** Read the draft of the passage and ask a list of comprehension questions to make sure the passage is being rightly understood. You can use the **Observation Questions** in this guide or come up with your own questions. Then, record any insights or issues that arise.\n\n**Discussion Group:** Develop key questions to ask about the passage (both formational and translational). Read the passage and have a group discussion about the passage, paying attention to issues that need to be addressed, edited, and revised.\n\n#### Record Feedback\n*After sharing your draft with the language community, discuss the **Observations Questions**, and record any feedback on your translation draft. Pay attention to parts of your translation that are translated well and parts of your translation that need correction.*\n\n#### Discuss and Revise\n*After gathering feedback on your draft, discuss it together with your translation community and make appropriate revisions to your translation.*\n\n#### Record Translation Decisions\n*Update your translation decisions and record and new any noteworthy observations on the quality of your draft."
+  },
+  {
+   "key": "conclusion",
+   "title": "Conclusion",
+   "text": "As a translation community, take time to reflect on all that was learned in studying, drafting, and checking this story. Celebrate all that God has taught you as a community. Then, submit your revised draft and checking summaries to network leaders for further review."
+  }
+ ],
+ "tf-frames": []
+}

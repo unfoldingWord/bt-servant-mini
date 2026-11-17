@@ -6,7 +6,7 @@ import { chooseCards, moreLabel, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
-import { installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
+import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
 import { has } from './commands'
@@ -19,13 +19,24 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, type ConvState, directRef, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
-import { backLine, GD, GT, mapRows, nodeOf } from './graph'
+import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
-import { shareButton } from './share'
+import { shareButton, shareSession, shareTextButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
+import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
+import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
+import { devOn, type Fixture, initDev } from './dev'
+import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
+import { drawBar, drawCard, drawOutline } from './obs5mview'
+import { W5 } from './obs5mwords'
+import { obsLabel } from './obs'
+import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
+import { learnLabel, learnSheet, resetLearn } from './learn'
+import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
+import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
@@ -135,6 +146,8 @@ type Msg = Reply & {
   waiting?: boolean
   /** an answer: its point in the conversation's graph (graph.ts); the person's: `mark`, where they went back to a point */
   node?: string; mark?: boolean
+  /** an answer: what ☆ Save keeps and where ✎ Note is tied (saved.ts: its passage, article or question) */
+  saveQ?: Query
 }
 type Conv = ConvState & { id: string; title: string; updated: number; msgs: Msg[] }
 const KEY = 'btsm.conversations.v1'
@@ -237,19 +250,29 @@ function askedFor(m: Msg): string | undefined {
 }
 /**
  * The online answer arrived for a message drawn while it was written: its text in place of "Writing…", the cards untouched,
- * and the share button made again, so it sends the online answer (it was made before it existed, or not at all).
+ * and the share button made again, so it sends the online answer (it was made before it existed, or not at all); ☆ Save too,
+ * so it keeps the online text (an item saved while it was written gets it: savedview.ts).
  */
 function fillAi(node: HTMLElement, m: Msg) {
   if (!m.ai) return
   node.querySelector('.ai.pending')?.replaceWith(aiBlock(m.ai))
   markCited(node, (m.ai.sources ?? []).map((s) => s.id), m.ui ?? nav)
   const sh = shareButton(m, m.ui ?? nav, askedFor(m))
-  const old = node.querySelector(':scope > .share')
-  if (old) old.remove()
+  node.querySelectorAll(':scope > .share, :scope > .keep').forEach((x) => x.remove())
   const rate = node.querySelector(':scope > .rate')
-  if (sh && rate) rate.before(sh)
-  else if (sh) node.appendChild(sh)
+  for (const x of [sh, keepOf(m, true)]) if (x) rate ? rate.before(x) : node.appendChild(x)
 }
+/** What ☆ Save keeps and ✎ Note is tied to: the answer's query, or for an older answer the question it answers. */
+const savedQOf = (m: Msg): Query | null => m.saveQ ?? (m.waiting || m.limits || m.packs ? null : queryOfAnswer({ q: askedFor(m) }))
+/** ☆ Save and ✎ Note under an answer (savedview.ts); `arrived`: its online text has just come. */
+const keepOf = (m: Msg, arrived = false) => !m.waiting && !m.limits && !m.packs && (m.info || m.study || m.helps?.length || m.ai)
+  ? keepButtons({ q: savedQOf(m), label: askedFor(m) ?? m.text ?? '', ai: () => m.ai, question: askedFor(m), arrived, pending: pendingOf(m) }) : null
+/** The item an answer's ☆ saved while its online answer was written (only that one gets the text when it comes). */
+const savedWhilePending = new WeakMap<Msg, string>()
+const pendingOf = (m: Msg) => ({
+  get saved() { return savedWhilePending.get(m) },
+  set: (id: string | undefined) => { if (id && !m.ai) savedWhilePending.set(m, id); else savedWhilePending.delete(m) },
+})
 /** `pending`: online AI is writing its answer to this message (the helps show as cards already). */
 function renderMsg(m: Msg, pending = false): HTMLElement {
   // going back to an earlier point: a small divider ("Back to Ruth 2:3"), not a bubble
@@ -269,6 +292,14 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pm)
   }
+  // a step of a 5M session: where it is ("Movement 1 · observation · frame 5/16"), first
+  if (m.sessionMark && devOn('obs5m')) {
+    const sm = el('div', 'path-mark s5-mark', bidiLabel(m.sessionMark, m.ui ?? nav))
+    sm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
+    d.appendChild(sm)
+  }
+  // what the person wrote about this verse, article or question (saved.ts), above the answer
+  d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const cv = convs.find((x) => x.msgs.includes(m))
   const asked = askedFor(m)
@@ -305,9 +336,15 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     host.appendChild(box)
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
-  if (m.text) d.appendChild(el('div', 'plain', m.text))
-  // the way back to the passage this answer left (and to the path it left), on its own row, then the next steps
-  const backs = [m.back, m.pathBack].filter((f): f is Followup => !!f)
+  // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
+  // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
+  const s5 = devOn('obs5m')
+  // (a card always draws hidden: what was revealed on it before is forgotten)
+  if (m.card && s5 && cv && m.node) forgetCard(cv.id, m.node)
+  if (m.card && s5) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav, m.node)))
+  else if (m.text) d.appendChild(el('div', 'plain', m.text))
+  // the way back to the 5M session, to the passage this answer left (and to the path it left), on its own row, then the next steps
+  const backs = [s5 ? m.sessionBack : undefined, m.back, m.pathBack].filter((f): f is Followup => !!f)
   if (backs.length) d.appendChild(followRow(m, backs, 'follow back-row'))
   // a path starts: the line that proposes it, just above its first step
   if (m.pathLine) {
@@ -337,8 +374,11 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(a)
   }
   // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
-  const sh = m.waiting ? null : shareButton(m, m.ui ?? nav, asked)
+  const sh = m.waiting ? null : (s5 && m.card ? sessionShare(cv, m.ui ?? nav) : null) ?? shareButton(m, m.ui ?? nav, asked)
   if (sh) d.appendChild(sh)
+  // ☆ Save and ✎ Note (savedview.ts); with an online answer, Save keeps its text too
+  const keep = keepOf(m)
+  if (keep) d.appendChild(keep)
   // thumbs up or down, and with a thumbs down a report (feedback.ts)
   if (!m.waiting && (m.info || m.intro || m.ai || m.text || m.helps)) {
     let bar = el('div', 'rate')
@@ -391,7 +431,7 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
   for (const x of follow) {
     const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
     b.type = 'button'
-    if (x.back || x.toPath) b.className = 'back'
+    if (x.back || x.toPath || x.toSession) b.className = 'back'
     else if (x.pathNext) b.className = 'path-next'
     b.onclick = () => {
       if (x.back) goTo(x.back, 'back')
@@ -409,6 +449,14 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
           input.value = x.again.q
           form.requestSubmit()
         }
+      } else if (x.add) {
+        // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
+        if (busy || b.disabled) return
+        b.disabled = true
+        addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
+          b.disabled = false
+          b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
+        })
       } else if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav)
     }
     f.appendChild(b)
@@ -582,6 +630,13 @@ function renderConv() {
     if (noPacks) w.appendChild(pickerFor([]))
     else {
       w.appendChild(el('p', '', T.hello))
+      // someone new: the welcome "What would you like to do today?" once (welcome.ts), else How to ask's line (howto.ts), on a
+      // few empty conversations; only once the languages are known
+      const inv = INSTALLED.length ? offerFirst(nav, c.id, !convs.some((x) => x.msgs.length)) : null
+      if (inv) w.appendChild(inv)
+      // a 5M session saved (dev switch): [Resume …], the ones used last
+      const r5 = resumeRow()
+      if (r5) w.appendChild(r5)
       const ex = el('div', 'examples')
       w.appendChild(ex)
       fillExamples(ex)
@@ -683,6 +738,7 @@ function renderPanel() {
     closePanel()
     openExplore('menu')
   })
+  row(SVT(nav).title, savedSummary(nav), () => { closePanel(); openSaved() })
   // the Map of the conversation open now: how many points, and where it is
   if (points() >= MAP_MIN) {
     const c = conv()
@@ -704,6 +760,14 @@ function renderPanel() {
   }
   list.appendChild(composerSwitch(nav, MT().on, MT().off))
   row(PT(nav).title, protectSummary(nav, MT().off), go('safety'))
+  row(howtoLabel(nav), '', () => {
+    closePanel()
+    openHowTo(nav)
+  })
+  row(welcomeLabel(nav), '', () => {
+    closePanel()
+    openWelcome(nav)
+  })
   const aboutRow = el('button', 'mrow') as HTMLButtonElement
   aboutRow.type = 'button'
   aboutRow.append(el('span', 'mrow-t', aboutLabel(nav)), el('span', 'mrow-c', '›'))
@@ -921,6 +985,11 @@ function eraseAll() {
   convs = []
   current = ''
   try { localStorage.removeItem(KEY) } catch {}
+  forgetHowto()
+  forgetWelcome()
+  eraseSaved() // and the saved items and notes
+  forgetSessions() // and where 5M sessions were
+  forgetAllReveals()
   newConv()
   renderConv()
 }
@@ -930,9 +999,13 @@ const closePanel = () => panel.classList.remove('show')
   if (locked()) return false // the back button leaves the app; it never opens it
   if (closeSafety()) return true
   if (closeReport()) return true
+  if (closeHowto()) return true
+  if (closeWelcome()) return true
   if (backPanel()) return true
+  if (backSaved()) return true
   if (backExplore()) return true
   if (mapIsOpen()) { closeMap(); return true }
+  if (outIsOpen()) { closeOutline(); return true }
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
   if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
@@ -942,6 +1015,7 @@ const closePanel = () => panel.classList.remove('show')
 browse.onclick = () => {
   closePanel()
   closeMap(false)
+  closeSaved(false)
   openExplore('bar')
 }
 menu.onclick = () => {
@@ -1069,9 +1143,10 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // what the answer is: pipeline.ts decides (and keeps the conversation's last passage and search results)
     const r = await answer(c, made, t0)
     answered = r.answered
-    m = { who: 'bot', ...r.reply }
+    m = { who: 'bot', ...r.reply, saveQ: queryOfAnswer({ sheet: made.sheet, ref: r.ref, concept: r.concept, q: made.q, label, lang: r.reply.lang }) ?? undefined }
     point = r.node
-    if (r.sheet && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(r.sheet).catch(() => '')
+    const cs = contextSheet(c, r) // (a branch on a story of Open Bible Stories: the story)
+    if (cs && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(cs).catch(() => '')
   } catch (err: any) {
     // an error: the same question again, or Browse (no dead end)
     m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}`, ui: nav, follow: [...againStep(nav, again), browseStep(nav)] }
@@ -1096,6 +1171,10 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   updateMapBtn()
   c.updated = Date.now()
   save()
+  // a 5M session (dev switch): where it is now, to resume it from another conversation (only while conversations are kept)
+  if (devOn('obs5m') && c.graph?.session) saveSession(c.id, c.graph.session)
+  // the row of suggestions shows where the conversation is now (and builds its word index at idle after the first answer)
+  cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
   // only from something found on the phone: with nothing found, the larger model would answer from memory (a report of Nov 13)
   const asking = m.who === 'bot' && !!(m.info || m.helps?.length || m.study) && onlineOn() && onlineAvailable() && isOnline()
@@ -1123,6 +1202,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // (on any error there, the phone's answer and the passage's context as before, so "writing…" never stays)
     const { helps, history, sources } = await buildContext({
       question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
+      // a 5M session (dev switch): its step, and the answers revealed on that card only
+      ...(devOn('obs5m') && fx5 && c.graph?.session ? { fx: fx5, ui: m.ui ?? nav, revealed: revealedOn(c.id, sessionNode(c.graph)?.id ?? '') } : {}),
     }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
@@ -1178,19 +1259,76 @@ setExploreHooks({
     panel.classList.add('show')
     renderPanel()
   },
+  saved: () => { closeExplore(false); openSaved() },
+})
+// Saved items and notes (savedview.ts): what opening one asks the chat
+setSavedHooks({
+  ui: () => nav, busy: () => busy || locked(), packName: (l) => PACK_NAMES[l] ?? l,
+  run: (label, sheet) => runSheet(label, sheet, nav),
+  ask: (q) => { const typed = input.value; input.value = q; form.requestSubmit(); input.value = typed },
+  addLang: () => { panelView = 'packs'; panel.classList.add('show'); renderPanel() },
+  closeOthers: () => { closePanel(); closeExplore(false); closeMap(false) },
 })
 
 // Typing suggestions above the box (composer.ts, menu > Typing suggestions): its "✓" sends the box's text, which the submit
-// below reads as a direct question (directRef → readQuestion with no reader: the reading the "✓" showed)
+// below reads by code (codeReads → readQuestion with no reader: the reading the "✓" showed)
 const cmp = mountComposer(form, input, {
   ui: () => nav, conv: () => conv(), packs: () => INSTALLED, busy: () => busy || locked(),
   send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
+  resume: (story) => { const e = savedSessions().find((x) => x.story === story); if (e) resume5(e) },
 })
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
   if (busy) return
   respond(conv(), label, async () => ({ sheet: { ...sheet, id: `f${Date.now()}` }, ui, meta: '(follow-up: no model call)' }), { sheet, label })
 }
+
+// How to ask (howto.ts): its "Try it" sends through the form, as if typed; its example for the composer is typed in the box
+setHowtoHooks({
+  ask: (q) => {
+    const typed = input.value
+    input.value = q
+    form.requestSubmit()
+    input.value = typed // what the person was writing stays in the box (as reaskWaiting)
+  },
+  busy: () => busy,
+  type: (text) => {
+    input.value = text
+    input.focus()
+    input.dispatchEvent(new Event('input'))
+  },
+  browse: () => openExplore('menu'),
+  onlineSettings: () => {
+    panelView = 'online'
+    panel.classList.add('show')
+    renderPanel()
+  },
+  packs: () => INSTALLED,
+  helpsLang: () => helpsLang,
+})
+// The welcome (welcome.ts): a book's path starts as if "Voy a traducir Rut" were typed (read by code, no model); a learning path
+// starts in this conversation at its first article (in place of a book's path). Its answers are counted like any answer; the
+// welcome adds no counters of its own
+setWelcomeHooks({
+  packs: () => [...new Set([examplesLang(), 'en', ...INSTALLED].filter((l): l is string => !!l && INSTALLED.includes(l)))],
+  start: (label, make) => {
+    if (busy || locked()) return
+    const c = conv()
+    respond(c, label, () => make(c), { q: label })
+  },
+  learn: (l, label, sheet) => {
+    if (busy || locked()) return
+    const g = (conv().graph ??= newGraph())
+    g.learn = l
+    // (the lessons replace a book's path: their articles are not "away from the path")
+    delete g.path
+    delete g.pathNext
+    delete g.pathBefore
+    runSheet(label, sheet, nav)
+  },
+  browse: () => openExplore('welcome'),
+  busy: () => busy,
+})
 
 /**
  * Back to a point of the conversation (the "← Back to …" button, a tap in the Map): a divider in the chat, the conversation's
@@ -1221,6 +1359,183 @@ function goTo(id: string, from: 'back' | 'map') {
   updateMapBtn()
 }
 
+// ------------------------------------------------------------------------------------------------------------ the 5M session
+// (dev switch `obs5m`; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
+// has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
+// [≡] opens the outline, full screen like the Map (under the PIN lock like it). With the switch off none of this exists.
+let fx5: Fixture | null = null
+let fx5p: Promise<Fixture | null> | null = null
+/** The story's tables, read once (the dev fixture); the bar and the cards are drawn again when they arrive */
+function fixture5(): Fixture | null {
+  if (fx5 || !devOn('obs5m')) return fx5
+  // (pipeline.ts's loader: the composer's session buttons read the same tables)
+  fx5p ??= loadFixture5().then((f) => {
+    fx5 = f
+    if (conv()?.msgs.some((m) => m.card) || !conv()?.msgs.length) renderConv()
+    else updateBar()
+    cmp.answered() // the composer's row asks again: [Resume] and the step's buttons need the tables
+    return f
+  }, () => { fx5p = null; return null })
+  return null
+}
+/** The share button of a session's card (dev switch): the session as it is when tapped, with the answers revealed so far */
+function sessionShare(cv: Conv | undefined, ui: string): HTMLElement | null {
+  const g = cv?.graph
+  if (!cv || !g?.session || !fx5) return null
+  return shareTextButton(() => shareSession(fx5!, g.session!, revealedIn(cv.id), ui), ui)
+}
+/** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
+function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
+  const fx = fixture5()
+  if (!fx || !cv?.graph?.session) return undefined
+  const g = cv.graph
+  // the session as it is when tapped (each step replaces g.session; the marks go to the current copy)
+  return { fx, get s() { return g.session! }, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui),
+    // an answer shown on a card is remembered here, in memory only, for share and the online context (never saved, never counted)
+    reveal: (id: string, shown: boolean) => { if (node) revealOn(cv.id, node, id, shown) },
+    // (a mark is kept with the conversation and the saved place, as any answer is; saveSession asks keepHistory and never throws)
+    marked: () => { save(); if (g.session) saveSession(cv.id, g.session) } }
+}
+/** A step of the session as a turn of the chat */
+function runStep(label: string, s: Session) {
+  if (!fx5) return
+  runSheet(label, sheetOf5(fx5, s, s.lang), nav)
+}
+function updateBar() {
+  const g = conv()?.graph
+  const s = devOn('obs5m') ? g?.session : undefined
+  const fx = s ? fixture5() : null
+  const old = document.querySelector('#s5bar')
+  if (!g || !s || !fx) {
+    old?.remove()
+    return
+  }
+  const dimmed = nodeOf(g, g.cur)?.kind !== 'obs5m'
+  const bar = drawBar(s, fx, nav, {
+    prev: () => { const p = prev5(fx, s); if (p) runStep(stepPlace(fx, p, nav), p) },
+    next: () => { const n = next5(fx, s); if (n) runStep(W5(nav).next.replace('{place}', stepPlace(fx, n, nav)), n) },
+    outline: () => openOutline(),
+    back: () => { const n = sessionNode(g); if (n) goTo(n.id, 'back') },
+  }, dimmed)
+  if (old) old.replaceWith(bar)
+  else document.querySelector('#notice')!.before(bar)
+  if (outIsOpen()) drawOutlineNow()
+}
+let s5out: { root: HTMLElement; title: HTMLElement; body: HTMLElement; close: HTMLButtonElement } | null = null
+const outIsOpen = () => !!s5out?.root.classList.contains('open')
+function ensureOutline() {
+  if (s5out) return s5out
+  const root = el('div', '')
+  root.id = 's5out'
+  root.tabIndex = -1
+  root.setAttribute('role', 'dialog')
+  root.setAttribute('aria-modal', 'true')
+  root.setAttribute('aria-labelledby', 's5-out-h')
+  const head = el('div', 'ex-head')
+  const title = el('h2', 'ex-title')
+  title.id = 's5-out-h'
+  const close = el('button', 'ex-btn', '✕') as HTMLButtonElement
+  close.type = 'button'
+  close.onclick = () => closeOutline()
+  head.append(title, close)
+  const body = el('div', 'ex-body')
+  root.append(head, body)
+  document.body.appendChild(root)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && outIsOpen()) {
+      e.preventDefault()
+      closeOutline()
+    }
+  })
+  // the PIN lock covers the outline: it closes under the lock
+  new MutationObserver(() => { if (outIsOpen() && document.querySelector('#lock')) closeOutline() }).observe(document.body, { childList: true })
+  s5out = { root, title, body, close }
+  return s5out
+}
+function drawOutlineNow() {
+  const o = ensureOutline()
+  const s = conv()?.graph?.session
+  if (!s || !fx5) return closeOutline()
+  const fx = fx5
+  o.root.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  o.title.textContent = W5(nav).outline
+  o.close.setAttribute('aria-label', W5(nav).view.close)
+  o.body.replaceChildren(drawOutline(s, fx, nav, {
+    jump: (p: Code5) => {
+      closeOutline()
+      const to = jump5(fx, s, p, p === s.part ? s.at : 0)
+      runStep(stepPlace(fx, to, nav), to)
+    },
+    how: () => {}, // "How the five movements work" ships after the licence check (decision 5): hidden in the mock
+    end: () => end5(),
+  }))
+}
+/** [End session]: the conversation leaves the session (its light path back); its notes stay, and so does [Resume] */
+function end5() {
+  closeOutline()
+  if (busy) return
+  count('5m.end')
+  forgetReveals(conv().id)
+  endSession(conv())
+  save()
+  // (the cards drawn before keep no live buttons into the ended session)
+  renderConv()
+  updateBar()
+  cmp.answered()
+}
+/** The resume buttons of the welcome: the sessions used last (up to 3) */
+function resumeRow(): HTMLElement | null {
+  const fx = fixture5()
+  if (!devOn('obs5m') || !fx) return null
+  const list = savedSessions().filter((e) => e.story === fx.story).slice(0, 3)
+  if (!list.length) return null
+  const row = el('div', 's5-resume')
+  row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  for (const e of list) {
+    const b = el('button', 's5-resume-btn', bidiLabel(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), nav)) as HTMLButtonElement
+    b.type = 'button'
+    b.onclick = () => resume5(e)
+    row.appendChild(b)
+  }
+  return row
+}
+/**
+ * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this
+ * one, where the saved place is put back and its step asked again. Its earlier consultations may be gone; its place is not.
+ */
+function resume5(e: Saved5) {
+  const fx = fixture5()
+  if (busy || locked() || !fx) return
+  const t = resumeTarget(e.conv, convs.map((c) => ({ id: c.id, empty: !c.msgs.length })), current, MAX)
+  if (t.k === 'open' || t.k === 'empty') current = t.id
+  else if (t.k === 'new' && !newConv()) return
+  const c = conv()
+  closePanel()
+  // its conversation, still at the session: shown as it was
+  const s = c.graph?.session
+  count('5m.resume')
+  if (t.k === 'open' && s && s.story === e.s.story) {
+    save()
+    renderConv()
+    return
+  }
+  resumeIn(c, e.s)
+  save()
+  renderConv()
+  runStep(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), e.s)
+}
+function openOutline() {
+  if (locked() || document.querySelector('#lock')) return
+  closeMap(false)
+  closeExplore(false)
+  drawOutlineNow()
+  s5out?.root.classList.add('open')
+  s5out?.root.focus({ preventScroll: true })
+}
+function closeOutline() {
+  s5out?.root.classList.remove('open')
+}
+
 // ------------------------------------------------------------------------------------------------------------ the map
 // The conversation's graph as a list, full screen like Browse (and under the PIN lock like it): each point its name and a small
 // mark for how it joined the one above (same passage, from it, new topic), indented when it went deeper or branched; the
@@ -1246,6 +1561,7 @@ mapBtn.onclick = () => {
 }
 const points = () => conv().graph?.nodes.length ?? 0
 function updateMapBtn() {
+  updateBar()
   mapBtn.hidden = points() < MAP_MIN
   mapBtn.setAttribute('aria-label', GT(nav).mapLong)
   mapBtn.title = GT(nav).map
@@ -1332,6 +1648,26 @@ function drawMap() {
     }
     b.body.appendChild(row)
   }
+  // a learning path (learn.ts): the article it was on, one tap to go on with it
+  if (g?.learn) {
+    const label = learnLabel(nav, g.learn, 'resume')
+    const row = el('button', 'ex-row gm-row gm-path') as HTMLButtonElement
+    row.type = 'button'
+    const ic = el('span', 'gm-ic gm-line')
+    ic.innerHTML = svg('<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>')
+    const txt = el('span', 'gm-txt')
+    const name = el('span', 'ex-row-t', bidiLabel(label, nav))
+    name.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+    txt.appendChild(name)
+    row.append(ic, txt)
+    const sheet = learnSheet(g.learn)
+    row.onclick = () => {
+      if (busy) return
+      closeMap(false)
+      runSheet(g.learn!.title, sheet, nav)
+    }
+    b.body.appendChild(row)
+  }
   const list = el('div', 'ex-rows gm-rows')
   let here: HTMLElement | null = null
   for (const r of g ? mapRows(g, mapOpened) : []) {
@@ -1346,6 +1682,13 @@ function drawMap() {
         mapOpened.add(r.key)
         drawMap()
       }
+    } else if (r.k === 'group') {
+      // a 5M session (dev switch `obs5m`): its name over its steps; the steps themselves are the points to go back to
+      row.classList.add('gm-group')
+      row.disabled = true
+      const name = el('span', 'ex-row-t', r.label)
+      name.dir = 'ltr'
+      row.appendChild(name)
     } else {
       const ic = el('span', `gm-ic gm-${r.node.edge}`)
       ic.innerHTML = svg(ICONS[r.node.edge] ?? ICONS.start!)
@@ -1383,14 +1726,15 @@ form.addEventListener('submit', (e) => {
   input.value = ''
   cmp.clear()
   const c = conv()
-  // only a reference ("Rut 2:3", "Jonás 1:3 notas"): code reads it, so neither reader runs (saves about 4 s on a phone)
-  const direct = !has('help', q) && directRef(q)
+  // only a reference ("Rut 2:3", "Jonás 1:3 notas") or a follow-up code reads ("¿y las notas?" after one): neither reader runs
+  // (saves about 4 s on a phone), and the answer is what the composer's "✓" showed
+  const direct = !has('help', q) && codeReads(q, c)
   count('asked')
   count(direct ? 'model.skipped' : modelReady() && !modelOff() ? 'model.used' : 'model.none')
   respond(c, q0, async () => {
     // "What can you do?", "What questions can you answer about Titus?": what to ask, and for a book, a few ways in
     if (has('help', q)) throw { done: await helpAnswer(q, target ?? guessLang(q) ?? nav) }
-    if (direct) return readQuestion(q, { slots: null, raw: 'model skipped (reference)', ms: 0 }, c, target)
+    if (direct) return readQuestion(q, { slots: null, raw: 'read by code (no reader)', ms: 0 }, c, target)
     // with the online helper on and a connection, the online model reads the question; otherwise (or if it fails) the phone's
     // a follow-up ("and the notes?", "and verse 5?") is read with the previous question's compact state; the phone model
     // gets it only when trained for it (followUps)
@@ -1434,6 +1778,7 @@ onPacksChanged(() => {
   resetLangs()
   resetBooks()
   resetExplore()
+  resetLearn()
   resetSearch()
   refreshInstalled().then(() => cmp.reset())
 })
@@ -1482,4 +1827,7 @@ function firstSafety() {
 try {
   if (!localStorage.getItem('btsm.onboarded')) localStorage.setItem('btsm.onboarded', '1')
 } catch {}
+initDev()
+// the 5M session's tables, read early so its cards and bar are drawn whole (dev switch only)
+fixture5()
 firstSafety()

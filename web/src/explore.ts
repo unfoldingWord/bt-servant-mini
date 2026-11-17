@@ -7,6 +7,9 @@ import { CANON, openLang } from './packs'
 import { bookShown } from './firstuse'
 import { count } from './usage'
 import taSections from './data/ta-sections.json'
+import { addSaved, findSaved, MAX_ITEMS, personal, removeSaved, savedSummary, ST as SVT } from './saved'
+import { bibleLabel, obsLabel, obsPack, OW, type StoryEntry, storyList } from './obs'
+import { rtlLang } from './bidi'
 
 // ------------------------------------------------------------------------------------------------------------------ data
 
@@ -240,6 +243,8 @@ export type ExploreHooks = {
   ask: (label: string, q: Ask) => boolean
   /** no language on the phone: to where one is added */
   addLang: () => void
+  /** the Saved view (savedview.ts), over Browse */
+  saved?: () => void
 }
 let hooks: ExploreHooks | null = null
 export function setExploreHooks(h: ExploreHooks) {
@@ -251,11 +256,13 @@ type View =
   | { k: 'book'; code: string; lang: string }
   | { k: 'chapter'; code: string; lang: string; ch: number }
   | { k: 'manual'; m: Manual; lang: string }
+  | { k: 'obs'; lang: string }
 // kept while the app is open: Browse opens again where the person left it (the next verse is one tap away)
 const stack: View[] = []
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
 let reached = false // whether this opening of the app has reached a help through Browse (counted once)
 let opener: HTMLElement | null = null // where the focus goes back to
+let picking = false // a chapter's verses saved with a tap (☆ Save verses) instead of opened
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag)
@@ -325,8 +332,11 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
   draw()
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
-export function openExploreAt(at: { book?: string; manual?: string; lang?: string }) {
-  if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
+export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean }) {
+  if (at.lang && at.obs) {
+    stack.length = 0
+    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang })
+  } else if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
     stack.length = 0
     stack.push({ k: 'home', tab: at.book ? 'bible' : 'academy' })
     stack.push(at.book ? { k: 'book', code: at.book, lang: at.lang } : { k: 'manual', m: at.manual as Manual, lang: at.lang })
@@ -395,15 +405,24 @@ async function draw() {
   const packs = hooks.packs()
   const name = (lang: string) => hooks!.packName(lang)
 
+  if (v.k !== 'chapter') picking = false
   if (v.k === 'home') {
     b.title.textContent = s.browse
+    // saved items and notes, one tap away (savedview.ts)
+    if (hooks.saved) {
+      const sv = el('div', 'ex-rows ex-saved')
+      const row = button('ex-row', '', () => hooks?.saved?.())
+      row.append(el('span', 'ex-row-t', `☆ ${SVT(ui).title}`), el('span', 'ex-row-s', savedSummary(ui)), chevron('ex-row-c'))
+      sv.appendChild(row)
+      b.body.appendChild(sv)
+    }
     if (!packs.length) {
       if (!done()) return
       b.body.appendChild(el('p', 'ex-note', s.none))
       b.body.appendChild(button('ex-pill', s.addLang, () => { closeExplore(); hooks?.addLang() }))
       return
     }
-    const [books, manuals] = await Promise.all([bibleBooks(packs), academyManuals(packs)])
+    const [books, manuals, stories] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null)])
     if (!done()) return
     // the two halves as tabs; one alone needs none
     if (books.length && manuals.length) {
@@ -419,6 +438,14 @@ async function draw() {
     }
     const tab = !manuals.length ? 'bible' : !books.length ? 'academy' : v.tab
     if (tab === 'bible') {
+      // Open Bible Stories, when a pack on the phone has them: the 50 stories, one tap each (obs.ts)
+      if (stories) {
+        const rows = el('div', 'ex-rows ex-obs')
+        const row = button('ex-row', '', () => { stack.push({ k: 'obs', lang: stories.lang }); draw() })
+        row.append(el('span', 'ex-row-t', OW(ui).browse), el('span', 'ex-row-s', OW(ui).browseSub), chevron('ex-row-c'))
+        rows.appendChild(row)
+        b.body.appendChild(rows)
+      }
       // books from more than one pack: those in the first pack's language first, then the others by pack, each said
       const langs = [...new Set(books.map((x) => x.lang))].sort((a, c) => packs.indexOf(a) - packs.indexOf(c))
       for (const lang of langs) {
@@ -446,6 +473,33 @@ async function draw() {
       }
       b.body.appendChild(list)
     }
+    return
+  }
+
+  if (v.k === 'obs') {
+    // the stories in order: the title in the pack's language (its own direction), the Bible passages it is told from
+    b.title.textContent = OW(ui).browse
+    let list: StoryEntry[] = []
+    try {
+      list = await storyList(await openLang(v.lang))
+    } catch { /* drawn as not readable below */ }
+    if (!done()) return
+    if (!list.length) {
+      b.body.appendChild(el('p', 'ex-note', s.failed))
+      return
+    }
+    const rows = el('div', 'ex-rows')
+    rows.dataset.lang = v.lang
+    for (const e of list) {
+      const label = e.title ? `${obsLabel(e.n)}: ${e.title}` : obsLabel(e.n)
+      const row = button('ex-row', '', () => ask(label, { lang: v.lang, intent: 'passage', ref: `obs ${e.n}`, what: ['text', 'notes'] }))
+      const t = row.appendChild(el('span', 'ex-row-t', label))
+      t.dir = rtlLang(v.lang) ? 'rtl' : 'ltr'
+      if (e.refs.length) row.appendChild(el('span', 'ex-row-s', e.refs.slice(0, 3).map((r) => bibleLabel(ui, r)).join(' · ') + (e.refs.length > 3 ? ' …' : ''))).dir = rtlLang(ui) ? 'rtl' : 'ltr'
+      row.appendChild(chevron('ex-row-c'))
+      rows.appendChild(row)
+    }
+    b.body.appendChild(rows)
     return
   }
 
@@ -487,10 +541,48 @@ async function draw() {
     const pills = el('div', 'ex-pills')
     pills.appendChild(button('ex-pill', fill(s.chapter, { ch: c.ch }), () => passage(`${book} ${c.ch}`, `${v.code} ${c.ch}`, ['text', 'notes'])))
     if (c.intro) pills.appendChild(button('ex-pill', fill(s.chIntro, { ch: c.ch }), () => passage(`${book} ${c.ch}: ${fill(s.chIntro, { ch: c.ch })}`, `${v.code} ${c.ch}:intro`, ['intro'])))
+    // ☆ Save verses: a tap on a verse saves it (or takes it out) instead of opening it, until Done (saved.ts)
+    const pick = button(picking ? 'ex-pill on' : 'ex-pill', picking ? SVT(ui).done : SVT(ui).saveVerses, () => { picking = !picking; draw() })
+    pick.setAttribute('aria-pressed', String(picking))
+    pills.appendChild(pick)
     b.body.appendChild(pills)
+    if (picking) b.body.appendChild(el('p', 'ex-note', SVT(ui).versesHint)).setAttribute('role', 'status')
     b.body.appendChild(el('h3', '', s.verses))
-    const grid = el('div', 'ex-grid')
-    for (const n of c.verses) grid.appendChild(button('', String(n), () => passage(`${book} ${c.ch}:${n}`, `${v.code} ${c.ch}:${n}`, ['text', 'notes'])))
+    const grid = el('div', picking ? 'ex-grid picking' : 'ex-grid')
+    let sure = '' // the verse whose removal waits for a second tap
+    for (const n of c.verses) {
+      const q = { k: 'passage' as const, ref: `${v.code} ${c.ch}:${n}`, lang: v.lang, what: ['text', 'notes'] }
+      const vb = button('', String(n), () => {
+        if (!picking) return passage(`${book} ${c.ch}:${n}`, q.ref, q.what)
+        const say = (t: string) => {
+          b.body.querySelector('.ex-busy')?.remove()
+          const note = el('p', 'ex-note ex-busy', t)
+          note.setAttribute('role', 'status')
+          grid.before(note)
+        }
+        const had = findSaved(q)
+        if (had) {
+          // one the person named or grouped goes with a second tap
+          if (personal(had) && sure !== q.ref) {
+            sure = q.ref
+            return say(SVT(ui).sure)
+          }
+          sure = ''
+          b.body.querySelector('.ex-busy')?.remove()
+          removeSaved(had.id)
+        } else {
+          const r = addSaved({ q, label: `${book} ${c.ch}:${n}`, ui }).res
+          if (r !== 'ok') say(r === 'full' ? SVT(ui).full : fill(SVT(ui).many, { n: MAX_ITEMS }))
+        }
+        const on = !!findSaved(q)
+        vb.classList.toggle('saved', on)
+        vb.setAttribute('aria-pressed', String(on))
+      })
+      // a saved verse is marked (★), in both modes
+      if (findSaved(q)) vb.classList.add('saved')
+      if (picking) vb.setAttribute('aria-pressed', String(vb.classList.contains('saved')))
+      grid.appendChild(vb)
+    }
     b.body.appendChild(grid)
     return
   }
