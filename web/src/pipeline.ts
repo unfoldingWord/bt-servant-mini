@@ -9,7 +9,7 @@ import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, i
 import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
-import { frameHelps, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
+import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
 import { devOn, type Fixture, loadFixture } from './dev'
 import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
 import { W5 } from './obs5mwords'
@@ -326,7 +326,8 @@ export function followUp(q: string, s0: Slots, c: ConvState): FollowUp | null {
   if (!st || !code) return null
   const lang = s0.lang ?? env.nav
   if (ownRef(q, s0, lang)) return null
-  const t = latinDigits(q)
+  // in a story of Open Bible Stories a frame is its verse: "next frame", "l'image suivante", "والإطار التالي", "अगला फ़्रेम"
+  const t = code === 'obs' ? latinDigits(q).replace(FRAME_ANY, ' verse ') : latinDigits(q)
   // "the next book", "how many books…": about books, not this passage
   if (has('bookWord', t)) return null
   const rest = keywords(strip(t, ['range', ...FU_WORDS]))
@@ -952,8 +953,14 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   // a follow-up with no reference of its own, completed from the state by code: only when the reader gave nothing usable
   // (no reader, "unknown", a passage with no book), never over a good reading; not when it picks a search result
   const unread = !slots || !slots.intent || slots.intent === 'unknown' || (slots.intent === 'passage' && !slots.book)
+  // Any reading gives way when the question has no book's name: followUp only reads a question with no reference and no
+  // words of its own, which the small model often reads as junk ("what are the key terms?" as the book «article», "¿y las
+  // notas?" as a search for «notes», "और टिप्पणियाँ?" as a count, "والإطار التالي؟" as Proverbs). A word that may name a
+  // book stays the reader's ("العدد 5" after Ruth 2:3 is Numbers 5 to a reader: decided Nov 15 for fu-ar-numbers-read),
+  // as in followUpPreview.
+  const yields = unread || !refInText({ intent: 'unknown', lang: s0.lang ?? guessLang(q) }, q).book
   // (without a greeting or thanks before it: "gracias, ¿y el siguiente?" is "¿y el siguiente?")
-  const fu = unread && ordinalPick(q) === undefined ? followUp(withoutWeak(q), s0, c) : null
+  const fu = yields && ordinalPick(q) === undefined ? followUp(withoutWeak(q), s0, c) : null
   if (fu) {
     // checked against the book: past its ends it says so ("Ruth 4:22 is the last verse of Ruth")
     const checked = await boundsCheck(fu, fu.slots.lang ?? env.nav)

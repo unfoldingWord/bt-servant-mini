@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Case, check, loadCases, offersNext, type Outcome, runCase } from './harness'
 
-const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall', 'guide']
+const FILES = ['q36', 'langs', 'new18', 'followup', 'reports', 'quechua', 'academy', 'findall', 'guide', 'obs']
 // ANSWERS=fast (build.py's default): only the cases marked fast, a minute at most; the scores are compared on a full run
 const FAST = process.env.ANSWERS === 'fast'
 /**
