@@ -2910,7 +2910,10 @@ async function step5(x: Ctx): Promise<Done | null> {
   const card = cardOf(fx, s, helps, ui)!
   const follow: Follow[] = []
   const nx = nextOf5(fx, s)
-  if (nx) follow.push({ label: W5(ui).next.replace('{place}', stepPlace(fx, nx, ui)), sheet: sheetOf(fx, nx, s.lang), sessionNext: true })
+  // the end of M1's observation frames: the optional review, or straight on to the translation questions
+  const skip = nx && stepAt(fx, nx)?.kind === 'review' ? nextOf5(fx, nx) : null
+  if (nx && skip) follow.push({ label: W5(ui).reviewOffer, sheet: sheetOf(fx, nx, s.lang), sessionNext: true }, { label: W5(ui).reviewSkip, sheet: sheetOf(fx, skip, s.lang) })
+  else if (nx) follow.push({ label: W5(ui).next.replace('{place}', stepPlace(fx, nx, ui)), sheet: sheetOf(fx, nx, s.lang), sessionNext: true })
   const links: string[] = []
   if (helps && fref && st.frame) {
     const w = W5(ui).helps

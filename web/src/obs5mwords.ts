@@ -27,6 +27,8 @@ export type Words5 = {
   /** the names of the helps a frame can open */
   helps: { tn: string; tq: string; twl: string; sn: string; sq: string; passage: string; academy: string }
   start: string
+  /** the session's view (obs5mview.ts): the M1 handout button, the folded instruction, the bar's ◀ ▶ and the outline's ✕ */
+  view: { allList: string; instruction: string; prevStep: string; nextStep: string; close: string }
 }
 
 const W: Record<L, Words5> = {
@@ -41,6 +43,7 @@ const W: Record<L, Words5> = {
     durations: { intro: '', frames: '', community: '', m1: 'about 150 min', m2: '3–4 h', drafting: '', m3: 'about 60 min', checking: '', m4: '60–90 min', m5: '', conclusion: '' },
     helps: { tn: 'Translation notes', tq: 'Translation questions', twl: 'Key terms', sn: 'Study notes', sq: 'Study questions', passage: 'Passage', academy: 'Translation Academy' },
     start: 'Start a 5M session',
+    view: { allList: 'All questions in one list', instruction: 'The manual’s instruction', prevStep: 'Previous step', nextStep: 'Next step', close: 'Close' },
   },
   es: {
     parts: { intro: 'Introducción', frames: 'Cuadros', community: 'Comunidad', m1: 'Movimiento 1', m2: 'Movimiento 2', drafting: 'Borrador', m3: 'Movimiento 3', checking: 'Revisión', m4: 'Movimiento 4', m5: 'Movimiento 5', conclusion: 'Conclusión' },
@@ -53,6 +56,7 @@ const W: Record<L, Words5> = {
     durations: { intro: '', frames: '', community: '', m1: 'unos 150 min', m2: '3–4 h', drafting: '', m3: 'unos 60 min', checking: '', m4: '60–90 min', m5: '', conclusion: '' },
     helps: { tn: 'Notas de traducción', tq: 'Preguntas de traducción', twl: 'Palabras clave', sn: 'Notas de estudio', sq: 'Preguntas de estudio', passage: 'Pasaje', academy: 'Translation Academy' },
     start: 'Empezar una sesión 5M',
+    view: { allList: 'Todas las preguntas en una lista', instruction: 'La instrucción del manual', prevStep: 'Paso anterior', nextStep: 'Paso siguiente', close: 'Cerrar' },
   },
   fr: {
     parts: { intro: 'Introduction', frames: 'Images', community: 'Communauté', m1: 'Mouvement 1', m2: 'Mouvement 2', drafting: 'Brouillon', m3: 'Mouvement 3', checking: 'Vérification', m4: 'Mouvement 4', m5: 'Mouvement 5', conclusion: 'Conclusion' },
@@ -65,6 +69,7 @@ const W: Record<L, Words5> = {
     durations: { intro: '', frames: '', community: '', m1: 'environ 150 min', m2: '3–4 h', drafting: '', m3: 'environ 60 min', checking: '', m4: '60–90 min', m5: '', conclusion: '' },
     helps: { tn: 'Notes de traduction', tq: 'Questions de traduction', twl: 'Mots clés', sn: 'Notes d’étude', sq: 'Questions d’étude', passage: 'Passage', academy: 'Translation Academy' },
     start: 'Commencer une session 5M',
+    view: { allList: 'Toutes les questions en une liste', instruction: 'La consigne du manuel', prevStep: 'Étape précédente', nextStep: 'Étape suivante', close: 'Fermer' },
   },
   id: {
     parts: { intro: 'Pengantar', frames: 'Bingkai', community: 'Komunitas', m1: 'Gerakan 1', m2: 'Gerakan 2', drafting: 'Draf', m3: 'Gerakan 3', checking: 'Pemeriksaan', m4: 'Gerakan 4', m5: 'Gerakan 5', conclusion: 'Penutup' },
@@ -77,6 +82,7 @@ const W: Record<L, Words5> = {
     durations: { intro: '', frames: '', community: '', m1: 'sekitar 150 menit', m2: '3–4 jam', drafting: '', m3: 'sekitar 60 menit', checking: '', m4: '60–90 menit', m5: '', conclusion: '' },
     helps: { tn: 'Catatan terjemahan', tq: 'Pertanyaan terjemahan', twl: 'Istilah kunci', sn: 'Catatan studi', sq: 'Pertanyaan studi', passage: 'Perikop', academy: 'Translation Academy' },
     start: 'Mulai sesi 5M',
+    view: { allList: 'Semua pertanyaan dalam satu daftar', instruction: 'Petunjuk dari manual', prevStep: 'Langkah sebelumnya', nextStep: 'Langkah berikutnya', close: 'Tutup' },
   },
   hi: { // model-written, unreviewed
     parts: { intro: 'परिचय', frames: 'फ़्रेम', community: 'समुदाय', m1: 'आंदोलन 1', m2: 'आंदोलन 2', drafting: 'प्रारूप', m3: 'आंदोलन 3', checking: 'जाँच', m4: 'आंदोलन 4', m5: 'आंदोलन 5', conclusion: 'समापन' },
@@ -89,6 +95,7 @@ const W: Record<L, Words5> = {
     durations: { intro: '', frames: '', community: '', m1: 'लगभग 150 मिनट', m2: '3–4 घंटे', drafting: '', m3: 'लगभग 60 मिनट', checking: '', m4: '60–90 मिनट', m5: '', conclusion: '' },
     helps: { tn: 'अनुवाद टिप्पणियाँ', tq: 'अनुवाद प्रश्न', twl: 'मुख्य शब्द', sn: 'अध्ययन टिप्पणियाँ', sq: 'अध्ययन प्रश्न', passage: 'अंश', academy: 'Translation Academy' },
     start: '5M सत्र शुरू करें',
+    view: { allList: 'सभी प्रश्न एक सूची में', instruction: 'मैनुअल का निर्देश', prevStep: 'पिछला चरण', nextStep: 'अगला चरण', close: 'बंद करें' },
   },
   ar: { // model-written, unreviewed
     parts: { intro: 'مقدمة', frames: 'الإطارات', community: 'المجتمع', m1: 'الحركة 1', m2: 'الحركة 2', drafting: 'المسودة', m3: 'الحركة 3', checking: 'التدقيق', m4: 'الحركة 4', m5: 'الحركة 5', conclusion: 'الخاتمة' },
@@ -101,6 +108,7 @@ const W: Record<L, Words5> = {
     durations: { intro: '', frames: '', community: '', m1: 'حوالي 150 دقيقة', m2: '3–4 ساعات', drafting: '', m3: 'حوالي 60 دقيقة', checking: '', m4: '60–90 دقيقة', m5: '', conclusion: '' },
     helps: { tn: 'ملاحظات الترجمة', tq: 'أسئلة الترجمة', twl: 'الكلمات الرئيسية', sn: 'ملاحظات الدراسة', sq: 'أسئلة الدراسة', passage: 'المقطع', academy: 'Translation Academy' },
     start: 'ابدأ جلسة 5M',
+    view: { allList: 'كل الأسئلة في قائمة واحدة', instruction: 'تعليمات الدليل', prevStep: 'الخطوة السابقة', nextStep: 'الخطوة التالية', close: 'إغلاق' },
   },
 }
 

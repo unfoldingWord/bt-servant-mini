@@ -20,7 +20,7 @@ import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, 
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { answer, codeReads, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
-import { backLine, GD, GT, mapRows, newGraph, nodeOf } from './graph'
+import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
@@ -28,7 +28,10 @@ import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, se
 import { composerSwitch, mountComposer } from './composer'
 import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
-import { initDev } from './dev'
+import { devOn, type Fixture, initDev, loadFixture } from './dev'
+import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
+import { drawBar, drawCard, drawOutline } from './obs5mview'
+import { W5 } from './obs5mwords'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
 import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
@@ -287,6 +290,12 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pm)
   }
+  // a step of a 5M session: where it is ("Movement 1 · observation · frame 5/16"), first
+  if (m.sessionMark) {
+    const sm = el('div', 'path-mark s5-mark', bidiLabel(m.sessionMark, m.ui ?? nav))
+    sm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
+    d.appendChild(sm)
+  }
   // what the person wrote about this verse, article or question (saved.ts), above the answer
   d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
@@ -325,9 +334,11 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     host.appendChild(box)
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
-  if (m.text) d.appendChild(el('div', 'plain', m.text))
-  // the way back to the passage this answer left (and to the path it left), on its own row, then the next steps
-  const backs = [m.back, m.pathBack].filter((f): f is Followup => !!f)
+  // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
+  if (m.card) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav)))
+  else if (m.text) d.appendChild(el('div', 'plain', m.text))
+  // the way back to the 5M session, to the passage this answer left (and to the path it left), on its own row, then the next steps
+  const backs = [m.sessionBack, m.back, m.pathBack].filter((f): f is Followup => !!f)
   if (backs.length) d.appendChild(followRow(m, backs, 'follow back-row'))
   // a path starts: the line that proposes it, just above its first step
   if (m.pathLine) {
@@ -414,7 +425,7 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
   for (const x of follow) {
     const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
     b.type = 'button'
-    if (x.back || x.toPath) b.className = 'back'
+    if (x.back || x.toPath || x.toSession) b.className = 'back'
     else if (x.pathNext) b.className = 'path-next'
     b.onclick = () => {
       if (x.back) goTo(x.back, 'back')
@@ -1331,6 +1342,115 @@ function goTo(id: string, from: 'back' | 'map') {
   updateMapBtn()
 }
 
+// ------------------------------------------------------------------------------------------------------------ the 5M session
+// (dev switch `obs5m`; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
+// has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
+// [≡] opens the outline, full screen like the Map (under the PIN lock like it). With the switch off none of this exists.
+let fx5: Fixture | null = null
+let fx5p: Promise<Fixture | null> | null = null
+/** The story's tables, read once (the dev fixture); the bar and the cards are drawn again when they arrive */
+function fixture5(): Fixture | null {
+  if (fx5 || !devOn('obs5m')) return fx5
+  fx5p ??= loadFixture().then((f) => {
+    fx5 = f
+    if (conv()?.msgs.some((m) => m.card)) renderConv()
+    else updateBar()
+    return f
+  }, () => { fx5p = null; return null })
+  return null
+}
+/** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
+function cardHooks(cv: Conv | undefined, ui: string) {
+  const fx = fixture5()
+  const s = cv?.graph?.session
+  return fx && s ? { fx, s, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui) } : undefined
+}
+/** A step of the session as a turn of the chat */
+function runStep(label: string, s: Session) {
+  if (!fx5) return
+  runSheet(label, sheetOf5(fx5, s, s.lang), nav)
+}
+function updateBar() {
+  const g = conv()?.graph
+  const s = devOn('obs5m') ? g?.session : undefined
+  const fx = s ? fixture5() : null
+  const old = document.querySelector('#s5bar')
+  if (!g || !s || !fx) {
+    old?.remove()
+    return
+  }
+  const dimmed = nodeOf(g, g.cur)?.kind !== 'obs5m'
+  const bar = drawBar(s, fx, nav, {
+    prev: () => { const p = prev5(fx, s); if (p) runStep(stepPlace(fx, p, nav), p) },
+    next: () => { const n = next5(fx, s); if (n) runStep(W5(nav).next.replace('{place}', stepPlace(fx, n, nav)), n) },
+    outline: () => openOutline(),
+    back: () => { const n = sessionNode(g); if (n) goTo(n.id, 'back') },
+  }, dimmed)
+  if (old) old.replaceWith(bar)
+  else document.querySelector('#notice')!.before(bar)
+  if (outIsOpen()) drawOutlineNow()
+}
+let s5out: { root: HTMLElement; title: HTMLElement; body: HTMLElement; close: HTMLButtonElement } | null = null
+const outIsOpen = () => !!s5out?.root.classList.contains('open')
+function ensureOutline() {
+  if (s5out) return s5out
+  const root = el('div', '')
+  root.id = 's5out'
+  root.tabIndex = -1
+  root.setAttribute('role', 'dialog')
+  root.setAttribute('aria-modal', 'true')
+  root.setAttribute('aria-labelledby', 's5-out-h')
+  const head = el('div', 'ex-head')
+  const title = el('h2', 'ex-title')
+  title.id = 's5-out-h'
+  const close = el('button', 'ex-btn', '✕') as HTMLButtonElement
+  close.type = 'button'
+  close.onclick = () => closeOutline()
+  head.append(title, close)
+  const body = el('div', 'ex-body')
+  root.append(head, body)
+  document.body.appendChild(root)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && outIsOpen()) {
+      e.preventDefault()
+      closeOutline()
+    }
+  })
+  // the PIN lock covers the outline: it closes under the lock
+  new MutationObserver(() => { if (outIsOpen() && document.querySelector('#lock')) closeOutline() }).observe(document.body, { childList: true })
+  s5out = { root, title, body, close }
+  return s5out
+}
+function drawOutlineNow() {
+  const o = ensureOutline()
+  const s = conv()?.graph?.session
+  if (!s || !fx5) return closeOutline()
+  const fx = fx5
+  o.root.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  o.title.textContent = W5(nav).outline
+  o.close.setAttribute('aria-label', W5(nav).view.close)
+  o.body.replaceChildren(drawOutline(s, fx, nav, {
+    jump: (p: Code5) => {
+      closeOutline()
+      const to = jump5(fx, s, p, p === s.part ? s.at : 0)
+      runStep(stepPlace(fx, to, nav), to)
+    },
+    how: () => {}, // "How the five movements work" ships after the licence check (decision 5): hidden in the mock
+    end: () => closeOutline(), // Task 6 ends the session here (endSession); the mock only closes the outline
+  }))
+}
+function openOutline() {
+  if (locked() || document.querySelector('#lock')) return
+  closeMap(false)
+  closeExplore(false)
+  drawOutlineNow()
+  s5out?.root.classList.add('open')
+  s5out?.root.focus({ preventScroll: true })
+}
+function closeOutline() {
+  s5out?.root.classList.remove('open')
+}
+
 // ------------------------------------------------------------------------------------------------------------ the map
 // The conversation's graph as a list, full screen like Browse (and under the PIN lock like it): each point its name and a small
 // mark for how it joined the one above (same passage, from it, new topic), indented when it went deeper or branched; the
@@ -1356,6 +1476,7 @@ mapBtn.onclick = () => {
 }
 const points = () => conv().graph?.nodes.length ?? 0
 function updateMapBtn() {
+  updateBar()
   mapBtn.hidden = points() < MAP_MIN
   mapBtn.setAttribute('aria-label', GT(nav).mapLong)
   mapBtn.title = GT(nav).map
@@ -1622,4 +1743,6 @@ try {
   if (!localStorage.getItem('btsm.onboarded')) localStorage.setItem('btsm.onboarded', '1')
 } catch {}
 initDev()
+// the 5M session's tables, read early so its cards and bar are drawn whole (dev switch only)
+fixture5()
 firstSafety()

@@ -19,12 +19,17 @@ export type Step = {
   block?: string; text?: string; intro?: { title: string | null; text: string | null }; shared?: string
   questions: string[]; terms: number[]
 }
-export type Session = { story: number; part: Code; at: number; lang: string; tfLang: string; started: number; done: Code[] }
+/**
+ * Where a session is. `checked`: the team's marks on the checking cards ([Understood] / [Confusing: revisit frame]) by frame and
+ * OBS tQ id; kept in this copy only (never counted, never shown as a count).
+ */
+export type Session = { story: number; part: Code; at: number; lang: string; tfLang: string; started: number; done: Code[]
+  checked?: Record<string, Record<string, 'understood' | 'confusing'>> }
 /**
  * What a frame's helps are: its OBS facts (key terms) and the tA articles its notes cite (obs.ts `frameHelps` fills them);
  * `twl`: its word links with their words (a translation term's article is found by them)
  */
-export type ObsFrameHelps = { facts: ObsFacts; academy: string[]; twl?: { id: string; words: string }[] }
+export type ObsFrameHelps = { facts: ObsFacts; academy: string[]; twl?: { id: string; words: string }[]; tq?: { id: string; q: string; a: string | null }[] }
 
 type Draft = Omit<Step, 'part' | 'at' | 'questions' | 'terms'> & { questions?: string[]; terms?: number[] }
 const finish = (part: Code, ds: Draft[]): Step[] => ds.map((d, at) => ({ ...d, part, at, questions: d.questions ?? [], terms: d.terms ?? [] }))
@@ -162,6 +167,8 @@ export function frameLinks(helps: ObsFrameHelps | null, frame: string): string[]
 export type Card5 = {
   step: Step; title: string; frame?: { ref: string; text: string; image: string }; blocks: string[]
   questions: { id: string; q: string; a: string | null }[]; terms: { term: string; text: string; concept: string | null }[]; tfLang: string
+  /** a checking step: the frame's OBS tQ (from its helps), each a community-check card; its answer, like `questions`', only behind [Show answer] */
+  checks?: { id: string; q: string; a: string | null }[]
 }
 const fill = (t: string, v: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''))
 const wordsOf = (t: string): string[] => t.toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean)
@@ -195,6 +202,7 @@ export function cardOf(fx: Fixture, s: Session, helps: ObsFrameHelps | null, ui:
     ...(fr ? { frame: { ref: obsRef(s.story, n), text: fr.text, image: fr.image } } : {}),
     questions: st.questions.flatMap((id) => { const q = byId.get(id); return q ? [{ id, q: q.q, a: q.a }] : [] }),
     terms: st.terms.flatMap((k) => { const t = fx.terms[k]; return t ? [{ term: t.term, text: t.text, concept: termConcept(t.term, helps?.twl) }] : [] }),
+    ...(st.kind === 'check' ? { checks: (helps?.tq ?? []).map((x) => ({ ...x })) } : {}),
   }
 }
 /**

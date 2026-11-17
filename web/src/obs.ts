@@ -489,6 +489,8 @@ export async function obsAnswer(s: { ref: string | null; what: string[]; lang: s
  */
 export type ObsFrameData = {
   facts: ObsFacts; academy: string[]; twl: { id: string; words: string }[]; notes: number; questions: number
+  /** its comprehension questions (OBS tQ) with their answers: the 5M checking card shows them, each answer behind [Show answer] */
+  tq: { id: string; q: string; a: string | null }[]
 }
 export async function frameHelps(ref: string, lang: string, ui: string): Promise<ObsFrameData | null> {
   const p = parseObsRef(ref)
@@ -504,7 +506,8 @@ export async function frameHelps(ref: string, lang: string, ui: string): Promise
     for (const id of ids) if (!academy.includes(id)) academy.push(id)
   }
   const twl = [...new Map(fr.links.filter((x) => x.concept).map((x) => [x.concept!, String(x.cols.origWords ?? '').trim()])).entries()].map(([id, words]) => ({ id, words }))
-  return { facts, academy, twl, notes: fr.notes.filter((x) => tidyNote(x.cols.note)).length, questions: fr.questions.length }
+  const tq = fr.questions.map((x) => ({ id: x.id, q: String(x.cols.question ?? '').trim(), a: String(x.cols.response ?? '').trim() || null })).filter((x) => x.q)
+  return { facts, academy, twl, notes: fr.notes.filter((x) => tidyNote(x.cols.note)).length, questions: fr.questions.length, tq }
 }
 
 /** The sentence before an answer: "Here is OBS 3:5 of Open Bible Stories (The Flood)." (runs of the other direction isolated). */

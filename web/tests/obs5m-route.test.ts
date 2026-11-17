@@ -227,6 +227,22 @@ describe('a 5M session (dev on)', () => {
     expect(c.graph!.session).toMatchObject({ part: 'm1', at: 18 })
   }, 60_000)
 
+  test('the last observation frame offers the optional review or the translation questions; a checking card carries the frame\'s OBS tQ, not in its text', async () => {
+    const c: ConvState = { last: null }
+    await turn(c, { q: '5M OBS 1' }, 'en')
+    const r: any = await press(c, { sheet: sheetOf(fx, { ...c.graph!.session!, part: 'm1', at: 16 }, 'en') })
+    expect(r.reply.card.frame.ref).toBe('obs 1:16')
+    const [offer, skip] = r.reply.follow
+    expect([offer.label, offer.sessionNext, offer.sheet.concept]).toEqual([W5('en').reviewOffer, true, 'obs5m:1/m1/17'])
+    expect([skip.label, skip.sheet.concept]).toEqual([W5('en').reviewSkip, 'obs5m:1/m1/18'])
+    const ck: any = await press(c, { sheet: sheetOf(fx, { ...c.graph!.session!, part: 'checking', at: 4 }, 'en') })
+    const card = ck.reply.card
+    expect(card.step.kind).toBe('check')
+    expect(card.checks.length).toBeGreaterThan(0)
+    for (const q of card.checks) expect(q.q.length).toBeGreaterThan(0)
+    for (const a of card.checks.map((q: any) => q.a).filter(Boolean)) expect(String(ck.reply.text ?? '')).not.toContain(a)
+  }, 60_000)
+
   test('a story with no session says so; the obs unit missing keeps the card and the next step, no helps', async () => {
     const c: ConvState = { last: null }
     const r: any = await turn(c, { q: '5M OBS 3' }, 'en')
