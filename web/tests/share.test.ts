@@ -22,7 +22,8 @@ test('reference and source', () => {
 })
 test('the full text: question, answer, reference, link; online answer first', () => {
   const t = shareText({ who: 'bot', info: '**GLT** (x, v1): offline', ai: { text: 'online answer' }, meta }, 'en', '¿Qué dice?')!
-  expect(t).toBe(`¿Qué dice?\n\nonline answer\n\nRuth 2:3 (GLT)\n\n${APP_LINK}`)
+  // marked as the online AI's, as its badge in the app
+  expect(t).toBe(`¿Qué dice?\n\nOnline AI: online answer\n\nRuth 2:3 (GLT)\n\n${APP_LINK}`)
 })
 test('nothing to share', () => {
   expect(shareText({ who: 'bot', intro: 'hi' }, 'en')).toBeNull()
