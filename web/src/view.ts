@@ -5,6 +5,7 @@ import { articleView, helpView, type Study, titleFor } from './answer'
 import { focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { type Card, cardsT, firstLine } from './helpcards'
 import { linkTarget } from './links'
+import { type ObsStudy, wordSpans } from './obswords'
 import { md, mdDir } from './md'
 import { bidiLabel, dirOf } from './bidi'
 import { count } from './usage'
@@ -190,9 +191,13 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     const p = el('p', 'vv')
     p.dir = dirOf(t.verses.map((v) => v.p.map((x) => x[0]).join('')).join(' ')) // the version's own direction
     for (const v of t.verses) {
-      if (many) p.appendChild(el('sup', '', v.v))
+      // each verse in its own span (pager.ts shows a chapter in parts, the same verses in every version)
+      const vs = el('span', 'vs')
+      vs.dataset.v = v.v
+      p.appendChild(vs)
+      if (many) vs.appendChild(el('sup', '', v.v))
       for (const [text, keys] of v.p) {
-        if (!keys) { p.appendChild(document.createTextNode(text)); continue }
+        if (!keys) { vs.appendChild(document.createTextNode(text)); continue }
         const w = el('span', /(^| )n/.test(keys) ? 'w n' : 'w t', text)
         w.dataset.k = keys
         w.onclick = (e) => {
@@ -200,9 +205,9 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
           mark(box, w, keys.split(' '))
           openPanel({ kind: 'word', study: s, word: text, keys: keys.split(' '), root: box })
         }
-        p.appendChild(w)
+        vs.appendChild(w)
       }
-      p.appendChild(document.createTextNode(' '))
+      vs.appendChild(document.createTextNode(' '))
     }
     wrap.appendChild(p)
     host.appendChild(wrap)
@@ -345,11 +350,64 @@ function mark(root: HTMLElement, word: HTMLElement | null, keys: string[]) {
   word?.classList.add('on')
 }
 
+// ------------------------------------------------------------------------------------------------------ OBS frame words
+
+/**
+ * The words of an OBS answer's frames made tappable, as a passage's are (renderStudy): each frame's paragraph (its first node
+ * the "**3:5**" obsAnswer writes) gets the class `obs-fr`, and the words its notes and key terms quote (obswords.ts) the
+ * same `.w.n` / `.w.t` and the same panel. The answer's text is not changed: only how it is drawn.
+ */
+export function linkObsWords(box: HTMLElement, o: ObsStudy) {
+  for (const p of box.querySelectorAll<HTMLParagraphElement>('p')) {
+    const head = p.firstElementChild
+    const m = head?.tagName === 'STRONG' && p.firstChild === head ? /^(\d{1,2}):(\d{1,2})$/.exec(head.textContent?.trim() ?? '') : null
+    if (!m || +m[1]! !== o.n) continue
+    p.classList.add('obs-fr')
+    const quotes = o.frames[String(+m[2]!)]
+    if (!quotes?.length) continue
+    // the text after the frame's number, in order (an emphasis or a link inside it counts too)
+    const nodes: Text[] = []
+    const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT)
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) if (!head!.contains(n) && !n.parentElement?.closest('a')) nodes.push(n as Text)
+    const text = nodes.map((n) => n.data).join('')
+    const spans = wordSpans(text, quotes)
+    if (!spans.length) continue
+    let at = 0
+    for (const node of nodes) {
+      const from = at
+      const to = (at += node.data.length)
+      const here = spans.filter(([a, b]) => a < to && b > from)
+      if (!here.length) continue
+      const frag = document.createDocumentFragment()
+      let k = from
+      for (const [a0, b0, keys] of here) {
+        const a = Math.max(a0, from), b = Math.min(b0, to)
+        if (a > k) frag.appendChild(document.createTextNode(text.slice(k, a)))
+        const word = text.slice(a, b)
+        const w = el('span', /(^| )n/.test(keys) ? 'w n' : 'w t', word)
+        w.dataset.k = keys
+        w.onclick = (e) => {
+          e.stopPropagation()
+          mark(box, w, keys.split(' '))
+          openPanel({ kind: 'word', study: o, word: text.slice(a0, b0), keys: keys.split(' '), root: box })
+        }
+        frag.appendChild(w)
+        k = b
+      }
+      if (k < to) frag.appendChild(document.createTextNode(text.slice(k, to)))
+      node.replaceWith(frag)
+    }
+  }
+}
+
 // ----------------------------------------------------------------------------------------------------------------- panel
 
+/** What the panel reads of a passage's helps (a Bible passage's Study, an OBS story's helps). */
+type Helps = Pick<Study, 'lang' | 'notes' | 'terms'>
+
 type View =
-  | { kind: 'word'; study: Study; word: string; keys: string[]; root: HTMLElement }
-  | { kind: 'note'; study: Study; i: number; root: HTMLElement }
+  | { kind: 'word'; study: Helps; word: string; keys: string[]; root: HTMLElement }
+  | { kind: 'note'; study: Helps; i: number; root: HTMLElement }
   | { kind: 'article'; id: string; lang: string }
   | { kind: 'help'; lang: string; book: string; id: string; which: 'note' | 'question'; label: string }
 
@@ -412,7 +470,7 @@ export function openPanel(v: View) {
   draw()
 }
 
-function noteBlock(s: Study, i: number): HTMLElement {
+function noteBlock(s: Helps, i: number): HTMLElement {
   const n = s.notes[i]!
   const d = el('div', 'pnote')
   const head = [n.said ? `«${n.said}»` : '', n.orig && n.orig !== n.said ? `(${n.orig})` : ''].filter(Boolean).join(' ')

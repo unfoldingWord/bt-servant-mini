@@ -9,6 +9,7 @@ import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, i
 import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
+import { type ObsStudy, obsStudyOf } from './obswords'
 import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
 import { devOn, type Fixture, loadFixture } from './dev'
 import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
@@ -1828,6 +1829,8 @@ export type Reply = {
   text?: string; intro?: string | null; info?: string; follow?: Follow[]; meta?: string; ui?: string
   /** the passage drawn with tappable words (kept for the last messages only); lang: the pack the answer came from; ctx: its article */
   study?: Study; lang?: string; ctx?: string
+  /** an OBS story's or frame's helps, its words tied to them when drawn (obswords.ts; kept for the last messages only) */
+  obs?: ObsStudy
   /** the notes and questions a free search found, each opened whole in the panel */
   helps?: { head: string; items: HelpItem[] }[]
   /** nothing could be answered: a link to About, which says what the app can and cannot do */
@@ -2477,9 +2480,11 @@ ${x.meta}` },
       }
       if (!follow.length) follow.push(browseStep(ui))
       const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
+      // the frames' words tied to their notes and key terms (obswords.ts), tappable when drawn
+      const obs = f.state === 'ok' ? await obsStudyOf(sheet).catch(() => null) : null
       return {
         answered: 'passage', ref: sheet.ref, concept: null, found: x.r?.cites.length ?? 0,
-        reply: { intro: said, info: x.r?.answer, follow: [...x.others, ...follow].slice(0, MAX_FOLLOW), ui, lang: f.pack ?? sheet.lang,
+        reply: { intro: said, info: x.r?.answer, follow: [...x.others, ...follow].slice(0, MAX_FOLLOW), ui, lang: f.pack ?? sheet.lang, obs: obs ?? undefined,
           meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nobs: ${f.state}${f.pack ? ` (${f.pack} pack)` : ''}\n${JSON.stringify(sheet, null, 1)}` },
       }
     },
