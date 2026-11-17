@@ -186,10 +186,12 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
 
   let pages: number[][] = [] // none: the answer is drawn whole
   let k = 0
-  let width = 0
-  // a fold opened or closed in the part (not a picture that loaded): the part keeps its units
-  let folded = false
-  box.addEventListener('toggle', () => { folded = true }, true)
+  /** What the last measure saw (the bubble's width and height, the conversation's height): the same again, nothing to do. */
+  let seen = ''
+  // a fold opened or closed in the bubble just now (not a picture that loaded): the part keeps its units, a whole answer stays
+  // whole (the bar would appear under the reader's finger)
+  let toggled = 0
+  box.addEventListener('toggle', () => { toggled = Date.now() }, true)
   const log = () => box.closest<HTMLElement>('#log')
   const show = () => units.forEach((u, i) => u.els.forEach((e) => { e.hidden = pages.length > 0 && !pages[k]!.includes(i) }))
   const total = lastOf(units[units.length - 1]!.label)
@@ -208,21 +210,26 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
   }
   /** Where an element is on the screen, from the top of the conversation. */
   const at = (e: Element | null | undefined) => (e ? e.getBoundingClientRect().top - (log()?.getBoundingClientRect().top ?? 0) : 0)
-  /** What the reader sees of a unit (its version's block for a verse, its picture for a frame). */
-  const head = (i: number) => { const e = units[i]!.els[0]!; return e.closest<HTMLElement>('.tx') ?? e }
+  /** What the reader sees of a unit (its version's block for a verse, its picture for a frame): its first part that is drawn
+   *  (a verse's first version may be in the closed fold of the other versions). */
+  const head = (i: number) => {
+    const e = units[i]!.els.find((x) => x.getBoundingClientRect().height) ?? units[i]!.els[0]!
+    return e.closest<HTMLElement>('.tx') ?? e
+  }
+  const state = (lg: HTMLElement | null) => `${box.clientWidth} ${Math.round(box.getBoundingClientRect().height)} ${lg?.clientHeight ?? innerHeight}`
+  /**
+   * Measured in the observer's turn, before the screen is painted (no flash of the whole answer). The reader's place is kept by
+   * the browser (scroll anchoring: what is on the screen stays where it is when the bubble above it or around it changes);
+   * only a conversation scrolled to its end is kept at its end.
+   */
   const measure = () => {
     const lg = log()
     if (!box.isConnected || !box.clientWidth) return // not drawn yet (or in a closed view): measured when it is
+    if (state(lg) === seen) return // its own cut, reported back: nothing changed
     const room = lg?.clientHeight || innerHeight
-    const wide = box.clientWidth
-    const msg = box.closest('.msg') ?? box
-    // what keeps the reader's place: the part being read (its first unit), else what follows a bubble that is above the screen
     const anchor = pages.length ? pages[k]![0]! : 0
-    const above = msg.getBoundingClientRect().bottom <= (lg?.getBoundingClientRect().top ?? 0)
-    const pin: Element | null | undefined = above ? msg.nextElementSibling : head(anchor)
-    const was = at(pin)
     const atEnd = !!lg && lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 2
-    const known = pages.length > 0
+    const fold = Date.now() - toggled < 1000
     // everything shown for a moment, measured, and cut (no paint in between)
     const old = pages
     pages = []
@@ -235,37 +242,35 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
     const versions = new Set(units.flatMap((u) => u.els).map((e) => e.closest('.tx')).filter(Boolean)).size
     const line = versions ? parseFloat(getComputedStyle(units[0]!.els[0]!).lineHeight) || 28 : 0
     const between = Math.max(0, span - h.reduce((a, b) => a + b, 0)) + versions * line
+    // a block answer (an article, a list) is cut only when it is clearly longer than the screen, not into one full part and a
+    // nearly empty one
+    const over = found.kind === 'parts' ? room * 1.3 : room
     let cut: number[][] = []
-    // drawn whole at this width: a fold opened does not cut it now (the bar would appear under the reader's finger)
-    const whole = !known && width > 0 && wide === width
-    if (!whole && box.getBoundingClientRect().height > room) {
-      // a fold opened in the part being read: it keeps its units; else (a picture loaded, the phone turned) cut again from its
-      // first unit
-      const keep = old.length && folded && wide === width ? old[k]![old[k]!.length - 1]! : -1
+    if (!(fold && !old.length) && box.getBoundingClientRect().height > over) {
+      // a fold opened in the part being read: it keeps its units; else (a picture loaded, the phone turned, the keyboard) cut
+      // again from its first unit
+      const keep = old.length && fold ? old[k]![old[k]!.length - 1]! : -1
       cut = pagesOf(h, Math.max(room - BAR - ROOM - between, room / 3), anchor, keep)
     }
-    width = wide
-    folded = false
     pages = cut.length > 1 ? cut : []
     k = Math.max(0, pages.findIndex((p) => p[0] === anchor))
     draw()
-    if (!lg) return
-    if (!known) { if (atEnd) lg.scrollTop = lg.scrollHeight } // the conversation scrolled to its end stays there
-    else if (pin) lg.scrollTop += at(pin) - was
+    if (lg && atEnd && !old.length) lg.scrollTop = lg.scrollHeight // the conversation scrolled to its end stays there
+    seen = state(lg)
   }
-  let queued = false
-  const later = () => {
-    if (queued) return
-    queued = true
-    // after the observer's turn (a change of size made there would be reported again at once)
-    setTimeout(() => { queued = false; measure() }, 0)
-  }
-  if (typeof ResizeObserver === 'function') new ResizeObserver(later).observe(box)
-  else { addEventListener('resize', later); later() }
+  if (typeof ResizeObserver === 'function') {
+    // the bubble (a fold, a picture, the phone turned) and the conversation's height (the keyboard, split screen)
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(box)
+    let lg: HTMLElement | null = null
+    // the conversation is known once the bubble is in it
+    new ResizeObserver(() => { if (!lg && (lg = log())) ro.observe(lg) }).observe(box)
+  } else addEventListener('resize', measure)
   /** To the new part: its first unit at the top of the conversation. */
   const go = (to: number) => {
     k = to
     draw()
+    seen = state(log())
     const lg = log()
     if (lg) lg.scrollTop += at(head(pages[k]![0]!)) - 8
   }

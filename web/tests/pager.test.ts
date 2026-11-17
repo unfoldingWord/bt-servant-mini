@@ -12,7 +12,7 @@ describe('parts by measured height', () => {
     expect(pagesOf([], 650)).toEqual([])
   })
   test('measured again from the unit being read: a part starts there', () => {
-    // 16 frames of 300 px in 650: two by two; the reader at frame 4 (index 3), the phone turned
+    // 6 frames of 300 px in 650: two by two; the reader at frame 4 (index 3), the phone turned
     expect(pagesOf(Array(6).fill(300), 650, 3)).toEqual([[0, 1], [2], [3, 4], [5]])
   })
   test('a fold opened in the part being read: it keeps its units, the others follow', () => {
