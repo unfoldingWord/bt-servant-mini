@@ -36,8 +36,8 @@ import { devOn, type Fixture, initDev } from './dev'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel } from './obs'
-import { addObsPictures } from './obsimg'
+import { obsLabel, pictureFrame } from './obs'
+import { addObsPictures, addVersePicture } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
@@ -317,6 +317,11 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   // with an online answer (or while it is written), it comes first, then the helps the phone found as cards in sight (the
   // articles it was grounded in first), then the whole phone's answer folded behind what it holds ("See all 66 notes…").
   // The cards are drawn already while the answer is written and stay where they are when it arrives (fillAi).
+  // a one-verse answer: the picture of the Open Bible Stories frame that tells the verse (obs-frames), above the answer and outside
+  // any fold, when the phone can show it (obsimg.ts addVersePicture; an OBS answer has its own pictures, never this one)
+  const picSlot = el('div', 'verse-pic-slot')
+  d.appendChild(picSlot)
+  void addVersePicture(picSlot, m.meta, m.ui ?? nav, (ref) => pictureFrame(ref, m.lang ?? 'en'))
   let host: HTMLElement = d
   if (showsCards(m, pending)) {
     d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
