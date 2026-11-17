@@ -7,6 +7,9 @@
 // made a part two to ten screens tall, and ▶ jumped back to the bubble's top): an answer that fits on the screen has no
 // parts; a part holds the units that fit in the conversation's height with the bar, at least one. Measured again when the
 // bubble changes size (a fold opened, a picture loaded, the phone turned), the part being read kept where it is.
+// Only the answer's own content is cut (the frames, the verses, a note or an article asked for): its helps (a frame's or a
+// verse's notes, the key terms, the questions, more notes) stay after the bar, each folded, all of them, never in a part
+// (Abel, Nov 17).
 import { rtlLang } from './bidi'
 
 type L = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
@@ -35,19 +38,6 @@ export type Kind = 'verses' | 'frames' | 'parts'
 export type Unit = { els: HTMLElement[]; label: string }
 const len = (e: Element) => (e.textContent ?? '').replace(/\s+/g, ' ').length
 
-/**
- * The folds of a story's frame or a chapter's verse ("Notes for OBS 1:3 (6)", "1:3 · 4") go with its part: they show with it.
- * `key(ch, v)` says which unit a fold's "ch:v" belongs to.
- */
-function foldsWith(box: HTMLElement, key: (ch: number, v: number) => Unit | undefined) {
-  for (const d of box.querySelectorAll<HTMLElement>('details')) {
-    if (d.closest('.tx') || d.classList.contains('more-tx')) continue
-    const m = /(\d+):(\d+)/.exec(d.querySelector(':scope > summary')?.textContent ?? '')
-    const u = m ? key(+m[1]!, +m[2]!) : undefined
-    if (u && !u.els.includes(d)) u.els.push(d)
-  }
-}
-
 /** The units of a bubble's answer, and where the bar goes (after `last`): OBS frames first, then a passage's verses, else blocks. */
 function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element } | null {
   // an OBS story's frames: each paragraph that starts with its "**1:3**" (obsAnswer), the words tappable or not (m.obs gone)
@@ -66,7 +56,6 @@ function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element }
       }),
     }
     const n = /^(\d+):/.exec(frames[0]!.firstElementChild?.textContent ?? '')?.[1]
-    foldsWith(box, (ch, v) => (String(ch) === n ? out.units.find((u) => +u.label === v) : undefined))
     return out
   }
   const study = box.classList.contains('study') ? box : box.querySelector<HTMLElement>('.study')
@@ -92,11 +81,12 @@ function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element }
       .sort(([a, x], [b, y]) => +a.split('#')[1]! - +b.split('#')[1]! || +first(x.label) - +first(y.label))
       .map(([, u]) => u)
     if (units.length < 2 || !last) return null
-    // a verse's notes fold ("1:3 · 4") with the first unit whose label holds that verse (one chapter: the usual long answer)
-    foldsWith(study, (_ch, v) => units.find((u) => +first(u.label) <= v && v <= +lastOf(u.label)))
     return { kind: 'verses', units, last }
   }
-  const kids = [...box.children] as HTMLElement[]
+  // only the answer itself, before its first fold: the folds (more notes, questions, key terms) are helps around it, never cut
+  const children = [...box.children] as HTMLElement[]
+  const fold = children.findIndex((e) => e.tagName === 'DETAILS')
+  const kids = fold < 0 ? children : children.slice(0, fold)
   const units: Unit[] = []
   // a long list is cut between its items (13 questions of a chapter); a short one stays a block
   const blocks = kids.flatMap((e) => (/^(UL|OL)$/.test(e.tagName) && len(e) > SHORT ? ([...e.children] as HTMLElement[]) : [e]))
@@ -106,7 +96,7 @@ function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element }
     if (prev && /^H[1-6]$/.test(prev.els[prev.els.length - 1]!.tagName)) { prev.els.push(e); continue }
     units.push({ els: [e], label: '' })
   }
-  return units.length > 1 ? { kind: 'parts', units, last: kids[kids.length - 1]! } : null
+  return units.length > 1 ? { kind: 'parts', units, last: blocks[blocks.length - 1]! } : null
 }
 
 
@@ -174,11 +164,10 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
   bar.className = 'pager'
   bar.dir = rtl ? 'rtl' : 'ltr'
   bar.hidden = true
-  // after the units and the folds that go with them (a frame's notes, a verse's), at the level of the last unit: the folds that
-  // go with no unit (the story's questions) stay after the bar
-  const level = found.last.parentElement
-  const after = [found.last, ...units.flatMap((u) => u.els).filter((e) => e.parentElement === level)]
-    .reduce((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? b : a))
+  // right after the answer's own content (the last frame, the versions' text): its helps (a frame's notes, a verse's, the key
+  // terms, the questions) stay after the bar, outside the parts, each folded and all in sight (Abel, Nov 17: "solo se pagina el
+  // contenido principal, no el periférico")
+  const after = found.last
   after.after(bar)
   const button = (cls: string, text: string, label?: string) => {
     const b = document.createElement('button')
@@ -257,7 +246,9 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
     // nearly empty one
     const over = found.kind === 'parts' ? room * 1.3 : room
     let cut: number[][] = []
-    if (!(fold && !old.length) && box.getBoundingClientRect().height > over) {
+    // the answer's own content taller than the screen (its helps below, folded, do not count)
+    const main = after.getBoundingClientRect().bottom - box.getBoundingClientRect().top
+    if (!(fold && !old.length) && main > over) {
       // a fold opened in the part being read: it keeps its units; else (a picture loaded, the phone turned, the keyboard) cut
       // again from its first unit
       const keep = old.length && fold ? old[k]![old[k]!.length - 1]! : -1
