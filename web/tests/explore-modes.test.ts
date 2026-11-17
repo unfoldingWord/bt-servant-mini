@@ -357,6 +357,32 @@ describe('the 5M view', () => {
     expect(counts()['explore.from.answer']).toBeUndefined()
   })
 })
+describe('the modes list (the empty conversation, Start a mode)', () => {
+  test('Browse opens on the modes alone, the same rows as the section, and Back goes to the home', async () => {
+    on()
+    openExploreAt({ mode: 'list', from: 'welcome' })
+    await until('.ex-modes .ex-row')
+    expect(modeIds()).toEqual(['book', 'learn', 'obs5m'])
+    expect($('.ex-tabs')).toBeNull() // the list only: no tabs, no books
+    expect($('#ex-title')?.textContent ?? $('.ex-title')!.textContent).toBe(MT('en').section)
+    expect(backExplore()).toBe(true)
+    await until('.ex-tabs')
+    expect(modeIds()).toEqual(['book', 'learn', 'obs5m'])
+  })
+  test('a row there opens its mode as on the home, and Arabic runs right to left', async () => {
+    openExploreAt({ mode: 'list', from: 'welcome' })
+    await until('.ex-modes .ex-row')
+    $$('.ex-modes .ex-row')[0]!.click()
+    expect(did.mode).toEqual(['book'])
+    closeExplore(false)
+    resetExplore()
+    ui = 'ar'
+    packs = ['ar']
+    openExploreAt({ mode: 'list', from: 'welcome' })
+    await until('.ex-modes .ex-row')
+    expect($('.ex-modes')!.dir).toBe('rtl')
+  })
+})
 function sheetOfSession(_fx: Awaited<ReturnType<typeof loadFixture>>) {
   return { story: 1, part: 'm1' as const, at: 2, lang: 'en', tfLang: 'en' as const, started: Date.now(), done: [] }
 }

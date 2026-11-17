@@ -26,8 +26,8 @@ import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, gue
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
-import { examplesFor, FU, helloLine, languagePicker, packFor } from './firstuse'
-import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
+import { FU, languagePicker, packFor, emptyLine, quickSpec } from './firstuse'
+import { backExplore, closeExplore, modesOn, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
 import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHooks } from './howto'
@@ -38,7 +38,7 @@ import { fiveText } from './modes'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { hasObs, obsLabel, pictureFrame } from './obs'
+import { obsLabel, pictureFrame } from './obs'
 import { addObsPictures, addVersePicture } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
@@ -632,18 +632,32 @@ function placeModelOffer() {
   const line = modelOffer()
   if (line) log.appendChild(line)
 }
-function fillExamples(ex: HTMLElement) {
-  const lang = examplesLang()
-  if (!lang) return
-  examplesFor(nav, lang).then((list) => {
-    if (!ex.isConnected) return
-    for (const e of list) {
-      const b = el('button', '', bidiLabel(e.label, nav)) as HTMLButtonElement
+/**
+ * The empty conversation's quick actions, one row of pills (RTL mirrors by the row's dir): a saved 5M session to continue, Browse,
+ * a guided mode (only when the phone has one: read a moment later, as Browse reads them), and How to ask.
+ */
+function quickRow(): HTMLElement {
+  const row = el('div', 'quick')
+  row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  const saved = resumeEntries()
+  const draw = (modes: boolean) => {
+    row.replaceChildren()
+    for (const q of quickSpec(nav, { modes, resume: saved.map((r) => r.label), explore: XT(nav).browse, howto: howtoLabel(nav) })) {
+      const b = el('button', q.kind === 'resume' ? 'quick-resume' : '', bidiLabel(q.label, nav)) as HTMLButtonElement
       b.type = 'button'
-      b.onclick = () => runSheet(e.label, { ...bare(e.lang), intent: e.intent, ref: e.ref ?? null, what: e.what ?? [], concept: e.concept ?? null }, nav)
-      ex.appendChild(b)
+      b.dataset.quick = q.kind
+      b.onclick = () => {
+        if (q.kind === 'resume') saved.find((r) => r.label === q.label)?.go()
+        else if (q.kind === 'explore') openExplore('welcome')
+        else if (q.kind === 'mode') openExploreAt({ mode: 'list', from: 'welcome' })
+        else openHowTo(nav)
+      }
+      row.appendChild(b)
     }
-  }).catch(() => {})
+  }
+  draw(false)
+  modesOn(INSTALLED).then((m) => { if (m.length && row.isConnected) draw(true) }).catch(() => {})
+  return row
 }
 function renderConv() {
   log.innerHTML = ''
@@ -657,26 +671,11 @@ function renderConv() {
     // no language yet: the first screen is the choice of one (the rest of the welcome comes with it)
     if (noPacks) w.appendChild(pickerFor([]))
     else {
-      // (the line without the Bible Stories first; a phone that has them gets the other one a moment later, as the examples come)
-      const hi = el('p', '', helloLine(nav, false))
-      w.appendChild(hi)
-      const hl = examplesLang()
-      if (hl) hasObs(hl).then((yes) => { if (yes && hi.isConnected) hi.textContent = helloLine(nav, true) }).catch(() => {})
-      // someone new: the welcome "What would you like to do today?" once (welcome.ts), else How to ask's line (howto.ts), on a
-      // few empty conversations; only once the languages are known
-      const inv = INSTALLED.length ? offerFirst(nav, c.id, !convs.some((x) => x.msgs.length)) : null
-      if (inv) w.appendChild(inv)
-      // a 5M session saved (dev switch): [Resume …], the ones used last
-      const r5 = resumeRow()
-      if (r5) w.appendChild(r5)
-      const ex = el('div', 'examples')
-      w.appendChild(ex)
-      fillExamples(ex)
-      // without typing: the Bible book by book, and the Academy manual by manual (explore.ts)
-      const go = el('button', 'browse-go', `${XT(nav).browseLong} ›`) as HTMLButtonElement
-      go.type = 'button'
-      go.onclick = () => openExplore('welcome')
-      w.appendChild(go)
+      w.appendChild(el('p', '', emptyLine(nav)))
+      // someone new: the welcome "What would you like to do today?" once (welcome.ts); only once the languages are known (its
+      // How to ask line is not drawn here: [How to ask] is always among the quick actions)
+      if (INSTALLED.length) offerFirst(nav, c.id, !convs.some((x) => x.msgs.length))
+      w.appendChild(quickRow())
     }
     log.appendChild(w)
     placeModelOffer()
@@ -1558,20 +1557,11 @@ function end5() {
   cmp.answered()
 }
 /** The resume buttons of the welcome: the sessions used last (up to 3) */
-function resumeRow(): HTMLElement | null {
+function resumeEntries(): { label: string; go: () => void }[] {
   const fx = fixture5()
-  if (!devOn('obs5m') || !fx) return null
-  const list = savedSessions().filter((e) => e.story === fx.story).slice(0, 3)
-  if (!list.length) return null
-  const row = el('div', 's5-resume')
-  row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
-  for (const e of list) {
-    const b = el('button', 's5-resume-btn', bidiLabel(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), nav)) as HTMLButtonElement
-    b.type = 'button'
-    b.onclick = () => resume5(e)
-    row.appendChild(b)
-  }
-  return row
+  if (!devOn('obs5m') || !fx) return []
+  return savedSessions().filter((e) => e.story === fx.story).slice(0, 3)
+    .map((e) => ({ label: W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), go: () => resume5(e) }))
 }
 /**
  * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this

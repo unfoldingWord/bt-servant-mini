@@ -6,7 +6,6 @@ import { bookLabel } from './converse'
 import books from './data/books.json'
 import shapes from './data/shapes.json'
 import { rtlLang } from './bidi'
-import { firstNotedFrame, obsLabel, obsRef } from './obs'
 
 type F = {
   title: string; lead: string; looking: string; download: string; cancel: string; retry: string; offline: string
@@ -71,37 +70,29 @@ const STR: Record<string, F> = {
 }
 export const FU = (ui: string): F => STR[ui] ?? STR.en!
 
-// ------------------------------------------------------------------------------------------------------------- the greeting
+// ------------------------------------------------------------------------------------------------------------- the empty screen
 
-/** The empty conversation's greeting: [without the Bible Stories, with them]. Two whole texts per language (never built by parts). */
-const HELLO: Record<string, [string, string]> = {
-  en: [
-    'Hello! I find what you need in the translation helps on this phone, without internet: the Bible with its notes, key terms and questions, and Translation Academy. Ask in your own words or tap Browse.',
-    'Hello! I find what you need in the translation helps on this phone, without internet: the Bible with its notes, key terms and questions, the Bible Stories and Translation Academy. Ask in your own words or tap Browse.',
-  ],
-  es: [
-    '¡Hola! Encuentro lo que necesitas en las ayudas de traducción de este teléfono, sin internet: la Biblia con sus notas, palabras clave y preguntas, y Translation Academy. Pregunta con tus palabras o toca Explorar.',
-    '¡Hola! Encuentro lo que necesitas en las ayudas de traducción de este teléfono, sin internet: la Biblia con sus notas, palabras clave y preguntas, las Historias de la Biblia y Translation Academy. Pregunta con tus palabras o toca Explorar.',
-  ],
-  fr: [
-    "Bonjour ! Je trouve ce dont vous avez besoin dans les aides à la traduction de ce téléphone, sans internet : la Bible avec ses notes, ses termes clés et ses questions, et Translation Academy. Demandez avec vos mots ou touchez Parcourir.",
-    "Bonjour ! Je trouve ce dont vous avez besoin dans les aides à la traduction de ce téléphone, sans internet : la Bible avec ses notes, ses termes clés et ses questions, les Histoires de la Bible et Translation Academy. Demandez avec vos mots ou touchez Parcourir.",
-  ],
-  id: [
-    'Halo! Saya menemukan yang Anda perlukan di bahan bantu penerjemahan di ponsel ini, tanpa internet: Alkitab dengan catatan, istilah kunci, dan pertanyaannya, serta Translation Academy. Bertanyalah dengan kata-kata Anda sendiri atau ketuk Jelajahi.',
-    'Halo! Saya menemukan yang Anda perlukan di bahan bantu penerjemahan di ponsel ini, tanpa internet: Alkitab dengan catatan, istilah kunci, dan pertanyaannya, Kisah-kisah Alkitab, dan Translation Academy. Bertanyalah dengan kata-kata Anda sendiri atau ketuk Jelajahi.',
-  ],
-  hi: [
-    'नमस्ते! मैं इस फ़ोन की अनुवाद सहायताओं में आपकी ज़रूरत की जानकारी ढूँढता हूँ, बिना इंटरनेट के: बाइबल अपने नोट्स, मुख्य शब्दों और प्रश्नों के साथ, और Translation Academy। अपने शब्दों में पूछें या «ब्राउज़ करें» पर टैप करें।',
-    'नमस्ते! मैं इस फ़ोन की अनुवाद सहायताओं में आपकी ज़रूरत की जानकारी ढूँढता हूँ, बिना इंटरनेट के: बाइबल अपने नोट्स, मुख्य शब्दों और प्रश्नों के साथ, बाइबल की कहानियाँ और Translation Academy। अपने शब्दों में पूछें या «ब्राउज़ करें» पर टैप करें।',
-  ],
-  ar: [
-    'مرحبًا! أجد ما تحتاج إليه في مساعدات الترجمة على هذا الهاتف، دون إنترنت: الكتاب المقدس مع ملاحظاته وكلماته الرئيسية وأسئلته، وTranslation Academy. اسأل بكلماتك أو المس «تصفّح».',
-    'مرحبًا! أجد ما تحتاج إليه في مساعدات الترجمة على هذا الهاتف، دون إنترنت: الكتاب المقدس مع ملاحظاته وكلماته الرئيسية وأسئلته، وقصص الكتاب المقدس، وTranslation Academy. اسأل بكلماتك أو المس «تصفّح».',
-  ],
+/** The empty conversation's one line, and its quick action for a guided mode (Browse's and How to ask's own names are theirs). */
+const EMPTY: Record<string, { line: string; mode: string }> = {
+  en: { line: 'Ask about a verse, a word or a story. Works without internet.', mode: 'Start a guided mode' },
+  es: { line: 'Pregunta por un versículo, una palabra o una historia. Funciona sin internet.', mode: 'Empezar un modo' },
+  fr: { line: 'Posez une question sur un verset, un mot ou une histoire. Fonctionne sans internet.', mode: 'Lancer un mode guidé' },
+  id: { line: 'Tanyakan tentang sebuah ayat, kata, atau kisah. Bekerja tanpa internet.', mode: 'Mulai mode terpandu' },
+  hi: { line: 'किसी पद, शब्द या कहानी के बारे में पूछें। बिना इंटरनेट के काम करता है।', mode: 'निर्देशित तरीका शुरू करें' },
+  ar: { line: 'اسأل عن آية أو كلمة أو قصة. يعمل دون إنترنت.', mode: 'ابدأ مسارًا موجّهًا' },
 }
-/** The greeting of the empty conversation; `obs`: the phone has Open Bible Stories. The Map, the buttons and the online AI are in How to ask. */
-export const helloLine = (ui: string, obs: boolean): string => (HELLO[ui] ?? HELLO.en!)[obs ? 1 : 0]
+export const emptyLine = (ui: string): string => (EMPTY[ui] ?? EMPTY.en!).line
+export const emptyModeLabel = (ui: string): string => (EMPTY[ui] ?? EMPTY.en!).mode
+/** The pills of the empty conversation, in order: Resume (a saved 5M session, each), Browse, Start a mode (only when a mode is there), How to ask. */
+export type Quick = { kind: 'resume' | 'explore' | 'mode' | 'howto'; label: string }
+export function quickSpec(ui: string, o: { modes: boolean; resume: string[]; explore: string; howto: string }): Quick[] {
+  return [
+    ...o.resume.map((label): Quick => ({ kind: 'resume', label })),
+    { kind: 'explore', label: o.explore },
+    ...(o.modes ? [{ kind: 'mode' as const, label: emptyModeLabel(ui) }] : []),
+    { kind: 'howto', label: o.howto },
+  ]
+}
 
 /** "2.6 MB", "0.4 MB". */
 export const size = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`
@@ -338,12 +329,5 @@ export async function examplesFor(ui: string, lang: string): Promise<Example[]> 
   if (term) out.push({ label: s.term.replace('{term}', term.title), lang, intent: 'article', concept: term.id })
   const topic = await titled(TOPICS)
   if (topic) out.push({ label: s.ta.replace('{topic}', topic.title), lang, intent: 'article', concept: topic.id })
-  // an Open Bible Stories frame with notes, when the phone has the stories: "OBS 1:2", no title. At most 4 examples: the passages stay
-  // (74 % of real use), the last word or topic example gives its place
-  const obs = await firstNotedFrame(lang).catch(() => null)
-  if (obs) {
-    if (out.length >= 4) out.pop()
-    out.push({ label: obsLabel(obs.n, obs.f), lang: obs.lang, intent: 'passage', ref: obsRef(obs.n, obs.f), what: ['text', 'notes'] })
-  }
   return out
 }

@@ -270,6 +270,7 @@ type View =
   | { k: 'manual'; m: Manual; lang: string }
   | { k: 'obs'; lang: string }
   | { k: 'obs5m' }
+  | { k: 'modes' }
 // kept while the app is open: Browse opens again where the person left it (the next verse is one tap away)
 const stack: View[] = []
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
@@ -353,8 +354,12 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
   draw()
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
-export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; mode?: ModeId; from?: 'welcome' }) {
-  if (at.mode === 'obs5m') {
+export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; mode?: ModeId | 'list'; from?: 'welcome' }) {
+  if (at.mode === 'list') {
+    // the guided modes alone (the empty conversation's [Start a mode]), Browse's home behind it
+    stack.length = 0
+    stack.push({ k: 'home', tab: 'bible' }, { k: 'modes' })
+  } else if (at.mode === 'obs5m') {
     // a guided mode's own view, Browse's home behind it (Back goes there)
     stack.length = 0
     stack.push({ k: 'home', tab: 'bible' }, { k: 'obs5m' })
@@ -411,6 +416,32 @@ function ask(label: string, q: Ask) {
   closeExplore()
 }
 /** A guided mode that is a screen of the welcome: the hook closes Browse and opens it; refused, the busy note and nothing else. */
+/** The guided modes as rows (Browse's home, and the modes view); a tap opens the mode. */
+function modeRows(ui: string, modes: ModeId[], five: Five): HTMLElement {
+  const rows = el('div', 'ex-rows ex-modes')
+  rows.dir = rtlLang(ui) ? 'rtl' : 'ltr'
+  for (const id of modes) {
+    const row = button('ex-row', '', () => {
+      if (id !== 'obs5m') return openMode(id)
+      stack.push({ k: 'obs5m' })
+      count(modeCount('obs5m'))
+      draw()
+    })
+    row.dataset.mode = id
+    const t = el('span', 'ex-row-t')
+    t.append(playMark(), document.createTextNode(bidiLabel(modeTitle(ui, id, five), ui)))
+    row.append(t, el('span', 'ex-row-s', bidiLabel(modeSub(ui, id), ui)), chevron('ex-row-c'))
+    rows.appendChild(row)
+  }
+  return rows
+}
+/** The guided modes this phone can run (modes.ts), read the way Browse's home reads them; [] with no pack. */
+export async function modesOn(packs: string[]): Promise<ModeId[]> {
+  if (!packs.length) return []
+  const [books, manuals, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), fiveStories(packs).catch((): Five => 'unreadable')])
+  return modesFor(dataOf(books.length, manuals.length, five))
+}
+
 function openMode(id: 'book' | 'learn') {
   if (!hooks?.mode(id)) return busyNote()
   count(modeCount(id))
@@ -471,22 +502,7 @@ async function draw() {
     const modes = modesFor(dataOf(books.length, manuals.length, five))
     if (modes.length) {
       b.body.appendChild(el('h4', 'ex-sub', MT(ui).section))
-      const rows = el('div', 'ex-rows ex-modes')
-      rows.dir = rtlLang(ui) ? 'rtl' : 'ltr'
-      for (const id of modes) {
-        const row = button('ex-row', '', () => {
-          if (id !== 'obs5m') return openMode(id)
-          stack.push({ k: 'obs5m' })
-          count(modeCount('obs5m'))
-          draw()
-        })
-        row.dataset.mode = id
-        const t = el('span', 'ex-row-t')
-        t.append(playMark(), document.createTextNode(bidiLabel(modeTitle(ui, id, five), ui)))
-        row.append(t, el('span', 'ex-row-s', bidiLabel(modeSub(ui, id), ui)), chevron('ex-row-c'))
-        rows.appendChild(row)
-      }
-      b.body.appendChild(rows)
+      b.body.appendChild(modeRows(ui, modes, five))
     }
     // the two halves as tabs; one alone needs none
     if (books.length && manuals.length) {
@@ -537,6 +553,14 @@ async function draw() {
       }
       b.body.appendChild(list)
     }
+    return
+  }
+
+  if (v.k === 'modes') {
+    b.title.textContent = MT(ui).section
+    const [five, modes] = await Promise.all([fiveStories(packs).catch((): Five => 'unreadable'), modesOn(packs)])
+    if (!done()) return
+    if (modes.length) b.body.appendChild(modeRows(ui, modes, five))
     return
   }
 
