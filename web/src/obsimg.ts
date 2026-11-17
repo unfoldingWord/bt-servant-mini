@@ -363,6 +363,50 @@ export function addObsPictures(box: HTMLElement, meta: string | undefined, ui: s
   return added
 }
 
+/** The passage an answer is about, from its call sheet (the last `"ref"` in its details), when it is one verse of a book ("gen 1:7"). */
+export function verseOf(meta: string | undefined): string | null {
+  const last = [...(meta ?? '').matchAll(/"ref":\s*"([^"]*)"/g)].pop()?.[1] ?? ''
+  return /^[1-3]?[a-z]{2,3} \d{1,3}:\d{1,3}$/.test(last) && !last.startsWith('obs ') ? last : null
+}
+
+/**
+ * A one-verse answer drawn (main.ts): the picture of the Open Bible Stories frame that tells the verse (obs-frames, the most
+ * specific frame), first in the answer, with "OBS n:f" and the credit under it. Only when the picture can be shown (the phone's
+ * pictures, or Door43's online): no placeholder for a verse. `frameOf` finds the frame (obs.ts pictureFrame). The answer's text
+ * does not change.
+ */
+export async function addVersePicture(
+  box: HTMLElement,
+  meta: string | undefined,
+  ui: string,
+  frameOf: (ref: string) => Promise<{ n: number; f: number } | null>,
+): Promise<{ n: number; f: number } | null> {
+  const ref = verseOf(meta)
+  if (!ref) return null
+  const at = await frameOf(ref).catch(() => null)
+  if (!at) return null
+  const local = await localUrl(at.n, at.f).catch(() => null)
+  const s = pickSource(local, isOnline(), at.n, at.f)
+  if (s.kind === 'none') return null
+  const fig = document.createElement('figure')
+  fig.className = 'obs-pic verse-pic'
+  const img = document.createElement('img')
+  img.alt = `OBS ${at.n}:${at.f}`
+  img.width = 640
+  img.height = 360
+  img.loading = 'lazy'
+  img.onerror = () => fig.remove()
+  img.src = s.src
+  const cap = document.createElement('figcaption')
+  cap.className = 'obs-pic-cap'
+  cap.textContent = `OBS ${at.n}:${at.f} · ${IW(ui).credit}`
+  cap.lang = ui
+  cap.dir = ui === 'ar' ? 'rtl' : 'ltr'
+  fig.append(img, cap)
+  box.prepend(fig)
+  return at
+}
+
 /** The menu's line: how many pictures and their size, a download not ended, or how to get them. */
 export const imagesLine = (ui: string, have: ImagesState): string =>
   !have ? IW(ui).none : 'bytes' in have ? fill(IW(ui).have, { n: IMAGES_COUNT, mb: `${(have.bytes / 1048576).toFixed(1)} MB` }) : IW(ui).partial
