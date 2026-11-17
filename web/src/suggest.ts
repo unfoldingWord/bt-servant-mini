@@ -17,7 +17,7 @@
 //   E  free text: nothing (the row takes no room; the question goes the usual way)
 //   F  the book is not on this phone: said on the button, which never sends ("no está en este teléfono"); or it is answered from
 //      another installed pack ("· en inglés"), exactly as buildSheet does
-import { bookCandidates, bookCode, fold, type Slots } from './sheet'
+import { bookCandidates, bookCode, bookNamesExact, fold, type Slots } from './sheet'
 import { rtlLang, strip as unmarked } from './bidi'
 import { type ConvState, directSheet, env, followUpPreview, pathLabel, pathSheet, previewable } from './pipeline'
 import { has, replyLang } from './commands'
@@ -38,7 +38,9 @@ export type Kind = 'ok' | 'book' | 'help' | 'intro' | 'missing' | 'shape' | 'pla
  * button under an answer does, with `ask` as the question shown. `choose`: it lists the books (Passage). `missing`: nothing is
  * sent; the composer offers Browse.
  */
-export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true; slots?: Slots; book?: string; sheet?: Sheet; ask?: string; choose?: true }
+export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true; slots?: Slots; book?: string; sheet?: Sheet; ask?: string; choose?: true
+  /** a `missing` button for a help the book lacks here (its notes, its introduction), not for a book that is not here */
+  lacks?: true }
 /** The chapter or verse strip: numbers 1…max; a tap writes `base + sep + n` in the box. */
 export type Strip = { unit: 'chapter' | 'verse'; max: number; base: string; sep: string; at?: number }
 /** `needs`: books to read before the row can say what they have (loadHelps); the composer reads them and makes the row again. */
@@ -403,6 +405,86 @@ export function startRow(ctx: Ctx): Row {
   }
   return { items }
 }
+const abbrMemo = new Map<string, boolean>()
+/**
+ * Whether a table's key for a book is an abbreviation ("est" Esther, "why" Wahyu, "rev", "phil", "1 jn"): not the name the app
+ * shows for it in any language, and short (three letters or fewer) or the start of a longer name of the same book.
+ */
+function isAbbr(key: string, code: string): boolean {
+  const memo = `${code}:${key}`
+  let r = abbrMemo.get(memo)
+  if (r === undefined) {
+    const shown = UI_LANGS.some((l) => fold(bookShown(l, code)) === key)
+    const longer = Object.values(TABLES).some((t) => Object.entries(t).some(([n, c]) => c === code && n.length > key.length && n.startsWith(key)))
+    r = !shown && (key.replace(/[\s\d]/g, '').length <= 3 || longer)
+    abbrMemo.set(memo, r)
+  }
+  return r
+}
+/**
+ * The book a question names, or null. A sentence is full of short words that are some language's abbreviation of a book ("why"
+ * is Wahyu in Indonesian, "est" Esther in English), so the names are ranked: a full name in the app's language or English, then
+ * a full name in any language, and an abbreviation only from the app's own table and only when nothing else matched. Earlier
+ * and longer names first within a rank ("1 Juan" before "Juan").
+ */
+function bookNamed(t: string, ui: string): string | null {
+  const words = t.replace(/[¿?!¡.,;:«»"“”؟।॥،؛()]/g, ' ').split(/\s+/).filter(Boolean)
+  let best: { code: string; rank: number } | null = null
+  for (let i = 0; i < words.length; i++)
+    for (let k = 3; k >= 1; k--) {
+      const name = words.slice(i, i + k).join(' ')
+      if (k > words.length - i || (name.replace(/\s/g, '').length < 3 && !/\d/.test(name))) continue
+      for (const m of bookNamesExact(name)) {
+        const abbr = isAbbr(m.key, m.code)
+        const rank = abbr ? (m.lang === ui ? 2 : 3) : m.lang === ui || m.lang === 'en' ? 0 : 1
+        if (rank < 3 && (!best || rank < best.rank)) best = { code: m.code, rank }
+      }
+      if (best?.rank === 0) return best.code
+    }
+  return best?.code ?? null
+}
+const TERM_ORDER: Record<TermKind, number> = { kt: 0, other: 1, names: 2, ta: 3 }
+/** A word of the question that is the exact name of a word article of the pack in the app's language (the word index, once built). */
+function termNamed(t: string, ctx: Ctx): string | null {
+  const own = UI_PACK[ctx.ui] ?? 'en'
+  if (!ctx.packs.includes(own)) return null
+  const hits: TermHit[] = []
+  for (const w of fold(t).split(/[^\p{L}\p{M}]+/u)) {
+    if (/[ऀ-ॿ]/.test(w) ? syllables(w) < 2 : w.length < 3) continue
+    const h = lookup(own, w, 3).find((x) => x.exact && x.kind !== 'ta')
+    if (h) hits.push(h)
+  }
+  return hits.sort((a, b) => TERM_ORDER[a.kind] - TERM_ORDER[b.kind])[0]?.name ?? null
+}
+/**
+ * The ways of asking under an answer that found nothing for a free question (phase 3, §2.3): with what code knew in the question
+ * written in (a book of this phone: "Ruth …", "Notes on Ruth …"; a word that names an article: "What does grace mean?"), else
+ * the shapes of state A. Each writes in the box and sends nothing; `row` false (Typing suggestions off): no "Passage", which
+ * lists the books in the row.
+ */
+export function shapesFor(q: string, ctx: Ctx, row = true): Suggestion[] {
+  const ui = ctx.ui
+  const t = unmarked(q)
+  const out: Suggestion[] = []
+  const code = bookNamed(t, ui)
+  if (code && ctx.books && packOf({ lang: ui }, code, ctx, true).has) {
+    const name = fillName(ui, code)
+    const shown = bookShown(ui, code)
+    if (readsAs(name, code, ui)) out.push({ kind: 'shape', label: `${shown} …`, fill: `${name} `, book: code })
+    const head = headOf('notes', ui)
+    if (head.trim() && shapeOffered('notes', ui) && readsAs(`${head}${name}`, code, ui)) out.push({ kind: 'shape', label: `${head}${shown} …`, fill: `${head}${name} `, book: code })
+  }
+  const term = termNamed(t, ctx)
+  if (term)
+    for (const shape of ['meaning', 'howTranslate']) {
+      if (!shapeOffered(shape, ui)) continue
+      const text = fillT(SHAPES[shape]!.text[ui]!, { term })
+      out.push({ kind: 'shape', label: text, fill: text })
+    }
+  if (out.length) return out
+  return startRow({ ...ctx, conv: { last: null }, choosing: false }).items.filter((s) => row || !s.choose)
+}
+
 /** The books there are, in the Bible's order, each writing its name after `lead` (only the books code reads there). */
 function bookList(lead: string, ctx: Ctx): Suggestion[] {
   const ui = ctx.ui
@@ -471,7 +553,7 @@ function rowOf(t: string, u: Understood, ctx: Ctx): Row {
   let okLabel = u.label
   const lacks = (k: string): Row => {
     const w = (k === 'intro' ? SHAPES.intro!.label[ui] : whatWord(ui, k)) ?? k
-    return { items: [{ kind: 'missing', label: `${refShown(ui, u.code, u.slots)} · ${fillT(s.none, { what: w.toLocaleLowerCase(ui) })}`, book: u.code }] }
+    return { items: [{ kind: 'missing', label: `${refShown(ui, u.code, u.slots)} · ${fillT(s.none, { what: w.toLocaleLowerCase(ui) })}`, book: u.code, lacks: true }] }
   }
   if (what.length === 1 && what[0] === 'intro') {
     const i = introIn(u.pack, u.code, u.slots.chapter ?? null, ctx)

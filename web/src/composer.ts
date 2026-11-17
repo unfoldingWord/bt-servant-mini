@@ -11,8 +11,24 @@
 //
 // Phase 2: with the box empty and the focus in it, the row shows where the conversation is and the ways of asking (state A);
 // the word index (termindex.ts) is built at idle after the first answer (`answered`), and dropped when the packs change.
-import { booksOf, type Ctx, loadHelps, resetSuggest, type Row, ST, startRow, type Strip, suggest, type Suggestion } from './suggest'
+//
+// Phase 3 (teach.ts): with no model and no online reader, a free question gets a grey line ("Free question: I will search the
+// helps for these words") the first three times; "Understood: …" under a message puts the question back (`restore`); the ways
+// of asking under an answer that found nothing write in the box (`offer`).
+//
+// Usage counts (usage.ts, only when the person turned them on; approved by Abel on Nov 16, propuesta §9 item 1), never text:
+//   sent.typed   a question sent from the box with Enter or the send arrow
+//   sent.chip    a question sent by a button of the row (the "✓", a word, an introduction, the path's next step)
+//   sent.code    one of those two that code read by itself (every row button; typed text main.ts reads by code)
+//   sent.free    one of those two that went to the readers or the search (sent.typed + sent.chip = sent.code + sent.free)
+//   cmp.fill     a button that wrote in the box (a book, a number, a help, a shape; also a shape under "found nothing")
+//   cmp.undo     the first edit after such a button only deleted some of what it wrote (a wrong button)
+//   cmp.missing  a book that is not on this phone, tapped
+// Questions sent another way (How to ask's "Try it", a saved item, "Try again") count none of these.
+import { booksOf, type Ctx, loadHelps, resetSuggest, type Row, shapesFor, ST, startRow, type Strip, suggest, type Suggestion } from './suggest'
 import { scheduleTermIndex } from './termindex'
+import { freeHintSeen, freeLine, type Shape } from './teach'
+import { count } from './usage'
 import { buildSheet } from './sheet'
 import { type ConvState, env } from './pipeline'
 import type { Sheet } from './answer'
@@ -47,6 +63,8 @@ export type Hooks = {
   ask: (label: string, sheet: Sheet, ui: string) => void
   /** Browse (the books there are) */
   browse: () => void
+  /** a model or the online reader would read a free question (then no grey line); none given: as if one would */
+  reader?: () => boolean
 }
 /** The box as the composer sees it: the textarea, or a plain object in the tests. */
 export type Box = { value: string; focus(): void; setSelectionRange?(a: number, b: number): void }
@@ -72,6 +90,12 @@ export class Composer {
   /** state A's Passage was tapped: the empty box lists the books */
   choosing = false
   books: Record<string, Set<string>> | null = null
+  /** how the question being sent left the box: typed (Enter, the send arrow) or a row's "✓"; null: sent some other way */
+  via: 'typed' | 'chip' | null = null
+  /** what a button of the row last wrote in the box: the next edit, if it only deletes some of it, is an undo (cmp.undo) */
+  filled: string | null = null
+  /** the grey line of a free question with no model (teach.ts freeLine), or null */
+  hint: string | null = null
   private reading: Promise<void> | null = null
   /** the packs the books were read for */
   private readFor = ''
@@ -106,6 +130,16 @@ export class Composer {
   }
   /** Typing: the row is made after a short pause (100 ms), never while the keyboard composes. */
   onInput() {
+    // (after a button wrote in the box: deleting into what it wrote undoes it, once. Deleting only its trailing space keeps
+    // watching, as the first backspace after "Romanos " does; any other edit ends the watch)
+    if (this.filled !== null) {
+      const w = this.filled.trimEnd()
+      const v = this.box.value
+      if (v.length < w.length && w.startsWith(v)) {
+        count('cmp.undo')
+        this.filled = null
+      } else if (!(v.length >= w.length && this.filled.startsWith(v))) this.filled = null
+    }
     this.missing = null
     this.choosing = false
     if (this.composing) return
@@ -139,6 +173,7 @@ export class Composer {
   refresh() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+    this.hint = null
     if (!composerOn()) {
       this.row = { items: [] }
       this.madeFor = this.box.value
@@ -153,8 +188,13 @@ export class Composer {
         this.reading = null
       }
       if (!this.books) void this.readBooks()
-      this.row = suggest(this.box.value, this.ctx())
+      const ctx = this.ctx()
+      this.row = suggest(this.box.value, ctx)
       this.madeFor = this.box.value
+      // E: nothing to offer for free text; with no model, the grey line says what will happen (the first three times)
+      const r = this.row
+      if (ctx.books && !r.items.length && !r.pick?.length && !r.strip && !r.needs?.length)
+        this.hint = freeLine(this.box.value, ctx.ui, ctx.conv, this.hooks.reader?.() ?? true)
       // the books a "✓" or an introduction depends on, read once (as the answer would), then the row again for the same text
       const needs = this.row.needs
       if (needs?.length) {
@@ -172,7 +212,13 @@ export class Composer {
    */
   sendIf(label: string) {
     this.refresh()
-    if (this.row.items.some((x) => x.send && x.label === label)) this.hooks.send()
+    if (!this.row.items.some((x) => x.send && x.label === label)) return
+    this.via = 'chip'
+    try {
+      this.hooks.send()
+    } finally {
+      this.via = null
+    }
   }
   /** The "✓" shown is for the text in the box now (not one typed since). */
   get current(): boolean {
@@ -207,17 +253,22 @@ export class Composer {
       return this.sendIf(s.label)
     }
     if (s.kind === 'missing') {
+      if (!s.lacks) count('cmp.missing')
       this.missing = s.book ?? ''
       return this.draw(this)
     }
     if (s.slots) {
       const { sheet, ui } = await buildSheet(`c${Date.now()}`, s.slots, env.helpsLang)
+      // (a question may have been sent, or the app locked, while the sheet was built: then nothing is asked, nothing counted)
+      if (!composerOn() || this.hooks.busy()) return
       this.hooks.ask(s.label, sheet, ui)
+      this.chipSent()
       return this.clear()
     }
     // an article, the path's next step: asked as the button under an answer asks it
     if (s.sheet) {
       this.hooks.ask(s.ask ?? s.label, { ...s.sheet, id: `c${Date.now()}` }, this.hooks.ui())
+      this.chipSent()
       return this.clear()
     }
     // Passage: the books, in the row
@@ -225,15 +276,62 @@ export class Composer {
       this.choosing = true
       return this.refresh()
     }
-    if (s.fill !== undefined) this.write(s.fill)
+    if (s.fill !== undefined) this.filledBy(s.fill)
   }
   tapNumber(strip: Strip, n: number) {
     if (!composerOn() || this.hooks.busy()) return
-    this.write(`${strip.base}${strip.sep}${n}`)
+    this.filledBy(`${strip.base}${strip.sep}${n}`)
+  }
+  /** A button wrote in the box: counted (cmp.fill), and its next edit watched for an undo. */
+  private filledBy(text: string) {
+    count('cmp.fill')
+    this.write(text)
+    this.filled = text
+  }
+  /** A ready question asked by a button of the row (no box, no reader): sent.chip, read by code. */
+  private chipSent() {
+    count('sent.chip')
+    count('sent.code')
+  }
+  /**
+   * A question left the box (main.ts submit, once it knows whether code reads it: `direct`): counted by how it was sent, typed
+   * or the "✓" (nothing when sent another way: How to ask, a saved item, Try again); the grey line went with it once more; then
+   * the row is emptied.
+   */
+  sent(direct: boolean) {
+    const via = this.via
+    this.via = null
+    if (via === 'typed' && !direct && this.hint) freeHintSeen()
+    if (via) {
+      count(via === 'chip' ? 'sent.chip' : 'sent.typed')
+      count(direct ? 'sent.code' : 'sent.free')
+    }
+    this.clear()
+  }
+  /** "Understood: …" tapped: the person's question back in the box, to correct it (not counted: no button of the row). */
+  restore(q: string) {
+    this.write(q)
+    this.filled = null
+  }
+  /** A way of asking under an answer that found nothing: written in the box (cmp.fill), or Passage's books listed in the row. */
+  offer(s: Shape) {
+    if (s.choose) {
+      this.write('')
+      this.choosing = true
+      return this.refresh()
+    }
+    if (s.fill !== undefined) this.filledBy(s.fill)
+  }
+  /** The ways of asking for a question that found nothing (suggest.ts shapesFor), once the books are known. */
+  async shapesFor(q: string): Promise<Shape[]> {
+    if (!this.books) await this.readBooks()
+    if (!this.books) return []
+    return shapesFor(q, this.ctx(), composerOn()).map((s) => ({ label: s.label, ...(s.fill !== undefined ? { fill: s.fill } : {}), ...(s.choose ? { choose: true as const } : {}) }))
   }
   /** After a question is sent: an empty row (state A, if the box keeps the focus). */
   clear() {
     if (!this.composing) this.box.value = ''
+    this.filled = null
     this.pending = null
     this.missing = null
     this.choosing = false
@@ -309,6 +407,11 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
       const it = row.items.find((x) => x.kind === 'missing' && x.book === c.missing)
       wrap.appendChild(el('span', 'cmp-note', it?.label ?? s.notHere))
       wrap.appendChild(chip('cmp-chip', s.browse, () => { if (!hooks.busy()) hooks.browse() }, ui))
+    } else if (c.hint) {
+      // E with no model: what a free question will do, grey, no button (the first three times)
+      const note = el('span', 'cmp-note cmp-free', c.hint)
+      note.dir = rtlLang(ui) ? 'rtl' : 'ltr'
+      wrap.appendChild(note)
     } else {
       for (const it of row.items) {
         const b = chip(`cmp-chip cmp-${it.kind}`, it.label, () => void c.tap(it), ui)
@@ -346,6 +449,14 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
   }
   const c = new Composer(box, hooks, draw)
   mounted = c
+  // a question sent from the box by the person (Enter, the send arrow), not by How to ask or a saved item (which submit the form
+  // too): marked for the submit that follows at once (main.ts calls `sent`), then forgotten
+  const typed = () => {
+    c.via ??= 'typed'
+    setTimeout(() => { if (c.via === 'typed') c.via = null }, 0)
+  }
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) typed() })
+  form.addEventListener('click', (e) => { if ((e.target as Element | null)?.closest?.('button[type="submit"]')) typed() }, true)
   box.addEventListener('input', (e) => {
     if ((e as InputEvent).isComposing) return
     c.onInput()
