@@ -1274,15 +1274,16 @@ async function relatedOf(lang: string, id: string, max = 3): Promise<{ id: strin
 /** An article's name in a pack (the first of its names), or null when the pack does not list it. */
 /**
  * A Translation Academy article's title for its button: in the app's language when a pack on the phone has the article (Abel,
- * Nov 17: "Academia: Introduction of New and Old Participants" in a Spanish app), else in `l`, the pack it opens in.
+ * Nov 17: "Academia: Introduction of New and Old Participants" in a Spanish app), and that pack is where it opens; else `l`'s.
  */
-async function taTitle(id: string, l: string, ui: string): Promise<string | null> {
-  for (const u of uiLangs(ui, await installedLangs())) {
+async function taTitle(id: string, l: string, ui: string): Promise<{ title: string | null; lang: string }> {
+  for (const u of uiLangs(ui, await installedLangs().catch(() => [] as string[]))) {
     if (u === l || !(await hasTa(u, id))) continue
     const t = await nameIn(u, id).catch(() => null)
-    if (t) return t
+    // (and it opens there: the button says what it opens)
+    if (t) return { title: t, lang: u }
   }
-  return nameIn(l, id)
+  return { title: await nameIn(l, id), lang: l }
 }
 async function nameIn(lang: string, id: string): Promise<string | null> {
   const names = ((await (await openLang(lang)).maps()) as any).map?.core?.names ?? {}
@@ -1301,8 +1302,8 @@ async function packSteps(sheet: Sheet, study: Study | null, ui: string): Promise
     if (!id) return []
     for (const l of new Set([sheet.lang, 'en'])) {
       if (!(await hasTa(l, id))) continue
-      const title = await taTitle(id, l, ui)
-      return title ? [{ label: academyLabel(ui, title), sheet: article(id, l) }] : []
+      const { title, lang } = await taTitle(id, l, ui)
+      return title ? [{ label: academyLabel(ui, title), sheet: article(id, lang) }] : []
     }
     return []
   }
@@ -1335,8 +1336,8 @@ async function taStep(base: Sheet, id: string, ui: string): Promise<Follow | nul
     if (!(await hasTa(l, id))) continue
     // its title in the app's language when a pack on the phone has the article (Abel, Nov 17: "Academia: Introduction of New
     // and Old Participants" in a Spanish app), else the found pack's; the article opens where it was found
-    const title = await taTitle(id, l, ui)
-    return title ? { label: academyLabel(ui, title), sheet: articleSheet(base, id, l) } : null
+    const { title, lang } = await taTitle(id, l, ui)
+    return title ? { label: academyLabel(ui, title), sheet: articleSheet(base, id, lang) } : null
   }
   return null
 }

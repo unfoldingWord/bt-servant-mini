@@ -36,6 +36,11 @@ describe('the buttons in sight and behind "More ▸"', () => {
     // Genesis 3 without a way back: six buttons, five in sight
     expect(splitFollow(gen3.slice(2), 0)).toEqual({ shown: gen3.slice(2, 7), more: gen3.slice(7) })
   })
+  test("a path's next step before the key steps; the key steps before the others (Abel: the OBS story stays in sight)", () => {
+    const xs = [f('Preguntas'), f('prev', { key: true }), f('next', { key: true }), f('obs', { key: true }), f('step', { pathNext: true })]
+    expect(labels(splitFollow(xs, 2).shown)).toEqual(['prev', 'next', 'step'])
+    expect(labels(splitFollow(xs, 1).shown)).toEqual(['prev', 'next', 'obs', 'step'])
+  })
   test('many ways back: at least three next steps in sight', () => {
     expect(splitFollow([f('a'), f('b'), f('c'), f('d'), f('e')], 3).shown.length).toBe(3)
   })

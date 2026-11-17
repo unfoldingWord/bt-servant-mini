@@ -20,8 +20,8 @@ describe("titles in the app's language", () => {
     // the story's title from the Spanish pack when it has one (the packs these tests read may have none: then the English one)
     const es = (await storyList(await openLang('es-419'))).find((e) => e.n === 2)?.title
     expect(obs).toMatch(new RegExp(`^Esta parte se cuenta en OBS 2:[0-9]+: ${es || 'Sin Enters the World'}$`))
-    // the article still opens in the pack it was found in
-    expect((r.reply.follow ?? []).find((x) => x.label === ta)?.sheet?.lang).toBe('en')
+    // and it opens there, in Spanish: the button says what it opens
+    expect((r.reply.follow ?? []).find((x) => x.label === ta)?.sheet?.lang).toBe('es-419')
   })
   test('in English, the English titles', async () => {
     const r = await turn({ last: null } as ConvState, { q: 'Genesis 3', slots: { intent: 'passage', book: 'gen', chapter: 3, what: ['text', 'notes'], lang: 'en' } }, 'en')

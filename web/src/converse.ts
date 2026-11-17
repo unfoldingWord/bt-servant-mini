@@ -173,10 +173,9 @@ export const SHOWN = 5
 export function splitFollow(follow: Followup[], backs = 0): { shown: Followup[]; more: Followup[] } {
   const room = Math.max(3, SHOWN - backs)
   if (follow.length <= room) return { shown: follow, more: [] }
-  const first = (f: Followup) => !!(f.pathNext || f.sessionNext || f.add || f.again || f.back || f.toPath || f.toSession || f.key)
+  const must = (f: Followup) => !!(f.pathNext || f.sessionNext || f.add || f.again || f.back || f.toPath || f.toSession)
   const pick = new Set<Followup>()
-  for (const f of follow) if (pick.size < room && first(f)) pick.add(f)
-  for (const f of follow) if (pick.size < room) pick.add(f)
+  for (const ok of [must, (f: Followup) => !!f.key, () => true]) for (const f of follow) if (pick.size < room && ok(f)) pick.add(f)
   return { shown: follow.filter((f) => pick.has(f)), more: follow.filter((f) => !pick.has(f)) }
 }
 
