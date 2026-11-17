@@ -22,6 +22,8 @@ export type Words5 = {
   outline: string; how: string; end: string
   /** "in Indonesian"; when the story has no session in that language */
   inLang: string; noSession: string
+  /** the button under an Open Bible Story that has a session; the one under "no session" that opens the list of the stories that have one */
+  startStory: string; seeStories: string
   /** the manual's time for each part; '' where it gives none (intro, frames, community, drafting, checking, m5, conclusion) */
   durations: Record<Code, string>
   /** the names of the helps a frame can open */
@@ -42,6 +44,7 @@ const W: Record<L, Words5> = {
     show: 'Show answer', hide: 'Hide answer', reviewOffer: 'We’re done: quick review (optional)', reviewSkip: 'Skip to translation questions',
     knew: 'We knew this', revisit: 'Review this frame', understood: 'Understood', confusing: 'Confusing: revisit frame',
     outline: 'Outline', how: 'How it works', end: 'End session', inLang: 'in {lang}', noSession: 'This story has no 5M session in {lang} yet',
+    startStory: '5M session for this story', seeStories: 'See the stories with a session',
     durations: { intro: '', frames: '', community: '', m1: 'about 150 min', m2: '3–4 h', drafting: '', m3: 'about 60 min', checking: '', m4: '60–90 min', m5: '', conclusion: '' },
     helps: { tn: 'Translation notes', tq: 'Translation questions', twl: 'Key terms', sn: 'Study notes', sq: 'Study questions', passage: 'Passage', academy: 'Translation Academy' },
     start: 'Start a 5M session', frameN: 'frame {n}',
@@ -55,6 +58,7 @@ const W: Record<L, Words5> = {
     show: 'Ver respuesta', hide: 'Ocultar respuesta', reviewOffer: 'Terminamos: repaso rápido (opcional)', reviewSkip: 'Pasar a las preguntas de traducción',
     knew: 'Lo sabíamos', revisit: 'Repasar este cuadro', understood: 'Entendido', confusing: 'Confuso: volver al cuadro',
     outline: 'Esquema', how: 'Cómo funciona', end: 'Terminar la sesión', inLang: 'en {lang}', noSession: 'Esta historia aún no tiene sesión 5M en {lang}',
+    startStory: 'Sesión 5M de esta historia', seeStories: 'Ver las historias con sesión',
     durations: { intro: '', frames: '', community: '', m1: 'unos 150 min', m2: '3–4 h', drafting: '', m3: 'unos 60 min', checking: '', m4: '60–90 min', m5: '', conclusion: '' },
     helps: { tn: 'Notas de traducción', tq: 'Preguntas de traducción', twl: 'Palabras clave', sn: 'Notas de estudio', sq: 'Preguntas de estudio', passage: 'Pasaje', academy: 'Translation Academy' },
     start: 'Empezar una sesión 5M', frameN: 'cuadro {n}',
@@ -68,6 +72,7 @@ const W: Record<L, Words5> = {
     show: 'Voir la réponse', hide: 'Masquer la réponse', reviewOffer: 'Nous avons fini : révision rapide (facultative)', reviewSkip: 'Passer aux questions de traduction',
     knew: 'On le savait', revisit: 'Revoir cette image', understood: 'Compris', confusing: 'Pas clair : revoir l’image',
     outline: 'Plan', how: 'Comment ça marche', end: 'Terminer la session', inLang: 'en {lang}', noSession: 'Cette histoire n’a pas encore de session 5M en {lang}',
+    startStory: 'Séance 5M de cette histoire', seeStories: 'Voir les histoires avec séance',
     durations: { intro: '', frames: '', community: '', m1: 'environ 150 min', m2: '3–4 h', drafting: '', m3: 'environ 60 min', checking: '', m4: '60–90 min', m5: '', conclusion: '' },
     helps: { tn: 'Notes de traduction', tq: 'Questions de traduction', twl: 'Mots clés', sn: 'Notes d’étude', sq: 'Questions d’étude', passage: 'Passage', academy: 'Translation Academy' },
     start: 'Commencer une session 5M', frameN: 'image {n}',
@@ -81,6 +86,7 @@ const W: Record<L, Words5> = {
     show: 'Lihat jawaban', hide: 'Sembunyikan jawaban', reviewOffer: 'Kami selesai: tinjauan singkat (opsional)', reviewSkip: 'Lanjut ke pertanyaan terjemahan',
     knew: 'Kami sudah tahu', revisit: 'Tinjau bingkai ini', understood: 'Mengerti', confusing: 'Membingungkan: tinjau bingkai',
     outline: 'Garis besar', how: 'Cara kerjanya', end: 'Akhiri sesi', inLang: 'dalam {lang}', noSession: 'Cerita ini belum punya sesi 5M dalam {lang}',
+    startStory: 'Sesi 5M untuk kisah ini', seeStories: 'Lihat kisah yang punya sesi',
     durations: { intro: '', frames: '', community: '', m1: 'sekitar 150 menit', m2: '3–4 jam', drafting: '', m3: 'sekitar 60 menit', checking: '', m4: '60–90 menit', m5: '', conclusion: '' },
     helps: { tn: 'Catatan terjemahan', tq: 'Pertanyaan terjemahan', twl: 'Istilah kunci', sn: 'Catatan studi', sq: 'Pertanyaan studi', passage: 'Perikop', academy: 'Translation Academy' },
     start: 'Mulai sesi 5M', frameN: 'bingkai {n}',
@@ -94,6 +100,7 @@ const W: Record<L, Words5> = {
     show: 'उत्तर दिखाएँ', hide: 'उत्तर छिपाएँ', reviewOffer: 'हो गया: छोटा दोहराव (वैकल्पिक)', reviewSkip: 'अनुवाद के प्रश्नों पर जाएँ',
     knew: 'हमें पता था', revisit: 'इस फ़्रेम को दोहराएँ', understood: 'समझ गया', confusing: 'उलझन: फ़्रेम फिर देखें',
     outline: 'रूपरेखा', how: 'यह कैसे काम करता है', end: 'सत्र समाप्त करें', inLang: '{lang} में', noSession: 'इस कहानी का {lang} में अभी कोई 5M सत्र नहीं है',
+    startStory: 'इस कहानी का 5M सत्र', seeStories: 'सत्र वाली कहानियाँ देखें',
     durations: { intro: '', frames: '', community: '', m1: 'लगभग 150 मिनट', m2: '3–4 घंटे', drafting: '', m3: 'लगभग 60 मिनट', checking: '', m4: '60–90 मिनट', m5: '', conclusion: '' },
     helps: { tn: 'अनुवाद टिप्पणियाँ', tq: 'अनुवाद प्रश्न', twl: 'मुख्य शब्द', sn: 'अध्ययन टिप्पणियाँ', sq: 'अध्ययन प्रश्न', passage: 'अंश', academy: 'Translation Academy' },
     start: '5M सत्र शुरू करें', frameN: 'फ़्रेम {n}',
@@ -107,6 +114,7 @@ const W: Record<L, Words5> = {
     show: 'إظهار الإجابة', hide: 'إخفاء الإجابة', reviewOffer: 'انتهينا: مراجعة سريعة (اختيارية)', reviewSkip: 'الانتقال إلى أسئلة الترجمة',
     knew: 'كنا نعرف هذا', revisit: 'مراجعة هذا الإطار', understood: 'فهمت', confusing: 'غير واضح: العودة إلى الإطار',
     outline: 'المخطط', how: 'طريقة عمل الحركات الخمس', end: 'إنهاء الجلسة', inLang: 'بـ{lang}', noSession: 'ليس لهذه القصة جلسة 5M بـ{lang} بعد',
+    startStory: 'جلسة 5M لهذه القصة', seeStories: 'عرض القصص التي لها جلسة',
     durations: { intro: '', frames: '', community: '', m1: 'حوالي 150 دقيقة', m2: '3–4 ساعات', drafting: '', m3: 'حوالي 60 دقيقة', checking: '', m4: '60–90 دقيقة', m5: '', conclusion: '' },
     helps: { tn: 'ملاحظات الترجمة', tq: 'أسئلة الترجمة', twl: 'الكلمات الرئيسية', sn: 'ملاحظات الدراسة', sq: 'أسئلة الدراسة', passage: 'المقطع', academy: 'Translation Academy' },
     start: 'ابدأ جلسة 5M', frameN: 'الإطار {n}',

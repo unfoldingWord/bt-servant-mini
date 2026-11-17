@@ -1586,7 +1586,7 @@ const NONE_T: Record<string, { none: string; see: string; what: Record<HelpKind,
   ar: { none: 'المساعدات باللغة {lang} على هذا الهاتف ليس فيها {what} لسفر {book}.', see: 'عرض {what} باللغة {other}', what: { notes: 'ملاحظات', questions: 'أسئلة', terms: 'كلمات رئيسية' },
     whatSee: { notes: 'الملاحظات', questions: 'الأسئلة', terms: 'الكلمات الرئيسية' } },
 }
-const langName = (ui: string, l: string) => (LANG_NAMES[ui] ?? LANG_NAMES.en!)[baseOf(l)] ?? env.packName(l)
+export const langName = (ui: string, l: string) => (LANG_NAMES[ui] ?? LANG_NAMES.en!)[baseOf(l)] ?? env.packName(l)
 /** "Las ayudas en hindi de este teléfono no tienen notas para Rut." and its button "Ver las notas en inglés". */
 export function noneInWords(ui: string, sheetLang: string, other: string, kind: HelpKind, book: string): { none: string; see: string } {
   const t = NONE_T[ui] ?? NONE_T.en!
