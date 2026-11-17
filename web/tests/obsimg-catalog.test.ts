@@ -96,6 +96,8 @@ let holdId: string | null = null
 const held: (() => void)[] = []
 
 const saved = { indexedDB: (globalThis as any).indexedDB, localStorage: (globalThis as any).localStorage }
+/** The fetch in place when this file started (tests/fs-packs.ts, loaded by another file, may have put an offline one there). */
+const savedFetch = globalThis.fetch
 let fake: any
 const mem = new Map<string, string>()
 const memStorage = {
@@ -117,6 +119,8 @@ function newPhone() {
 beforeAll(async () => {
   fake = await import(FAKE_IDB)
   ;(globalThis as any).localStorage = memStorage
+  // bun's own fetch for this file's server (and blob: URLs): another file may have left an offline stand-in
+  globalThis.fetch = (globalThis as any).Bun.fetch
   B = await build()
   server = (globalThis as any).Bun.serve({
     port: 0,
@@ -147,6 +151,7 @@ afterAll(() => {
   setPacksServers()
   setTrustedKeys()
   resetAddedStore()
+  globalThis.fetch = savedFetch
   // as they were: a global bun did not have is deleted, not left as undefined
   for (const k of ['indexedDB', 'localStorage'] as const) {
     if (saved[k] === undefined) delete (globalThis as any)[k]
