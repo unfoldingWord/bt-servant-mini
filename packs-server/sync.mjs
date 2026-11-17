@@ -8,8 +8,8 @@
 //   bun sync.mjs --dir <folder>       into a folder, as <folder>/v3/catalog/<lang>.seg and <folder>/v3/seg/<id>.seg
 //   bun sync.mjs --remote             into the real bucket with `wrangler r2 object put --remote` (needs Abel's OK; checks
 //                                     what is there through the deployed worker, --target-url)
-// Options: --from <url> (default the preview server), --langs en,id (default every language the app offers, plus the
-// catalogs they require), --no-model, --concurrency 6, --rpm 400 (requests a minute to the source), --bucket <name>.
+// Options: --from <url> (default the preview server), --langs en,id (default every language the app offers and zxx-obsimg,
+// plus the catalogs they require), --no-model, --concurrency 6, --rpm 400 (requests a minute to the source), --bucket <name>.
 //
 // Each catalog is read and its signature checked with the app's trusted keys before anything is copied; then only the segments
 // the target does not have are fetched (each checked against its size in the catalog; the model against its SHA-256) and
@@ -22,7 +22,7 @@ import { dirname, join, resolve } from 'node:path'
 import { verifyCatalogFile } from '@bt-synergy/language-pack-client'
 import { KNOWN, readSegment } from '@bt-synergy/language-pack-v3'
 import { MINI_SERVER, PREVIEW_SERVER, trustedKeys } from '../web/src/shared.ts'
-import { CANDIDATES } from '../web/src/packs.ts'
+import { CANDIDATES, IMAGES_CATALOG } from '../web/src/packs.ts'
 import models from '../web/src/data/models.json'
 
 const HERE = import.meta.dir
@@ -37,7 +37,9 @@ const DRY = flag('dry-run')
 const BUCKET = opt('bucket', 'bt-servant-mini-packs')
 const CONCURRENCY = Number(opt('concurrency', '6'))
 const RPM = Number(opt('rpm', '400'))
-const LANGS = opt('langs', CANDIDATES.join(',')).split(',').filter(Boolean)
+// the languages the app offers, and the catalogs that are not a language (zxx-obsimg, the Open Bible Stories pictures: the app
+// downloads it on a tap in the menu); needs the client of bt-synergy.ref (the one at 569b88a6 turns down the class obsimg)
+const LANGS = opt('langs', [...CANDIDATES, IMAGES_CATALOG].join(',')).split(',').filter(Boolean)
 const BIG = 32 << 20 // larger objects go through a file (with Range resume), not memory
 const CACHE = join(HERE, '.sync-cache')
 const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')

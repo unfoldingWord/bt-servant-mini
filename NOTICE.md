@@ -10,10 +10,11 @@ BT Servant Mini (alpha) ships these inside the APK:
 - **Language packs (format 3)**: unfoldingWord translation helps (ULT, UST, Translation Notes, Questions, Words, Words Links,
   Academy) and their Gateway Language versions, CC BY-SA 4.0. Berean Standard Bible (BSB): public domain. Built from Door43
   resources by the unfoldingWord language-pack builder.
-- **Open Bible Stories pictures** (optional pack `bt-servant-mini-obs-images.zip`, not inside the APK; passed as a file):
-  illustrations © Sweet Publishing (https://sweetpublishing.com), CC BY-SA 3.0 Unported
-  (https://creativecommons.org/licenses/by-sa/3.0/). Converted to WebP (quality 75) from Door43's obs-images-360px.zip; the
-  pack is shared under the same license. Without the pack, online, the app shows Door43's own pictures.
+- **Open Bible Stories pictures** (the optional format-3 catalog `zxx-obsimg`, not inside the APK; downloaded from the packs
+  server on a tap in the menu, or passed as a `.tcpack` file): illustrations © Sweet Publishing (https://sweetpublishing.com),
+  CC BY-SA 3.0 Unported (https://creativecommons.org/licenses/by-sa/3.0/). Converted to WebP (quality 75) from Door43's
+  obs-images-360px.zip by the unfoldingWord language-pack builder; the catalog carries this credit itself, and is shared under
+  the same license. Without it, online, the app shows Door43's own pictures.
 - **noble-curves / noble-hashes** (Paul Miller), **pako**: MIT License (bundled through `language-pack-client`).
 
 Online AI (optional, off until the person turns it on; not inside the APK):

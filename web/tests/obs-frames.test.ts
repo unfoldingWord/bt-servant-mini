@@ -10,7 +10,7 @@ import { ALL_PACKS, installPacks } from './fs-packs'
 import { fullPhone } from './harness'
 import { withObs } from './obs-fixture'
 import { forgetFrameTables, framesTelling, obsAnswer, obsSteps, pictureFrame, rangeOfRef, storyAt, storyStep } from '../src/obs'
-import { addVersePicture, cdnUrl, IW, setImageStore, verseOf, type ImagePack, type ImageStore } from '../src/obsimg'
+import { addVersePicture, cdnUrl, IW, verseOf } from '../src/obsimg'
 import { openLang } from '../src/packs'
 
 afterAll(async () => { await installPacks(ALL_PACKS) })
@@ -110,8 +110,8 @@ describe('the frame map', () => {
   })
 
   test('the picture drawn: above a one-verse answer with "OBS n:f" and the credit; nothing for a passage, an OBS answer or offline', async () => {
-    const mem: ImageStore = { get: async () => null as ImagePack | null, put: async () => {}, del: async () => {} }
-    setImageStore(mem) // no pictures on the phone: Door43's (bun has no navigator: counted online)
+    // no pictures on the phone (no IndexedDB here: the zxx-obsimg catalog cannot be read): Door43's (bun has no navigator:
+    // counted online)
     ;(globalThis as any).document = {
       createElement: (tag: string) => {
         const e: any = { tagName: tag.toUpperCase(), className: '', textContent: '', children: [] as any[], parent: null,

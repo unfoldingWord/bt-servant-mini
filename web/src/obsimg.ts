@@ -1,240 +1,280 @@
-// The Open Bible Stories images, without internet (handoff/mini-servant/plan-obs-imagenes.md). The images are the same for
-// every language: one optional pack, `bt-servant-mini-obs-images.zip` (web/obs_images.py builds it from Door43's 360px zip),
-// passed from phone to phone as a file (SD card, USB, Bluetooth). The app takes only a file whose SHA-256 it knows
-// (data/obsimages.json): no key is needed, and anything else is turned down. It is kept whole, as one Blob, with the place of
-// each image in it; sharing gives back the same bytes, which the next phone accepts the same way.
+// The Open Bible Stories images, without internet (handoff/mini-servant/plan-obs-imagenes-v3.md). The images are the same for
+// every language: one format-3 catalog of their own, `zxx-obsimg` (zxx: no linguistic content; no language requires it), unit
+// `obsimg`, 50 segments (one per story), signed with the key the app already trusts. It is downloaded from the packs server on
+// a tap in the menu, or loaded from a .tcpack file (SD card, USB, Bluetooth), and shared as one; it is never downloaded by
+// itself (20 MB): not with a language, not in the daily update.
 //
-// A frame's picture: the one on the phone when the pack is there, else Door43's when online, else a quiet placeholder.
-// The illustrations: © Sweet Publishing, CC BY-SA 3.0 (the pack's LICENSE.txt, NOTICE.md and the menu's line say so).
-import known from './data/obsimages.json'
+// A frame's picture: the one on the phone when the catalog is there, else Door43's when online, else a quiet placeholder.
+// The illustrations: © Sweet Publishing, CC BY-SA 3.0 (the catalog's own credit, NOTICE.md and the menu's line say so).
+import { ClientError, type PackReader } from '@bt-synergy/language-pack-client'
+import {
+  addedClient, addedStore, catalogOffer, downloadCatalog, IMAGES_CATALOG, onPacksChanged, openAdded, PACK_NAMES, removeLang,
+  type CatalogOffer, type Progress,
+} from './packs'
 
 // ------------------------------------------------------------------------------------------------------------ words
 
 type Words = {
-  /** the menu's section, what it says with and without the pack, its buttons */
-  title: string; have: string; none: string; credit: string; load: string; share: string; remove: string
+  /** the menu's section, what it says with and without the images, its buttons */
+  title: string; have: string; none: string; credit: string; download: string; resume: string; downloading: string
+  share: string; remove: string
+  /** a download that did not end (part of it on the phone, nothing shown yet) */
+  partial: string
+  /** asked before a download over mobile data ({mb}: its size) */
+  metered: string
   /** under a frame with no picture */
   missing: string
-  /** a file that is not the pack this app knows */
-  unknown: string
 }
 const W: Record<string, Words> = {
   en: {
     title: 'Open Bible Stories pictures', have: '{n} pictures · {mb} ✓',
-    none: 'Not on this phone. With internet the pictures come from Door43; to see them without internet, load the file bt-servant-mini-obs-images.zip (SD card, USB, Bluetooth).',
-    credit: 'Illustrations © Sweet Publishing, CC BY-SA 3.0.', load: 'Load the pictures file', share: 'Share', remove: 'Remove',
-    missing: 'Picture not on this phone', unknown: 'This is not the Open Bible Stories pictures file this app knows.',
+    none: 'Not on this phone. With internet they download here, or load a .tcpack file of pictures (SD card, USB, Bluetooth).',
+    credit: 'Illustrations © Sweet Publishing, CC BY-SA 3.0.', download: 'Download', resume: 'Continue', downloading: 'Downloading…',
+    share: 'Share', remove: 'Remove', metered: '{mb} over mobile data. Continue?',
+    partial: 'Download not finished: no picture shows yet. With internet it continues here; or remove what arrived.',
+    missing: 'Picture not on this phone',
   },
   es: {
     title: 'Imágenes de Open Bible Stories', have: '{n} imágenes · {mb} ✓',
-    none: 'No están en el teléfono. Con internet las imágenes vienen de Door43; para verlas sin internet, carga el archivo bt-servant-mini-obs-images.zip (tarjeta SD, USB, Bluetooth).',
-    credit: 'Ilustraciones © Sweet Publishing, CC BY-SA 3.0.', load: 'Cargar el archivo de imágenes', share: 'Compartir', remove: 'Quitar',
-    missing: 'La imagen no está en el teléfono', unknown: 'Este no es el archivo de imágenes de Open Bible Stories que conoce la app.',
+    none: 'No están en el teléfono. Con internet se bajan aquí, o carga un archivo .tcpack de imágenes (tarjeta SD, USB, Bluetooth).',
+    credit: 'Ilustraciones © Sweet Publishing, CC BY-SA 3.0.', download: 'Bajar', resume: 'Seguir', downloading: 'Bajando…',
+    share: 'Compartir', remove: 'Quitar', metered: '{mb} por datos móviles. ¿Seguir?',
+    partial: 'Bajada sin terminar: aún no se ve ninguna imagen. Con internet sigue aquí; o quita lo que llegó.',
+    missing: 'La imagen no está en el teléfono',
   },
   pt: {
     title: 'Imagens das Open Bible Stories', have: '{n} imagens · {mb} ✓',
-    none: 'Não estão no telefone. Com internet as imagens vêm do Door43; para vê-las sem internet, carregue o arquivo bt-servant-mini-obs-images.zip (cartão SD, USB, Bluetooth).',
-    credit: 'Ilustrações © Sweet Publishing, CC BY-SA 3.0.', load: 'Carregar o arquivo de imagens', share: 'Compartilhar', remove: 'Remover',
-    missing: 'A imagem não está no telefone', unknown: 'Este não é o arquivo de imagens das Open Bible Stories que o app conhece.',
+    none: 'Não estão no telefone. Com internet, baixe-as aqui, ou carregue um arquivo .tcpack de imagens (cartão SD, USB, Bluetooth).',
+    credit: 'Ilustrações © Sweet Publishing, CC BY-SA 3.0.', download: 'Baixar', resume: 'Continuar', downloading: 'Baixando…',
+    share: 'Compartilhar', remove: 'Remover', metered: '{mb} pelos dados móveis. Continuar?',
+    partial: 'Download não terminado: nenhuma imagem aparece ainda. Com internet, continue aqui; ou remova o que chegou.',
+    missing: 'A imagem não está no telefone',
   },
   fr: {
     title: 'Images des Open Bible Stories', have: '{n} images · {mb} ✓',
-    none: 'Elles ne sont pas sur le téléphone. Avec internet, les images viennent de Door43 ; pour les voir sans internet, chargez le fichier bt-servant-mini-obs-images.zip (carte SD, USB, Bluetooth).',
-    credit: 'Illustrations © Sweet Publishing, CC BY-SA 3.0.', load: 'Charger le fichier d’images', share: 'Partager', remove: 'Retirer',
-    missing: 'Image absente du téléphone', unknown: "Ce n'est pas le fichier d'images des Open Bible Stories que l'application connaît.",
+    none: 'Elles ne sont pas sur le téléphone. Avec internet, téléchargez-les ici, ou chargez un fichier .tcpack d’images (carte SD, USB, Bluetooth).',
+    credit: 'Illustrations © Sweet Publishing, CC BY-SA 3.0.', download: 'Télécharger', resume: 'Continuer', downloading: 'Téléchargement…',
+    share: 'Partager', remove: 'Retirer', metered: '{mb} par les données mobiles. Continuer ?',
+    partial: 'Téléchargement inachevé : aucune image ne s’affiche encore. Avec internet, il continue ici ; ou retirez ce qui est arrivé.',
+    missing: 'Image absente du téléphone',
   },
   id: {
     title: 'Gambar Open Bible Stories', have: '{n} gambar · {mb} ✓',
-    none: 'Belum ada di ponsel. Dengan internet gambar diambil dari Door43; agar bisa dilihat tanpa internet, muat berkas bt-servant-mini-obs-images.zip (kartu SD, USB, Bluetooth).',
-    credit: 'Ilustrasi © Sweet Publishing, CC BY-SA 3.0.', load: 'Muat berkas gambar', share: 'Bagikan', remove: 'Hapus',
-    missing: 'Gambar tidak ada di ponsel', unknown: 'Ini bukan berkas gambar Open Bible Stories yang dikenal aplikasi.',
+    none: 'Belum ada di ponsel. Dengan internet, unduh di sini, atau muat berkas .tcpack gambar (kartu SD, USB, Bluetooth).',
+    credit: 'Ilustrasi © Sweet Publishing, CC BY-SA 3.0.', download: 'Unduh', resume: 'Lanjutkan', downloading: 'Mengunduh…',
+    share: 'Bagikan', remove: 'Hapus', metered: '{mb} lewat data seluler. Lanjutkan?',
+    partial: 'Unduhan belum selesai: belum ada gambar yang tampil. Dengan internet, lanjutkan di sini; atau hapus yang sudah masuk.',
+    missing: 'Gambar tidak ada di ponsel',
   },
   hi: {
     title: 'ओपन बाइबल स्टोरीज़ के चित्र', have: '{n} चित्र · {mb} ✓',
-    none: 'ये फ़ोन पर नहीं हैं। इंटरनेट होने पर चित्र Door43 से आते हैं; बिना इंटरनेट देखने के लिए bt-servant-mini-obs-images.zip फ़ाइल (SD कार्ड, USB, Bluetooth) लोड करें।',
-    credit: 'चित्र © Sweet Publishing, CC BY-SA 3.0.', load: 'चित्रों की फ़ाइल लोड करें', share: 'साझा करें', remove: 'हटाएँ',
-    missing: 'चित्र फ़ोन पर नहीं है', unknown: 'यह ओपन बाइबल स्टोरीज़ के चित्रों की वह फ़ाइल नहीं है जिसे ऐप जानता है।',
+    none: 'ये फ़ोन पर नहीं हैं। इंटरनेट हो तो इन्हें यहीं डाउनलोड करें, या चित्रों की .tcpack फ़ाइल (SD कार्ड, USB, Bluetooth) लोड करें।',
+    credit: 'चित्र © Sweet Publishing, CC BY-SA 3.0.', download: 'डाउनलोड करें', resume: 'जारी रखें', downloading: 'डाउनलोड हो रहा है…',
+    share: 'साझा करें', remove: 'हटाएँ', metered: 'मोबाइल डेटा से {mb}। जारी रखें?',
+    partial: 'डाउनलोड पूरा नहीं हुआ: अभी कोई चित्र नहीं दिखता। इंटरनेट हो तो यहीं जारी रखें; या जो आया है उसे हटाएँ।',
+    missing: 'चित्र फ़ोन पर नहीं है',
   },
   ar: {
     title: 'صور قصص الكتاب المقدس المفتوحة', have: '{n} صورة · {mb} ✓',
-    none: 'ليست على الهاتف. مع الإنترنت تأتي الصور من Door43؛ ولرؤيتها بلا إنترنت حمّل الملف bt-servant-mini-obs-images.zip (بطاقة SD أو USB أو Bluetooth).',
-    credit: 'الرسوم © Sweet Publishing، بترخيص CC BY-SA 3.0.', load: 'تحميل ملف الصور', share: 'مشاركة', remove: 'إزالة',
-    missing: 'الصورة ليست على الهاتف', unknown: 'هذا ليس ملف صور قصص الكتاب المقدس المفتوحة الذي يعرفه التطبيق.',
+    none: 'ليست على الهاتف. مع الإنترنت نزّلها من هنا، أو حمّل ملف ‎.tcpack للصور (بطاقة SD أو USB أو Bluetooth).',
+    credit: 'الرسوم © Sweet Publishing، بترخيص CC BY-SA 3.0.', download: 'تنزيل', resume: 'متابعة', downloading: 'جارٍ التنزيل…',
+    share: 'مشاركة', remove: 'إزالة', metered: '{mb} عبر بيانات الجوال. متابعة؟',
+    partial: 'لم يكتمل التنزيل: لا تظهر أي صورة بعد. مع الإنترنت يُتابَع من هنا؛ أو أزل ما وصل.',
+    missing: 'الصورة ليست على الهاتف',
   },
 }
 /** The words for a UI language (pt-br and es-419 by their base; any other in English). */
 export const IW = (ui: string): Words => W[ui] ?? W[ui.split('-')[0]!] ?? W.en!
-const fill = (t: string, v: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''))
+export const fill = (t: string, v: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''))
 
-// ------------------------------------------------------------------------------------------------------------ the pack
+// ------------------------------------------------------------------------------------------------------------ the catalog
 
-export const PACK_FILE = 'bt-servant-mini-obs-images.zip'
-type Known = { sha256: string; bytes: number; count: number }
-let KNOWN: Known[] = [known as Known]
-/** Tests: the packs this app accepts (no argument puts the app's back). */
-export function setKnown(list?: Known[]) {
-  KNOWN = list ?? [known as Known]
-}
+/** The images' catalog and its one unit. */
+export const IMAGES = IMAGES_CATALOG
+export const UNIT = 'obsimg'
+const WANT = { units: [UNIT], defaults: false as const }
+/**
+ * How many pictures the unit holds: the 598 frames of the 50 stories (bt-synergy's OBS_FRAMES_PER_STORY). The format makes a
+ * built unit always that whole shape, and the client activates it only with all its segments, so an installed unit has them all.
+ */
+export const IMAGES_COUNT = 598
+/** The file sharing saves. */
+export const PACK_FILE = 'bt-servant-mini-obs-images.tcpack'
+
 const pad = (x: number) => String(x).padStart(2, '0')
 /** "01-03": the key of story 1, frame 3 */
 export const frameKey = (n: number, f: number): string => `${pad(n)}-${pad(f)}`
 /** Door43's picture of a frame (360 px high), the same for every language. */
 export const cdnUrl = (n: number, f: number): string => `https://cdn.door43.org/obs/jpg/360px/obs-en-${frameKey(n, f)}.jpg`
 
-/** Where each image is in the file: `{ "01-03": [start, length] }`. */
-export type ImageIndex = Record<string, [number, number]>
-/** Whether the bytes start like a zip (the pack) rather than a .tcpack. */
-export const isZip = (b: Uint8Array): boolean => b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04
-
+function kv(): Storage | null {
+  try {
+    return (globalThis as any).localStorage ?? null
+  } catch {
+    return null
+  }
+}
 /**
- * Reads a zip's central directory: every `obs-images/SS-FF.webp` with where its bytes are. Only stored entries (the pack has
- * nothing else); a compressed, cut or odd file throws.
+ * The segments of the download that started (saved before its first byte): the reader names no segment ids, and without
+ * internet there is no offer, so this is how a cut download is told from none. Cleared when the images are whole or removed.
  */
-export function readIndex(b: Uint8Array): ImageIndex {
-  const v = new DataView(b.buffer, b.byteOffset, b.byteLength)
-  let end = -1
-  for (let i = b.length - 22; i >= Math.max(0, b.length - 22 - 0xffff); i--) {
-    if (v.getUint32(i, true) === 0x06054b50) {
-      end = i
-      break
-    }
+const SEGMENTS = 'btsm.obsimg.segments'
+function savedSegments(): string[] {
+  try {
+    const v = JSON.parse(kv()?.getItem(SEGMENTS) ?? '[]')
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
   }
-  if (end < 0) throw new Error('not a zip file')
-  const count = v.getUint16(end + 10, true)
-  let p = v.getUint32(end + 16, true)
-  const out: ImageIndex = {}
-  const dec = new TextDecoder()
-  for (let k = 0; k < count; k++) {
-    if (p + 46 > b.length || v.getUint32(p, true) !== 0x02014b50) throw new Error('broken zip directory')
-    const method = v.getUint16(p + 10, true)
-    const size = v.getUint32(p + 20, true)
-    const nlen = v.getUint16(p + 28, true), xlen = v.getUint16(p + 30, true), clen = v.getUint16(p + 32, true)
-    const local = v.getUint32(p + 42, true)
-    const name = dec.decode(b.subarray(p + 46, p + 46 + nlen))
-    p += 46 + nlen + xlen + clen
-    const m = /^obs-images\/(\d\d-\d\d)\.webp$/.exec(name)
-    if (!m) continue
-    if (method !== 0) throw new Error(`${name} is compressed`)
-    if (local + 30 > b.length || v.getUint32(local, true) !== 0x04034b50) throw new Error(`${name}: broken zip entry`)
-    const start = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true)
-    if (start + size > b.length) throw new Error(`${name} is cut`)
-    out[m[1]!] = [start, size]
-  }
-  return out
+}
+function saveSegments(ids: string[] | null) {
+  try {
+    if (ids) kv()?.setItem(SEGMENTS, JSON.stringify(ids))
+    else kv()?.removeItem(SEGMENTS)
+  } catch {}
 }
 
-const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('')
-
-/** What the phone keeps: the file whole, its hash, where each image is. */
-export type ImagePack = { sha256: string; bytes: number; blob: Blob; index: ImageIndex }
-export type ImageStore = { get(): Promise<ImagePack | null>; put(p: ImagePack): Promise<void>; del(): Promise<void> }
-
-/** The page's IndexedDB `btsm-obsimg`, one record. */
-export function idbStore(): ImageStore {
-  const open = () => new Promise<IDBDatabase>((resolve, reject) => {
-    const r = indexedDB.open('btsm-obsimg', 1)
-    r.onupgradeneeded = () => r.result.createObjectStore('pack')
-    r.onsuccess = () => resolve(r.result)
-    r.onerror = () => reject(r.error)
-  })
-  const run = async <T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBRequest): Promise<T> => {
-    const db = await open()
+/**
+ * The old stop-gap zip (ms/obsimg: its own IndexedDB `btsm-obsimg`, on test phones only; no release had it) is deleted the first
+ * time the images' state is read. A delete that is blocked (another tab holds it open) or fails leaves no mark: it is tried again.
+ */
+const ZIP_GONE = 'btsm.obsimg.zipGone'
+const OLD_DB = 'btsm-obsimg'
+function dropOldZip(): Promise<void> {
+  const s = kv()
+  const idb: IDBFactory | undefined = (globalThis as any).indexedDB
+  try {
+    if (!s || !idb || s.getItem(ZIP_GONE)) return Promise.resolve()
+  } catch {
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => {
     try {
-      return await new Promise<T>((resolve, reject) => {
-        const t = db.transaction('pack', mode)
-        const req = f(t.objectStore('pack'))
-        t.oncomplete = () => resolve(req.result as T)
-        t.onerror = t.onabort = () => reject(t.error ?? req.error)
-      })
-    } finally {
-      db.close()
+      const r = idb.deleteDatabase(OLD_DB)
+      r.onsuccess = () => {
+        try {
+          s.setItem(ZIP_GONE, '1')
+        } catch {}
+        resolve()
+      }
+      r.onerror = () => resolve()
+      // blocked: no mark now (a success that comes later, once the other holder lets go, still sets it)
+      r.onblocked = () => resolve()
+    } catch {
+      resolve()
     }
-  }
-  return {
-    get: async () => (await run<ImagePack | undefined>('readonly', (s) => s.get('obs'))) ?? null,
-    put: (p) => run('readwrite', (s) => s.put(p, 'obs')),
-    del: () => run('readwrite', (s) => s.delete('obs')),
-  }
+  })
 }
 
-let store: ImageStore | null = null
-let pack: Promise<ImagePack | null> | null = null
-/** The blob: URLs made, per frame, for the pack with this hash (a picture drawn and not loaded yet keeps working) */
+// The reader of the images' catalog, its own (never openLang: zxx-* is not a language), opened once and read again after every
+// change. The blob: URLs made from it are kept while the images stay on the phone (a language downloaded meanwhile must not
+// break a lazy picture drawn before and not loaded yet; a new revision comes only by removing them first) and let go when a
+// read finds them gone.
+let reader: Promise<PackReader | null> | null = null
+/** The blob: URLs made, per frame */
 let urls = new Map<string, Promise<string | null>>()
-let urlsOf = ''
-/** Tests: another store (no argument: the page's IndexedDB again). Forgets what was read. */
-export function setImageStore(s?: ImageStore) {
-  store = s ?? null
-  forget(true)
-}
-const theStore = (): ImageStore => (store ??= idbStore())
-/**
- * Reads the pack again on the next request. `revoke`: the pack is gone (removed), so its URLs are let go; an install keeps
- * them (the only pack the app accepts is the same bytes), so a lazy picture drawn before still loads.
- */
-function forget(revoke = false) {
-  pack = null
-  if (revoke) dropUrls()
-}
+onPacksChanged(() => {
+  reader = null
+})
 function dropUrls() {
-  for (const u of urls.values()) void u.then((x) => { try { if (x) URL.revokeObjectURL(x) } catch {} })
+  for (const u of urls.values()) void u.then((x) => { try { if (x) URL.revokeObjectURL(x) } catch {} }, () => {})
   urls = new Map()
-  urlsOf = ''
 }
-/** The pack on the phone, or null (read once; an install or a removal reads it again; a failed read is tried again next time). */
-export function imagePack(): Promise<ImagePack | null> {
-  if (!pack) {
-    const p: Promise<ImagePack | null> = theStore().get().catch(() => {
-      if (pack === p) pack = null
-      return null
-    })
-    pack = p
+/** The images' reader when the unit is installed, else null. "Not installed" is kept until a change; a failed read is not. */
+function imagesReader(): Promise<PackReader | null> {
+  if (!reader) {
+    const p: Promise<PackReader | null> = openAdded(IMAGES)
+      .then((r) => (r.installed(UNIT) ? r : null))
+      .catch((e) => {
+        if (!(e instanceof ClientError && e.code === 'E_NOT_INSTALLED')) {
+          if (reader === p) reader = null // a failed read: tried again next time, and the URLs stay
+          throw e
+        }
+        return null
+      })
+      .then((r) => {
+        if (!r) dropUrls() // not on the phone (removed): their URLs are let go
+        return r
+      }, () => null)
+    reader = p
   }
-  return pack
+  return reader
 }
-/** How many pictures the pack on the phone has, and its size; null without it. */
-export async function imagesInstalled(): Promise<{ count: number; bytes: number } | null> {
-  const p = await imagePack()
-  return p ? { count: Object.keys(p.index).length, bytes: p.bytes } : null
+
+export type ImagesState = { bytes: number } | { partial: true } | null
+/**
+ * What the phone has: the size of the installed unit; `partial` when a download started and did not end (some of its segments
+ * are in the store, the catalog not active yet), so the menu says "Continue"; null otherwise. Works without internet; never throws.
+ */
+export async function imagesInstalled(): Promise<ImagesState> {
+  await dropOldZip().catch(() => {})
+  try {
+    const r = await imagesReader()
+    if (r) {
+      saveSegments(null)
+      return { bytes: r.size(UNIT) }
+    }
+    const want = savedSegments()
+    if (want.length) {
+      const have = new Set(await (await addedStore()).ids())
+      if (want.some((id) => have.has(id))) return { partial: true }
+    }
+  } catch {}
+  return null
 }
+
+/** What the server offers for the images: the size of the unit and its segments (a few KB read, needs internet), or null. */
+export const imagesOffer = (): Promise<CatalogOffer | null> => catalogOffer(IMAGES, WANT)
 
 /**
- * Puts the pack on the phone: only a file whose SHA-256 this app knows, with the number of images it says. Throws (with the
- * words for `ui`) for any other file.
+ * Downloads the images into the phone's store, as a language is: one request at a time with a prefetch, the segments already
+ * there counted from the start and not fetched again, `signal` cancels (what arrived stays; nothing shows until all 50 are in,
+ * the client activates the unit whole).
  */
-export async function installImages(bytes: Uint8Array, ui = 'en'): Promise<{ count: number; bytes: number }> {
-  const sha = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>))
-  const k = KNOWN.find((x) => x.sha256 === sha)
-  if (!k || k.bytes !== bytes.length) throw new Error(IW(ui).unknown)
-  const index = readIndex(bytes)
-  if (Object.keys(index).length !== k.count) throw new Error(IW(ui).unknown)
-  await theStore().put({ sha256: sha, bytes: bytes.length, blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), index })
-  forget()
-  return { count: k.count, bytes: bytes.length }
-}
-/** The file to share: the same bytes as the one installed (the next phone checks the same hash). */
-export async function exportImages(): Promise<Uint8Array | null> {
-  const p = await imagePack()
-  return p ? new Uint8Array(await p.blob.arrayBuffer()) : null
-}
-export async function removeImages(): Promise<void> {
-  await theStore().del()
-  forget(true)
+export async function downloadImages(onProgress?: (p: Progress) => void, signal?: AbortSignal, offer?: CatalogOffer | null): Promise<{ bytes: number }> {
+  const o = offer ?? (await imagesOffer())
+  if (!o) throw new Error(`no ${IMAGES} on the server`)
+  saveSegments(o.segments)
+  const got = await downloadCatalog(IMAGES, WANT, o, onProgress, signal ? { signal } : {})
+  saveSegments(null)
+  return got
 }
 
-/** The picture of a frame on the phone (a blob: URL, made once), or null when the pack or that frame is not there. */
-export async function localUrl(n: number, f: number): Promise<string | null> {
-  const key = frameKey(n, f)
-  const p = await imagePack()
-  const at = p?.index[key]
-  if (!p || !at) return null
-  if (urlsOf !== p.sha256) {
-    dropUrls()
-    urlsOf = p.sha256
+/** A .tcpack with the images, to pass to another phone (not exportPack: no books, no shared articles). */
+export async function exportImages(): Promise<Uint8Array> {
+  return (await addedClient()).exportTransfer({ lang: IMAGES, mode: 'full' })
+}
+/** Removes the images: only the `zxx-obsimg/…` units, then the store's prune; languages and common stay. */
+export async function removeImages(): Promise<void> {
+  try {
+    await removeLang(IMAGES)
+  } finally {
+    saveSegments(null)
   }
+}
+/** The credit the catalog itself carries, as one line ("Illustrations … · CC BY-SA 3.0"), or null without the images. */
+export async function imagesCredit(): Promise<string | null> {
+  try {
+    const m = await (await imagesReader())?.obsImageCredit()
+    return m ? [m.credit, m.license].filter(Boolean).join(' · ') : null
+  } catch {
+    return null
+  }
+}
+
+/** The picture of a frame on the phone (a blob: URL, made once per reader), or null when the images or that frame are not there. */
+export async function localUrl(n: number, f: number): Promise<string | null> {
+  const r = await imagesReader()
+  if (!r) return null
+  const key = frameKey(n, f)
   // one URL per frame, even when two pictures of it ask at once
   let u = urls.get(key)
-  if (!u) urls.set(key, (u = Promise.resolve(URL.createObjectURL(p.blob.slice(at[0], at[0] + at[1], 'image/webp')))))
+  if (!u) {
+    const p: Promise<string | null> = r.obsImage(n, f).then((img) =>
+      img ? URL.createObjectURL(new Blob([img.bytes as Uint8Array<ArrayBuffer>], { type: img.media })) : null)
+    p.catch(() => { if (urls.get(key) === p) urls.delete(key) })
+    urls.set(key, (u = p))
+  }
   return u
 }
 
@@ -367,6 +407,17 @@ export async function addVersePicture(
   return at
 }
 
-/** The menu's line under the section, and the size as the menu writes it. */
-export const imagesLine = (ui: string, have: { count: number; bytes: number } | null): string =>
-  have ? fill(IW(ui).have, { n: have.count, mb: `${(have.bytes / 1048576).toFixed(1)} MB` }) : IW(ui).none
+/** The menu's line: how many pictures and their size, a download not ended, or how to get them. */
+export const imagesLine = (ui: string, have: ImagesState): string =>
+  !have ? IW(ui).none : 'bytes' in have ? fill(IW(ui).have, { n: IMAGES_COUNT, mb: `${(have.bytes / 1048576).toFixed(1)} MB` }) : IW(ui).partial
+
+/**
+ * What the menu says after a .tcpack was loaded: its languages, the pictures' line when it brought them and they are on the phone
+ * now (`have`), or `failed` with the number of entries turned down when it brought neither.
+ */
+export function importedLine(ui: string, r: { langs: string[]; rejected: number; images?: boolean }, have: ImagesState, failed: string): string {
+  const parts: string[] = []
+  if (r.langs.length) parts.push(r.langs.map((l) => PACK_NAMES[l] ?? l).join(', ') + ' ✓')
+  if (r.images && have && 'bytes' in have) parts.push(imagesLine(ui, have))
+  return parts.length ? parts.join(' · ') : `${failed} ${r.rejected}`
+}
