@@ -1,6 +1,7 @@
-// How to ask (Abel, Nov 16 2026): a short optional guide for someone new, never a gate. Five cards, one screen each (a passage;
-// a word or a topic; following the conversation; without typing; online AI where the app has it), each with a "Try it" that
-// asks its example the way typing it and pressing send does, with the packs on this phone. Every card says that writing in
+// How to ask (Abel, Nov 16 2026): a short optional guide for someone new, never a gate. Six to eight cards, one screen each (a
+// passage; a word or a topic; the Bible Stories, when the phone has them; who is who, when it has a book; following the
+// conversation; saving and notes; without typing; more in the menu), each with a "Try it" where it has an example, that
+// asks it the way typing it and pressing send does, with the packs on this phone. Every card says that writing in
 // your own words works too: the short forms are the fastest way, not the only one.
 //
 // The examples come from what the installed packs have (the composer's own reading, suggest.ts `understood`, and the notes and
@@ -9,7 +10,7 @@
 // or app starts), and never again once tapped or dismissed (`btsm.howto`: how many times it showed, or "done"); the menu has the
 // guide for good. Nothing here is counted in the usage counts (usage.ts): opening the guide is no one's business.
 import { verseId } from '@bt-synergy/language-pack-v3'
-import { openLang } from './packs'
+import { CANON, openLang } from './packs'
 import { booksOf, type Ctx, firstPack, fillName, helpsKnown, loadHelps, ST, understood } from './suggest'
 import { termArticle } from './pipeline'
 import { composerOn } from './composer'
@@ -17,12 +18,18 @@ import { onlineAvailable } from './online'
 import { bidiLabel, rtlLang } from './bidi'
 import { backLabel, GT } from './graph'
 import { XT } from './explore'
+import { bookLabel, type Followup } from './converse'
+import { hasWho, macBook, MW } from './macula'
+import { firstNotedFrame, hasObs, obsLabel } from './obs'
+import { ST as SVT } from './saved'
 
 const KEY = 'btsm.howto'
 
 type H = {
   menu: string; invite: string; dismiss: string; step: string; back: string; next: string; done: string; close: string; tryIt: string
   free: string; online: string
+  /** the "Open Saved" and "Open the menu" buttons; the "without typing" card without the Bible Stories; the menu card without online AI */
+  openSaved: string; openMenu: string; browsePlain: string; menuPlain: string
   cards: Record<CardId, [string, string]>
   /** the "without typing" card's second half: the typing suggestions, or how to turn them on ({toggle}: its name in the menu) */
   typing: string; typingOff: string
@@ -35,20 +42,26 @@ type H = {
   /** a word's meaning (each with the article it names, tried in order until the pack has one), and a translation topic */
   terms: [string, string][]; topics: [string, string][]
 }
-export type CardId = 'passage' | 'word' | 'follow' | 'browse' | 'online'
-// {map}, {back} (with its arrow, → in Arabic), {browse}: the names the app shows for them (graph.ts, explore.ts), so the card says what the screen says
+export type CardId = 'passage' | 'word' | 'obs' | 'who' | 'follow' | 'save' | 'browse' | 'menu'
+// {map}, {back} (with its arrow, → in Arabic), {browse}, {saved}: the names the app shows for them (graph.ts, explore.ts, saved.ts), so the card says what the screen says
 const STR: Record<string, H> = {
   en: {
-    menu: 'How to ask', invite: 'New here? See how to ask (1 min)', dismiss: 'Dismiss', step: '{n} of {m}', back: 'Back', next: 'Next',
+    menu: 'How to ask', invite: 'New here? See how to ask (2 min)', dismiss: 'Dismiss', step: '{n} of {m}', back: 'Back', next: 'Next',
     done: 'Done', close: 'Close', tryIt: 'Try it',
     free: 'You can also write freely, in your own words: that works too. These short forms are just the fastest way.',
     online: 'Online AI settings',
+    openSaved: 'Open Saved', openMenu: 'Open the menu',
+    browsePlain: '{browse} shows the Bible book by book, the Translation Academy manuals and the guided modes, which take you step by step.',
+    menuPlain: 'In the menu: the pictures of the Bible Stories to keep without internet, and Safety: a discreet mode and a PIN, if someone might check your phone.',
     cards: {
       passage: ['A passage', 'Write the book, the chapter and the verse. Add a word like “notes” or “questions” to see only that.'],
       word: ['A word or a topic', 'Ask what a word means, or how to translate something. The answer comes from Translation Words and Translation Academy.'],
-      follow: ['Follow the conversation', 'After an answer, go on in a few words: I remember the passage. The buttons under every answer take you further, and the {map} or “{back}” takes you back to any earlier point.'],
-      browse: ['Without typing', '{browse} shows the Bible book by book, and the Translation Academy manuals.'],
-      online: ['Online AI (optional)', 'Turn on online AI in the menu. With internet, a larger model also explains what I find, and longer questions in your own words work better. Without internet, the phone answers as usual.'],
+      obs: ['Bible Stories', 'Write OBS and the number of the story, or of the story and the frame. Each frame comes with its picture and its notes. Tap an underlined word to see its note or its key term, and open the Bible passage the story tells.'],
+      who: ['Who is who', 'Ask who “he” or “she” is in a verse, or ask for the sentence structure. The answer comes from the original text (Hebrew or Greek) and shows you the words that translate it.'],
+      save: ['Save and annotate', 'Tap ☆ to save a verse, an article or an answer, and ✎ to write your note. Everything stays on this phone, in Browse → ☆ {saved}. To send an answer by WhatsApp, use its share button.'],
+      follow: ['Follow the conversation', 'After an answer, go on in a few words: I remember the passage. The buttons under every answer take you further, and the {map} or “{back}” takes you back to any earlier point. A long answer comes in parts: move through them with ◀ ▶.'],
+      browse: ['Without typing', '{browse} shows the Bible book by book, the Bible Stories, the Translation Academy manuals and the guided modes, which take you step by step.'],
+      menu: ['More in the menu', 'In the menu: online AI (optional: with internet, a larger model explains what I find), the pictures of the Bible Stories to keep without internet, and Safety: a discreet mode and a PIN, if someone might check your phone.'],
     },
     typing: 'Or start writing a book’s name: the row above the box offers its chapters and verses, and ✓ shows what I understood. Tap it to send.',
     typingOff: 'Typing suggestions are off: turn them on in the menu (“{toggle}”), and the row above the box will offer chapters and verses as you write.',
@@ -57,16 +70,22 @@ const STR: Record<string, H> = {
     topics: [['How do I translate a metaphor?', 'ta:translate/figs-metaphor'], ['How do I translate an idiom?', 'ta:translate/figs-idiom']],
   },
   es: {
-    menu: 'Cómo preguntar', invite: '¿Primera vez aquí? Mira cómo preguntar (1 min)', dismiss: 'Descartar', step: '{n} de {m}', back: 'Atrás',
+    menu: 'Cómo preguntar', invite: '¿Primera vez aquí? Mira cómo preguntar (2 min)', dismiss: 'Descartar', step: '{n} de {m}', back: 'Atrás',
     next: 'Siguiente', done: 'Listo', close: 'Cerrar', tryIt: 'Pruébalo',
     free: 'También puedes escribir libremente, con tus palabras: funciona igual. Estas formas cortas son solo el camino más rápido.',
     online: 'Ajustes de la IA en línea',
+    openSaved: 'Abrir Guardados', openMenu: 'Abrir el menú',
+    browsePlain: '{browse} muestra la Biblia libro por libro, los manuales de Translation Academy y los modos guiados, que te llevan paso a paso.',
+    menuPlain: 'En el menú: las imágenes de las Historias de la Biblia para tenerlas sin internet, y Seguridad: un modo discreto y un PIN, si alguien puede revisar tu teléfono.',
     cards: {
       passage: ['Un pasaje', 'Escribe el libro, el capítulo y el versículo. Añade una palabra como «notas» o «preguntas» para ver solo eso.'],
       word: ['Una palabra o un tema', 'Pregunta qué significa una palabra o cómo traducir algo. La respuesta viene de Translation Words y Translation Academy.'],
-      follow: ['Sigue la conversación', 'Después de una respuesta, sigue con pocas palabras: recuerdo el pasaje. Los botones bajo cada respuesta te llevan más lejos, y el {map} o «{back}» te devuelve a cualquier punto anterior.'],
-      browse: ['Sin escribir', '{browse} muestra la Biblia libro por libro y los manuales de Translation Academy.'],
-      online: ['IA en línea (opcional)', 'Activa la IA en línea en el menú. Con internet, un modelo más grande además explica lo que encuentro, y las preguntas largas con tus palabras funcionan mejor. Sin internet, el teléfono responde como siempre.'],
+      obs: ['Historias de la Biblia', 'Escribe OBS y el número de la historia, o de la historia y el cuadro. Cada cuadro trae su imagen y sus notas. Toca una palabra subrayada para ver su nota o su palabra clave, y abre el pasaje de la Biblia que cuenta la historia.'],
+      who: ['Quién es quién', 'Pregunta quién es «él» o «ella» en un versículo, o pide la estructura de la oración. La respuesta sale del texto original (hebreo o griego) y te muestra las palabras que lo traducen.'],
+      save: ['Guarda y anota', 'Toca ☆ para guardar un versículo, un artículo o una respuesta, y ✎ para escribir tu nota. Todo queda en este teléfono, en Explorar → ☆ {saved}. Para mandar una respuesta por WhatsApp, usa su botón de compartir.'],
+      follow: ['Sigue la conversación', 'Después de una respuesta, sigue con pocas palabras: recuerdo el pasaje. Los botones bajo cada respuesta te llevan más lejos, y el {map} o «{back}» te devuelve a cualquier punto anterior. Una respuesta larga viene en partes: pasa con ◀ ▶.'],
+      browse: ['Sin escribir', '{browse} muestra la Biblia libro por libro, las Historias de la Biblia, los manuales de Translation Academy y los modos guiados, que te llevan paso a paso.'],
+      menu: ['Más en el menú', 'En el menú: la IA en línea (opcional: con internet, un modelo más grande explica lo que encuentro), las imágenes de las Historias de la Biblia para tenerlas sin internet, y Seguridad: un modo discreto y un PIN, si alguien puede revisar tu teléfono.'],
     },
     typing: 'O empieza a escribir el nombre de un libro: la fila sobre el cuadro ofrece sus capítulos y versículos, y ✓ muestra lo que entendí. Tócalo para enviar.',
     typingOff: 'Las sugerencias al escribir están apagadas: actívalas en el menú («{toggle}») y la fila sobre el cuadro te ofrecerá capítulos y versículos mientras escribes.',
@@ -75,16 +94,22 @@ const STR: Record<string, H> = {
     topics: [['¿Cómo traduzco una metáfora?', 'ta:translate/figs-metaphor'], ['¿Cómo traduzco una expresión idiomática?', 'ta:translate/figs-idiom']],
   },
   fr: {
-    menu: 'Comment poser une question', invite: 'Nouveau ici ? Voyez comment poser une question (1 min)', dismiss: 'Ignorer', step: '{n} sur {m}',
+    menu: 'Comment poser une question', invite: 'Nouveau ici ? Voyez comment poser une question (2 min)', dismiss: 'Ignorer', step: '{n} sur {m}',
     back: 'Retour', next: 'Suivant', done: 'Terminé', close: 'Fermer', tryIt: 'Essayer',
     free: 'Vous pouvez aussi écrire librement, avec vos mots : cela marche aussi. Ces formes courtes sont seulement le chemin le plus rapide.',
     online: "Réglages de l'IA en ligne",
+    openSaved: 'Ouvrir Favoris', openMenu: 'Ouvrir le menu',
+    browsePlain: '{browse} montre la Bible livre par livre, les manuels de Translation Academy et les modes guidés, qui vous mènent pas à pas.',
+    menuPlain: "Dans le menu : les images des Histoires de la Bible pour les avoir sans internet, et Sécurité : un mode discret et un code PIN, si quelqu'un peut consulter votre téléphone.",
     cards: {
       passage: ['Un passage', 'Écrivez le livre, le chapitre et le verset. Ajoutez un mot comme « notes » ou « questions » pour ne voir que cela.'],
       word: ['Un mot ou un sujet', 'Demandez ce que signifie un mot, ou comment traduire quelque chose. La réponse vient de Translation Words et de Translation Academy.'],
-      follow: ['Suivre la conversation', 'Après une réponse, continuez en quelques mots : je me souviens du passage. Les boutons sous chaque réponse vous mènent plus loin, et la {map} ou « {back} » vous ramène à un point précédent.'],
-      browse: ['Sans écrire', '{browse} montre la Bible livre par livre, et les manuels de Translation Academy.'],
-      online: ['IA en ligne (facultative)', "Activez l'IA en ligne dans le menu. Avec internet, un modèle plus grand explique aussi ce que je trouve, et les longues questions avec vos mots marchent mieux. Sans internet, le téléphone répond comme d'habitude."],
+      obs: ['Histoires de la Bible', "Écrivez OBS et le numéro de l'histoire, ou de l'histoire et de l'image. Chaque image vient avec son illustration et ses notes. Touchez un mot souligné pour voir sa note ou son mot clé, et ouvrez le passage de la Bible que raconte l'histoire."],
+      who: ['Qui est qui', 'Demandez qui est « il » ou « elle » dans un verset, ou la structure de la phrase. La réponse vient du texte original (hébreu ou grec) et vous montre les mots qui le traduisent.'],
+      save: ['Enregistrer et annoter', 'Touchez ☆ pour enregistrer un verset, un article ou une réponse, et ✎ pour écrire votre note. Tout reste sur ce téléphone, dans Parcourir → ☆ {saved}. Pour envoyer une réponse par WhatsApp, utilisez son bouton de partage.'],
+      follow: ['Suivre la conversation', 'Après une réponse, continuez en quelques mots : je me souviens du passage. Les boutons sous chaque réponse vous mènent plus loin, et la {map} ou « {back} » vous ramène à un point précédent. Une longue réponse vient en parties : passez de l’une à l’autre avec ◀ ▶.'],
+      browse: ['Sans écrire', '{browse} montre la Bible livre par livre, les Histoires de la Bible, les manuels de Translation Academy et les modes guidés, qui vous mènent pas à pas.'],
+      menu: ['Plus dans le menu', "Dans le menu : l'IA en ligne (facultative : avec internet, un modèle plus grand explique ce que je trouve), les images des Histoires de la Bible pour les avoir sans internet, et Sécurité : un mode discret et un code PIN, si quelqu'un peut consulter votre téléphone."],
     },
     typing: "Ou commencez à écrire le nom d'un livre : la ligne au-dessus de la zone propose ses chapitres et versets, et ✓ montre ce que j'ai compris. Touchez-le pour envoyer.",
     typingOff: 'Les suggestions pendant la saisie sont désactivées : activez-les dans le menu (« {toggle} »), et la ligne au-dessus de la zone proposera chapitres et versets pendant que vous écrivez.',
@@ -93,16 +118,22 @@ const STR: Record<string, H> = {
     topics: [['Comment traduire une métaphore ?', 'ta:translate/figs-metaphor'], ['Comment traduire une expression idiomatique ?', 'ta:translate/figs-idiom']],
   },
   id: {
-    menu: 'Cara bertanya', invite: 'Baru di sini? Lihat cara bertanya (1 menit)', dismiss: 'Abaikan', step: '{n} dari {m}', back: 'Kembali',
+    menu: 'Cara bertanya', invite: 'Baru di sini? Lihat cara bertanya (2 menit)', dismiss: 'Abaikan', step: '{n} dari {m}', back: 'Kembali',
     next: 'Berikutnya', done: 'Selesai', close: 'Tutup', tryIt: 'Coba',
     free: 'Anda juga bisa menulis bebas dengan kata-kata Anda sendiri: itu juga berhasil. Bentuk singkat ini hanya cara yang paling cepat.',
     online: 'Pengaturan AI daring',
+    openSaved: 'Buka Tersimpan', openMenu: 'Buka menu',
+    browsePlain: '{browse} menampilkan Alkitab kitab demi kitab, buku panduan Translation Academy, dan mode terpandu yang menuntun Anda selangkah demi selangkah.',
+    menuPlain: 'Di menu: gambar Kisah-kisah Alkitab agar tersedia tanpa internet, dan Keamanan: mode diam-diam dan PIN, jika ada yang mungkin memeriksa ponsel Anda.',
     cards: {
       passage: ['Sebuah perikop', 'Tulis kitab, pasal, dan ayatnya. Tambahkan kata seperti «catatan» atau «pertanyaan» untuk melihat itu saja.'],
       word: ['Kata atau topik', 'Tanyakan arti sebuah kata, atau cara menerjemahkan sesuatu. Jawabannya dari Translation Words dan Translation Academy.'],
-      follow: ['Ikuti percakapan', 'Setelah jawaban, lanjutkan dengan beberapa kata: saya ingat perikopnya. Tombol di bawah setiap jawaban membawa Anda lebih jauh, dan {map} atau «{back}» membawa Anda kembali ke titik mana pun sebelumnya.'],
-      browse: ['Tanpa mengetik', '{browse} menampilkan Alkitab kitab demi kitab, dan buku panduan Translation Academy.'],
-      online: ['AI daring (pilihan)', 'Aktifkan AI daring di menu. Dengan internet, model yang lebih besar juga menjelaskan apa yang saya temukan, dan pertanyaan panjang dengan kata-kata Anda bekerja lebih baik. Tanpa internet, ponsel menjawab seperti biasa.'],
+      obs: ['Kisah-kisah Alkitab', 'Tulis OBS dan nomor kisahnya, atau nomor kisah dan bingkainya. Setiap bingkai disertai gambar dan catatannya. Ketuk kata bergaris bawah untuk melihat catatan atau istilah kuncinya, dan buka perikop Alkitab yang dikisahkan kisah itu.'],
+      who: ['Siapa adalah siapa', 'Tanyakan siapa «dia» dalam sebuah ayat, atau minta struktur kalimatnya. Jawabannya berasal dari teks asli (Ibrani atau Yunani) dan menunjukkan kata-kata yang menerjemahkannya.'],
+      save: ['Simpan dan beri catatan', 'Ketuk ☆ untuk menyimpan ayat, artikel, atau jawaban, dan ✎ untuk menulis catatan Anda. Semuanya tetap di ponsel ini, di Jelajahi → ☆ {saved}. Untuk mengirim jawaban lewat WhatsApp, pakai tombol bagikannya.'],
+      follow: ['Ikuti percakapan', 'Setelah jawaban, lanjutkan dengan beberapa kata: saya ingat perikopnya. Tombol di bawah setiap jawaban membawa Anda lebih jauh, dan {map} atau «{back}» membawa Anda kembali ke titik mana pun sebelumnya. Jawaban yang panjang datang dalam beberapa bagian: berpindahlah dengan ◀ ▶.'],
+      browse: ['Tanpa mengetik', '{browse} menampilkan Alkitab kitab demi kitab, Kisah-kisah Alkitab, buku panduan Translation Academy, dan mode terpandu yang menuntun Anda selangkah demi selangkah.'],
+      menu: ['Lebih banyak di menu', 'Di menu: AI daring (pilihan: dengan internet, model yang lebih besar menjelaskan apa yang saya temukan), gambar Kisah-kisah Alkitab agar tersedia tanpa internet, dan Keamanan: mode diam-diam dan PIN, jika ada yang mungkin memeriksa ponsel Anda.'],
     },
     typing: 'Atau mulai tulis nama kitab: baris di atas kotak menawarkan pasal dan ayatnya, dan ✓ menunjukkan apa yang saya pahami. Ketuk untuk mengirim.',
     typingOff: 'Saran saat mengetik sedang mati: aktifkan di menu («{toggle}»), lalu baris di atas kotak akan menawarkan pasal dan ayat saat Anda menulis.',
@@ -111,16 +142,22 @@ const STR: Record<string, H> = {
     topics: [['Bagaimana menerjemahkan metafora?', 'ta:translate/figs-metaphor'], ['Bagaimana menerjemahkan ungkapan?', 'ta:translate/figs-idiom']],
   },
   hi: {
-    menu: 'कैसे पूछें', invite: 'नए हैं? देखें कैसे पूछें (1 मिनट)', dismiss: 'हटाएँ', step: '{m} में से {n}', back: 'पीछे', next: 'आगे',
+    menu: 'कैसे पूछें', invite: 'नए हैं? देखें कैसे पूछें (2 मिनट)', dismiss: 'हटाएँ', step: '{m} में से {n}', back: 'पीछे', next: 'आगे',
     done: 'हो गया', close: 'बंद करें', tryIt: 'आज़माएँ',
     free: 'आप अपने शब्दों में खुलकर भी लिख सकते हैं: वह भी काम करता है। ये छोटे रूप बस सबसे तेज़ तरीका हैं।',
     online: 'ऑनलाइन AI सेटिंग',
+    openSaved: 'सहेजे गए खोलें', openMenu: 'मेनू खोलें',
+    browsePlain: '«{browse}» बाइबल को पुस्तक-दर-पुस्तक, Translation Academy की पुस्तिकाएँ और निर्देशित तरीके दिखाता है, जो आपको कदम-दर-कदम ले चलते हैं।',
+    menuPlain: 'मेनू में: बाइबल की कहानियों के चित्र जो बिना इंटरनेट रहें, और सुरक्षा: एक गुप्त मोड और PIN, यदि कोई आपका फ़ोन देख सकता है।',
     cards: {
       passage: ['कोई अंश', 'पुस्तक, अध्याय और पद लिखें। केवल वही देखने के लिए «नोट्स» या «प्रश्न» जैसा शब्द जोड़ें।'],
       word: ['कोई शब्द या विषय', 'पूछें कि किसी शब्द का क्या अर्थ है, या किसी बात का अनुवाद कैसे करें। उत्तर Translation Words और Translation Academy से आता है।'],
-      follow: ['बातचीत जारी रखें', 'उत्तर के बाद कुछ शब्दों में आगे बढ़ें: मुझे अंश याद रहता है। हर उत्तर के नीचे के बटन आपको आगे ले जाते हैं, और {map} या «{back}» आपको किसी भी पिछले बिंदु पर लौटा देता है।'],
-      browse: ['बिना लिखे', '«{browse}» बाइबल को पुस्तक-दर-पुस्तक, और Translation Academy की पुस्तिकाएँ दिखाता है।'],
-      online: ['ऑनलाइन AI (वैकल्पिक)', 'मेनू में ऑनलाइन AI चालू करें। इंटरनेट हो तो एक बड़ा मॉडल मेरी ढूँढी जानकारी समझाता भी है, और अपने शब्दों में लंबे प्रश्न बेहतर चलते हैं। बिना इंटरनेट के फ़ोन सामान्य रूप से उत्तर देता है।'],
+      obs: ['बाइबल की कहानियाँ', 'OBS और कहानी का नंबर लिखें, या कहानी और फ़्रेम का नंबर। हर फ़्रेम के साथ उसका चित्र और उसके नोट्स आते हैं। रेखांकित शब्द पर टैप करके उसका नोट या मुख्य शब्द देखें, और वह बाइबल अंश खोलें जिसे कहानी सुनाती है।'],
+      who: ['कौन किसको दर्शाता है', 'पूछें कि किसी पद में «वह» कौन है, या वाक्य की संरचना माँगें। उत्तर मूल पाठ (इब्रानी या यूनानी) से आता है और उसका अनुवाद करने वाले शब्द दिखाता है।'],
+      save: ['सहेजें और नोट लिखें', 'किसी पद, लेख या उत्तर को सहेजने के लिए ☆ टैप करें, और अपना नोट लिखने के लिए ✎। सब कुछ इसी फ़ोन पर रहता है, «{browse}» → ☆ {saved} में। उत्तर को WhatsApp से भेजने के लिए उसका शेयर बटन इस्तेमाल करें।'],
+      follow: ['बातचीत जारी रखें', 'उत्तर के बाद कुछ शब्दों में आगे बढ़ें: मुझे अंश याद रहता है। हर उत्तर के नीचे के बटन आपको आगे ले जाते हैं, और {map} या «{back}» आपको किसी भी पिछले बिंदु पर लौटा देता है। लंबा उत्तर भागों में आता है: ◀ ▶ से आगे-पीछे जाएँ।'],
+      browse: ['बिना लिखे', '«{browse}» बाइबल को पुस्तक-दर-पुस्तक, बाइबल की कहानियाँ, Translation Academy की पुस्तिकाएँ और निर्देशित तरीके दिखाता है, जो आपको कदम-दर-कदम ले चलते हैं।'],
+      menu: ['मेनू में और भी', 'मेनू में: ऑनलाइन AI (वैकल्पिक: इंटरनेट हो तो एक बड़ा मॉडल मेरी ढूँढी जानकारी समझाता है), बाइबल की कहानियों के चित्र जो बिना इंटरनेट रहें, और सुरक्षा: एक गुप्त मोड और PIN, यदि कोई आपका फ़ोन देख सकता है।'],
     },
     typing: 'या किसी पुस्तक का नाम लिखना शुरू करें: बॉक्स के ऊपर की पंक्ति उसके अध्याय और पद देती है, और ✓ दिखाता है कि मैंने क्या समझा। भेजने के लिए उसे टैप करें।',
     typingOff: 'लिखते समय सुझाव बंद हैं: उन्हें मेनू में («{toggle}») चालू करें, फिर लिखते समय बॉक्स के ऊपर की पंक्ति अध्याय और पद देगी।',
@@ -129,16 +166,22 @@ const STR: Record<string, H> = {
     topics: [['रूपक का अनुवाद कैसे करें?', 'ta:translate/figs-metaphor'], ['मुहावरे का अनुवाद कैसे करें?', 'ta:translate/figs-idiom']],
   },
   ar: {
-    menu: 'كيف تسأل', invite: 'جديد هنا؟ تعرّف على طريقة السؤال (دقيقة واحدة)', dismiss: 'تجاهل', step: '{n} من {m}', back: 'السابق', next: 'التالي',
+    menu: 'كيف تسأل', invite: 'جديد هنا؟ تعرّف على طريقة السؤال (دقيقتان)', dismiss: 'تجاهل', step: '{n} من {m}', back: 'السابق', next: 'التالي',
     done: 'تم', close: 'إغلاق', tryIt: 'جرّبه',
     free: 'يمكنك أيضًا أن تكتب بحرية وبكلماتك: هذا ينجح أيضًا. هذه الصيغ القصيرة هي أسرع طريق فقط.',
     online: 'إعدادات الذكاء الاصطناعي عبر الإنترنت',
+    openSaved: 'افتح المحفوظات', openMenu: 'افتح القائمة',
+    browsePlain: '«{browse}» يعرض الكتاب المقدس سفرًا سفرًا، وأدلة Translation Academy، والمسارات الموجّهة التي تقودك خطوة بخطوة.',
+    menuPlain: 'في القائمة: صور قصص الكتاب المقدس لتبقى دون إنترنت، والأمان: وضع متخفٍّ ورمز PIN، إن كان أحد قد يفتّش هاتفك.',
     cards: {
       passage: ['مقطع', 'اكتب السفر والأصحاح والآية. أضف كلمة مثل «ملاحظات» أو «أسئلة» لترى ذلك وحده.'],
       word: ['كلمة أو موضوع', 'اسأل عن معنى كلمة، أو كيف تترجم شيئًا. تأتي الإجابة من Translation Words وTranslation Academy.'],
-      follow: ['تابع المحادثة', 'بعد الإجابة، تابع ببضع كلمات: أتذكّر المقطع. الأزرار تحت كل إجابة تأخذك أبعد، و{map} أو «{back}» تعيدك إلى أي نقطة سابقة.'],
-      browse: ['دون كتابة', '«{browse}» يعرض الكتاب المقدس سفرًا سفرًا، وأدلة Translation Academy.'],
-      online: ['الذكاء الاصطناعي عبر الإنترنت (اختياري)', 'فعّل الذكاء الاصطناعي عبر الإنترنت من القائمة. مع الإنترنت يشرح نموذج أكبر أيضًا ما أجده، وتنجح الأسئلة الطويلة بكلماتك على نحو أفضل. دون إنترنت يجيب الهاتف كالمعتاد.'],
+      obs: ['قصص الكتاب المقدس', 'اكتب OBS ورقم القصة، أو رقم القصة والإطار. لكل إطار صورته وملاحظاته. المس كلمة تحتها خط لترى ملاحظتها أو كلمتها الرئيسية، وافتح مقطع الكتاب المقدس الذي ترويه القصة.'],
+      who: ['من هو مَن', 'اسأل من هو «هو» أو «هي» في آية، أو اطلب بنية الجملة. تأتي الإجابة من النص الأصلي (العبري أو اليوناني) وتُظهر لك الكلمات التي تترجمه.'],
+      save: ['احفظ ودوّن', 'المس ☆ لتحفظ آية أو مقالة أو إجابة، و✎ لتكتب ملاحظتك. يبقى كل شيء على هذا الهاتف، في تصفّح ← ☆ {saved}. لإرسال إجابة عبر واتساب، استخدم زر المشاركة.'],
+      follow: ['تابع المحادثة', 'بعد الإجابة، تابع ببضع كلمات: أتذكّر المقطع. الأزرار تحت كل إجابة تأخذك أبعد، و{map} أو «{back}» تعيدك إلى أي نقطة سابقة. تأتي الإجابة الطويلة على أجزاء: تنقّل بينها بـ ◀ ▶.'],
+      browse: ['دون كتابة', '«{browse}» يعرض الكتاب المقدس سفرًا سفرًا، وقصص الكتاب المقدس، وأدلة Translation Academy، والمسارات الموجّهة التي تقودك خطوة بخطوة.'],
+      menu: ['المزيد في القائمة', 'في القائمة: الذكاء الاصطناعي عبر الإنترنت (اختياري)، وصور قصص الكتاب المقدس لتبقى دون إنترنت، والأمان: وضع متخفٍّ ورمز PIN، إن كان أحد قد يفتّش هاتفك.'],
     },
     typing: 'أو ابدأ بكتابة اسم سفر: يقترح الصف فوق المربع أصحاحاته وآياته، وتُظهر ✓ ما فهمته. المسها للإرسال.',
     typingOff: 'الاقتراحات أثناء الكتابة مطفأة: فعّلها من القائمة («{toggle}»)، فيقترح الصف فوق المربع الأصحاحات والآيات أثناء كتابتك.',
@@ -149,6 +192,8 @@ const STR: Record<string, H> = {
 }
 export const HT = (ui: string): H => STR[ui] ?? STR.en!
 export const howtoLabel = (ui: string) => HT(ui).menu
+/** The button next to Browse under "what can you do?": opens the guide (main.ts followRow). */
+export const howtoStep = (ui: string): Followup => ({ label: HT(ui).menu, howto: true })
 
 // ------------------------------------------------------------------------------------------------------------ remembered
 
@@ -218,6 +263,8 @@ export type Examples = {
   ref: string; chapter: string | null
   passage: string; notes: string; questions: string | null; follow: [string, string]; free: string
   term: string | null; topic: string | null
+  /** the first Open Bible Stories frame with notes ("OBS 1:2"), when the phone has the stories */
+  obs: string | null
   /** the book's name as the composer writes it, for "start writing a book's name" */
   book: string
 }
@@ -315,10 +362,71 @@ async function findExamples(ui: string, packs: string[], helpsLang: string | nul
   // (the topic is not read through academyFor here: it loads every Academy article, over 3 s on a desktop; the tests check
   // that each topic routes to its article)
   const topic = await first(s.topics)
+  // an Open Bible Stories frame that has notes, asked as "OBS 1:2" (the app reads it in every language)
+  const fr = await firstNotedFrame(pack).catch(() => null)
   return {
     ref, chapter, passage: named(ref), notes: fill(s.notes, named(ref)), questions: chapter ? fill(s.questions, named(chapter)) : null,
-    follow: s.follow, free: fill(s.freeQ, named(ref)), term, topic, book: fillName(ui, ref.split(' ')[0]!),
+    follow: s.follow, free: fill(s.freeQ, named(ref)), term, topic, obs: fr ? obsLabel(fr.n, fr.f) : null, book: fillName(ui, ref.split(' ')[0]!),
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------- who is who
+
+/** The "who is who" card's example: a verse whose book MACULA has referents for, asked as a sheet (no sentence to be understood in each language). */
+export type WhoExample = { label: string; ref: string; what: string[]; lang: string }
+/** Verses with pronouns in the MACULA data, in the order they are tried (the first whose book is on the phone and has referents there). */
+const WHO = ['rut 2:4', 'jon 1:6', 'mrk 1:7', 'gen 3:6', 'jhn 1:7', 'tit 1:3']
+const WHO_MS = 8000
+const WHOS = new Map<string, Promise<WhoExample | null>>()
+/**
+ * The example for "who is who", found when the card is reached and never when the guide opens (reading a big book takes seconds):
+ * the answer's own reading (macula.ts macBook, hasWho), here with a longer wait than the answer buttons give it. Null: no verse of
+ * the list works with these packs, and the card has no "Try it". Read once per app language and packs.
+ */
+export function whoExampleOf(ui: string, packs: string[]): Promise<WhoExample | null> {
+  const key = `${ui}|${packs.join(',')}`
+  let p = WHOS.get(key)
+  if (!p) {
+    p = findWho(ui, packs).catch(() => null)
+    WHOS.set(key, p)
+    // (not kept when nothing was found: a pack may be installing)
+    p.then((w) => { if (!w && WHOS.get(key) === p) WHOS.delete(key) })
+  }
+  return p
+}
+async function findWho(ui: string, packs: string[]): Promise<WhoExample | null> {
+  for (const ref of WHO) {
+    const [code, cv] = ref.split(' ')
+    const [c, v] = cv!.split(':').map(Number)
+    for (const l of packs) {
+      let mb = null
+      try {
+        if (!(await openLang(l)).installed(`book:${code}`)) continue
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const late = new Promise<null>((ok) => { timer = setTimeout(() => ok(null), WHO_MS) })
+        mb = await Promise.race([macBook(code!, l), late]).finally(() => clearTimeout(timer))
+      } catch { /* the next pack */ }
+      if (mb && hasWho(mb, c!, v!)) return { label: MW(ui).whoIn.replace('{ref}', `${bookLabel(ui, code!)} ${c}:${v}`), ref, what: ['who'], lang: l }
+      break // the book's data is the same in every pack: the next verse
+    }
+  }
+  return null
+}
+
+/** What the phone has that decides the cards: some Open Bible Stories, some book of the Bible (every book brings its MACULA data). */
+export type PhoneHas = { obs: boolean; books: boolean }
+let lastHas: PhoneHas = { obs: false, books: true }
+export async function phoneHas(packs: string[]): Promise<PhoneHas> {
+  const books = (await Promise.all(packs.map(async (l) => {
+    try {
+      const r = await openLang(l)
+      return CANON.some((b) => r.installed(`book:${b}`))
+    } catch {
+      return false
+    }
+  }))).some(Boolean)
+  const obs = packs[0] ? await hasObs(packs[0]).catch(() => false) : false
+  return (lastHas = { obs, books })
 }
 
 // ---------------------------------------------------------------------------------------------------------------- cards
@@ -333,8 +441,10 @@ export type Card = {
   fill?: string
   /** "Try it" opens Browse (the typing suggestions are off) */
   tryBrowse?: true
-  /** a second button: Browse, or the online AI settings */
-  extra?: 'browse' | 'online'
+  /** "Try it" sends this ready sheet (who is who): no sentence to be understood in each language */
+  sheet?: WhoExample
+  /** a second button: Browse, the online AI settings, Saved, or the menu */
+  extra?: 'browse' | 'online' | 'saved' | 'menu'
 }
 /** Online AI where the app has it (not in the iOS app); never when the page cannot tell (tests, no window). */
 export function onlineHere(): boolean {
@@ -353,23 +463,35 @@ const typingOn = (): boolean => {
   }
 }
 /**
- * The guide's cards in the app's language: the online AI card only where online AI is available; with the typing suggestions
- * off, the "without typing" card says how to turn them on, and its "Try it" opens Browse.
+ * The guide's cards in the app's language, six to eight: always a passage, a word or a topic, following the conversation, saving,
+ * without typing and the menu; the Bible Stories card when the phone has them, "who is who" when it has a book (`has`; `who`: its
+ * example, found when the card is reached). The menu card has the online AI settings and its "Try it" only where online AI is available;
+ * with the typing suggestions off, the "without typing" card says how to turn them on, and its "Try it" opens Browse.
  */
-export function cardsFor(ui: string, ex: Examples | null, online = onlineHere(), typing = typingOn()): Card[] {
+export function cardsFor(ui: string, ex: Examples | null, online = onlineHere(), typing = typingOn(), has: PhoneHas = lastHas, who: WhoExample | null = null): Card[] {
   const s = HT(ui)
   const words = (t: string) => t.replace('{map}', GT(ui).map).replace('{back}', backLabel(ui, '…')).replace('{browse}', XT(ui).browse)
-    .replace('{toggle}', ST(ui).toggle)
-  const card = (id: CardId, rest: Omit<Card, 'id' | 'title' | 'body'>): Card => ({ id, title: s.cards[id][0], body: words(s.cards[id][1]), ...rest })
+    .replace('{toggle}', ST(ui).toggle).replace('{saved}', SVT(ui).title)
+  const card = (id: CardId, rest: Omit<Card, 'id' | 'title' | 'body'>, body = s.cards[id][1]): Card => ({ id, title: s.cards[id][0], body: words(body), ...rest })
+  const none = { examples: [], ask: [] }
   const out: Card[] = [
-    card('passage', ex ? { examples: [ex.passage, ex.notes, ex.questions].filter((x): x is string => !!x), ask: [ex.passage] } : { examples: [], ask: [] }),
+    card('passage', ex ? { examples: [ex.passage, ex.notes, ex.questions].filter((x): x is string => !!x), ask: [ex.passage] } : none),
     card('word', { examples: ex ? [ex.term, ex.topic].filter((x): x is string => !!x) : [], ask: ex?.term ? [ex.term] : ex?.topic ? [ex.topic] : [] }),
-    // a follow-up needs a passage before it: "Try it" asks the passage, then the next verse
-    card('follow', ex ? { examples: [...ex.follow], ask: [ex.passage, ex.follow[0]] } : { examples: [], ask: [] }),
-    typing ? card('browse', { examples: [], ask: [], ...(ex ? { fill: `${ex.book} ` } : {}), extra: 'browse' }) : card('browse', { examples: [], ask: [], tryBrowse: true }),
   ]
-  out[3]!.body = `${out[3]!.body} ${words(typing ? s.typing : s.typingOff)}`
-  if (online) out.push(card('online', { examples: ex ? [ex.free] : [], ask: ex ? [ex.free] : [], extra: 'online' }))
+  // (a "Try it" only with an example found, so none answers with nothing)
+  if (has.obs) out.push(card('obs', ex?.obs ? { examples: [ex.obs], ask: [ex.obs] } : none))
+  if (has.books) out.push(card('who', who ? { examples: [who.label], ask: [], sheet: who } : none))
+  out.push(
+    // a follow-up needs a passage before it: "Try it" asks the passage, then the next verse
+    card('follow', ex ? { examples: [...ex.follow], ask: [ex.passage, ex.follow[0]] } : none),
+    card('save', { ...none, extra: 'saved' }),
+    typing
+      ? card('browse', { ...none, ...(ex ? { fill: `${ex.book} ` } : {}), extra: 'browse' }, has.obs ? s.cards.browse[1] : s.browsePlain)
+      : card('browse', { ...none, tryBrowse: true }, has.obs ? s.cards.browse[1] : s.browsePlain),
+    online ? card('menu', { examples: ex ? [ex.free] : [], ask: ex ? [ex.free] : [], extra: 'online' }) : card('menu', { ...none, extra: 'menu' }, s.menuPlain),
+  )
+  const b = out.find((c) => c.id === 'browse')!
+  b.body = `${b.body} ${words(typing ? s.typing : s.typingOff)}`
   return out
 }
 
@@ -384,6 +506,11 @@ export type HowtoHooks = {
   type: (text: string) => void
   browse: () => void
   onlineSettings: () => void
+  /** Explorar > Guardados, and the menu */
+  saved: () => void
+  menu: () => void
+  /** a ready sheet asked (who is who): `s.lang` is the pack that has the book */
+  askSheet: (label: string, s: { ref: string; what: string[]; lang: string }) => void
   packs: () => string[]
   helpsLang: () => string | null
 }
@@ -425,6 +552,13 @@ async function askAll(qs: string[], h: HowtoHooks) {
   }
 }
 
+/** The same, for a ready sheet. */
+async function askSheet(sh: WhoExample, h: HowtoHooks) {
+  for (let t = 0; h.busy() && t < 400; t++) await new Promise((r) => setTimeout(r, 150))
+  if (h.busy()) return
+  h.askSheet(sh.label, { ref: sh.ref, what: sh.what, lang: sh.lang })
+}
+
 /** Closes the guide (Android's back button, Escape, ×); false when it was not open. */
 export function closeHowto(): boolean {
   const g = document.querySelector('#howto')
@@ -464,8 +598,22 @@ export function openHowTo(ui: string, start?: CardId) {
   for (const q of quiet) q.inert = true
   document.body.appendChild(wrap)
   document.addEventListener('keydown', onKey)
-  let cards = cardsFor(ui, null)
+  // what the phone has, the examples, and the "who is who" example come after the cards show (the last one only at its card)
+  let has = lastHas
+  let found: Examples | null = null
+  let who: WhoExample | null | undefined
+  let whoAsked = false
+  const make = () => cardsFor(ui, found, onlineHere(), typingOn(), has, who ?? null)
+  let cards = make()
   if (start) at = Math.max(0, cards.findIndex((c) => c.id === start))
+  /** The cards again with what arrived; the card on screen stays. */
+  const refresh = () => {
+    const id = cards[at]?.id
+    cards = make()
+    const i = cards.findIndex((c) => c.id === id)
+    if (i >= 0) at = i
+    draw()
+  }
   const btn = (k: string, text: string, on: () => void, cls: string) => {
     const b = button(text, on, cls)
     b.dataset.k = k
@@ -494,12 +642,15 @@ export function openHowTo(ui: string, start?: CardId) {
       box.appendChild(ul)
     }
     const acts = el('div', 'howto-try')
-    if (c.ask.length || c.fill || c.tryBrowse) acts.appendChild(btn('try', s.tryIt, () => {
+    if (c.ask.length || c.fill || c.tryBrowse || c.sheet) acts.appendChild(btn('try', s.tryIt, () => {
       closeHowto()
       if (c.fill) h.type(c.fill)
       else if (c.tryBrowse) h.browse()
+      else if (c.sheet) void askSheet(c.sheet, h)
       else void askAll(c.ask, h)
     }, 'primary'))
+    if (c.extra === 'saved') acts.appendChild(btn('extra', s.openSaved, () => { closeHowto(); h.saved() }, 'secondary'))
+    if (c.extra === 'menu') acts.appendChild(btn('extra', s.openMenu, () => { closeHowto(); h.menu() }, 'secondary'))
     if (c.extra === 'browse') acts.appendChild(btn('extra', XT(ui).browse, () => { closeHowto(); h.browse() }, 'secondary'))
     if (c.extra === 'online') acts.appendChild(btn('extra', s.online, () => { closeHowto(); h.onlineSettings() }, 'secondary'))
     if (acts.childElementCount) box.appendChild(acts)
@@ -514,14 +665,27 @@ export function openHowTo(ui: string, start?: CardId) {
     box.appendChild(nav)
     const again = !toTitle && key ? box.querySelector<HTMLElement>(`[data-k="${key}"]:not(:disabled)`) : null
     if (toTitle || was) (again ?? t).focus({ preventScroll: true })
+    // "who is who" reads a book: its example is looked for when its card is reached, never when the guide opens
+    if (c.id === 'who' && !whoAsked) {
+      whoAsked = true
+      whoExampleOf(ui, h.packs()).then((w) => {
+        who = w
+        if (wrap.isConnected && w) refresh()
+      }).catch(() => {})
+    }
   }
   draw()
   box.focus({ preventScroll: true })
-  // the examples come from the packs (a book is read): the cards show at once, their examples a moment later
+  // what the phone has decides which cards there are (a moment, no book is read); the examples come from the packs (a book is
+  // read): the cards show at once, their examples a moment later
+  phoneHas(h.packs()).then((x) => {
+    has = x
+    if (wrap.isConnected) refresh()
+  }).catch(() => {})
   examplesOf(ui, h.packs(), h.helpsLang()).then((ex) => {
     if (!wrap.isConnected || !ex) return
-    cards = cardsFor(ui, ex)
-    draw()
+    found = ex
+    refresh()
   }).catch(() => {})
 }
 

@@ -30,7 +30,8 @@ import { examplesFor, FU, helloLine, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
-import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
+import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHooks } from './howto'
+import { helpLines } from './helplines'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
 import { devOn, type Fixture, initDev } from './dev'
 import { fiveText } from './modes'
@@ -473,6 +474,9 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
           input.value = x.again.q
           form.requestSubmit()
         }
+      } else if (x.howto) {
+        closePanel()
+        openHowTo(m.ui ?? nav)
       } else if (x.add) {
         // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
         if (busy || b.disabled) return
@@ -1136,8 +1140,10 @@ async function helpAnswer(q: string, ui: string): Promise<Msg> {
     go(`${B} 1 ${t.terms}`, `${code} 1`, ['terms'])
     go(`${B} 1 ${t.questions}`, `${code} 1`, ['questions'])
   }
-  follow.push(browseStep(ui))
-  return { who: 'bot', intro: t.intro, info: whatYouCanAsk(ui), ui, follow, limits: true, meta: `${T.details}
+  follow.push(browseStep(ui), howtoStep(ui))
+  // what the phone has, named after About's text (helplines.ts)
+  const lines = await helpLines(ui, INSTALLED).catch(() => '')
+  return { who: 'bot', intro: t.intro, info: whatYouCanAsk(ui) + lines, ui, follow, limits: true, meta: `${T.details}
 (help: what you can ask)` }
 }
 
@@ -1363,6 +1369,13 @@ setHowtoHooks({
     panel.classList.add('show')
     renderPanel()
   },
+  saved: () => { openSaved() },
+  menu: () => {
+    panelView = 'main'
+    panel.classList.add('show')
+    renderPanel()
+  },
+  askSheet: (label, s) => runSheet(label, { ...bare(s.lang), intent: 'passage', ref: s.ref, what: s.what }, nav),
   packs: () => INSTALLED,
   helpsLang: () => helpsLang,
 })

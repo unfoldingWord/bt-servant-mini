@@ -158,6 +158,8 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   toSession?: boolean
   /** "Next: Movement 1 · observation · frame 6/16", a 5M session's next step (first under a step's card, marked) */
   sessionNext?: boolean
+  /** "How to ask": opens the guide (howto.ts howtoStep) */
+  howto?: true
   /** a unit to add to a language on a tap ("Add Open Bible Stories (218 KB)"), then `sheet` is asked again (main.ts) */
   add?: { lang: string; unit: string } }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */

@@ -88,7 +88,7 @@ for (const [ui, pack] of PHONES) {
     const fr = await ask([ex.free], ui)
     expect(fr.found, ex.free).toBeGreaterThan(0)
     // and every "Try it" of every card, as the guide sends it
-    for (const c of cardsFor(ui, ex, true)) {
+    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true })) {
       if (!c.ask.length) continue
       const r = await ask(c.ask, ui)
       expect(r.found, `${ui} ${c.id}: ${c.ask.join(' → ')}`).toBeGreaterThan(0)
@@ -110,7 +110,7 @@ test('another app language than the pack: the examples are still answered', asyn
     await installPacks([pack])
     const ex = (await examplesOf(ui, [pack], null))!
     for (const q of [ex.passage, ex.notes, ex.questions].filter((x): x is string => !!x)) expect((await ask([q], ui)).found, `${ui}/${pack}: ${q}`).toBeGreaterThan(0)
-    for (const c of cardsFor(ui, ex, true)) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
+    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true })) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
   }
 }, 120000)
 
@@ -203,20 +203,21 @@ test('typing suggestions off: the card says how to turn them on, and Try it open
   }
 })
 
-test('the online AI card only where online AI is available', () => {
+test('the menu card has the online AI settings only where online AI is available', () => {
+  // (the card itself is always there: Safety and the pictures are in the menu; howto-cards.test.ts has the rest)
   for (const ui of UIS) {
-    expect(cardsFor(ui, null, false).map((c) => c.id)).toEqual(['passage', 'word', 'follow', 'browse'])
-    expect(cardsFor(ui, null, true).map((c) => c.id)).toEqual(['passage', 'word', 'follow', 'browse', 'online'])
+    expect(cardsFor(ui, null, false).find((c) => c.id === 'menu')!.extra).toBe('menu')
+    expect(cardsFor(ui, null, true).find((c) => c.id === 'menu')!.extra).toBe('online')
   }
   // the iOS app: not there; the Android app and the web: there (online.ts onlineAvailable)
   ;(globalThis as any).window = { Android: { platform: () => 'ios' } }
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(false)
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('menu')
   ;(globalThis as any).window = { Android: { platform: () => 'android' } }
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(true)
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('online')
   ;(globalThis as any).window = {}
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(true)
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('online')
   delete (globalThis as any).window
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(false) // cannot tell: not offered
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('menu') // cannot tell: not offered
 })
 
 test('every card says that writing in your own words works too, in every language', () => {
