@@ -87,7 +87,11 @@ describe('questions that name a story or a frame', () => {
     // the frame's text before the folds; "no notes" said before them, not inside the last one
     expect(info.indexOf('**3:4**')).toBeLessThan(info.indexOf('▸ '))
     const r5: any = await ask('obs 3:5', 'en')
-    expect(r5.reply.info.indexOf('There are no')).toBeLessThan(r5.reply.info.indexOf('▸ '))
+    // only the helps there are: no "There are no questions" line between the frame and its folds (Abel, Nov 17)
+    expect(r5.reply.info).not.toContain('There are no')
+    // asked alone, "none" is the answer
+    const q5 = await obsAnswer({ ref: 'obs 3:5', what: ['notes'], lang: 'en' }, 'en')
+    expect(q5.answer).toContain('There are no translation notes for OBS 3:5')
     // shared or sent to the online AI without the fold marks: every note and the question still there
     const plain = unfold(info)
     expect(plain).not.toContain('▸')

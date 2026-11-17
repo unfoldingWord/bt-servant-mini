@@ -554,19 +554,20 @@ export async function obsAnswer(s: { ref: string | null; what: string[]; lang: s
     for (const [id] of terms) cites.push(`id:${id}`)
     const links = terms.map(([id, t]) => `[${t}](${id})`).join(' · ')
     // each help behind its own button with its count, as under a passage (Abel, Nov 17: open, a frame's helps took the whole
-    // screen); only the one help a question asks for alone stays open ("the notes of story 3, frame 4"). "There are none" is
-    // said first: after a fold it would be inside it.
+    // screen); only the one help a question asks for alone stays open ("the notes of story 3, frame 4"). "There are none" only
+    // for that one (it is the answer then; otherwise only the helps there are show, Abel, Nov 17), said first: after a fold it
+    // would be inside it.
     const asked = (['notes', 'questions', 'terms'] as const).filter((x) => what.includes(x))
     const only = asked.length === 1 ? asked[0] : null
     const said: string[] = [], open: string[] = [], folds: string[] = []
     if (notes.length) {
       if (only === 'notes') open.push(`### ${fill(w.notes, { ref: lab })}`, notes.join('\n'))
       else folds.push(FOLD + fill(w.notesFold, { ref: lab, n: notes.length }), notes.join('\n'))
-    } else if (wantNotes) said.push(fill(w.noNotes, { ref: lab }))
+    } else if (only === 'notes') said.push(fill(w.noNotes, { ref: lab }))
     if (qs.length) {
       if (only === 'questions') open.push(`### ${fill(w.questions, { ref: lab })}`, ...qs)
       else folds.push(FOLD + fill(w.questionsFold, { n: qs.length }), ...qs)
-    } else if (wantQs) said.push(fill(w.noQuestions, { ref: lab }))
+    } else if (only === 'questions') said.push(fill(w.noQuestions, { ref: lab }))
     if (terms.length && wantTerms) {
       if (only === 'terms') open.push(`*${w.terms}:* ${links}`)
       else folds.push(`${FOLD}${w.terms} (${terms.length})`, links)
