@@ -139,12 +139,14 @@ export function sheetOf(fx: Fixture, s: Session, lang: string): Sheet {
   const ref = f ? obsRef(s.story, +f.split(':')[1]!) : obsRef(s.story)
   return { id: `f${Date.now()}`, intent: 'obs5m', ref, what: [], version: null, concept: stepId(s), term: null, phrase: null, candidates: null, lang }
 }
-/** The session behind an obs5m sheet; `base` (the session in progress) gives language, start and done. Null for another sheet or a step that does not exist. */
+/** The session behind an obs5m sheet; `base` (the session in progress) gives language, start, done and, in the same story, the checking marks. Null for another sheet or a step that does not exist. */
 export function sessionOfSheet(sh: Sheet, fx: Fixture, base: Session | null): Session | null {
   if (sh.intent !== 'obs5m') return null
   const m = /^obs5m:(\d+)\/([a-z0-9]+)\/(\d+)$/.exec(sh.concept ?? '')
   if (!m || !(ORDER as readonly string[]).includes(m[2]!)) return null
   const s: Session = { story: +m[1]!, part: m[2] as Code, at: +m[3]!, lang: base?.lang ?? sh.lang, tfLang: base?.tfLang ?? fx.tfLang, started: base?.started ?? Date.now(), done: base ? [...base.done] : [] }
+  // the team's checking marks move with the session (the same object: a card drawn earlier still marks the session's copy)
+  if (base && base.story === s.story) s.checked = (base.checked ??= {})
   return s.story === fx.story && stepAt(fx, s) ? s : null
 }
 

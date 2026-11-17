@@ -10,6 +10,7 @@ import { type GNode, mapRows, newGraph, nodeOf } from '../src/graph'
 import { loadFixture } from '../src/dev'
 import { sheetOf, type Session } from '../src/obs5m'
 import { W5 } from '../src/obs5mwords'
+import { frameAgain } from '../src/obs5mview'
 import type { Sheet } from '../src/answer'
 
 const store = new Map<string, string>()
@@ -241,6 +242,52 @@ describe('a 5M session (dev on)', () => {
     expect(card.checks.length).toBeGreaterThan(0)
     for (const q of card.checks) expect(q.q.length).toBeGreaterThan(0)
     for (const a of card.checks.map((q: any) => q.a).filter(Boolean)) expect(String(ck.reply.text ?? '')).not.toContain(a)
+  }, 60_000)
+
+  test('checking marks stay with the session (next, then back); [Confusing: revisit frame] shows the frame as a help and the place stays (R14)', async () => {
+    const c: ConvState = { last: null }
+    await turn(c, { q: '5M OBS 1' }, 'en')
+    const at12 = (await press(c, { sheet: sheetOf(fx, { ...c.graph!.session!, part: 'checking', at: 11 }, 'en') })) as any
+    const step = node(c, at12)
+    const tq = at12.reply.card.checks as { id: string }[]
+    expect(tq.length).toBeGreaterThan(0)
+    // the view's hooks read the session as it is when tapped (main.ts), and mark it there
+    const hooks = { fx, get s() { return c.graph!.session! }, run: (_l: string, _s: Sheet) => {} }
+    const mark = (id: string, v: 'understood' | 'confusing') => { ((hooks.s.checked ??= {})['1:12'] ??= {})[id] = v }
+    mark(tq[0]!.id, 'understood')
+    await press(c, at12.reply.follow[0])
+    expect(at(c)).toBe('checking/12')
+    expect(c.graph!.session!.checked).toEqual({ '1:12': { [tq[0]!.id]: 'understood' } })
+    await press(c, { sheet: sheetOf(fx, { ...c.graph!.session!, part: 'checking', at: 11 }, 'en') })
+    expect(at(c)).toBe('checking/11')
+    expect(c.graph!.session!.checked).toEqual({ '1:12': { [tq[0]!.id]: 'understood' } })
+    // Confusing: its mark, and the frame's OBS answer as a help of the step, deeper, with the way back
+    const cur = node(c, { node: c.graph!.cur })
+    mark(tq[0]!.id, 'confusing')
+    const rf: any = await press(c, { sheet: frameAgain(hooks.s, '1:12') })
+    expect([rf.answered, rf.ref]).toEqual(['passage', 'obs 1:12'])
+    expect([node(c, rf).edge, node(c, rf).parent]).toEqual(['deeper', cur.id])
+    expect(at(c)).toBe('checking/11')
+    expect(c.graph!.session!.checked!['1:12']).toEqual({ [tq[0]!.id]: 'confusing' })
+    const sb = backs(rf)[0]
+    expect(sb).toMatchObject({ toSession: true, back: cur.id })
+    const rb: any = await answer(c, returnTo(c, sb.back, 'en')!, performance.now())
+    expect([rb.answered, rb.node]).toEqual(['obs5m', cur.id])
+    const rn: any = await press(c, rb.reply.follow[0])
+    expect([rn.reply.card.step.kind, rn.reply.card.frame.ref, at(c)]).toEqual(['check', 'obs 1:13', 'checking/12'])
+    expect(c.graph!.session!.checked!['1:12']![tq[0]!.id]).toBe('confusing')
+    expect(step.kind).toBe('obs5m')
+  }, 60_000)
+
+  test('the review\'s [Revisit this frame] shows the frame as a help of the review step; the session stays at the review', async () => {
+    const c: ConvState = { last: null }
+    await turn(c, { q: '5M OBS 1' }, 'en')
+    const rv: any = await press(c, { sheet: sheetOf(fx, { ...c.graph!.session!, part: 'm1', at: 17 }, 'en') })
+    expect(rv.reply.card.step.kind).toBe('review')
+    const rf: any = await press(c, { sheet: frameAgain(c.graph!.session!, '1:7') })
+    expect([node(c, rf).edge, node(c, rf).parent]).toEqual(['deeper', rv.node])
+    expect(at(c)).toBe('m1/17')
+    expect(backs(rf)[0]).toMatchObject({ toSession: true, back: rv.node })
   }, 60_000)
 
   test('a story with no session says so; the obs unit missing keeps the card and the next step, no helps', async () => {

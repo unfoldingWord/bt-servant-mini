@@ -7,8 +7,8 @@ import type { Sheet } from './answer'
 import type { Fixture } from './dev'
 import { md, mdDir } from './md'
 import { bidiLabel, dirOf, rtlLang } from './bidi'
-import { obsLabel, parseObsRef } from './obs'
-import { type Card5, type Code, next, ORDER, prev, type Session, sheetOf, stepPlace, steps } from './obs5m'
+import { obsLabel, obsRef, parseObsRef } from './obs'
+import { type Card5, type Code, next, ORDER, prev, type Session, stepPlace, steps } from './obs5m'
 import { W5 } from './obs5mwords'
 
 const fill = (t: string, v: Record<string, string | number>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''))
@@ -92,7 +92,7 @@ export function cardModel(card: Card5, ui: string, fx?: Fixture | null, s?: Sess
   }
 }
 
-/** What a card can do: run a step's or an article's sheet (a turn of the chat), and hear of a reveal (share and online context) */
+/** What a card can do: run a sheet (a turn of the chat), and hear of a reveal (share and online context). `s`: the session as it is now (main.ts gives a getter) */
 export type CardHooks = { fx: Fixture; s: Session; run(label: string, sheet: Sheet): void; reveal?(id: string, shown: boolean): void }
 
 function el(tag: string, cls: string, text?: string): HTMLElement {
@@ -109,10 +109,12 @@ function btn(cls: string, label: string, ui: string): HTMLButtonElement {
 const article = (concept: string, lang: string): Sheet =>
   ({ id: `f${Date.now()}`, intent: 'article', concept, lang, ref: null, what: [], version: null, term: null, phrase: null, candidates: null })
 
-/** The step of a frame in a part (the observation step of M1, the frame of the story), as a sheet to run */
-function frameSheet(on: CardHooks, part: Code, kind: string, frame: string): Sheet | null {
-  const st = steps(on.fx, part).find((x) => x.kind === kind && x.frame === frame)
-  return st ? sheetOf(on.fx, { ...on.s, part, at: st.at }, on.s.lang) : null
+/**
+ * The frame shown again (R14): its OBS answer ('obs 1:F', its text), a help of the step (deeper, with the way back); the
+ * session's place does not move
+ */
+export function frameAgain(s: Session, frame: string): Sheet {
+  return { id: `f${Date.now()}`, intent: 'passage', ref: obsRef(s.story, frameNo(frame)), what: ['text'], lang: s.lang, concept: null, term: null, phrase: null, candidates: null, version: null }
 }
 
 /** One question: its text, [Show answer] (the answer is drawn only then, and removed on [Hide answer]), and its marks */
@@ -149,10 +151,7 @@ function drawQ(q: QCard, m: CardModel, ui: string, on: CardHooks | undefined, ma
     knew.setAttribute('aria-pressed', 'false')
     knew.onclick = () => knew.setAttribute('aria-pressed', String(knew.getAttribute('aria-pressed') !== 'true'))
     const again = btn('s5-mark', m.words.revisit, ui)
-    again.onclick = () => {
-      const sh = on && q.frame ? frameSheet(on, 'm1', 'observation', q.frame) : null
-      if (sh) on!.run(m.words.revisit, sh)
-    }
+    again.onclick = () => { if (on && q.frame) on.run(m.words.revisit, frameAgain(on.s, q.frame)) }
     row.append(knew, again)
   } else if (marks === 'check') {
     // the team's mark, in the session copy only; "Confusing" also opens the frame again
@@ -171,8 +170,7 @@ function drawQ(q: QCard, m: CardModel, ui: string, on: CardHooks | undefined, ma
     ok.onclick = () => set('understood')
     no.onclick = () => {
       set('confusing')
-      const sh = on && q.frame ? frameSheet(on, 'frames', 'frame', q.frame) : null
-      if (sh) on!.run(m.words.confusing, sh)
+      if (on && q.frame) on.run(m.words.confusing, frameAgain(on.s, q.frame))
     }
     row.append(ok, no)
   }

@@ -2934,6 +2934,8 @@ async function step5(x: Ctx): Promise<Done | null> {
     }
     links.unshift(...frameLinks(helps, st.frame))
   }
+  // the review shows any frame again (R14): each frame's OBS answer is a help of the review step
+  if (st.kind === 'review') links.push(...fx.frames.map((f) => obsRef(s.story, +f.ref.split(':')[1]!)))
   x.five = { s, links }
   return {
     answered: 'obs5m', ref: fref ?? obsRef(s.story), concept: stepId(s), found: 1,

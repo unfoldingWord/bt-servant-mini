@@ -99,7 +99,7 @@ describe('a step card', () => {
     for (const a of answersOf(obs)) expect(d.seen).not.toContain(a)
   })
 
-  test('the review: 3 large cards, [We knew it] and [Revisit this frame]; revisiting runs the frame\'s observation step', () => {
+  test('the review: 3 large cards, [We knew it] and [Revisit this frame]; revisiting shows the frame again (its OBS answer, R14)', () => {
     const s = session('m1', steps(fx, 'm1').find((x) => x.kind === 'review')!.at)
     const d = draw(s)
     const qs = d.byClass('s5-review')
@@ -116,8 +116,7 @@ describe('a step card', () => {
     qs[0]!.byClass('s5-mark')[1]!.click()
     expect(runs.length).toBe(1)
     const f = picked[0]!.frames[0]!
-    expect(runs[0]![1].intent).toBe('obs5m')
-    expect(runs[0]![1].concept).toBe(stepId({ story: 1, part: 'm1', at: atFrame('m1', 'observation', f) }))
+    expect(runs[0]![1]).toMatchObject({ intent: 'passage', ref: `obs 1:${f.split(':')[1]}`, what: ['text'], concept: null })
     // [We knew it] is the team's own sign: nothing is stored
     qs[0]!.byClass('s5-mark')[0]!.click()
     expect(store.size).toBe(0)
@@ -133,6 +132,11 @@ describe('a step card', () => {
       expect(q.list).toBe('observation')
       expect(+q.frames[0]!.split(':')[1]!).toBeLessThanOrEqual(5)
     }
+    // a pool smaller than 3: all of it, nothing made up
+    const two = { ...fx, questions: fx.questions.filter((q) => q.part === 'm1' && q.list === 'observation' && q.frames[0] === '1:1').slice(0, 2) }
+    expect(two.questions.length).toBe(2)
+    expect(reviewPick(two, at5, 7).sort()).toEqual(two.questions.map((q) => q.id).sort())
+    expect(reviewPick(fx, session('m1', 0), 7)).toEqual([]) // the opening card: no frame covered yet
     const end = session('m1', steps(fx, 'm1').find((x) => x.kind === 'review')!.at)
     for (const seed of [1, 2, 3, 99]) {
       const ids = reviewPick(fx, end, seed)
@@ -180,9 +184,10 @@ describe('a step card', () => {
     expect(store.size).toBe(0)
     expect(d.textContent).toBe(before) // no count, no score: only the buttons' pressed state changes
     expect(qs[0]!.byClass('s5-mark')[0]!.getAttribute('aria-pressed')).toBe('true')
-    // "Confusing: revisit frame" opens the frame again
+    // "Confusing: revisit frame" shows the frame again (its OBS answer, R14), and keeps its own mark
     expect(runs.length).toBe(1)
-    expect(runs[0]![1].concept).toBe(stepId({ story: 1, part: 'frames', at: atFrame('frames', 'frame', '1:5') }))
+    expect(runs[0]![1]).toMatchObject({ intent: 'passage', ref: 'obs 1:5', what: ['text'] })
+    expect(s.checked!['1:5']!.tq2).toBe('confusing')
     // the marks show again on a new draw (the answers do not)
     const again = draw(s, helps)
     expect(again.byClass('s5-check')[1]!.byClass('s5-mark')[1]!.getAttribute('aria-pressed')).toBe('true')
@@ -206,9 +211,17 @@ describe('the bar and the outline', () => {
     expect(buttons.length).toBe(4)
     for (const b of buttons) expect(b.has('s5-where') || b.has('s5-nav')).toBe(true)
     const css = readFileSync(join(import.meta.dir, '..', 'index.html'), 'utf8')
-    const rule = /\.s5-bar button\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
-    expect(rule).toMatch(/min-height:\s*44px/)
-    expect(rule).toMatch(/min-width:\s*44px/)
+    const rule = (sel: string) => [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1]!.split(',').some((x) => x.trim() === sel)).map((m) => m[2]).join(';')
+    expect(rule('.s5-bar button')).toMatch(/min-height:\s*44px/)
+    expect(rule('.s5-bar button')).toMatch(/min-width:\s*44px/)
+    // the cards' and the outline's buttons too: every card button sits in .s5-card, every outline button has one of its classes
+    for (const sel of ['.s5-card button', '.s5-part-btn', '.s5-how', '.s5-end']) expect(rule(sel), sel).toMatch(/min-height:\s*44px/)
+    for (const p of ORDER) for (const st of steps(fx, p)) {
+      const c = draw(session(p, st.at))
+      if (c.byTag('button').length) expect(c.has('s5-card')).toBe(true)
+    }
+    const out = drawOutline(s, fx, 'en', { jump() {}, how() {}, end() {} }) as unknown as FakeEl
+    for (const b of out.byTag('button')) expect(b.has('s5-part-btn') || b.has('s5-how') || b.has('s5-end')).toBe(true)
     // the first step has no ◀
     const first = drawBar(session('intro', 0), fx, 'en', on, false) as unknown as FakeEl
     expect(first.byClass('s5-nav')[0]!.disabled).toBe(true)

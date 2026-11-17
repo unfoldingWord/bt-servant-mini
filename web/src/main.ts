@@ -291,7 +291,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(pm)
   }
   // a step of a 5M session: where it is ("Movement 1 · observation · frame 5/16"), first
-  if (m.sessionMark) {
+  if (m.sessionMark && devOn('obs5m')) {
     const sm = el('div', 'path-mark s5-mark', bidiLabel(m.sessionMark, m.ui ?? nav))
     sm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(sm)
@@ -335,10 +335,12 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
-  if (m.card) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav)))
+  // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
+  const s5 = devOn('obs5m')
+  if (m.card && s5) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav)))
   else if (m.text) d.appendChild(el('div', 'plain', m.text))
   // the way back to the 5M session, to the passage this answer left (and to the path it left), on its own row, then the next steps
-  const backs = [m.sessionBack, m.back, m.pathBack].filter((f): f is Followup => !!f)
+  const backs = [s5 ? m.sessionBack : undefined, m.back, m.pathBack].filter((f): f is Followup => !!f)
   if (backs.length) d.appendChild(followRow(m, backs, 'follow back-row'))
   // a path starts: the line that proposes it, just above its first step
   if (m.pathLine) {
@@ -1362,8 +1364,10 @@ function fixture5(): Fixture | null {
 /** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
 function cardHooks(cv: Conv | undefined, ui: string) {
   const fx = fixture5()
-  const s = cv?.graph?.session
-  return fx && s ? { fx, s, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui) } : undefined
+  if (!fx || !cv?.graph?.session) return undefined
+  const g = cv.graph
+  // the session as it is when tapped (each step replaces g.session; the marks go to the current copy)
+  return { fx, get s() { return g.session! }, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui) }
 }
 /** A step of the session as a turn of the chat */
 function runStep(label: string, s: Session) {
