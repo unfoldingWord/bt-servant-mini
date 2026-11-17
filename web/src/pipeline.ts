@@ -544,9 +544,9 @@ export function guessLang(q: string): string {
  */
 export function langByWords(q: string): string | null {
   // a script, when most of the letters are in it ("¿Qué significa الله?" is still Spanish)
-  const letters = (q.match(/\p{L}/gu) ?? []).length || 1
-  if ((q.match(/[؀-ۿ]/g) ?? []).length / letters > 0.5) return 'ar'
-  if ((q.match(/[ऀ-ॿ]/g) ?? []).length / letters > 0.5) return 'hi'
+  const letters = (q.match(/[\p{L}\p{M}]/gu) ?? []).length || 1
+  if ((q.match(/[؀-ۿ](?<=[\p{L}\p{M}])/gu) ?? []).length / letters > 0.5) return 'ar'
+  if ((q.match(/[ऀ-ॿ](?<=[\p{L}\p{M}])/gu) ?? []).length / letters > 0.5) return 'hi'
   const n = Object.entries(COMMON).map(([l, re]) => [l, q.match(re)?.length ?? 0] as const).filter(([, k]) => k > 0)
   const most = Math.max(0, ...n.map(([, k]) => k))
   const top = n.filter(([, k]) => k === most).map(([l]) => l)
@@ -954,7 +954,8 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   if (target && given?.lang && packCode(given.lang) === packCode(target)) given.lang = guessLang(q)
   // the reader's language against the question's own words (a report of Nov 16: "¿Dónde se tragó a Jonás un gran pez?" read
   // as French on a phone in Spanish got a French sentence and English verses): the words win when they say another language
-  // (only over a language the word lists know: a Portuguese reading of "O que significa graça?" stays Portuguese)
+  // (only over a language the word lists know, the app's six: a Portuguese reading of "O que significa graça?" stays
+  // Portuguese, and so does a clear Spanish question read as Portuguese)
   else if (given?.lang && ['en', 'es', 'fr', 'id', 'ar', 'hi'].includes(baseOf(given.lang))) {
     const said = langByWords(q)
     if (said && baseOf(said) !== baseOf(given.lang)) given.lang = said
