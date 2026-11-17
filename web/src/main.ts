@@ -346,18 +346,16 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
       study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: asked,
       sources: m.ai?.sources?.length ? m.ai.sources : m.sources, cited: m.ai?.sources?.map((s) => s.id),
     })
-    // a card of the text or of the answer goes to it, above (open now)
-    const reveal = (what: 'text' | 'answer') => {
-      const at = (what === 'text' && d.querySelector<HTMLElement>('.study .tx')) || d.querySelector<HTMLElement>('.study, .info, .plain.md')
-      at?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    }
-    if (plan.cards.length) {
+    // the cards of the text and of the phone's answer would repeat what is open above: the notes and articles only
+    const cards = plan.cards.filter((c) => c.kind !== 'text' && c.kind !== 'answer')
+    const reveal = () => {}
+    if (cards.length) {
       const fold = document.createElement('details')
       fold.className = 'sources fold'
-      fold.appendChild(el('summary', '', `${cardsT(ui).head} (${plan.cards.length})`))
-      const cards = renderHelpCards(plan.cards, { ui, lang: m.lang ?? 'en', study: m.study, helps: m.helps, reveal })
-      cards.querySelector('.hc-head')?.remove() // the fold says it
-      fold.appendChild(cards)
+      fold.appendChild(el('summary', '', `${cardsT(ui).head} (${cards.length})`))
+      const box = renderHelpCards(cards, { ui, lang: m.lang ?? 'en', study: m.study, helps: m.helps, reveal })
+      box.querySelector('.hc-head')?.remove() // the fold says it
+      fold.appendChild(box)
       d.appendChild(fold)
     }
     d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
