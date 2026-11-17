@@ -26,7 +26,7 @@ import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, gue
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
-import { examplesFor, FU, languagePicker, packFor } from './firstuse'
+import { examplesFor, FU, helloLine, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
@@ -37,7 +37,7 @@ import { fiveText } from './modes'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel, pictureFrame } from './obs'
+import { hasObs, obsLabel, pictureFrame } from './obs'
 import { addObsPictures, addVersePicture } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
@@ -45,14 +45,13 @@ import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from '
 import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
 
 type UiText = {
-  ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
+  ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; ex: string[]
   chats: string; newChat: string; max: string; del: string; confirmDel: string; untitled: string; appLang: string; packs: string; welcome: string; helps: string; auto: string
 }
 const UI: Record<string, UiText> = {
   en: {
     ph: 'Ask about a verse or a word…', send: 'Send', loading: 'Starting the offline model…', ready: 'Works without internet',
     thinking: 'Looking in the translation helps…', failed: 'Something went wrong:', details: 'details',
-    hello: "Hello! I find what you need in the translation helps on this phone (Bible texts, notes, key terms, questions, Translation Academy), without internet. Ask in your own words, tap Browse, or start typing and pick a suggestion. Ask follow-ups to go on, and go back to any point with the Map. On Android and the web, with online AI (optional) and internet, a larger model also explains what I find.",
     ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'Where was Jonah swallowed by the fish?', 'What do the notes say about Ruth 1:16?'],
     chats: 'Conversations', newChat: 'New conversation', max: 'You can keep up to 3 conversations. Delete one to start another.',
     del: 'Delete', confirmDel: 'Delete this conversation?', untitled: 'New conversation',
@@ -61,7 +60,6 @@ const UI: Record<string, UiText> = {
   es: {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
     ready: 'Funciona sin internet', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
-    hello: "¡Hola! Encuentro lo que necesitas en las ayudas de traducción de este teléfono (textos bíblicos, notas, palabras clave, preguntas, Translation Academy), sin internet. Pregunta con tus palabras, toca Explorar, o empieza a escribir y elige una sugerencia. Sigue la conversación con más preguntas y vuelve a cualquier punto con el Mapa. En Android y en la web, con la IA en línea (opcional) e internet, un modelo más grande además explica lo que encuentro.",
     ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Dónde fue tragado Jonás por un pez?', '¿Qué dice Jonás 3:9?'],
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
     del: 'Borrar', confirmDel: '¿Borrar esta conversación?', untitled: 'Conversación nueva',
@@ -70,7 +68,6 @@ const UI: Record<string, UiText> = {
   fr: {
     ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Fonctionne sans internet',
     thinking: 'Je cherche dans les aides à la traduction…', failed: 'Une erreur est survenue :', details: 'détails',
-    hello: "Bonjour ! Je trouve ce dont vous avez besoin dans les aides à la traduction de ce téléphone (textes bibliques, notes, termes clés, questions, Translation Academy), sans internet. Demandez avec vos mots, touchez Parcourir, ou commencez à écrire et choisissez une suggestion. Poursuivez la conversation par d'autres questions et revenez à n'importe quel point avec la Carte. Sur Android et sur le web, avec l'IA en ligne (facultative) et internet, un modèle plus grand explique aussi ce que je trouve.",
     ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?', 'Où Jonas a-t-il été avalé par le poisson ?'],
     chats: 'Conversations', newChat: 'Nouvelle conversation', max: "Vous pouvez garder 3 conversations. Supprimez-en une pour en commencer une autre.",
     del: 'Supprimer', confirmDel: 'Supprimer cette conversation ?', untitled: 'Nouvelle conversation',
@@ -79,7 +76,6 @@ const UI: Record<string, UiText> = {
   id: {
     ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Bisa tanpa internet',
     thinking: 'Mencari di bahan bantu penerjemahan…', failed: 'Terjadi kesalahan:', details: 'detail',
-    hello: "Halo! Saya menemukan yang Anda perlukan di bahan bantu penerjemahan di ponsel ini (teks Alkitab, catatan, istilah kunci, pertanyaan, Translation Academy), tanpa internet. Bertanyalah dengan kata-kata Anda sendiri, ketuk Jelajahi, atau mulai mengetik dan pilih saran. Lanjutkan percakapan dengan pertanyaan berikutnya, dan kembali ke titik mana pun lewat Peta. Di Android dan web, dengan AI daring (pilihan) dan internet, model yang lebih besar juga menjelaskan apa yang saya temukan.",
     ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?', 'Di mana Yunus ditelan ikan?'],
     chats: 'Percakapan', newChat: 'Percakapan baru', max: 'Anda bisa menyimpan 3 percakapan. Hapus satu untuk memulai yang lain.',
     del: 'Hapus', confirmDel: 'Hapus percakapan ini?', untitled: 'Percakapan baru',
@@ -88,7 +84,6 @@ const UI: Record<string, UiText> = {
   hi: {
     ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'बिना इंटरनेट चलता है',
     thinking: 'अनुवाद सहायता में खोज रहा हूँ…', failed: 'कुछ गलत हो गया:', details: 'विवरण',
-    hello: "नमस्ते! मैं इस फ़ोन की अनुवाद सहायताओं (बाइबल पाठ, नोट्स, मुख्य शब्द, प्रश्न, Translation Academy) में आपकी ज़रूरत की जानकारी ढूँढता हूँ, बिना इंटरनेट के। अपने शब्दों में पूछें, «ब्राउज़ करें» पर टैप करें, या लिखना शुरू करें और कोई सुझाव चुनें। आगे के प्रश्नों से बातचीत जारी रखें, और नक्शे से किसी भी पिछले बिंदु पर लौटें। Android और वेब पर, ऑनलाइन AI (वैकल्पिक) और इंटरनेट हो, तो एक बड़ा मॉडल मेरी ढूँढी जानकारी समझाता भी है।",
     ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?', 'योना को मछली ने कहाँ निगल लिया?'],
     chats: 'बातचीत', newChat: 'नई बातचीत', max: 'आप 3 बातचीत रख सकते हैं। नई शुरू करने के लिए एक हटाएँ।',
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
@@ -97,7 +92,6 @@ const UI: Record<string, UiText> = {
   ar: {
     ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'يعمل دون إنترنت',
     thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
-    hello: "مرحبًا! أجد ما تحتاج إليه في مساعدات الترجمة على هذا الهاتف (نصوص الكتاب المقدس، الملاحظات، الكلمات الرئيسية، الأسئلة، Translation Academy)، دون إنترنت. اسأل بكلماتك، أو المس «تصفّح»، أو ابدأ الكتابة واختر اقتراحًا. تابع المحادثة بأسئلة أخرى، وعُد إلى أي نقطة سابقة من الخريطة. وعلى أندرويد والويب، مع الذكاء الاصطناعي عبر الإنترنت (اختياري) وتوفر الاتصال، يشرح نموذج أكبر أيضًا ما أجده.",
     ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'أين ابتلع الحوت يونان؟', 'ساعدني في ترجمة يونان ١'],
     chats: 'المحادثات', newChat: 'محادثة جديدة', max: 'يمكنك الاحتفاظ بثلاث محادثات. احذف واحدة لتبدأ أخرى.',
     del: 'حذف', confirmDel: 'حذف هذه المحادثة؟', untitled: 'محادثة جديدة',
@@ -659,7 +653,11 @@ function renderConv() {
     // no language yet: the first screen is the choice of one (the rest of the welcome comes with it)
     if (noPacks) w.appendChild(pickerFor([]))
     else {
-      w.appendChild(el('p', '', T.hello))
+      // (the line without the Bible Stories first; a phone that has them gets the other one a moment later, as the examples come)
+      const hi = el('p', '', helloLine(nav, false))
+      w.appendChild(hi)
+      const hl = examplesLang()
+      if (hl) hasObs(hl).then((yes) => { if (yes && hi.isConnected) hi.textContent = helloLine(nav, true) }).catch(() => {})
       // someone new: the welcome "What would you like to do today?" once (welcome.ts), else How to ask's line (howto.ts), on a
       // few empty conversations; only once the languages are known
       const inv = INSTALLED.length ? offerFirst(nav, c.id, !convs.some((x) => x.msgs.length)) : null

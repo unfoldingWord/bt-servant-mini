@@ -600,6 +600,21 @@ export async function frameHelps(ref: string, lang: string, ui: string): Promise
   return { facts, academy, twl, notes: fr.notes.filter((x) => tidyNote(x.cols.note)).length, questions: fr.questions.length, tq }
 }
 
+/**
+ * The first frame, counting from OBS 1:1, that has notes in the phone's Open Bible Stories: the welcome's example (firstuse.ts). Reads
+ * the first few stories only (a pack with notes for just some of them, like the Hindi one, is still found), never all fifty.
+ */
+export async function firstNotedFrame(lang: string, stories = 6): Promise<{ n: number; f: number; lang: string } | null> {
+  const at = await obsPack(lang)
+  if (!at) return null
+  for (let n = 1; n <= stories; n++) {
+    const frames = (await at.r.story(n).catch(() => null))?.data?.frames ?? []
+    const f = frames.filter((x) => x.notes.some((y) => tidyNote(y.cols.note))).map((x) => +x.ref.split(':')[1]!).filter((x) => x > 0).sort((a, b) => a - b)[0]
+    if (f) return { n, f, lang: at.lang }
+  }
+  return null
+}
+
 /** The sentence before an answer: "Here is OBS 3:5 of Open Bible Stories (The Flood)." (runs of the other direction isolated). */
 export const introLine = (f: ObsFacts, ui: string): string | null =>
   f.state !== 'ok' ? null : bidiLabel(f.f ? fill(OW(ui).found, { ref: obsLabel(f.n, f.f), title: f.title || obsLabel(f.n) }) : fill(OW(ui).foundStory, { ref: obsLabel(f.n), title: f.title || obsLabel(f.n) }), ui)

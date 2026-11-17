@@ -1,10 +1,13 @@
 // First use: the welcome's examples come from the installed pack (never a book it lacks), the picker picks the pack of the
 // question's / app's / phone's language, and the download fetches a few segments at a time without changing what the client sees.
-import { test, expect } from 'bun:test'
+import { afterAll, test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
-import { examplesFor, packFor, preferred } from '../src/firstuse'
+import { examplesFor, helloLine, packFor, preferred } from '../src/firstuse'
+import { withObs } from './obs-fixture'
+import { frameHelps } from '../src/obs'
 import { exportPack, installedLangs, markPartial, missingUnits, openLang, partialLangs, prefetching, updateLang } from '../src/packs'
 
+afterAll(async () => { await installPacks(ALL_PACKS) }) // (the stories patched in above go with the readers)
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
 
 for (const pack of ALL_PACKS) {
@@ -16,7 +19,7 @@ for (const pack of ALL_PACKS) {
       expect(ex.length).toBeGreaterThanOrEqual(2)
       for (const e of ex) {
         expect(e.lang).toBe(pack)
-        if (e.ref) expect(r.installed(`book:${e.ref.split(' ')[0]}`)).toBe(true)
+        if (e.ref && !e.ref.startsWith('obs ')) expect(r.installed(`book:${e.ref.split(' ')[0]}`)).toBe(true)
         if (e.concept) expect((await r.article(e.concept)).data).toBeTruthy()
       }
       // a verse, then the notes of one
@@ -155,4 +158,65 @@ test('a .tcpack of a shipped language exports what it has', async () => {
   await installPacks([lang])
   const bytes = await exportPack(lang)
   expect(bytes.length).toBeGreaterThan(100_000)
+})
+
+test('the greeting has two whole texts per language: with the Bible Stories, and without', () => {
+  const names: Record<string, string> = {
+    en: 'Bible Stories', es: 'Historias de la Biblia', fr: 'Histoires de la Bible', id: 'Kisah-kisah Alkitab', hi: 'बाइबल की कहानियाँ', ar: 'قصص الكتاب المقدس',
+  }
+  for (const ui of UIS) {
+    const without = helloLine(ui, false), withObs = helloLine(ui, true)
+    expect(withObs, ui).not.toBe(without)
+    expect(withObs, ui).toContain(names[ui]!)
+    expect(without, ui).not.toContain(names[ui]!)
+    // both name Translation Academy and send to Browse; neither carries the Map or the online AI (How to ask has them)
+    for (const t of [without, withObs]) {
+      expect(t, ui).toContain('Translation Academy')
+      expect(t, ui).not.toMatch(/Map|Mapa|Carte|Peta|नक्शे|الخريطة|AI|IA|الذكاء/)
+    }
+  }
+  expect(helloLine('es', false)).toBe('¡Hola! Encuentro lo que necesitas en las ayudas de traducción de este teléfono, sin internet: la Biblia con sus notas, palabras clave y preguntas, y Translation Academy. Pregunta con tus palabras o toca Explorar.')
+  expect(helloLine('es', true)).toContain('las Historias de la Biblia y Translation Academy.')
+  expect(helloLine('xx', true)).toBe(helloLine('en', true)) // a language the app lacks: English
+})
+
+test('an Open Bible Stories frame with notes among the examples, when the phone has the stories', async () => {
+  if (!ALL_PACKS.includes('en')) return
+  await installPacks(['en'])
+  await withObs('en')
+  for (const ui of UIS) {
+    const ex = await examplesFor(ui, 'en')
+    const o = ex.find((e) => e.ref?.startsWith('obs '))!
+    expect(o, ui).toBeDefined()
+    // "OBS 1:2": the text of the reference, no title, a passage asked as the Browse row asks a story
+    expect(o.label, ui).toMatch(/^OBS \d+:\d+$/)
+    expect(o.ref).toBe(o.label.toLowerCase())
+    expect([o.intent, o.lang, o.what]).toEqual(['passage', 'en', ['text', 'notes']])
+    // the frame has notes in the pack (the first one from 1:1)
+    const h = await frameHelps(o.ref!, o.lang, ui)
+    expect(h?.notes, o.label).toBeGreaterThan(0)
+    // at most 4 examples: the verse and its notes stay, the last word or topic example gave its place
+    expect(ex.length).toBeLessThanOrEqual(4)
+    expect(ex[0]!.intent).toBe('passage')
+    expect(ex[1]!.what).toEqual(['notes'])
+    expect(ex[ex.length - 1]).toBe(o)
+  }
+})
+
+test('the first frame with notes counts from OBS 1:1: Hindi has notes for story 3 only (in the test unit), so that is the example', async () => {
+  if (!ALL_PACKS.includes('hi')) return
+  await installPacks(['hi'])
+  await withObs('hi')
+  const o = (await examplesFor('hi', 'hi')).find((e) => e.ref?.startsWith('obs '))
+  expect(o?.ref).toMatch(/^obs 3:\d+$/)
+  expect(o?.lang).toBe('hi')
+})
+
+test('without the stories on the phone there is no OBS example', async () => {
+  if (!ALL_PACKS.includes('en')) return
+  await installPacks(['en'])
+  await withObs('en', 'none')
+  const ex = await examplesFor('en', 'en')
+  expect(ex.some((e) => e.ref?.startsWith('obs '))).toBe(false)
+  await withObs('en')
 })
