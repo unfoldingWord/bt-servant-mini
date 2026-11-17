@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { withObs } from './obs-fixture'
 import { answer, type ConvState, type Made, returnTo } from '../src/pipeline'
-import { type GNode, mapRows, nodeOf } from '../src/graph'
+import { type GNode, mapRows, newGraph, nodeOf } from '../src/graph'
 import { loadFixture } from '../src/dev'
 import { sheetOf, type Session } from '../src/obs5m'
 import { W5 } from '../src/obs5mwords'
@@ -150,6 +150,38 @@ describe('a 5M session (dev on)', () => {
     expect([row(nn.id).depth, row(na.id).depth, row(ng.id).depth]).toEqual([2, 3, 2])
   }, 180_000)
 
+  test('from any depth the way back: step → notes → Academy → typed verse (its own follow-ups) → back to the same step → next', async () => {
+    const c: ConvState = { last: null }
+    await turn(c, { q: '5M OBS 1' }, 'en')
+    const r5: any = await press(c, { sheet: sheetOf(fx, { ...c.graph!.session!, part: 'm1', at: 5 }, 'en') })
+    const step = node(c, r5)
+    // at the step: "and the notes?" is its frame's
+    const rn: any = await turn(c, { q: 'and the notes?' }, 'en')
+    expect([rn.ref, node(c, rn).edge, node(c, rn).parent]).toEqual(['obs 1:5', 'deeper', step.id])
+    const ra: any = await press(c, (rn.reply.follow as any[]).find((x) => x.sheet?.concept === 'ta:translate/figs-quotations'))
+    expect(node(c, ra).edge).toBe('deeper')
+    const rg: any = await turn(c, { q: 'Genesis 1:20' }, 'en')
+    expect([rg.ref, node(c, rg).edge]).toEqual(['gen 1:20', 'branch'])
+    // on the typed verse, follow-ups are about it (R9), not about the session's frame or step
+    const gn: any = await turn(c, { q: 'and the notes?' }, 'en')
+    expect([gn.answered, gn.ref]).toEqual(['passage', 'gen 1:20'])
+    expect(gn.reply.card).toBeUndefined()
+    const gv: any = await turn(c, { q: 'the next verse' }, 'en')
+    expect([gv.answered, gv.ref]).toEqual(['passage', 'gen 1:21'])
+    expect(c.graph!.session).toMatchObject({ part: 'm1', at: 5 })
+    // its way back: the same step, no new point, the session where it was
+    const sb = backs(gv)[0]
+    expect(sb).toMatchObject({ toSession: true, back: step.id })
+    const count = c.graph!.nodes.length
+    const made = returnTo(c, sb.back, 'en')!
+    const rb: any = await answer(c, made, performance.now())
+    expect([rb.answered, rb.node, c.graph!.cur, c.graph!.nodes.length]).toEqual(['obs5m', step.id, step.id, count])
+    expect(c.graph!.session).toMatchObject({ part: 'm1', at: 5 })
+    // and on from there: the following step, on the line
+    const r6: any = await press(c, rb.reply.follow[0])
+    expect([at(c), node(c, r6).edge, node(c, r6).parent]).toEqual(['m1/6', 'line', step.id])
+  }, 120_000)
+
   test('typed in a session: "the key terms?", "the questions?" are the frame\'s; "next", "siguiente" the next step', async () => {
     const c: ConvState = { last: null }
     await turn(c, { q: '5M OBS 1' }, 'en')
@@ -224,6 +256,18 @@ describe('a 5M session (dev on)', () => {
       expect([x.reply.pathMark, x.reply.pathBack]).toEqual([undefined, undefined])
     }
     expect(c.graph!.path).toEqual(path)
+  }, 60_000)
+
+  test('a learning path offers nothing under session cards either (R10)', async () => {
+    const c: ConvState = { last: null, graph: newGraph() }
+    c.graph!.learn = { kind: 'intro', at: 'ta:intro/ta-intro', title: 'Introduction to Translation Academy', lang: 'en' }
+    const r: any = await turn(c, { q: '5M OBS 1' }, 'en')
+    expect(r.answered).toBe('obs5m')
+    for (const x of [r, await press(c, r.reply.follow[0])]) {
+      expect(x.reply.follow.some((f: any) => f.pathNext || f.toPath)).toBe(false)
+      expect([x.reply.pathMark, x.reply.pathBack]).toEqual([undefined, undefined])
+      expect(x.reply.follow[0].sessionNext).toBe(true)
+    }
   }, 60_000)
 })
 

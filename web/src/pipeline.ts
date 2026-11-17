@@ -2822,12 +2822,25 @@ let fx5: Promise<Fixture> | null = null
 const fixture5 = (): Promise<Fixture> => (fx5 ??= loadFixture().catch((e) => { fx5 = null; throw e }))
 
 /**
+ * Whether the conversation is at the session (R9): its current point is a step, or under one through `deeper` points only (the
+ * frame's notes, an Academy article opened from them). On a `branch` (a typed verse) and what goes on from it, follow-ups read
+ * that point as everywhere else.
+ */
+function atSession(g: Graph): boolean {
+  for (let n = nodeOf(g, g.cur); n; n = nodeOf(g, n.parent)) {
+    if (n.kind === 'obs5m') return true
+    if (n.edge !== 'deeper') return false
+  }
+  return false
+}
+
+/**
  * In a 5M session, a short question about its step with no reference of its own: "and the notes?", "the key terms?", "the
  * questions?" (what to show of its frame), "next", "¿y el siguiente?" (its next step). Null otherwise (a typed reference, other
  * words: answered as usual), and always with the dev switch off or no session.
  */
 export function sessionAsks(q: string, c: ConvState): 'next' | string[] | null {
-  if (!c.graph?.session || !devOn('obs5m')) return null
+  if (!c.graph?.session || !devOn('obs5m') || !atSession(c.graph)) return null
   const t = latinDigits(withoutWeak(q))
   if (/\d/.test(t) || obsAsked(t)) return null
   const lang = guessLang(q)
@@ -2989,7 +3002,8 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     // on a light path: where it is and its next step first; off it, the way back to it
     if (!(devOn('obs5m') && c.graph?.session)) await pathStep(c, made, done, x).catch(() => {})
     // on a learning path (learn.ts): where it is, the next article and a verse to try; off it, the way back to it
-    await learnStep(c, done, x.sheet, x.ui).catch(() => {})
+    // (not in a 5M session either: its next step and its way back come first)
+    if (!(devOn('obs5m') && c.graph?.session)) await learnStep(c, done, x.sheet, x.ui).catch(() => {})
     return { ...done, route: route.name, sheet: x.r ? x.sheet : null, node }
   }
   throw new Error('no route answered') // `reply` always answers
