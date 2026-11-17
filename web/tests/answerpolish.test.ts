@@ -29,10 +29,12 @@ describe('the buttons in sight and behind "More ▸"', () => {
     expect(labels(shown)).toEqual(['a', 'next', 'add'])
     expect(labels(more)).toEqual(['b', 'c', 'd', 'e'])
   })
-  test('few buttons: all in sight; one alone behind "More ▸" is shown instead', () => {
+  test('few buttons: all in sight; never more than five with the ways back', () => {
     expect(splitFollow([f('a'), f('b'), f('c')], 1).more).toEqual([])
-    expect(splitFollow([f('a'), f('b'), f('c'), f('d'), f('e')], 1).more).toEqual([])
-    expect(splitFollow([f('a'), f('b'), f('c'), f('d'), f('e'), f('g')], 1).more.length).toBe(2)
+    expect(splitFollow([f('a'), f('b'), f('c'), f('d')], 1).more).toEqual([])
+    expect(labels(splitFollow([f('a'), f('b'), f('c'), f('d'), f('e')], 1).more)).toEqual(['e'])
+    // Genesis 3 without a way back: six buttons, five in sight
+    expect(splitFollow(gen3.slice(2), 0)).toEqual({ shown: gen3.slice(2, 7), more: gen3.slice(7) })
   })
   test('many ways back: at least three next steps in sight', () => {
     expect(splitFollow([f('a'), f('b'), f('c'), f('d'), f('e')], 3).shown.length).toBe(3)

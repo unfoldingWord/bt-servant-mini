@@ -168,11 +168,11 @@ export const SHOWN = 5
 /**
  * The buttons in sight and the ones behind "More ▸", each in its order. `backs`: how many ways back are drawn above them (they
  * count). In sight first: a path's or a session's next step, a unit to add, try again, the key steps; then the others in their
- * order, until there is no room. One button alone behind "More ▸" is shown instead.
+ * order, until there is no room (never more than SHOWN with the ways back, Abel: "4–5 a la vista").
  */
 export function splitFollow(follow: Followup[], backs = 0): { shown: Followup[]; more: Followup[] } {
   const room = Math.max(3, SHOWN - backs)
-  if (follow.length <= room + 1) return { shown: follow, more: [] }
+  if (follow.length <= room) return { shown: follow, more: [] }
   const first = (f: Followup) => !!(f.pathNext || f.sessionNext || f.add || f.again || f.back || f.toPath || f.toSession || f.key)
   const pick = new Set<Followup>()
   for (const f of follow) if (pick.size < room && first(f)) pick.add(f)
