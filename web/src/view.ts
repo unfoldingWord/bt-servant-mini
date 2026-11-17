@@ -284,8 +284,9 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   }
   const terms = () => {
     if (!s.terms.length) return
-    // a chapter's many key terms behind a button; a verse's few stay in sight
-    if (s.long && s.first !== 'terms') {
+    // behind a button, a chapter's and a verse's (Abel, Nov 17: Genesis 43:29's key terms were open too); in sight only when
+    // they are what was asked
+    if (s.first !== 'terms') {
       const d = el('details', 'fold')
       d.appendChild(el('summary', '', lbl(fill(heads.termsN, { n: s.terms.length }))))
       drawTerms(d)
@@ -318,7 +319,21 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     }
     host.appendChild(list)
   }
-  /** The notes not about the question: per verse for a chapter, else the first few and a button for the others. */
+  /** One note folded: its quote as the button; inside, the note, a tap opens it in the panel as before (its words marked in the
+   *  passage, its key term, its links). */
+  const noteFold = (i: number): HTMLElement => {
+    const n = s.notes[i]!
+    const body = el('button', 'nrow')
+    body.type = 'button'
+    body.textContent = plainNote(n.note)
+    body.onclick = () => {
+      mark(box, null, [`n${i}`])
+      openPanel({ kind: 'note', study: s, i, root: box })
+    }
+    return itemFold(noteHead(n.said, first(n.note)), body, dirOf(n.note || n.said || ''))
+  }
+  /** The notes not about the question: for a chapter per verse, for a verse in one group, each folded; asked for alone, the
+   *  first few in sight and a button for the others. */
   const notes = (idx: number[], focused: boolean) => {
     if (!idx.length) return
     if (s.long) {
@@ -332,20 +347,16 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
       }
       for (const [ref, list] of byRef) {
         const d = atFold(fill(heads.verse, { ref, n: list.length }), ref, list.length)
-        for (const i of list) {
-          const n = s.notes[i]!
-          // inside: the note, a tap opens it in the panel as before (its words marked in the passage, its key term, its links)
-          const body = el('button', 'nrow')
-          body.type = 'button'
-          body.textContent = plainNote(n.note)
-          body.onclick = () => {
-            mark(box, null, [`n${i}`])
-            openPanel({ kind: 'note', study: s, i, root: box })
-          }
-          d.appendChild(itemFold(noteHead(n.said, first(n.note)), body, dirOf(n.note || n.said || '')))
-        }
+        for (const i of list) d.appendChild(noteFold(i))
         host.appendChild(d)
       }
+      return
+    }
+    // a verse's notes not asked for alone: in a group, each note folded (Abel, Nov 17: Genesis 43:29 listed its 7 notes open)
+    if (s.first !== 'notes' || focused) {
+      const host = groupFold(ui.notes, idx.length)
+      for (const i of idx) host.appendChild(noteFold(i))
+      box.appendChild(host)
       return
     }
     const few = focused ? 0 : idx.length > SHOWN + 2 ? SHOWN : idx.length
