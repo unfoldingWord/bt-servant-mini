@@ -163,6 +163,18 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   key?: boolean }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
+/**
+ * The buttons that only ask again for what the answer shows, taken off (Abel, Nov 17: "si ya forman parte de la respuesta no
+ * deberían estar como un follow up"): a button for the same passage (`ref`) whose helps are all among `shown` ("notes",
+ * "terms", "questions", "text"), and a key term's article the answer (`answer`, its Markdown) links already. The others stay (the verse
+ * before and after, the chapter, the story, an Academy article).
+ */
+export function dropShown(follow: Followup[], ref: string | null | undefined, shown: ReadonlySet<string>, answer = ''): Followup[] {
+  // a key term's article the answer links already (an OBS frame's "Key terms (1)" fold: "God"); an Academy article stays
+  const linked = (id: string) => id.startsWith('tw:') && answer.includes(`](${id})`)
+  return follow.filter((f) => !(ref && f.sheet?.intent === 'passage' && f.sheet.ref === ref && f.sheet.what.length && f.sheet.what.every((w) => shown.has(w)))
+    && !(f.sheet?.intent === 'article' && f.sheet.concept && linked(f.sheet.concept)))
+}
 /** The buttons in sight under an answer, the way back included; the others behind "More ▸" (Abel, Nov 17: ten were too many). */
 export const SHOWN = 5
 /**

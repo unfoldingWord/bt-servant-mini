@@ -5,7 +5,7 @@ import { bookCode, bookExact, bookNameWords, buildSheet, endsLongName, fold, ids
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
 import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, RELAX_COVERAGE, keywords, searchHelps, searchVerses, versesOf, textsOfVerses } from './search'
-import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
+import { academyLabel, bookLabel, browseStep, dropShown, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
 import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang, uiLangs } from './packs'
@@ -2592,7 +2592,9 @@ ${x.meta}` },
       const obs = f.state === 'ok' ? await obsStudyOf(sheet).catch(() => null) : null
       return {
         answered: 'passage', ref: sheet.ref, concept: null, found: x.r?.cites.length ?? 0,
-        reply: { intro: said, info: x.r?.answer, follow: [...x.others, ...follow].slice(0, MAX_FOLLOW), ui, lang: f.pack ?? sheet.lang, obs: obs ?? undefined,
+        // (an OBS answer's key terms are linked in it: their buttons go; an article's "See also" links are not passed here, they
+        // go somewhere new)
+        reply: { intro: said, info: x.r?.answer, follow: dropShown([...x.others, ...follow], null, new Set(), x.r?.answer ?? '').slice(0, MAX_FOLLOW), ui, lang: f.pack ?? sheet.lang, obs: obs ?? undefined,
           meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nobs: ${f.state}${f.pack ? ` (${f.pack} pack)` : ''}\n${JSON.stringify(sheet, null, 1)}` },
       }
     },
@@ -2735,7 +2737,9 @@ ${x.meta}` },
       // online AI is given the article and the Translation Academy article its text links to ("How to Translate Names")
       const ta = sheet.concept?.startsWith('tw:') ? follow.find((f) => f.sheet?.concept?.startsWith('ta:'))?.sheet?.concept : undefined
       // a free search answered by an article or an introduction says so first
-      const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: [...x.others, ...follow].slice(0, MAX_FOLLOW), ui,
+      // no button that asks again for a help the passage shows (its notes, key terms, questions, text: each in its fold)
+      const shown = new Set(study ? [study.texts.length ? 'text' : '', study.notes.length ? 'notes' : '', study.terms.length ? 'terms' : '', study.questions.length ? 'questions' : ''].filter(Boolean) : [])
+      const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: dropShown([...x.others, ...follow], sheet.ref, shown).slice(0, MAX_FOLLOW), ui,
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
         sources: sheet.intent === 'article' && ta ? [{ id: sheet.concept! }, { id: ta, title: titleOfStep(follow, ta) }] : undefined,
         meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\n${JSON.stringify(sheet, null, 1)}` }

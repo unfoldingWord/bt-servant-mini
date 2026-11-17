@@ -72,3 +72,20 @@ describe("the packs in the app's language", () => {
     expect(uiLangs('fr', ['en', 'es-419'])).toEqual([])
   })
 })
+
+describe('no button for what the answer shows (Abel, Nov 17: "ya tengo una lista de notas y de términos clave")', () => {
+  test('the same passage asked again for helps it shows: gone; the rest stays', async () => {
+    const { dropShown } = await import('../src/converse')
+    const sh = (ref: string, what: string[]) => ({ id: 'f', intent: 'passage', ref, what, version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'en' }) as any
+    const xs = [f('Preguntas', { sheet: sh('gen 43:29', ['questions']) }), f('Palabras clave', { sheet: sh('gen 43:29', ['terms']) }),
+      f('Versículo anterior', { sheet: sh('gen 43:28', ['text', 'notes']), key: true }), f('Texto', { sheet: sh('gen 43:29', ['text']) }),
+      f('Academia: Kinship', { sheet: { ...sh('', []), intent: 'article', ref: null, concept: 'ta:translate/translate-kinship' } })]
+    expect(labels(dropShown(xs, 'gen 43:29', new Set(['text', 'notes', 'terms'])))).toEqual(['Preguntas', 'Versículo anterior', 'Academia: Kinship'])
+    expect(labels(dropShown(xs, 'gen 43:29', new Set(['text', 'notes', 'terms', 'questions'])))).toEqual(['Versículo anterior', 'Academia: Kinship'])
+    expect(dropShown(xs, null, new Set(['terms']))).toEqual(xs)
+    // a key term the answer links (an OBS frame's key terms fold) is not a button again; an Academy article the notes link is
+    const god = f('Dios', { sheet: { ...sh('', []), intent: 'article', ref: null, concept: 'tw:kt/god' } })
+    const ans = 'Palabras clave (1): [God](tw:kt/god) … [Academia: Kinship](ta:translate/translate-kinship)'
+    expect(labels(dropShown([god, ...xs], null, new Set(), ans))).toEqual(['Dios', ...labels(xs)].filter((l) => l !== 'Dios'))
+  })
+})

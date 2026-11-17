@@ -2,7 +2,7 @@
 // and a bottom panel that opens what is tapped (the notes of a word, a note, an article) and follows the links inside it.
 // The panel keeps a stack, so "back" returns to where the reader was; "Open in chat" turns an article into a message.
 import { articleView, helpView, type Study, titleFor } from './answer'
-import { focusOrder, focusWords, SHOWN, wordsOf } from './focus'
+import { focusOrder, focusWords, wordsOf } from './focus'
 import { type Card, cardsT, firstLine } from './helpcards'
 import { linkTarget } from './links'
 import { type ObsStudy, wordSpans } from './obswords'
@@ -284,46 +284,37 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   }
   const terms = () => {
     if (!s.terms.length) return
-    // a chapter's many key terms behind a button; a verse's few stay in sight
-    if (s.long && s.first !== 'terms') {
-      const d = el('details', 'fold')
-      d.appendChild(el('summary', '', lbl(fill(heads.termsN, { n: s.terms.length }))))
-      drawTerms(d)
-      box.appendChild(d)
-    } else {
-      box.appendChild(el('h4', '', lbl(s.heads.terms)))
-      drawTerms(box)
-    }
+    // behind a button, a chapter's and a verse's (Abel, Nov 17: Genesis 43:29's key terms were open too); asked for alone, the
+    // button open (it is the answer). Each term is its own button, opening its article.
+    const d = groupFold(ui.terms, s.terms.length)
+    if (s.first === 'terms') d.setAttribute('open', '')
+    drawTerms(d)
+    box.appendChild(d)
   }
-  /** A list of notes (by their index in the study, which the words of the text point to). */
-  const noteList = (idx: number[], host: HTMLElement, withRef: boolean) => {
-    const list = el('ol', 'nl')
-    for (const i of idx) {
-      const n = s.notes[i]!
-      const li = el('li')
-      const b = el('button', 'nrow')
-      b.type = 'button'
-      // the row reads in the note's own direction (English notes in an Arabic pack); the reference and the quote isolated
-      const text = first(n.note)
-      b.dir = dirOf(text || n.said || '')
-      if (withRef) { b.appendChild(el('span', 'nref', n.ref)).dir = 'auto'; b.append(' ') }
-      if (n.said) { b.appendChild(el('strong', '', `«${n.said}»`)).dir = 'auto'; b.append(' ') }
-      b.appendChild(document.createTextNode(text))
-      b.onclick = () => {
-        mark(box, null, [`n${i}`])
-        openPanel({ kind: 'note', study: s, i, root: box })
-      }
-      li.appendChild(b)
-      list.appendChild(li)
+  /** One note folded: its quote as the button; inside, the note, a tap opens it in the panel as before (its words marked in the
+   *  passage, its key term, its links). */
+  const noteFold = (i: number, withRef = false): HTMLElement => {
+    const n = s.notes[i]!
+    const body = el('button', 'nrow')
+    body.type = 'button'
+    body.textContent = plainNote(n.note)
+    body.onclick = () => {
+      mark(box, null, [`n${i}`])
+      openPanel({ kind: 'note', study: s, i, root: box })
     }
-    host.appendChild(list)
+    // (a chapter's note asked about a word, above the passage: its verse first, "3:5 «…»")
+    const head = noteHead(n.said, first(n.note))
+    const h: Node = withRef ? (() => { const f = document.createDocumentFragment(); const r = el('span', 'nref', n.ref); r.dir = 'auto'; f.append(r, ' ', head); return f })() : head
+    return itemFold(h, body, dirOf(n.note || n.said || ''))
   }
-  /** The notes not about the question: per verse for a chapter, else the first few and a button for the others. */
+  /** The notes not about the question: for a chapter per verse, for a verse in one group, each folded; asked for alone, the
+   *  first few in sight and a button for the others. */
   const notes = (idx: number[], focused: boolean) => {
     if (!idx.length) return
     if (s.long) {
-      // a chapter's notes in three levels: all of them, a verse's, each note
+      // a chapter's notes in three levels: all of them, a verse's, each note (asked for alone: the group open)
       const host = groupFold(ui.notes, idx.length)
+      if (s.first === 'notes' && !focused) host.setAttribute('open', '')
       box.appendChild(host)
       const byRef = new Map<string, number[]>()
       for (const i of idx) {
@@ -332,38 +323,25 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
       }
       for (const [ref, list] of byRef) {
         const d = atFold(fill(heads.verse, { ref, n: list.length }), ref, list.length)
-        for (const i of list) {
-          const n = s.notes[i]!
-          // inside: the note, a tap opens it in the panel as before (its words marked in the passage, its key term, its links)
-          const body = el('button', 'nrow')
-          body.type = 'button'
-          body.textContent = plainNote(n.note)
-          body.onclick = () => {
-            mark(box, null, [`n${i}`])
-            openPanel({ kind: 'note', study: s, i, root: box })
-          }
-          d.appendChild(itemFold(noteHead(n.said, first(n.note)), body, dirOf(n.note || n.said || '')))
-        }
+        for (const i of list) d.appendChild(noteFold(i))
         host.appendChild(d)
       }
       return
     }
-    const few = focused ? 0 : idx.length > SHOWN + 2 ? SHOWN : idx.length
-    if (!focused) box.appendChild(el('h4', '', lbl(s.heads.notes)))
-    if (few) noteList(idx.slice(0, few), box, false)
-    if (idx.length > few) {
-      const d = el('details', 'fold')
-      d.appendChild(el('summary', '', lbl(fill(heads.more, { n: idx.length - few }))))
-      noteList(idx.slice(few), d, false)
-      box.appendChild(d)
-    }
+    // a verse's notes in one group, each note folded (Abel, Nov 17: "tanto las notas como términos clave o preguntas, si hay
+    // disponible, deben estar plegadas cada una"); asked for alone, the group is open (it is the answer), its notes still folded
+    const host = groupFold(ui.notes, idx.length)
+    if (s.first === 'notes' && !focused) host.setAttribute('open', '')
+    for (const i of idx) host.appendChild(noteFold(i))
+    box.appendChild(host)
   }
 
   if (order.first.length) {
     // the question names a word: its notes first, then the passage, then the rest behind buttons
     const words = wordsOf(order.used, asked).map((w) => `«${w}»`).join(', ')
     box.appendChild(el('h4', 'focus', lbl(fill(heads.focus, { words, n: order.first.length, all: s.notes.length }))))
-    noteList(order.first, box, !!s.long)
+    // (each folded too: its quote the button)
+    for (const i of order.first) box.appendChild(noteFold(i, !!s.long))
     drawTexts()
     notes(order.rest, true)
     terms()
@@ -383,6 +361,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   if (s.questions.length) {
     const d = el('details', 'qs fold')
     d.appendChild(el('summary', '', lbl(fill(heads.questionsN, { n: s.questions.length }))))
+    if (s.first === 'questions') d.setAttribute('open', '') // asked for alone: it is the answer (each question still folded)
     // each question folded, its answer inside (an English question in an Arabic app: its "?" at its end)
     for (const q of s.questions) d.appendChild(itemFold(el('strong', '', q.q), document.createTextNode(q.a), dirOf(`${q.q} ${q.a}`)))
     box.appendChild(d)

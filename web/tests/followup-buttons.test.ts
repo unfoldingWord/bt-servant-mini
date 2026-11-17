@@ -10,14 +10,17 @@ beforeAll(fullPhone)
 const refs = (f: { sheet?: { ref: string | null; concept: string | null } }[]) => f.map((x) => x.sheet?.ref ?? x.sheet?.concept)
 
 describe('buttons under a passage', () => {
-  test('Ruth 2:3, text: the other helps, the verses around it, the chapter, an Academy article, the introductions', async () => {
+  test('Ruth 2:3, text: the helps it does not show, the verses around it, the chapter, an Academy article, the introductions', async () => {
     const c: ConvState = { last: null }
     // (a question that asks for the text: "Show me Ruth 2:3" alone is read by code, with no reader, as the whole passage, whose
     // buttons rightly leave out the helps it already shows; main.ts has skipped the reader for it since directRef)
     const r = await turn(c, { q: 'Show me the text of Ruth 2:3', slots: { intent: 'passage', book: 'rut', chapter: 2, verse_start: 3, what: ['text'], lang: 'en' } }, 'en')
     const f = r.reply.follow ?? []
     const labels = f.map((x) => x.label)
-    expect(labels.slice(0, 3)).toEqual(['Notes', 'Questions', 'Key terms'])
+    // the notes and key terms are in the answer (folded): no button asks for them again (Abel, Nov 17); the questions are not
+    expect(labels).not.toContain('Notes')
+    expect(labels).not.toContain('Key terms')
+    expect(labels[0]).toBe('Questions')
     expect(refs(f)).toContain('rut 2:2')
     expect(refs(f)).toContain('rut 2:4')
     expect(refs(f)).toContain('rut 2')
@@ -31,7 +34,7 @@ describe('buttons under a passage', () => {
     const c: ConvState = { last: null }
     const r = await turn(c, { q: 'Muéstrame el texto de Jonás 1:3', slots: { intent: 'passage', book: 'jon', chapter: 1, verse_start: 3, what: ['text'], lang: 'es' } }, 'es')
     const labels = (r.reply.follow ?? []).map((x) => x.label)
-    expect(labels).toContain('Notas')
+    expect(labels).not.toContain('Notas') // the notes are in the answer
     expect(labels.some((l) => l.startsWith('Academia: '))).toBe(true)
     expect(labels.some((l) => l.startsWith('Versículo anterior'))).toBe(true)
     expect(labels.some((l) => l.startsWith('Capítulo completo'))).toBe(true)
