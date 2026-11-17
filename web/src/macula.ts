@@ -433,6 +433,13 @@ const P_FR = 'il|elle|ils|elles|lui|le|la|les|leur|tu|te|toi|je|moi|nous|vous|on
 const P_ID = 'dia|ia|mereka|engkau|kamu|aku|saya|kami|kita|beliau|kau|nya'
 const P_HI = 'वह|वो|वे|उसने|उसे|उसको|उन्होंने|उन्हें|उनको|तुम|तू|मैं|हम|आप|उसका|उसकी|उसके|उनका|उनकी|उनके|यह|ये|इसने|इसे'
 const P_AR = 'هو|هي|هم|هن|هما|انت|انتم|انا|نحن|ه|ها'
+/** The pronouns safe to take unquoted: no articles (el, la, le, les, lo...), no second person (you, kamu), no possessives that start a noun phrase (their). */
+const U_EN = 'he|she|they|him|her|them|it|we|us'
+const U_ES = 'ella|ellos|ellas|yo|nosotros'
+const U_FR = 'il|elle|ils|elles|lui|leur|nous'
+const U_ID = 'dia|ia|mereka|aku|saya|kami|kita|beliau'
+const U_HI = 'वह|वो|वे|उसने|उसे|उसको|उन्होंने|उन्हें|उनको|मैं|हम|उसका|उसकी|उसके|उनका|उनकी|उनके|इसने|इसे'
+const U_AR = 'هو|هي|هم|هن|هما|انا|نحن'
 /** After a pronoun with no quotes: a place ("he in Ruth 2:4"), the question's end; not a noun ("¿quién es el redentor?"). */
 const END = `(?=\\s+(?:in|en|dans|di|dalam|here|aqui|ici|disini|di sini|this|este|ce)\\b|\\s*[?؟.!]|\\s*$)`
 const RE_ALL = [
@@ -446,15 +453,17 @@ const RE_REFER = [
   /(?:संकेत|संदर्भित|इशारा|दर्शाता|दर्शाती|दर्शाते)/, /(?:يشير|تشير|يعود|تعود|المقصود|الضمير)/,
 ]
 const RE_PRON = [
-  new RegExp(`\\bwho\\s+(?:is|are|was|were|does)\\s+(?:the\\s+)?${QUOTE}?(${P_EN})\\b(?:${QUOTE}|${END})`),
-  new RegExp(`\\bquien(?:es)?\\s+(?:es|son|era|eran)\\s+(?:${QUOTE}(${P_ES})${QUOTE}|(${P_ES})${END})`),
-  new RegExp(`\\bqui\\s+(?:est|sont|etait)\\s+(?:${QUOTE}(${P_FR})${QUOTE}|(${P_FR})${END})`),
-  new RegExp(`\\bsiapa(?:kah)?\\s+(?:yang dimaksud(?:kan)?\\s+(?:dengan\\s+)?)?(?:${QUOTE}-?(${P_ID})${QUOTE}|(${P_ID})${END})`),
+  new RegExp(`\\bwho\\s+(?:is|are|was|were|does)\\s+(?:the\\s+)?(?:${QUOTE}(${P_EN})${QUOTE}|(${U_EN})\\b${END})`),
+  new RegExp(`\\bquien(?:es)?\\s+(?:es|son|era|eran)\\s+(?:${QUOTE}(${P_ES})${QUOTE}|(${U_ES})${END})`),
+  new RegExp(`\\bqui\\s+(?:est|sont|etait)\\s+(?:${QUOTE}(${P_FR})${QUOTE}|(${U_FR})${END})`),
+  new RegExp(`\\bsiapa(?:kah)?\\s+(?:yang dimaksud(?:kan)?\\s+(?:dengan\\s+)?)?(?:${QUOTE}-?(${P_ID})${QUOTE}|(${U_ID})${END})`),
   new RegExp(`${QUOTE}-?(${P_ID})${QUOTE}\\s+(?:itu\\s+)?siapa`),
   new RegExp(`(?:^|[\\s(])${QUOTE}?(${P_HI})${QUOTE}?\\s+(?:कौन|किसको|किसे)`),
   new RegExp(`कौन\\s+(?:है|हैं|था|थे)\\s+${QUOTE}(${P_HI})${QUOTE}`),
   new RegExp(`من\\s+(?:هو|هي|هم)\\s+${QUOTE}(${P_AR})${QUOTE}`),
 ]
+const LATIN_U = new Set([U_EN, U_ES, U_FR, U_ID].join('|').split('|'))
+const OTHER_U = new Set([U_HI, U_AR].join('|').split('|'))
 const LATIN_P = new Set([P_EN, P_ES, P_FR, P_ID].join('|').split('|'))
 const OTHER_P = new Set([P_HI, P_AR].join('|').split('|'))
 /** A pronoun of one of the six languages (folded), or a word of the original (Hebrew, Greek): what may be asked about. */
@@ -464,7 +473,7 @@ const isPronoun = (w: string): boolean => {
 }
 /** The first pronoun standing as a word in a folded question (one letter is not enough: "i", "a"). */
 function pronounIn(f: string): string | null {
-  for (const w of f.split(/[^\p{L}\p{M}]+/u)) if (w.length > 1 && (LATIN_P.has(w) || OTHER_P.has(w))) return w
+  for (const w of f.split(/[^\p{L}\p{M}]+/u)) if (w.length > 1 && (LATIN_U.has(w) || OTHER_U.has(w))) return w
   return null
 }
 /** The word in quotes ("who does 'him' refer to?"). */

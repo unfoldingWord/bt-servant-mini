@@ -6,6 +6,7 @@ import { chooseCards, moreLabel, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
+import { resetMacula } from './macula'
 import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
@@ -1569,6 +1570,7 @@ onPacksChanged(() => {
   resetExplore()
   resetLearn()
   resetSearch()
+  resetMacula()
   refreshInstalled().then(() => cmp.reset())
 })
 setReady()

@@ -102,8 +102,10 @@ function whoLine(it: WhoItem, greek: boolean, ui: string): HTMLElement {
   const w = MW(ui)
   const li = el('li', '')
   li.appendChild(gate('said', it.gl || it.orig))
-  li.append(' ')
-  li.appendChild(orig(it.orig, greek))
+  if (it.gl) {
+    li.append(' ')
+    li.appendChild(orig(it.orig, greek))
+  }
   li.append(' ')
   li.appendChild(el('span', 'role', w.roles[it.role]))
   li.appendChild(el('span', 'arrow', rtl(ui) ? ' ← ' : ' → '))

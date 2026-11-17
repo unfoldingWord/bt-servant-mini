@@ -158,6 +158,8 @@ describe('the question, read by code', () => {
   const no = [
     'who is Boaz?', 'Who is Boaz in Ruth 2:4?', '¿Quién es Booz?', '¿quién es el redentor?', 'Qui est Boaz ?', 'Siapa Boas?', 'बोअज़ कौन है?', 'من هو بوعز؟',
     "What does 'kinsman redeemer' refer to?", 'who is speaking here?', 'Who are the Moabites?', 'Who wrote Ruth?', 'Ruth 2:4', 'What does glean mean here?',
+    '¿a qué se refiere la expresión reino de los cielos?', "à quoi renvoie le terme Fils de l'homme ?", 'what does their culture refer to', 'quién es el',
+    'who are you?', 'siapa kamu?',
   ]
   for (const q of no) test(`does not: ${q}`, () => expect(asksWho(q)).toBeNull())
 })
@@ -232,6 +234,15 @@ describe.skipIf(!PACKS)('in the app (packs on disk)', () => {
     expect(r.ref).toBe('tit 1:5')
     expect(r.reply.info).toMatch(/\*\*you\*\* \(σε, pronoun\) → \*\*Titus\*\*/)
   })
+  test('articles and "you" are not pronouns: after one verse these do not take the who-is-who route', async () => {
+    for (const q of ['¿a qué se refiere la expresión reino de los cielos?', "à quoi renvoie le terme Fils de l'homme ?", 'what does their culture refer to', 'quién es el',
+      'who are you?', 'siapa kamu?']) {
+      const c: ConvState = { last: null }
+      await turn(c, { q: 'Ruth 2:4' }, 'en')
+      const r = await turn(c, { q }, 'en')
+      expect(r.route, q).not.toBe('macula')
+    }
+  }, 60_000)
   test('"who is Boaz?" stays the Translation Words article', async () => {
     const r = await turn({ last: null }, { q: 'who is Boaz?' }, 'en')
     expect(r.route).not.toBe('macula')

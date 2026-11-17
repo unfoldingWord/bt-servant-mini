@@ -2560,10 +2560,12 @@ ${x.meta}` },
         const at = follow.findIndex((f) => f.sheet?.what.includes('intro'))
         follow.splice(at < 0 ? follow.length : at, 0, ...mac)
         // only as many as fit (MAX_FOLLOW): the book's introduction gives way first, then these, never the others
-        const room = MAX_FOLLOW - x.others.length
-        const book = follow.findIndex((f) => f.sheet?.ref?.endsWith(' front:intro'))
-        if (follow.length > room && book >= 0) follow.splice(book, 1)
-        for (const m of [...mac].reverse()) if (follow.length > room) follow.splice(follow.indexOf(m), 1)
+        if (mac.length > 0) {
+          const room = MAX_FOLLOW - x.others.length
+          const book = follow.findIndex((f) => f.sheet?.ref?.endsWith(' front:intro'))
+          if (follow.length > room && book >= 0) follow.splice(book, 1)
+          for (const m of [...mac].reverse()) if (follow.length > room) follow.splice(follow.indexOf(m), 1)
+        }
       }
       // a passage with nothing to go on from (the version asked for is not here): the ways forward, its book first
       if (sheet.intent === 'passage' && !follow.length) follow.push(...(await wayForward(sheet, ui, pack ? sheet.ref!.slice(0, 3) : null)))
