@@ -1,13 +1,14 @@
 // The language-pack client the app is built and tested with: bt-synergy at the commit in bt-synergy.ref, checked out in
-// ../bts-client2 (web/tsconfig.json paths). The other tests mean nothing against another commit; build.py checks the same.
+// BTS_DIR (tests/bts-dir.ts; web/tsconfig.json paths). The other tests mean nothing against another commit; build.py checks the same.
 import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { BTS_DIR } from './bts-dir'
 
 const ROOT = resolve(import.meta.dir, '../..')
-const BTS = resolve(ROOT, '../bts-client2')
+const BTS = BTS_DIR
 
-test('../bts-client2 is at bt-synergy.ref', () => {
+test('the bt-synergy checkout (BTS_DIR) is at bt-synergy.ref', () => {
   const ref = readFileSync(resolve(ROOT, 'bt-synergy.ref'), 'utf8').trim()
   const r = Bun.spawnSync(['git', '-C', BTS, 'rev-parse', 'HEAD'])
   const head = r.success ? r.stdout.toString().trim() : '(no git checkout there)'

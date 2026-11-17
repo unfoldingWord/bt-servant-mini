@@ -6,10 +6,10 @@ ROOT = Path(__file__).resolve().parent.parent
 WWW = ROOT / 'app' / 'src' / 'main' / 'assets' / 'www'
 # the packs with all four Translation Academy manuals, else the older ones (the same choice as web/tests/fs-packs.ts)
 PACKS = next((p for p in (ROOT.parent / 'lp3-ta-packs', ROOT.parent / 'fase0-mini-servant' / 'packs') if p.is_dir()), ROOT.parent / 'fase0-mini-servant' / 'packs')
-# The language-pack client (web/tsconfig.json paths): bt-synergy at the commit in bt-synergy.ref, checked out in ../bts-client2
+# The language-pack client (web/tsconfig.json paths): bt-synergy at the commit in bt-synergy.ref, checked out in ../bts-client3 (../bts-client2 again once this branch is merged)
 # (as Servos does). Built against another commit, the app would read the packs with a client it was not tested with.
 REF = (ROOT / 'bt-synergy.ref').read_text(encoding='utf-8').strip()
-BTS = ROOT.parent / 'bts-client2'
+BTS = ROOT.parent / 'bts-client3'
 _head = subprocess.run(['git', '-C', str(BTS), 'rev-parse', 'HEAD'], capture_output=True, text=True)
 if _head.returncode or _head.stdout.strip() != REF:
     raise SystemExit(f"""{BTS} is not at bt-synergy.ref ({REF[:12]}): {'no git checkout there' if _head.returncode else 'it is at ' + _head.stdout.strip()[:12]}.

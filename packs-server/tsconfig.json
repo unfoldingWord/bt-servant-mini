@@ -3,8 +3,8 @@
     "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": true, "skipLibCheck": true, "noEmit": true,
     "resolveJsonModule": true, "lib": ["ES2022", "DOM"], "types": ["@cloudflare/workers-types"], "baseUrl": ".",
     "paths": {
-      "@bt-synergy/language-pack-client": ["../../bts-client2/packages/language-pack-client/src/index.ts"],
-      "@bt-synergy/language-pack-v3": ["../../bts-client2/packages/language-pack-v3/src/index.ts"]
+      "@bt-synergy/language-pack-client": ["../../bts-client3/packages/language-pack-client/src/index.ts"],
+      "@bt-synergy/language-pack-v3": ["../../bts-client3/packages/language-pack-v3/src/index.ts"]
     }
   }
 }
