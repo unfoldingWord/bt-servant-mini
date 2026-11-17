@@ -66,9 +66,13 @@ function itemFold(head: Node, body: Node, dir: string): HTMLElement {
 }
 /** A note's button: its quote, else its first words. */
 const noteHead = (said: string, note: string): Node => {
-  if (said) return el('strong', '', `«${said}»`)
+  if (said) {
+    const q = el('strong', '', `«${said}»`)
+    q.dir = 'auto'
+    return q
+  }
   const t = note.replace(/\s+/g, ' ').trim()
-  return document.createTextNode(t.length > 70 ? `${t.slice(0, 70)}…` : t)
+  return document.createTextNode(t.length > 70 ? `${t.slice(0, 70).replace(/\s+\S*$/, '')}…` : t)
 }
 
 export type Hooks = {
@@ -88,8 +92,10 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: stri
   if (text !== undefined) e.textContent = text
   return e
 }
+/** A note's words as plain text: no link targets, no Markdown marks. */
+const plainNote = (t: string): string => t.replace(/\[\[[^\]]+\]\]/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim()
 const first = (t: string, n = 140): string => {
-  const x = t.replace(/\[\[[^\]]+\]\]/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim()
+  const x = plainNote(t)
   const m = /^.{20,}?[.!?。।؟](?=\s|$)/.exec(x)
   const s = m ? m[0] : x
   return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + ' …' : s
@@ -328,8 +334,14 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
         const d = atFold(fill(heads.verse, { ref, n: list.length }), ref, list.length)
         for (const i of list) {
           const n = s.notes[i]!
-          const body = el('div', 'md')
-          body.innerHTML = md(n.note) // md() escapes everything first
+          // inside: the note, a tap opens it in the panel as before (its words marked in the passage, its key term, its links)
+          const body = el('button', 'nrow')
+          body.type = 'button'
+          body.textContent = plainNote(n.note)
+          body.onclick = () => {
+            mark(box, null, [`n${i}`])
+            openPanel({ kind: 'note', study: s, i, root: box })
+          }
           d.appendChild(itemFold(noteHead(n.said, first(n.note)), body, dirOf(n.note || n.said || '')))
         }
         host.appendChild(d)
@@ -656,7 +668,8 @@ export function groupObsHelps(box: HTMLElement) {
   const notes = folds.filter((d) => d.querySelector(':scope > ol') && /\d+:\d+/.test(sum(d)))
   /** A list item as a fold: its first bold words (a quote, a question) the button, the rest inside. */
   const asItem = (li: HTMLElement, drop: RegExp) => {
-    const strong = [...li.children].find((c) => c.tagName === 'STRONG')
+    // (the bold words are the quote only when they open the item: a note without one may have bold words inside)
+    const strong = li.firstChild === li.firstElementChild && li.firstElementChild?.tagName === 'STRONG' ? li.firstElementChild : null
     const head = strong ? strong.cloneNode(true) : noteHead('', li.textContent ?? '')
     strong?.remove()
     const body = el('div', '')

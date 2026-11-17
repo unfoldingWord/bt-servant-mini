@@ -123,6 +123,7 @@ export function pagesOf(h: number[], room: number, from = 0, keep = -1): number[
 /** Whether a help of `at` ("3:1", a story's "1:3") goes with the part whose units are `labels` (verses "2", "4-5"; frames "3"). */
 export function atOnPage(kind: Kind, labels: string[], at: string): boolean {
   const v = +at.split(':')[1]!
+  if (!Number.isFinite(v)) return true // a chapter's introduction ("3:intro"): with every part
   return labels.some((l) => (kind === 'frames' ? +l === v : +first(l) <= v && v <= +lastOf(l)))
 }
 const first = (l: string) => l.split('-')[0]!
@@ -205,7 +206,8 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
   const helps = [...box.querySelectorAll<HTMLElement>('[data-at]')]
   const onPage = (at: string) => atOnPage(found.kind, pages[k]!.map((i) => units[i]!.label), at)
   const showHelps = () => {
-    if (!helps.length || found.kind === 'parts') return
+    // (a range over chapters: the verse numbers repeat, so all of them)
+    if (!helps.length || found.kind === 'parts' || new Set(helps.map((h) => h.dataset.at!.split(':')[0])).size > 1) return
     for (const h of helps) h.hidden = pages.length > 0 && !onPage(h.dataset.at!)
     for (const g of box.querySelectorAll<HTMLElement>('details.hgroup')) {
       const kids = [...g.querySelectorAll<HTMLElement>(':scope > [data-at]')]
