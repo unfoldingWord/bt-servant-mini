@@ -36,9 +36,9 @@ import { devOn, type Fixture, initDev } from './dev'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel, parseObsRef } from './obs'
+import { obsLabel, parseObsRef, pictureFrame } from './obs'
 import { type ObsStudy, obsStudyOf } from './obswords'
-import { addObsPictures } from './obsimg'
+import { addObsPictures, addVersePicture } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
@@ -315,6 +315,11 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const asked = askedFor(m)
+  // a one-verse answer: the picture of the Open Bible Stories frame that tells the verse (obs-frames), above the answer and outside
+  // any fold, when the phone can show it (obsimg.ts addVersePicture; an OBS answer has its own pictures, never this one)
+  const picSlot = el('div', 'verse-pic-slot')
+  d.appendChild(picSlot)
+  void addVersePicture(picSlot, m.meta, m.ui ?? nav, (ref) => pictureFrame(ref, m.lang ?? 'en'))
   // the phone's answer first, open, as without online AI (the passage, its helps folded as always); with an online answer (or
   // while it is written), then the helps it was grounded in as cards behind one fold ("Helps of this answer (3)"), then the
   // online answer itself, last, with its badge (Abel, Nov 17: "primero es el contenido que viene de los datos"). It is drawn
