@@ -37,7 +37,7 @@ import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type S
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
 import { obsLabel, parseObsRef } from './obs'
-import { obsStudyOf } from './obswords'
+import { type ObsStudy, obsStudyOf } from './obswords'
 import { addObsPictures } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
@@ -1430,11 +1430,18 @@ function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
     reveal: (id: string, shown: boolean) => { if (node) revealOn(cv.id, node, id, shown) },
     // (a mark is kept with the conversation and the saved place, as any answer is; saveSession asks keepHistory and never throws)
     marked: () => { save(); if (g.session) saveSession(cv.id, g.session) },
-    // the frame's words: the story's notes and key terms, read once per card, in the session's language (obswords.ts)
-    words: (text: HTMLElement, ref: string, root: HTMLElement) => {
+    // the frame's words: its notes and key terms in the language of the card's text (its quotes must be in it; obswords.ts)
+    words: (text: HTMLElement, ref: string, root: HTMLElement, lang: string) => {
       const f = parseObsRef(ref)?.f
-      if (f) void obsStudyOf({ ref, lang: g.session!.lang }).then((o) => { if (o) linkFrameWords(text, o, f, root) }).catch(() => {})
+      if (f) void frameStudy(ref, lang).then((o) => { if (o) linkFrameWords(text, o, f, root) }).catch(() => {})
     } }
+}
+/** A frame's helps for its words, read once (a card is drawn again at each turn) */
+const frameStudies = new Map<string, Promise<ObsStudy | null>>()
+function frameStudy(ref: string, lang: string): Promise<ObsStudy | null> {
+  const k = `${ref}|${lang}`
+  if (!frameStudies.has(k)) frameStudies.set(k, obsStudyOf({ ref, lang }).catch(() => null))
+  return frameStudies.get(k)!
 }
 /** A step of the session as a turn of the chat */
 function runStep(label: string, s: Session) {

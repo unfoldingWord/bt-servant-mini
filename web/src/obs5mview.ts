@@ -97,8 +97,9 @@ export function cardModel(card: Card5, ui: string, fx?: Fixture | null, s?: Sess
 export type CardHooks = {
   fx: Fixture; s: Session; run(label: string, sheet: Sheet): void; reveal?(id: string, shown: boolean): void; marked?(): void
   /** The frame's words tappable as in an OBS answer (Abel, Nov 17): `text` holds the frame's text, `ref` is "obs N:F", `root` the
-   *  card. They open the panel over the session (its notes and key terms; the session does not move, no answer is shown). */
-  words?(text: HTMLElement, ref: string, root: HTMLElement): void
+   *  card, `lang` the language of that text (the manual's, `tfLang`: the quotes must be in it). They open the panel over the
+   *  session (its notes and key terms; the session does not move, no answer is shown). */
+  words?(text: HTMLElement, ref: string, root: HTMLElement, lang: string): void
 }
 
 function el(tag: string, cls: string, text?: string): HTMLElement {
@@ -220,7 +221,7 @@ export function drawCard(card: Card5, ui: string, on?: CardHooks): HTMLElement {
     const words = el('span', '', m.frame.text)
     cap.append(el('b', '', `${m.frame.label} `), words)
     fig.appendChild(cap)
-    if (p?.f && on?.words) on.words(words, obsRef(p.n, p.f), root)
+    if (p?.f && on?.words) on.words(words, obsRef(p.n, p.f), root, card.tfLang)
     if (p?.f) fillPicture(fig, p.n, p.f, m.frame.label, ui, 's5-img')
     root.appendChild(fig)
   }
