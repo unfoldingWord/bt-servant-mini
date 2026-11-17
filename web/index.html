@@ -379,6 +379,12 @@
   :is(.info, .md) details.fold[open] > summary { margin-bottom: 10px; }
   :is(.info, .md) details.fold.verse { margin: 4px 0; }
   :is(.info, .md) details.fold.verse > summary { font-weight: 500; color: var(--fg); padding: 7px 12px; }
+  /* helps in three levels (view.ts groupFold, itemFold): the group, a verse's or a frame's, each help */
+  :is(.info, .md) details.fold.hgroup > details.fold, :is(.info, .md) details.fold.verse > details.fold.item { margin-inline-start: 12px; }
+  :is(.info, .md) details.fold.item { margin: 4px 0; }
+  :is(.info, .md) details.fold.item > summary { font-weight: 400; color: var(--fg); padding: 6px 10px; border-style: dashed; }
+  :is(.info, .md) details.item > .item-body { padding: 2px 10px 6px; }
+  :is(.info, .md) details.item > .item-body p { margin: 0 0 6px; }
   .study .nref { font: 600 12px system-ui, sans-serif; color: var(--accent); }
   .study h4.focus { margin-top: 4px; }
   .nrow strong { font-weight: 650; }

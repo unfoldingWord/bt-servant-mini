@@ -1,7 +1,7 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
 import { passageContext, resetLangs, type Sheet } from './answer'
-import { backPanel, fillTitles, linkFrameWords, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
+import { backPanel, fillTitles, groupObsHelps, linkFrameWords, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
 import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
@@ -342,6 +342,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     addObsPictures(box, m.meta, m.ui ?? nav)
     // an OBS story or frame: the words its notes and key terms quote, tappable as a passage's (obswords.ts)
     if (m.obs) linkObsWords(box, m.obs)
+    // its helps in three levels: all the notes, a frame's, each note (view.ts)
+    if (m.obs) groupObsHelps(box)
     host.appendChild(box)
     pageAnswer(box, m.ui ?? nav)
   }

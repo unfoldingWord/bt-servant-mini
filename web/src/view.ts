@@ -30,6 +30,47 @@ export function setViewLang(lang: string) {
 /** A label built in the app's language, the runs of the other direction isolated (bidi.ts). */
 const lbl = (s: string) => bidiLabel(s, uiLang)
 
+// ------------------------------------------------------------------------------------------- helps in three levels
+// (Abel, Nov 17: "listas muy largas de notas… pueden agruparse en un solo grupo de todas las notas y luego dentro el grupo de
+// notas de cada frame. Incluso cada nota podría estar plegada"): a group per kind ("Translation notes (101)"), in it one
+// fold per verse or frame ("3:1 · notes: 6", with `data-at` "3:1" and `data-n` 6: pager.ts shows only the page's and counts
+// them), in it each help folded (its quote, opening to all of it).
+
+/** A group of helps: its name and its count, the count in its own span (pager.ts writes the page's there). */
+export function groupFold(label: string, n: number, cls = ''): HTMLElement {
+  const d = el('details', `fold hgroup ${cls}`.trim())
+  const sm = el('summary', '')
+  sm.append(lbl(label), ' ', el('span', 'hcount', `(${n})`))
+  d.appendChild(sm)
+  return d
+}
+/** A verse's or a frame's helps in a group: "3:1" (or "1:3" of a story) and how many. */
+function atFold(summary: string, at: string, n: number): HTMLElement {
+  const d = el('details', 'fold verse')
+  d.dataset.at = at
+  d.dataset.n = String(n)
+  d.appendChild(el('summary', '', lbl(summary)))
+  return d
+}
+/** One help folded: `head` (its quote, a question) as the button, `body` (the note, the answer) inside. */
+function itemFold(head: Node, body: Node, dir: string): HTMLElement {
+  const d = el('details', 'fold item')
+  const sm = el('summary', '')
+  sm.dir = dir
+  sm.appendChild(head)
+  const b = el('div', 'item-body')
+  b.dir = dir
+  b.appendChild(body)
+  d.append(sm, b)
+  return d
+}
+/** A note's button: its quote, else its first words. */
+const noteHead = (said: string, note: string): Node => {
+  if (said) return el('strong', '', `«${said}»`)
+  const t = note.replace(/\s+/g, ' ').trim()
+  return document.createTextNode(t.length > 70 ? `${t.slice(0, 70)}…` : t)
+}
+
 export type Hooks = {
   /** A Bible reference was tapped: ask for it in the chat. */
   ref: (ref: string, label: string, lang: string) => void
@@ -275,20 +316,22 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   const notes = (idx: number[], focused: boolean) => {
     if (!idx.length) return
     if (s.long) {
-      const host = focused ? el('details', 'fold') : box
-      if (focused) {
-        host.appendChild(el('summary', '', lbl(fill(heads.more, { n: idx.length }))))
-        box.appendChild(host)
-      } else box.appendChild(el('h4', '', lbl(s.heads.notes)))
+      // a chapter's notes in three levels: all of them, a verse's, each note
+      const host = groupFold(ui.notes, idx.length)
+      box.appendChild(host)
       const byRef = new Map<string, number[]>()
       for (const i of idx) {
         const v = s.notes[i]!.ref.split('-')[0]!
         byRef.set(v, [...(byRef.get(v) ?? []), i])
       }
       for (const [ref, list] of byRef) {
-        const d = el('details', 'fold verse')
-        d.appendChild(el('summary', '', lbl(fill(heads.verse, { ref, n: list.length }))))
-        noteList(list, d, false)
+        const d = atFold(fill(heads.verse, { ref, n: list.length }), ref, list.length)
+        for (const i of list) {
+          const n = s.notes[i]!
+          const body = el('div', 'md')
+          body.innerHTML = md(n.note) // md() escapes everything first
+          d.appendChild(itemFold(noteHead(n.said, first(n.note)), body, dirOf(n.note || n.said || '')))
+        }
         host.appendChild(d)
       }
       return
@@ -328,14 +371,8 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   if (s.questions.length) {
     const d = el('details', 'qs fold')
     d.appendChild(el('summary', '', lbl(fill(heads.questionsN, { n: s.questions.length }))))
-    for (const q of s.questions) {
-      const p = el('p')
-      p.dir = dirOf(`${q.q} ${q.a}`) // an English question in an Arabic app: its "?" at its end
-      p.appendChild(el('strong', '', q.q))
-      p.appendChild(el('br'))
-      p.appendChild(document.createTextNode(q.a))
-      d.appendChild(p)
-    }
+    // each question folded, its answer inside (an English question in an Arabic app: its "?" at its end)
+    for (const q of s.questions) d.appendChild(itemFold(el('strong', '', q.q), document.createTextNode(q.a), dirOf(`${q.q} ${q.a}`)))
     box.appendChild(d)
   }
   return box
@@ -607,3 +644,56 @@ document.addEventListener('click', (e) => {
     hooks?.ref(t.ref, a.textContent ?? t.ref, lang)
   }
 })
+
+/**
+ * An OBS answer's helps (the folds md.ts draws from obsAnswer) in the same three levels: the frames' notes ("Notes for OBS 1:3
+ * (6)") in one group "Translation notes (101)" when there are several, each note folded; the questions ("Questions (22)",
+ * "1:3 **q** a" in a story) per frame, each folded with its answer inside. Only how it is drawn.
+ */
+export function groupObsHelps(box: HTMLElement) {
+  const folds = [...box.querySelectorAll<HTMLElement>(':scope > details.fold')]
+  const sum = (d: HTMLElement) => d.querySelector(':scope > summary')?.textContent ?? ''
+  const notes = folds.filter((d) => d.querySelector(':scope > ol') && /\d+:\d+/.test(sum(d)))
+  /** A list item as a fold: its first bold words (a quote, a question) the button, the rest inside. */
+  const asItem = (li: HTMLElement, drop: RegExp) => {
+    const strong = [...li.children].find((c) => c.tagName === 'STRONG')
+    const head = strong ? strong.cloneNode(true) : noteHead('', li.textContent ?? '')
+    strong?.remove()
+    const body = el('div', '')
+    body.append(...li.childNodes)
+    const t = body.firstChild
+    if (t?.nodeType === Node.TEXT_NODE) t.textContent = (t.textContent ?? '').replace(drop, '')
+    return itemFold(head, body, li.dir || dirOf(li.textContent ?? ''))
+  }
+  for (const d of notes) {
+    const lis = [...d.querySelectorAll<HTMLElement>(':scope > ol > li')]
+    d.dataset.at = /(\d+:\d+)/.exec(sum(d))![1]!
+    d.dataset.n = String(lis.length)
+    d.classList.add('verse')
+    for (const ol of d.querySelectorAll(':scope > ol')) ol.replaceWith(...[...ol.querySelectorAll<HTMLElement>(':scope > li')].map((li) => asItem(li, /^\s*:\s*/)))
+  }
+  if (notes.length > 1) {
+    const g = groupFold(ui.notes, notes.reduce((a, d) => a + +(d.dataset.n ?? 0), 0))
+    notes[0]!.before(g)
+    g.append(...notes)
+  }
+  // the questions: the fold whose lists hold them (one list per question, md.ts)
+  const qs = folds.find((d) => !notes.includes(d) && d.querySelector(':scope > ul'))
+  if (!qs) return
+  const lis = [...qs.querySelectorAll<HTMLElement>(':scope > ul > li')]
+  const frameOf = (li: HTMLElement) => /^\s*(\d+:\d+)\s/.exec(li.textContent ?? '')?.[1]
+  const sm = qs.querySelector<HTMLElement>(':scope > summary')!
+  const label = sm.textContent!.replace(/\s*\(\d+\)\s*$/, '')
+  sm.replaceChildren(label, ' ', el('span', 'hcount', `(${lis.length})`))
+  qs.classList.add('hgroup')
+  const items = lis.map((li) => ({ at: frameOf(li), item: asItem(li, /^\s*\d+:\d+\s+/) }))
+  for (const ul of qs.querySelectorAll(':scope > ul')) ul.remove()
+  if (!items.some((x) => x.at)) { qs.append(...items.map((x) => x.item)); return }
+  const byAt = new Map<string, HTMLElement[]>()
+  for (const x of items) byAt.set(x.at ?? '', [...(byAt.get(x.at ?? '') ?? []), x.item])
+  for (const [at, list] of byAt) {
+    const d = atFold(`${at} · ${list.length}`, at, list.length)
+    d.append(...list)
+    qs.appendChild(d)
+  }
+}

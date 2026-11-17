@@ -120,6 +120,11 @@ export function pagesOf(h: number[], room: number, from = 0, keep = -1): number[
   }
   return [...cut(0, from, -1), ...cut(from, h.length, keep)]
 }
+/** Whether a help of `at` ("3:1", a story's "1:3") goes with the part whose units are `labels` (verses "2", "4-5"; frames "3"). */
+export function atOnPage(kind: Kind, labels: string[], at: string): boolean {
+  const v = +at.split(':')[1]!
+  return labels.some((l) => (kind === 'frames' ? +l === v : +first(l) <= v && v <= +lastOf(l)))
+}
 const first = (l: string) => l.split('-')[0]!
 const lastOf = (l: string) => l.split('-').pop()!
 /**
@@ -195,8 +200,25 @@ export function pageAnswer(box: HTMLElement, ui: string): boolean {
   const log = () => box.closest<HTMLElement>('#log')
   const show = () => units.forEach((u, i) => u.els.forEach((e) => { e.hidden = pages.length > 0 && !pages[k]!.includes(i) }))
   const total = lastOf(units[units.length - 1]!.label)
+  // the helps of a verse or a frame (view.ts: `data-at` "3:1", `data-n` how many), after the bar: only the page's are shown, and
+  // their group counts them (Abel, Nov 17: "solo mostrar las notas de la página que se está mostrando"); all without parts
+  const helps = [...box.querySelectorAll<HTMLElement>('[data-at]')]
+  const onPage = (at: string) => atOnPage(found.kind, pages[k]!.map((i) => units[i]!.label), at)
+  const showHelps = () => {
+    if (!helps.length || found.kind === 'parts') return
+    for (const h of helps) h.hidden = pages.length > 0 && !onPage(h.dataset.at!)
+    for (const g of box.querySelectorAll<HTMLElement>('details.hgroup')) {
+      const kids = [...g.querySelectorAll<HTMLElement>(':scope > [data-at]')]
+      if (!kids.length) continue
+      const n = kids.filter((x) => !x.hidden).reduce((a, x) => a + (+(x.dataset.n ?? 0) || 0), 0)
+      g.hidden = n === 0
+      const c = g.querySelector(':scope > summary .hcount')
+      if (c) c.textContent = `(${n})`
+    }
+  }
   const draw = () => {
     show()
+    showHelps()
     bar.hidden = !pages.length
     if (!pages.length) return
     const p = pages[k]!.map((i) => units[i]!)
