@@ -970,3 +970,18 @@ test('learn entry: Back steps through the two questions and then closes', async 
   $$('.wl-nav button').find((b) => b.textContent === WT('en').back)!.click()
   expect($('#welcome')).toBeNull()
 })
+
+test('opened from Browse by a mode: when it closes, the focus goes to the page’s Browse button, not the hidden Browse row', async () => {
+  freshPhone()
+  const explore = new FakeEl('div'); explore.id = 'explore'
+  const row = new FakeEl('button'); explore.appendChild(row)
+  const browseBtn = new FakeEl('button'); browseBtn.id = 'browse'
+  doc.body.append(explore, browseBtn)
+  row.focus()
+  expect(openWelcome('en', { at: 'book' })).toBe(true)
+  $$('.wl-nav button').find((b) => b.textContent === WT('en').back)!.click()
+  expect($('#welcome')).toBeNull()
+  expect(doc.activeElement).toBe(browseBtn)
+  explore.remove()
+  browseBtn.remove()
+})

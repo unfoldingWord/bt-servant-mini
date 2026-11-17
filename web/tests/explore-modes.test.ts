@@ -99,6 +99,7 @@ const saved = { localStorage: (globalThis as any).localStorage, document: (globa
 let packs: string[] = ['en']
 let ui = 'en'
 let allow = true
+let loading = 0
 let did: { mode: string[]; ask5: number[]; resume: number[]; ask: string[] } = { mode: [], ask5: [], resume: [], ask: [] }
 const hooks: ExploreHooks = {
   ui: () => ui, packs: () => packs, packName: (l) => l, addLang: () => {},
@@ -106,7 +107,7 @@ const hooks: ExploreHooks = {
   mode: (id) => { did.mode.push(id); if (allow) closeExplore(false); return allow },
   ask5: (n) => { did.ask5.push(n); return allow },
   saved5: () => savedSessions(),
-  resume5: (e) => { did.resume.push(e.story); return allow },
+  resume5: (e) => { did.resume.push(e.story); return loading > 0 ? (loading--, 'loading') : allow },
 }
 const on = () => store.set('btsm.dev.obs5m', '1')
 const off = () => store.delete('btsm.dev.obs5m')
@@ -138,7 +139,7 @@ beforeEach(() => {
   resetFixture5()
   store.clear()
   store.set('btsm.usage', '1')
-  packs = ['en']; ui = 'en'; allow = true
+  packs = ['en']; ui = 'en'; allow = true; loading = 0
   did = { mode: [], ask5: [], resume: [], ask: [] }
 })
 const modeIds = () => $$('.ex-modes .ex-row').map((r) => r.dataset.mode)
@@ -219,6 +220,63 @@ describe('the section on Browse’s home', () => {
   })
 })
 
+describe('review fixes', () => {
+  test('a resume while the test file is not loaded: "Opening…", then it goes (never "an answer is on its way")', async () => {
+    on()
+    const fx = await loadFixture()
+    forgetSessions()
+    saveSession('c1', sheetOfSession(fx))
+    openExploreAt({ mode: 'obs5m' })
+    await until('.ex-row[data-resume="1"]')
+    loading = 1
+    $('.ex-row[data-resume="1"]')!.click()
+    expect($('.ex-opening')).not.toBeNull()
+    expect($('.ex-busy')).toBeNull()
+    for (let t = 0; t < 2000 && exploreOpen(); t += 20) await sleep(20)
+    expect(exploreOpen()).toBe(false)
+    expect(did.resume).toEqual([1, 1])
+    forgetSessions()
+  })
+  test('a hook that refuses leaves Browse open (the welcome that did not open, the submit that did nothing)', async () => {
+    allow = false
+    openExplore('bar')
+    await until('.ex-modes .ex-row')
+    $('.ex-row[data-mode="book"]')!.click()
+    expect(exploreOpen()).toBe(true)
+  })
+  test('the dev switch off with the 5M view still in the stack: back to what is behind it', async () => {
+    on()
+    openExploreAt({ mode: 'obs5m' })
+    await until('.ex-row[data-story="1"]')
+    off()
+    // drawn again (Browse opened again, the stack kept)
+    closeExplore(false)
+    openExplore('bar')
+    await until('.ex-modes .ex-row')
+    expect($('.ex-row[data-story="1"]')).toBeNull()
+    expect(modeIds()).toEqual(['book', 'learn'])
+  })
+  test('not counted under the PIN lock', async () => {
+    const lock = Object.assign(new FakeEl('div'), { id: 'lock' })
+    doc.body.appendChild(lock)
+    on()
+    openExploreAt({ mode: 'obs5m', from: 'welcome' })
+    lock.remove()
+    expect(exploreOpen()).toBe(false)
+    expect(counts()['explore.mode.obs5m']).toBeUndefined()
+    expect(counts()['explore.from.welcome']).toBeUndefined()
+  })
+  test('Arabic: "OBS 1:" is isolated, so it stays beside a Latin title', async () => {
+    ui = 'ar'
+    packs = ['ar']
+    on()
+    openExploreAt({ mode: 'obs5m' })
+    await until('.ex-row[data-story="1"]')
+    const t = $('.ex-row[data-story="1"] .ex-row-t')!.textContent
+    expect(/[\u2066-\u2069]OBS 1: .+[\u2066-\u2069]/.test(t)).toBe(true)
+  })
+})
+
 describe('a mode’s tap', () => {
   test('"Translate a book" and "Learn to translate": the hook is asked, once; no answer on its way: Browse is closed for the welcome, counted as a number', async () => {
     openExplore('bar')
@@ -286,8 +344,9 @@ describe('the 5M view', () => {
     expect(did.ask5).toEqual([1])
     expect(fiveText(did.ask5[0]!)).toBe('5M OBS 1')
     expect(exploreOpen()).toBe(false)
-    expect(counts()['explore.mode.obs5m']).toBe(2) // the view opened (1) and the story (1)
-    expect(counts()['explore.answer']).toBe(1)
+    expect(counts()['explore.mode.obs5m']).toBe(1) // once, when the view opened; the story start is not counted again
+    expect(counts()['explore.answer']).toBeUndefined() // a session is not "a help reached"
+    expect(counts()['explore.session']).toBeUndefined()
     expect(did.ask).toEqual([]) // not asked as a ready sheet: it goes the way typing goes
   })
   test('a story tapped with an answer on its way: the busy note, still open, no count of a session', async () => {

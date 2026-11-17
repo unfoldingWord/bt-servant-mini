@@ -51,6 +51,19 @@ export function modesFor(d: ModeData): ModeId[] {
   return out
 }
 
+/**
+ * Sends `text` through the page's form as if typed, leaving what was being written as it was. True when the form took it (a
+ * submit with nothing to do, an answer on its way, leaves the text in the box).
+ */
+export function sendTyped(input: { value: string }, form: { requestSubmit(): void }, text: string): boolean {
+  const typed = input.value
+  input.value = text
+  form.requestSubmit()
+  const sent = input.value !== text
+  input.value = typed
+  return sent
+}
+
 /** The text "5M OBS 1": what a tap on a story sends, as if typed (it is read like the typed words, in every app language). */
 export const fiveText = (story: number): string => `5M ${obsLabel(story)}`
 

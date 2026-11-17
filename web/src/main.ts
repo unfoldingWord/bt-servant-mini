@@ -34,7 +34,7 @@ import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHook
 import { helpLines } from './helplines'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
 import { devOn, type Fixture, initDev } from './dev'
-import { fiveText } from './modes'
+import { fiveText, sendTyped } from './modes'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
@@ -477,6 +477,10 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
       } else if (x.howto) {
         closePanel()
         openHowTo(m.ui ?? nav)
+      } else if (x.typed) {
+        // sent as if typed (the 5M button under a story)
+        if (busy) return
+        sendTyped(input, form, x.typed)
       } else if (x.add) {
         // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
         if (busy || b.disabled) return
@@ -1304,24 +1308,20 @@ setExploreHooks({
     if (busy || locked()) return false
     // (Browse closes first: the welcome puts the rest of the page out of reach, and Browse is part of it)
     closeExplore(false)
-    openWelcome(nav, { at: id })
-    return true
+    if (openWelcome(nav, { at: id })) return true
+    openExplore('menu') // it did not open: Browse stays as it was
+    return false
   },
   // a story's session starts as if "5M OBS n" were typed, the way How to ask's [Try it] sends: read by code, kept, counted
   ask5: (story) => {
     if (busy || locked()) return false
-    const typed = input.value
-    input.value = fiveText(story)
-    form.requestSubmit()
-    input.value = typed
-    return true
+    return sendTyped(input, form, fiveText(story))
   },
   saved5: () => savedSessions(),
   resume5: (e) => {
-    if (busy || locked() || !fixture5()) return false
-    closeExplore(false)
-    resume5(e)
-    return true
+    if (busy || locked()) return false
+    if (!fixture5()) return 'loading'
+    return resume5(e)
   },
 })
 // Saved items and notes (savedview.ts): what opening one asks the chat
@@ -1567,12 +1567,12 @@ function resumeEntries(): { label: string; go: () => void }[] {
  * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this
  * one, where the saved place is put back and its step asked again. Its earlier consultations may be gone; its place is not.
  */
-function resume5(e: Saved5) {
+function resume5(e: Saved5): boolean {
   const fx = fixture5()
-  if (busy || locked() || !fx) return
+  if (busy || locked() || !fx) return false
   const t = resumeTarget(e.conv, convs.map((c) => ({ id: c.id, empty: !c.msgs.length })), current, MAX)
   if (t.k === 'open' || t.k === 'empty') current = t.id
-  else if (t.k === 'new' && !newConv()) return
+  else if (t.k === 'new' && !newConv()) return false
   const c = conv()
   closePanel()
   // its conversation, still at the session: shown as it was
@@ -1581,12 +1581,13 @@ function resume5(e: Saved5) {
   if (t.k === 'open' && s && s.story === e.s.story) {
     save()
     renderConv()
-    return
+    return true
   }
   resumeIn(c, e.s)
   save()
   renderConv()
   runStep(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), e.s)
+  return true
 }
 function openOutline() {
   if (locked() || document.querySelector('#lock')) return

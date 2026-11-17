@@ -317,14 +317,16 @@ type View = { k: 'home' } | { k: 'book' } | { k: 'q1' } | { k: 'q2'; before: Ans
  * showing: it saves nothing (not that it showed, not a door, not the answers to the two questions, not a skip), so someone who
  * has not seen the welcome still sees it, and what was chosen on it stays. Back from the first screen closes it.
  */
-export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}) {
+export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}): boolean {
   const h = hooks
-  if (!h || document.querySelector('#lock')) return
+  if (!h || document.querySelector('#lock')) return false
   const entry = !!opts.at
   if (!entry) remember()
   closeWelcome()
   chosen = entry
-  opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
+  // (opened from Browse, whose row is out of sight once Browse closes: the focus goes back to the Browse button of the page)
+  const was = document.activeElement
+  opener = was instanceof HTMLElement && was !== document.body && !(entry && document.querySelector('#explore')?.contains(was)) ? was : entry ? (document.querySelector('#browse') as HTMLElement | null) : null
   const s = WT(ui)
   const dir = rtlLang(ui) ? 'rtl' : 'ltr'
   const wrap = el('div')
@@ -456,6 +458,7 @@ export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}) {
     t.focus({ preventScroll: true })
   }
   draw()
+  return true
 }
 
 /**

@@ -2480,7 +2480,7 @@ ${x.meta}` },
       }
       // the story's own 5M session, when it has one (dev switch `obs5m`; not in a session already: that one would start over)
       if (devOn('obs5m') && !x.c.graph?.session && f.state === 'ok') {
-        const st = await sessionButton(parseObsRef(sheet.ref)?.n ?? 0, sheet.lang, ui).catch(() => null)
+        const st = await sessionButton(parseObsRef(sheet.ref)?.n ?? 0, ui).catch(() => null)
         if (st) follow.splice(Math.min(2 + terms.length, follow.length), 0, st)
       }
       if (!follow.length) follow.push(browseStep(ui))
@@ -3041,12 +3041,13 @@ function frameStep(s: Session, n: number): Session | null {
   return st ? { ...s, at: st.at } : null
 }
 
-/** [5M session for this story], under an Open Bible Story that has a session: a button's sheet at the session's first step. Null when it has none. */
-async function sessionButton(n: number, lang: string, ui: string): Promise<Follow | null> {
-  const fx = await fixture5()
-  const first = ORDER5.find((x) => stepsOf5(fx, x).length)
-  if (n !== fx.story || !first) return null
-  return { label: W5(ui).startStory, sheet: sheetOf(fx, { story: fx.story, part: first, at: 0, lang, tfLang: fx.tfLang, started: Date.now(), done: [] }, lang) }
+/** [5M session for this story], under an Open Bible Story that has a session: a button that sends "5M OBS n" as typed. Null when it has none. */
+async function sessionButton(n: number, ui: string): Promise<Follow | null> {
+  // (the tables are read once, then this is a lookup)
+  const fx = fx5v ?? (await fixture5())
+  if (n !== fx.story || !ORDER5.some((x) => stepsOf5(fx, x).length)) return null
+  // the question typed: session5Asked builds the session at tap time with its language rule, keeps the state and counts 5m.start
+  return { label: W5(ui).startStory, typed: `5M ${obsLabel(n)}` }
 }
 
 /** "5M OBS 1" (the session's words and a story), or a question about the session's step: its sheet, read by code. */

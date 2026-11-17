@@ -160,6 +160,8 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   sessionNext?: boolean
   /** "How to ask": opens the guide (howto.ts howtoStep) */
   howto?: true
+  /** a question sent as if typed ("5M OBS 1"): read, kept and counted like the typed words, and "Try again" asks it again as typed */
+  typed?: string
   /** a unit to add to a language on a tap ("Add Open Bible Stories (218 KB)"), then `sheet` is asked again (main.ts) */
   add?: { lang: string; unit: string } }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */

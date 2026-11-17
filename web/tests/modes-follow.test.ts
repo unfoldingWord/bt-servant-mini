@@ -3,9 +3,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { withObs } from './obs-fixture'
-import { answer, type ConvState, type Made } from '../src/pipeline'
+import { type ConvState } from '../src/pipeline'
 import { W5 } from '../src/obs5mwords'
-import type { Sheet } from '../src/answer'
 
 const store = new Map<string, string>()
 const fake = {
@@ -23,8 +22,6 @@ afterAll(async () => {
 })
 const on = () => store.set('btsm.dev.obs5m', '1')
 const off = () => store.delete('btsm.dev.obs5m')
-const press = (c: ConvState, f: { sheet?: Sheet }, ui = 'en') =>
-  answer(c, { sheet: { ...f.sheet!, id: `t${Date.now()}` }, ui, meta: '(button)' } as Made, performance.now())
 
 describe('under an Open Bible Story', () => {
   test('story 1 with the switch on: a button to its session, which starts it', async () => {
@@ -33,8 +30,10 @@ describe('under an Open Bible Story', () => {
     const r: any = await turn(c, { q: 'OBS 1' }, 'en')
     const b = r.reply.follow.find((f: any) => f.label === W5('en').startStory)
     expect(b).toBeTruthy()
-    expect(b.sheet).toMatchObject({ intent: 'obs5m', ref: 'obs 1' })
-    const s: any = await press(c, b)
+    // it sends the question typed: the session starts the way "5M OBS 1" starts it (chat label, 5m.start, Try again)
+    expect(b.typed).toBe('5M OBS 1')
+    expect(b.sheet).toBeUndefined()
+    const s: any = await turn(c, { q: b.typed }, 'en')
     expect(s.answered).toBe('obs5m')
     expect(c.graph!.session).toMatchObject({ story: 1 })
     off()

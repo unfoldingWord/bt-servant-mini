@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { withObs } from './obs-fixture'
-import { type Five, fiveOffered, fiveStories, fiveText, fiveViewTitle, MT, type ModeData, modeSub, modesFor, modeTitle } from '../src/modes'
+import { type Five, fiveOffered, fiveStories, fiveText, fiveViewTitle, MT, sendTyped, type ModeData, modeSub, modesFor, modeTitle } from '../src/modes'
 import { WT } from '../src/welcome'
 import { type ConvState } from '../src/pipeline'
 
@@ -113,16 +113,50 @@ describe('"5M OBS 1", as a tap on the story sends it', () => {
     expect(fiveText(1)).toBe('5M OBS 1')
   })
   for (const ui of UIS) {
-    test(`${ui}: read like the typed words, the same session as typing "5M OBS 1"`, async () => {
+    test(`${ui}: the text a tap sends starts a session like the typed words (same state, same count of 5m.start)`, async () => {
       on()
+      store.set('btsm.usage', '1')
       await fullPhone()
-      const a: any = await turn({ last: null } as ConvState, { q: fiveText(1) }, ui)
-      const b: any = await turn({ last: null } as ConvState, { q: '5M OBS 1' }, ui)
-      expect(a.answered).toBe('obs5m')
-      expect(a.route).toBe('obs5m')
-      expect(a.reply.card.step.part).toBe(b.reply.card.step.part)
-      expect(a.reply.sessionMark).toBe(b.reply.sessionMark)
+      const start = () => Object.values(JSON.parse(store.get('btsm.usage.days') ?? '{}') as Record<string, Record<string, number>>)[0]?.['5m.start'] ?? 0
+      const n0 = start()
+      const a: ConvState = { last: null }
+      const ra: any = await turn(a, { q: fiveText(1) }, ui)
+      const n1 = start()
+      const b: ConvState = { last: null }
+      const rb: any = await turn(b, { q: '5M OBS 1' }, ui)
+      const n2 = start()
+      expect([ra.answered, ra.route]).toEqual(['obs5m', 'obs5m'])
+      expect(n1 - n0).toBe(1)
+      expect(n2 - n1).toBe(1)
+      const { started: _a, ...sa } = a.graph!.session as any
+      const { started: _b, ...sb } = b.graph!.session as any
+      expect(sa).toEqual(sb)
+      expect(ra.reply.sessionMark).toBe(rb.reply.sessionMark)
+      store.delete('btsm.usage')
+      store.delete('btsm.usage.days')
       off()
     })
   }
+})
+
+describe('sendTyped (what a tap on a story, and the 5M button, do with the page)', () => {
+  const page = (busy: boolean) => {
+    const input = { value: 'half a question' }
+    const sent: string[] = []
+    // as main.ts submit does: nothing while busy; else it takes the text and empties the box
+    const form = { requestSubmit: () => { if (busy || !input.value.trim()) return; sent.push(input.value); input.value = '' } }
+    return { input, form, sent }
+  }
+  test('sent: the text goes as typed and what was being written stays in the box', () => {
+    const p = page(false)
+    expect(sendTyped(p.input, p.form, fiveText(1))).toBe(true)
+    expect(p.sent).toEqual(['5M OBS 1'])
+    expect(p.input.value).toBe('half a question')
+  })
+  test('an answer on its way: false, nothing sent, the box as it was', () => {
+    const p = page(true)
+    expect(sendTyped(p.input, p.form, fiveText(1))).toBe(false)
+    expect(p.sent).toEqual([])
+    expect(p.input.value).toBe('half a question')
+  })
 })

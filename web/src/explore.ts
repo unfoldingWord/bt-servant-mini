@@ -256,7 +256,8 @@ export type ExploreHooks = {
   ask5: (story: number) => boolean
   /** the 5M sessions saved (the ones used last), and [Resume] one (the same as the welcome's); false when it cannot now */
   saved5: () => Saved5[]
-  resume5: (e: Saved5) => boolean
+  /** 'loading': the test file is not read yet (Browse says "Opening…" and tries again); false: it cannot now (an answer is on its way, the app is locked) */
+  resume5: (e: Saved5) => boolean | 'loading'
 }
 let hooks: ExploreHooks | null = null
 export function setExploreHooks(h: ExploreHooks) {
@@ -342,8 +343,8 @@ function ensure() {
 }
 
 /** Opens Browse (where it was left, else its first view). `from`: the entry point, for the usage counts. */
-export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
-  if (!hooks || document.querySelector('#lock')) return
+export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer'): boolean {
+  if (!hooks || document.querySelector('#lock')) return false
   count('explore.open')
   count(`explore.from.${from}`)
   const b = ensure()
@@ -352,6 +353,7 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
   b.root.classList.add('open')
   b.root.focus({ preventScroll: true })
   draw()
+  return true
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
 export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; mode?: ModeId | 'list'; from?: 'welcome' }) {
@@ -363,7 +365,6 @@ export function openExploreAt(at: { book?: string; manual?: string; lang?: strin
     // a guided mode's own view, Browse's home behind it (Back goes there)
     stack.length = 0
     stack.push({ k: 'home', tab: 'bible' }, { k: 'obs5m' })
-    count(modeCount('obs5m'))
   } else if (at.lang && at.obs) {
     stack.length = 0
     stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang })
@@ -372,7 +373,8 @@ export function openExploreAt(at: { book?: string; manual?: string; lang?: strin
     stack.push({ k: 'home', tab: at.book ? 'bible' : 'academy' })
     stack.push(at.book ? { k: 'book', code: at.book, lang: at.lang } : { k: 'manual', m: at.manual as Manual, lang: at.lang })
   }
-  openExplore(at.from ?? 'answer')
+  // the mode is counted once, when Browse really opened (not under the PIN lock)
+  if (openExplore(at.from ?? 'answer') && at.mode === 'obs5m') count(modeCount('obs5m'))
 }
 /** Closes Browse; the focus goes back to what opened it (not under the lock: `refocus` false). */
 export function closeExplore(refocus = true) {
@@ -449,10 +451,24 @@ function openMode(id: 'book' | 'learn') {
 }
 /** A story's 5M session: asked as if typed. */
 function openFive(story: number) {
+  // (not counted again: the mode was counted when its view opened; and not a help reached, it is a session)
   if (!hooks?.ask5(story)) return busyNote()
-  count(modeCount('obs5m'))
-  reachedHelp()
-  closeExplore()
+  closeExplore(false)
+}
+/** [Resume] a saved session; the test file not read yet: "Opening…", then again. */
+async function resumeFive(e: Saved5) {
+  let r = hooks?.resume5(e)
+  for (let i = 0; r === 'loading' && i < 20; i++) {
+    const b = ensure()
+    if (!b.body.querySelector('.ex-opening')) b.body.prepend(el('p', 'ex-note ex-opening', XT(hooks?.ui() ?? 'en').loading))
+    await loadFixture5().catch(() => null)
+    await new Promise((res) => setTimeout(res, 50))
+    if (!exploreOpen()) return
+    r = hooks?.resume5(e)
+  }
+  ensure().body.querySelector('.ex-opening')?.remove()
+  if (r === true) closeExplore(false)
+  else busyNote()
 }
 
 let drawing = 0
@@ -571,6 +587,12 @@ async function draw() {
     const dir = rtlLang(ui) ? 'rtl' : 'ltr'
     const [five, fx] = await Promise.all([fiveStories(packs).catch((): Five => 'unreadable'), loadFixture5().catch(() => null)])
     if (!done()) return
+    // the dev switch went off with this view still in the stack: back to what is behind it
+    if (five !== 'unreadable' && !five.stories.length) {
+      if (stack.length > 1) stack.pop()
+      else stack[0] = { k: 'home', tab: 'bible' }
+      return draw()
+    }
     // no test file in this build (a normal build does not carry it): said, never an empty screen
     if (five === 'unreadable' || !fx) {
       b.body.appendChild(el('p', 'ex-note', t.unreadable))
@@ -581,7 +603,7 @@ async function draw() {
     const rows = el('div', 'ex-rows ex-five')
     rows.dir = dir
     for (const e of hooks.saved5().filter((x) => x.story === fx.story).slice(0, 3)) {
-      const row = button('ex-row', '', () => (hooks?.resume5(e) ? closeExplore(false) : busyNote()))
+      const row = button('ex-row', '', () => void resumeFive(e))
       row.dataset.resume = String(e.story)
       row.append(el('span', 'ex-row-t', `↻ ${bidiLabel(w.resume.replace('{story}', `OBS ${e.story}`).replace('{place}', stepPlace(fx, e.s, ui)), ui)}`), chevron('ex-row-c'))
       rows.appendChild(row)
@@ -593,8 +615,8 @@ async function draw() {
     for (const st of five.stories) {
       const row = button('ex-row', '', () => openFive(st.story))
       row.dataset.story = String(st.story)
-      const title = row.appendChild(el('span', 'ex-row-t', `OBS ${st.story}: ${st.title}`))
-      title.dir = rtlLang(st.titleLang) ? 'rtl' : 'ltr'
+      // (in the app's direction; a title in another script is isolated, so "OBS 1:" stays beside it)
+      row.appendChild(el('span', 'ex-row-t', bidiLabel(`OBS ${st.story}: ${st.title}`, ui)))
       // the line under it: the Bible passage the story is told from, and the language of the session when it is not the app's
       const lang = st.tfLang.split('-')[0] !== ui ? fill(w.inLang, { lang: langName(ui, st.tfLang) }) : ''
       const sub = [st.reference.replace(/^[^:]*:\s*/, ''), lang].filter(Boolean).join(' \u00b7 ')
