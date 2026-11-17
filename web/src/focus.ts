@@ -75,7 +75,8 @@ export const stem = (w: string): string => {
 // «la palabra completo en Mateo 5:48», or quoted: then it is the word looked for).
 const WHOLE = new Set(words('whole entire complete full completo completa entero entera complet complète entier entière ' +
   'seluruh lengkap utuh पूरा पूरी संपूर्ण كامل كاملا كله بأكمله'))
-const ASKS_WORD = new Set(words('word mean means meaning palabra significa significado mot signifie veut kata arti maksud शब्द मतलब अर्थ كلمة معنى يعني'))
+const CHAPTER = new Set(words('chapter capitulo capítulo chapitre pasal अध्याय أصحاح الأصحاح اصحاح'))
+const ASKS_WORD = new Set(words('word mean means meaning palabra significa significado mot signifie veut dire kata arti maksud शब्द मतलब अर्थ كلمة معنى يعني'))
 export function focusWords(question: string | null | undefined, exact: (string | null | undefined)[] = []): string[] {
   const out: string[] = []
   const add = (w: string) => {
@@ -86,11 +87,12 @@ export function focusWords(question: string | null | undefined, exact: (string |
   // quotes ("What does «see» mean in John 1:39?")
   for (const t of [...exact, ...quoted(question ?? '')]) for (const w of words(t ?? '')) if (!/^\d+$/.test(w) && w.length >= 2) add(w)
   const ws = words((question ?? '').replace(PHRASES, ' '))
-  // asked about only when the cue is right next to it («significa completo», «la palabra completo», "does whole mean"); «el
-  // capítulo completo», "the whole chapter … mean" are still how much to show
-  const asked = (i: number) => ASKS_WORD.has(ws[i - 1] ?? '') || ASKS_WORD.has(ws[i + 1] ?? '')
-  for (const [i, w] of ws.entries()) {
-    if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w) || (WHOLE.has(w) && !asked(i))) continue
+  // asked about only when the cue is next to it, the small words between not counted («significa (el) completo», «veut dire
+  // complet», "the meaning of whole"); a chapter in between, or none: how much to show («significa el capítulo completo»)
+  const near = ws.filter((w) => !STOP.has(w) || ASKS_WORD.has(w) || CHAPTER.has(w) || WHOLE.has(w))
+  const asked = (w: string) => near.some((x, j) => x === w && (ASKS_WORD.has(near[j - 1] ?? '') || ASKS_WORD.has(near[j + 1] ?? '')))
+  for (const w of ws) {
+    if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w) || (WHOLE.has(w) && !asked(w))) continue
     if (w.length < 3) continue
     add(w)
   }
