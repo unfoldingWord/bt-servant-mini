@@ -21,7 +21,8 @@ describe('"the whole chapter" is not a word to look for', () => {
       ['Que veut dire complet ?', 'complet']])
       expect(focusWords(q), q).toEqual(focusWords(`«${w}»`))
     // the cue elsewhere in the question: still how much to show
-    for (const q of ['¿Qué significa el capítulo completo de Rut 1?', 'Explícame el significado de Éxodo 22 completo', 'What does the whole chapter of Exodus 22 mean?'])
+    for (const q of ['¿Qué significa el capítulo completo de Rut 1?', 'Explícame el significado de Éxodo 22 completo', 'What does the whole chapter of Exodus 22 mean?',
+      'What does the whole book mean?', '¿Qué significa el libro completo de Rut?', '¿Qué significa el pasaje completo?', 'What does the entire passage mean?', 'Que veut dire le passage entier ?'])
       expect(focusWords(q), q).toEqual([])
     // a real word still counts
     expect(focusWords('¿Qué dice Éxodo 22 sobre el ladrón?')).toContain(focusWords('ladrón')[0]!)

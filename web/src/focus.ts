@@ -75,7 +75,9 @@ export const stem = (w: string): string => {
 // «la palabra completo en Mateo 5:48», or quoted: then it is the word looked for).
 const WHOLE = new Set(words('whole entire complete full completo completa entero entera complet complète entier entière ' +
   'seluruh lengkap utuh पूरा पूरी संपूर्ण كامل كاملا كله بأكمله'))
-const CHAPTER = new Set(words('chapter capitulo capítulo chapitre pasal अध्याय أصحاح الأصحاح اصحاح'))
+// what "whole" qualifies (a chapter, a book, a passage, a story): between the cue and the word, it is not the word asked about
+const CHAPTER = new Set(words('chapter book passage verse verses story text capitulo capítulo libro pasaje versiculo versículo historia texto ' +
+  'chapitre livre passage verset histoire texte pasal kitab ayat bagian cerita अध्याय पुस्तक पद कहानी أصحاح الأصحاح اصحاح سفر السفر آية قصة'))
 const ASKS_WORD = new Set(words('word mean means meaning palabra significa significado mot signifie veut dire kata arti maksud शब्द मतलब अर्थ كلمة معنى يعني'))
 export function focusWords(question: string | null | undefined, exact: (string | null | undefined)[] = []): string[] {
   const out: string[] = []
