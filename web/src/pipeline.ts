@@ -2834,6 +2834,12 @@ let fx5v: Fixture | null = null
 const fixture5 = (): Promise<Fixture> => (fx5 ??= loadFixture().then((f) => (fx5v = f)).catch((e) => { fx5 = null; throw e }))
 /** The story's tables if read already (the composer and the labels cannot wait for them); null before */
 export const fixture5Now = (): Fixture | null => fx5v
+/**
+ * The one loader of the story's tables (the phone's window reads them through it too, with the dev switch on): the composer's
+ * session buttons and the labels read what it loaded. `resetFixture5` forgets it (tests).
+ */
+export const loadFixture5 = (): Promise<Fixture> => fixture5()
+export function resetFixture5(): void { fx5 = null; fx5v = null }
 
 /**
  * Whether the conversation is at the session (R9): its current point is a step, or under one through `deeper` points only (the
@@ -2867,7 +2873,14 @@ export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { fram
   const lang = guessLang(q)
   if (ownRef(t, { intent: 'unknown', lang } as Slots, lang)) return null
   if (keywords(strip(t, ['range', ...FU_WORDS])).length) return null
-  return kindOf(t) ?? (has('next', t) ? 'next' : null)
+  const k = kindOf(t)
+  // (R18) on a checking step the frame's questions are not shown: their responses are what the card hides; the typed words read as
+  // no help of the frame (as with a step that has none), and the question goes on as everywhere else
+  if (k && c.graph.session.part === 'checking') {
+    const rest = k.filter((x) => x !== 'questions')
+    return rest.length ? rest : null
+  }
+  return k ?? (has('next', t) ? 'next' : null)
 }
 
 /**
@@ -3023,7 +3036,7 @@ async function step5(x: Ctx): Promise<Done | null> {
     const lab = refLabelOf(ui, fref)
     if (helps.notes) follow.push({ label: `${w.tn} · ${lab}`, sheet: passageSheet(sheet, fref, ['notes'], s.lang) })
     if (helps.facts.terms.length) follow.push({ label: `${w.twl} · ${lab}`, sheet: passageSheet(sheet, fref, ['terms'], s.lang) })
-    if (helps.questions) follow.push({ label: `${w.tq} · ${lab}`, sheet: passageSheet(sheet, fref, ['questions'], s.lang) })
+    if (helps.questions && st.kind !== 'check') follow.push({ label: `${w.tq} · ${lab}`, sheet: passageSheet(sheet, fref, ['questions'], s.lang) })
     // the Bible passages the story is told from (2c's, as under its answers)
     const bible = (await obsSteps(helps.facts, s.lang, ui).catch((): ObsStep[] => [])).filter((b): b is Extract<ObsStep, { k: 'bible' }> => b.k === 'bible')
     for (const b of bible) {
@@ -3054,6 +3067,15 @@ function helpKind5(n: GNode): 'tn' | 'tq' | 'twl' | 'passage' | 'academy' | null
   if (!parseObsRef(n.sheet.ref)?.f) return isObsRef(n.sheet.ref ?? '') ? null : 'passage'
   const w = n.sheet.what
   return w.length !== 1 ? null : w[0] === 'notes' ? 'tn' : w[0] === 'questions' ? 'tq' : w[0] === 'terms' ? 'twl' : null
+}
+
+/** Whether a point is under a session's step through `deeper` points only (not under a typed branch's term or article) */
+function underStep(g: Graph, pt: GNode): boolean {
+  for (let n: GNode | undefined = pt; n; n = nodeOf(g, n.parent)) {
+    if (n.kind === 'obs5m') return true
+    if (n.edge !== 'deeper') return false
+  }
+  return false
 }
 
 /**
@@ -3091,7 +3113,7 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
   const pt = nodeOf(g, g.cur)
   if (pt?.kind === 'passage' && parseObsRef(pt.sheet.ref)?.f && pt.sheet.what.length === 1) reply.sessionMark = placeLabel(pt, x.ui)
   // usage (counts only): a help opened from the step
-  if (pt && pt.edge === 'deeper' && !x.at) {
+  if (pt && pt.edge === 'deeper' && !x.at && underStep(g, pt)) {
     const h = helpKind5(pt)
     if (h) count(`5m.help.${h}`)
   }

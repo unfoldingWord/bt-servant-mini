@@ -19,7 +19,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, codeReads, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
@@ -28,12 +28,12 @@ import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, se
 import { composerSwitch, mountComposer } from './composer'
 import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
-import { devOn, type Fixture, initDev, loadFixture } from './dev'
+import { devOn, type Fixture, initDev } from './dev'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
 import { obsLabel } from './obs'
-import { endSession, forgetSessions, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
+import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
 import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
@@ -339,6 +339,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
   // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
   const s5 = devOn('obs5m')
+  // (a card always draws hidden: what was revealed on it before is forgotten)
+  if (m.card && s5 && cv && m.node) forgetCard(cv.id, m.node)
   if (m.card && s5) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav, m.node)))
   else if (m.text) d.appendChild(el('div', 'plain', m.text))
   // the way back to the 5M session, to the passage this answer left (and to the path it left), on its own row, then the next steps
@@ -987,6 +989,7 @@ function eraseAll() {
   forgetWelcome()
   eraseSaved() // and the saved items and notes
   forgetSessions() // and where 5M sessions were
+  forgetAllReveals()
   newConv()
   renderConv()
 }
@@ -1002,6 +1005,7 @@ const closePanel = () => panel.classList.remove('show')
   if (backSaved()) return true
   if (backExplore()) return true
   if (mapIsOpen()) { closeMap(); return true }
+  if (outIsOpen()) { closeOutline(); return true }
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
   if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
@@ -1199,7 +1203,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     const { helps, history, sources } = await buildContext({
       question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
       // a 5M session (dev switch): its step, and the answers revealed on that card only
-      ...(devOn('obs5m') && fx5 && c.graph?.session ? { fx: fx5, ui: m.ui ?? nav, revealed: revealed5.get(`${c.id}|${sessionNode(c.graph)?.id}`) ?? new Set<string>() } : {}),
+      ...(devOn('obs5m') && fx5 && c.graph?.session ? { fx: fx5, ui: m.ui ?? nav, revealed: revealedOn(c.id, sessionNode(c.graph)?.id ?? '') } : {}),
     }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
@@ -1364,31 +1368,21 @@ let fx5p: Promise<Fixture | null> | null = null
 /** The story's tables, read once (the dev fixture); the bar and the cards are drawn again when they arrive */
 function fixture5(): Fixture | null {
   if (fx5 || !devOn('obs5m')) return fx5
-  fx5p ??= loadFixture().then((f) => {
+  // (pipeline.ts's loader: the composer's session buttons read the same tables)
+  fx5p ??= loadFixture5().then((f) => {
     fx5 = f
     if (conv()?.msgs.some((m) => m.card) || !conv()?.msgs.length) renderConv()
     else updateBar()
+    cmp.answered() // the composer's row asks again: [Resume] and the step's buttons need the tables
     return f
   }, () => { fx5p = null; return null })
   return null
-}
-/**
- * The answers the team has revealed, by conversation and card (the point of its step), as question ids. In memory only: never
- * saved, so a reload forgets them (the manual's answers are never remembered); a card's reveals feed share and the online context.
- */
-const revealed5 = new Map<string, Set<string>>()
-function revealOn(conv: string, node: string, id: string, shown: boolean) {
-  const k = `${conv}|${node}`
-  const set = revealed5.get(k) ?? new Set<string>()
-  if (shown) set.add(id)
-  else set.delete(id)
-  revealed5.set(k, set)
 }
 /** The share button of a session's card (dev switch): the session as it is when tapped, with the answers revealed so far */
 function sessionShare(cv: Conv | undefined, ui: string): HTMLElement | null {
   const g = cv?.graph
   if (!cv || !g?.session || !fx5) return null
-  return shareTextButton(() => shareSession(fx5!, g.session!, new Set([...revealed5].flatMap(([k, v]) => (k.startsWith(`${cv.id}|`) ? [...v] : []))), ui), ui)
+  return shareTextButton(() => shareSession(fx5!, g.session!, revealedIn(cv.id), ui), ui)
 }
 /** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
 function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
@@ -1481,6 +1475,7 @@ function end5() {
   closeOutline()
   if (busy) return
   count('5m.end')
+  forgetReveals(conv().id)
   endSession(conv())
   save()
   // (the cards drawn before keep no live buttons into the ended session)

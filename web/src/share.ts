@@ -8,7 +8,7 @@ import { slugLabel } from './links'
 import { count } from './usage'
 import type { Fixture } from './dev'
 import { obsLabel } from './obs'
-import { ORDER, type Session } from './obs5m'
+import { ORDER, steps, type Session } from './obs5m'
 import { W5 } from './obs5mwords'
 
 export const APP_LINK = 'https://bt-servant-mini.unfoldingword.workers.dev'
@@ -113,7 +113,9 @@ export function shareSession(fx: Fixture, s: Session, revealed: Set<string>, ui:
   const out = [`${obsLabel(s.story)} · ${fx.title}`, fx.reference, DEV_SOURCES]
   for (const p of ORDER) {
     if (p !== s.part && !s.done.includes(p)) continue
-    const qs = fx.questions.filter((q) => q.part === p)
+    // (R19) the part in progress lists only the questions of the steps reached (up to the current one), never the frames ahead
+    const reached = p === s.part ? new Set(steps(fx, p).slice(0, s.at + 1).flatMap((st) => st.questions)) : null
+    const qs = fx.questions.filter((q) => q.part === p && (!reached || reached.has(q.id)))
     if (!qs.length) continue
     out.push('', `${w.parts[p]}${p === s.part ? '' : ' ✓'}`)
     for (const q of qs) {
@@ -121,8 +123,8 @@ export function shareSession(fx: Fixture, s: Session, revealed: Set<string>, ui:
       if (revealed.has(q.id) && q.a) out.push(`  → ${q.a}`)
     }
   }
-  out.push('', APP_LINK)
-  return strip(out.join('\n'))
+  // (R19) the same room as a shared answer: cut with an ellipsis, then the link
+  return strip(`${trimAt(out.join('\n'))}\n\n${APP_LINK}`)
 }
 
 /** The share button for a bot answer, or null when it has nothing to share. `question`: what the person asked. */

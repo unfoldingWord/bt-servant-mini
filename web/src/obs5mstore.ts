@@ -131,3 +131,27 @@ export function resumeIn(c: ConvState, s: Session): void {
   g.pathPaused = !!g.path
   delete g.pathNext
 }
+
+// ---- the answers the team revealed, by conversation and card (the step's point). In memory only: never saved, so a reload
+// forgets them. A card always draws hidden, so a redraw, [End session] or "Erase everything" forgets its reveals too (R: reveals
+// never outlive the card): what share and the online context carry is only what the card on screen shows.
+const revealed5 = new Map<string, Set<string>>()
+export function revealOn(conv: string, node: string, id: string, shown: boolean): void {
+  const k = `${conv}|${node}`
+  const set = revealed5.get(k) ?? new Set<string>()
+  if (shown) set.add(id)
+  else set.delete(id)
+  revealed5.set(k, set)
+}
+/** The question ids revealed on one card */
+export const revealedOn = (conv: string, node: string): Set<string> => new Set(revealed5.get(`${conv}|${node}`) ?? [])
+/** The question ids revealed on any card of a conversation */
+export const revealedIn = (conv: string): Set<string> => new Set([...revealed5].flatMap(([k, v]) => (k.startsWith(`${conv}|`) ? [...v] : [])))
+/** A card is drawn again (hidden): its reveals go */
+export const forgetCard = (conv: string, node: string): void => void revealed5.delete(`${conv}|${node}`)
+/** [End session]: the conversation's reveals go */
+export function forgetReveals(conv: string): void {
+  for (const k of [...revealed5.keys()]) if (k.startsWith(`${conv}|`)) revealed5.delete(k)
+}
+/** "Erase everything" */
+export const forgetAllReveals = (): void => revealed5.clear()
