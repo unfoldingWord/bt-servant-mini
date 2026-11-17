@@ -11,6 +11,7 @@ import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, las
 import { CANON, hasLang, installedLangs, openLang } from './packs'
 import { fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, obsAsked, obsLabel, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
 import { verseId } from '@bt-synergy/language-pack-v3'
+import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
@@ -912,6 +913,13 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
   const again = c.again === q ? c.prevResolved : undefined
   delete c.again
   if (again) return repeatOf(again, target, prefer, raw, ms)
+  // "who is 'he' in Ruth 2:4?", "who is who in this verse?": MACULA's referents (ROUTES 'macula'), read by code
+  const who = whoSlots(q, c)
+  if (who) {
+    keepState(c, who, { q })
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, who, prefer)
+    if (sheet.ref) return { sheet: { ...sheet, what: ['who'] }, ui, meta: `model ${ms} ms\n${raw}\n(who is who: read by code)`, q, inScope: 'who is who' }
+  }
   const given = read.slots ? { ...read.slots } : null
   // "and the notes in Spanish?": the reader may take the language named for the question's own; the reply's words stay in
   // the language of the rest of the question
@@ -1078,6 +1086,19 @@ export function previewable(f: FollowUp): boolean {
   return v >= 1 && v <= max && (end === null || (end > v && end <= max))
 }
 /**
+ * "Who is 'he' in Ruth 2:4?", "¿quién es quién en este versículo?" (macula.ts asksWho): the slots of that verse (a few
+ * verses at most), named in the question or else the passage of the conversation; null when it is not such a question, or
+ * names a chapter or a book only ("who is he in Ruth 2?" goes the usual way).
+ */
+function whoSlots(q: string, c: ConvState): Slots | null {
+  if (!asksWho(q)) return null
+  const lang = /[؀-ۿ]/.test(q) ? 'ar' : /[ऀ-ॿ]/.test(q) ? 'hi' : guessLang(q)
+  const s = refInText({ intent: 'unknown', lang }, q)
+  if (s.book) return s.chapter && s.verse_start && bookCode(lang, s.book) ? { ...s, intent: 'passage', what: ['text'], lang } : null
+  const m = /^([0-9a-z]{3}) (\d+):(\d+)(?:-(\d+))?$/.exec(c.last?.ref ?? '')
+  return m ? { intent: 'passage', book: m[1]!, chapter: +m[2]!, verse_start: +m[3]!, verse_end: m[4] ? +m[4] : null, what: ['text'], lang } : null
+}
+/**
  * Whether code alone reads the question: only a reference in this conversation (directSheet with it, as the composer's "✓"
  * reads it), or a follow-up of this conversation the composer shows with a "✓" (followUpPreview, previewable). Then main.ts
  * skips the readers (the phone's model, about 4 s; the online one) and readQuestion reads it with no slots: the very reading
@@ -1089,6 +1110,7 @@ export function codeReads(q: string, c: ConvState): boolean {
   // the last answer again in another language ("en inglés"): readQuestion builds it from what it was asked for (repeatOf)
   if (c.again === q) return true
   if (directSheet(q, c)) return true
+  if (whoSlots(q, c)) return true
   // a story of Open Bible Stories by its number ("historia 34", "OBS 3:5"): the obs-question step reads it (obs.ts)
   if (obsAsked(q)) return true
   const fu = followUpPreview(q, c)
@@ -1806,6 +1828,8 @@ export type Reply = {
   pathBack?: Follow
   /** the conversation drifted far from its topic: offer a new conversation for this question (main.ts, while it is the last answer) */
   drift?: boolean
+  /** who is who in a verse, or its sentence structure (macula.ts), drawn by syntaxview.ts */
+  macula?: MacView
 }
 /** The answer, what kind it was (for the usage counts), and what tests check: the route-table step that made it, its target, how many sources it shows. */
 export type Answered = {
@@ -2037,6 +2061,17 @@ async function outOfScope(x: Ctx): Promise<Done> {
 
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
+  {
+    // MACULA (macula.ts): who is who in a verse ("who is 'he' in Ruth 2:4?", the button under a verse), or its sentence
+    // structure (a button): from the original's syntax trees and referents, with no model
+    name: 'macula',
+    when: (x) => x.sheet.intent === 'passage' && (x.sheet.what.includes('who') || x.sheet.what.includes('structure')),
+    run: async (x) => {
+      const d = await maculaAnswer(x.sheet, x.ui, x.q)
+      x.c.last = { ...x.sheet, what: ['text', 'notes'] }
+      return { ...d, reply: { ...d.reply, meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\n(MACULA: ${x.sheet.what.join(', ')})` } }
+    },
+  },
   {
     // Open Bible Stories asked for (obs.ts): by number ("¿qué dice OBS 3:5?", "historia 34", "story 3, frame 4", "القصة 34"),
     // or by what the story is about when one story clearly is it ("the story of Noah"); the sheet becomes that story or frame,
@@ -2532,6 +2567,19 @@ ${x.meta}` },
         const st = await storyStep(sheet.ref, sheet.lang, ui, text).catch(() => null)
         if (st) follow.splice(Math.min(3, follow.length), 0, { label: st.label, sheet: passageSheet(sheet, st.ref, st.ref.includes(':') ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'], st.lang) })
       }
+      // one verse: who is who in it and its sentence structure (macula.ts), before the introductions
+      if (sheet.intent === 'passage' && pack && !none && follow.length) {
+        const mac = await maculaSteps({ ...sheet, lang: pack }, ui).catch(() => [])
+        const at = follow.findIndex((f) => f.sheet?.what.includes('intro'))
+        follow.splice(at < 0 ? follow.length : at, 0, ...mac)
+        // only as many as fit (MAX_FOLLOW): the book's introduction gives way first, then these, never the others
+        if (mac.length > 0) {
+          const room = MAX_FOLLOW - x.others.length
+          const book = follow.findIndex((f) => f.sheet?.ref?.endsWith(' front:intro'))
+          if (follow.length > room && book >= 0) follow.splice(book, 1)
+          for (const m of [...mac].reverse()) if (follow.length > room) follow.splice(follow.indexOf(m), 1)
+        }
+      }
       // a passage with nothing to go on from (the version asked for is not here): the ways forward, its book first
       if (sheet.intent === 'passage' && !follow.length) follow.push(...(await wayForward(sheet, ui, pack ? sheet.ref!.slice(0, 3) : null)))
       // online AI is given the article and the Translation Academy article its text links to ("How to Translate Names")
@@ -2573,7 +2621,7 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')
   if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
   if (kind === 'passage' && s.ref) {
-    const w = s.what.length === 1 ? whatWord(ui, s.what[0]!) : null
+    const w = s.what.length === 1 ? whatWord(ui, s.what[0]!) ?? maculaWord(ui, s.what[0]!) : null
     return w ? `${refLabelOf(ui, s.ref)} · ${w}` : refLabelOf(ui, s.ref)
   }
   if (s.concept && kind !== 'search' && kind !== 'count') {
