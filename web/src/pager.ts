@@ -86,17 +86,31 @@ function unitsOf(box: HTMLElement): { kind: Kind; units: Unit[]; last: Element }
   const children = [...box.children] as HTMLElement[]
   const fold = children.findIndex((e) => e.tagName === 'DETAILS')
   const kids = fold < 0 ? children : children.slice(0, fold)
-  const units: Unit[] = []
   // a long list is cut between its items (13 questions of a chapter); a short one stays a block
   const blocks = kids.flatMap((e) => (/^(UL|OL)$/.test(e.tagName) && len(e) > SHORT ? ([...e.children] as HTMLElement[]) : [e]))
-  for (const e of blocks) {
-    const prev = units[units.length - 1]
-    // a heading goes with what follows it
-    if (prev && /^H[1-6]$/.test(prev.els[prev.els.length - 1]!.tagName)) { prev.els.push(e); continue }
-    units.push({ els: [e], label: '' })
-  }
+  const units: Unit[] = groupBlocks(blocks.map((e) => ({ tag: e.tagName, len: len(e) })))
+    .map((g) => ({ els: g.map((i) => blocks[i]!), label: '' }))
   // (the bar after a list cut between its items goes after the list, not in it)
   return units.length > 1 ? { kind: 'parts', units, last: kids[kids.length - 1]! } : null
+}
+
+/** A heading with only a short line under it (the answer's title and its source, "Translation Notes v91 — Nehemiah"). */
+const LEAD = 160
+/**
+ * The blocks of an answer (`tag`: the element's, "H5", "P"; `len`: its text's length) put together in units, by their indexes:
+ * a heading goes with what follows it, and so does a heading with only a short line under it (Abel, Nov 17: the introduction to
+ * Nehemiah's first part held only its title and its source line, the next heading's section being too tall to go with it).
+ */
+export function groupBlocks(blocks: { tag: string; len: number }[]): number[][] {
+  const heading = (t: string) => /^H[1-6]$/.test(t)
+  const out: number[][] = []
+  for (let i = 0; i < blocks.length; i++) {
+    const prev = out[out.length - 1]
+    const lead = prev && heading(blocks[prev[0]!]!.tag) && prev.reduce((a, j) => a + blocks[j]!.len, 0) < LEAD
+    if (prev && (heading(blocks[prev[prev.length - 1]!]!.tag) || lead)) prev.push(i)
+    else out.push([i])
+  }
+  return out
 }
 
 
