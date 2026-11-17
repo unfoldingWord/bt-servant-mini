@@ -617,14 +617,17 @@ const NAMED = [
 ]
 /**
  * Stories by the common names of what they tell, in the six languages: a name read the same whatever OBS pack is on the phone
- * (an English pack's titles have no "Noé", "نوح" or "नूह"). Only names that point to one story: Abraham is in stories 4 to 6,
- * the first that tells him; Jonah is in none. Each entry is a name of one or more words, folded as `fold` folds them.
+ * (an English pack's titles have no "Noé", "نوح" or "नूह"). A name in several stories is in each (Isaac: 5 and 6), so it alone
+ * names none; Abraham is in stories 4 to 6 and goes to the first, which tells his call; Paul (46, 47) and Saul (King Saul in
+ * 17) are left out; Jonah is in no story. Each entry is a name of one or more words, folded as `fold` folds them.
  */
 const STORY_NAMES: Record<number, string[]> = {
   1: ['creation', 'creacion', 'la creacion', 'penciptaan', 'सृष्टि', 'الخلق', 'الخليقة'],
   2: ['adam', 'eve', 'adan', 'eva', 'ève', 'hawa', 'आदम', 'हव्वा', 'آدم', 'حواء'],
   3: ['noah', 'noe', 'nuh', 'नूह', 'نوح', 'flood', 'diluvio', 'deluge', 'air bah', 'जलप्रलय', 'الطوفان'],
   4: ['abraham', 'abram', 'अब्राहम', 'इब्राहीम', 'ابراهيم', 'ابرام'],
+  5: ['isaac', 'ishak', 'इसहाक', 'اسحق', 'اسحاق'],
+  6: ['isaac', 'ishak', 'इसहाक', 'اسحق', 'اسحاق', 'rebekah', 'rebeca', 'rebecca', 'ribka', 'रिबका', 'رفقة'],
   7: ['jacob', 'esau', 'yakub', 'याकूब', 'एसाव', 'يعقوب', 'عيسو'],
   8: ['joseph', 'jose', 'yusuf', 'यूसुफ', 'يوسف'],
   9: ['moses', 'moises', 'moise', 'musa', 'मूसा', 'موسى', 'burning bush', 'zarza'],
@@ -642,23 +645,32 @@ const STORY_NAMES: Record<number, string[]> = {
   25: ['temptation', 'tentacion', 'tentation', 'pencobaan', 'परीक्षा', 'التجربة'],
   27: ['good samaritan', 'samaritan', 'samaritano', 'samaritain', 'samaria yang baik', 'सामरी', 'السامري'],
   33: ['sower', 'sembrador', 'semeur', 'penabur', 'बोने वाले', 'الزارع'],
-  35: ['prodigal', 'prodigo', 'prodigue', 'anak yang hilang', 'उड़ाऊ', 'الضال'],
+  35: ['prodigal', 'prodigal son', 'prodigo', 'hijo prodigo', 'prodigue', 'fils prodigue', 'anak yang hilang', 'उड़ाऊ', 'उड़ाऊ पुत्र', 'الضال', 'الابن الضال'],
   36: ['transfiguration', 'transfiguracion', 'transfigurasi', 'रूपान्तरण', 'التجلي'],
   37: ['lazarus', 'lazaro', 'lazare', 'लाज़र', 'लाजर', 'لعازر'],
   40: ['crucifixion', 'penyaliban', 'क्रूस पर चढ़ाया', 'الصلب'],
   41: ['resurrection', 'resurreccion', 'kebangkitan', 'पुनरुत्थान', 'القيامة'],
   43: ['pentecost', 'pentecostes', 'pentecote', 'pentakosta', 'पिन्तेकुस्त', 'الخمسين'],
   45: ['stephen', 'esteban', 'etienne', 'stefanus', 'स्तिफनुस', 'استفانوس', 'ethiopian', 'etiope', 'ethiopien', 'الحبشي'],
-  46: ['paul', 'pablo', 'paulus', 'पौलुस', 'بولس'],
   47: ['philippi', 'filipos', 'philippes', 'filipi', 'फिलिप्पी', 'فيلبي'],
 }
 const NAME_INDEX: [number, string[]][] = Object.entries(STORY_NAMES).flatMap(([n, names]) => names.map((s) => [+n, s.split(' ').map(fold)] as [number, string[]]))
-/** The one story the words name by STORY_NAMES (every word of a name, at a word's start: "Noé's"), or null (none, or two disagree). */
+/** An Arabic word as written and without a joined letter or article before it ("ونوح", "لنوح", "والطوفان"). */
+const arForms = (x: string): string[] => /^[ء-ي]/.test(x) ? [x, x.replace(/^(?:[وفبكل]?ال|[وف]?لل)(?=\S{3})/, ''), x.replace(/^[وفبكل](?=\S{3})/, '')] : [x]
+/**
+ * The one story the content words of a question name by STORY_NAMES, when names of that story are all its words ("Noé",
+ * "Noah and the flood"), or null: no name, names of two stories, or another word too ("Paul shipwreck", "Lázaro y el rico",
+ * "José et Marie" are not the story, but verses or another story: the search goes on as before).
+ */
 export function storyByName(words: string[]): number | null {
-  const toks = words.map(fold).map((w) => w.replace(/^(?:[وفبكل]?ال|[وف]?لل)(?=\S{3})/, ''))
-  const at = (w: string) => toks.some((x) => x === w || x === w.replace(/^ال/, '') || (w.length >= 4 && x.startsWith(w) && x.length <= w.length + 2))
-  const hits = new Set(NAME_INDEX.filter(([, ws]) => ws.every(at)).map(([n]) => n))
-  return hits.size === 1 ? [...hits][0]! : null
+  const toks = words.map(fold).filter(Boolean)
+  if (!toks.length) return null
+  const is = (x: string, w: string) => arForms(x).some((f) => f === w || f === w.replace(/^ال/, '') || (w.length >= 4 && f.startsWith(w) && f.length <= w.length + 2))
+  const named = NAME_INDEX.filter(([, ws]) => ws.every((w) => toks.some((x) => is(x, w))))
+  const stories = new Set(named.map(([n]) => n))
+  if (stories.size !== 1) return null
+  const covered = (x: string) => named.some(([, ws]) => ws.some((w) => is(x, w)))
+  return toks.every(covered) ? [...stories][0]! : null
 }
 /**
  * A story named by what it is about ("the story of Noah", "la historia de José"), when Open Bible Stories are on the phone and
@@ -673,7 +685,7 @@ export async function namedStory(q: string, lang: string): Promise<{ ref: string
   const at = await obsPack(lang)
   if (!at) return null
   // else a common name ("Noé", "نوح", "नूह"): the story it names, whatever the pack's language
-  const byName = (): { ref: string; what: string[] } | null => { const n = storyByName(wordsOf(hit[1]!)); return n ? { ref: obsRef(n), what: ['text', 'notes'] } : null }
+  const byName = (): { ref: string; what: string[] } | null => { const n = storyByName(keywords(hit[1]!)); return n ? { ref: obsRef(n), what: ['text', 'notes'] } : null }
   const want = keywords(hit[1]!).map((x) => fold(x)).filter((x) => x.length >= 3)
   if (!want.length) return byName()
   const has = (s: string) => { const toks = wordsOf(s); return want.filter((w) => toks.some((x) => x === w || (w.length >= 5 && x.startsWith(w.slice(0, w.length - 1))))).length }

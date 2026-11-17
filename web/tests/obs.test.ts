@@ -145,6 +145,12 @@ describe('OBS questions the obs set missed (Nov 17): fixed in code, no retrainin
     expect(storyByName(['noe', 'diluvio'])).toBe(3)
     expect(storyByName(['والطوفان'])).toBe(3)
     expect(storyByName(['jonas'])).toBeNull()
+    expect(storyByName(['ونوح'])).toBe(3)
+    expect(storyByName(['لعازر'])).toBe(37)
+    expect(storyByName(['isaac'])).toBeNull()
+    // another word, or a name in two stories: not a story (the review of Nov 17)
+    for (const q of ['the story of Paul shipwreck', 'la historia de Lázaro y el rico', 'l’histoire de José et Marie', 'la historia de Abraham e Isaac'])
+      expect(await namedStory(q, 'en'), q).toBeNull()
     // the answer itself: Noah's story, not Genesis verses
     expect((await ask('la historia de Noé', 'es')).ref).toBe('obs 3')
     expect((await ask('قصة نوح', 'ar')).ref).toBe('obs 3')
