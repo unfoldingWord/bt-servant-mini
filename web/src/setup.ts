@@ -242,7 +242,8 @@ export function modelSection(lang: string, refresh: () => void): HTMLElement {
   return box
 }
 function alertish(box: HTMLElement, text: string) {
-  box.querySelector('.note')?.remove()
+  // the last message goes; the pictures' credit (a note too) stays
+  box.querySelector('.note:not(.credit)')?.remove()
   box.appendChild(el('p', 'note', text))
 }
 
@@ -351,9 +352,9 @@ async function imagesSection(lang: string, box: HTMLElement, s: S, after: () => 
     // a download that did not end can always be removed (what arrived is kept by the store until then, even without internet)
     const remove = btn(w.remove, async () => { await removeImages(); after() }, 'small del')
     if (have) row.appendChild(remove)
-    // the size from the catalog (a few KB), read while the menu is already drawn
+    // the size from the catalog (a few KB), read while the menu is already drawn; meanwhile the line says how to get them (a
+    // phone in airplane mode may still say it is online, and the request then waits until it gives up)
     if (navigator.onLine !== false) {
-      if (!have) label.textContent = s.working
       void imagesOffer().then((offer) => {
         if (!offer) return void (label.textContent = imagesLine(lang, have))
         const size = mb1(offer.bytes)
