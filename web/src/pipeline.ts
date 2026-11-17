@@ -15,6 +15,7 @@ import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type 
 import { W5 } from './obs5mwords'
 import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
+import { count } from './usage'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
@@ -2962,6 +2963,7 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
       ? sheetOf(fx, { story: fx.story, part: first, at: 0, lang, tfLang: fx.tfLang, started: Date.now(), done: [] }, lang)
       : { id: `q${Date.now()}`, intent: 'obs5m', ref: obsRef(p.n), what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang }
     keepState(c, slotsOfSheet(sheet), { sheet, ui })
+    if (p.n === fx.story && first) count('5m.start')
     return { sheet, ui, meta: '(a 5M session asked for, read by code)', q, inScope: 'a 5M session' }
   }
   const s = c.graph?.session
@@ -3045,6 +3047,15 @@ async function step5(x: Ctx): Promise<Done | null> {
   }
 }
 
+/** Which help a point under a session's step is, for the usage counts: the frame's notes, questions or terms, a Bible passage, an article */
+function helpKind5(n: GNode): 'tn' | 'tq' | 'twl' | 'passage' | 'academy' | null {
+  if (n.kind === 'article') return n.sheet.concept?.startsWith('ta:') ? 'academy' : n.sheet.concept?.startsWith('tw:') ? 'twl' : null
+  if (n.kind !== 'passage') return null
+  if (!parseObsRef(n.sheet.ref)?.f) return isObsRef(n.sheet.ref ?? '') ? null : 'passage'
+  const w = n.sheet.what
+  return w.length !== 1 ? null : w[0] === 'notes' ? 'tn' : w[0] === 'questions' ? 'tq' : w[0] === 'terms' ? 'twl' : null
+}
+
 /**
  * After an answer, in a 5M session (dev switch `obs5m`): a step moves the session there (`g.session`), says where it is
  * (`sessionMark`), keeps its frame's links on its point, and pauses a light path (`pathPaused`: kept, not offered); any other
@@ -3059,6 +3070,9 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
     const fx = await fixture5()
     const { s, links } = x.five
     g.session = s
+    // usage (counts only, no text): a step, the way back to one, the review
+    count(x.at ? '5m.back' : '5m.step')
+    if (stepAt(fx, s)?.kind === 'review') count('5m.review')
     g.pathPaused = !!g.path
     delete g.pathNext
     const n = nodeOf(g, g.cur)
@@ -3076,6 +3090,11 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
   // a frame's help ("OBS 1:5 · notes"): says what it shows, as the Map and the way back do (placeLabel)
   const pt = nodeOf(g, g.cur)
   if (pt?.kind === 'passage' && parseObsRef(pt.sheet.ref)?.f && pt.sheet.what.length === 1) reply.sessionMark = placeLabel(pt, x.ui)
+  // usage (counts only): a help opened from the step
+  if (pt && pt.edge === 'deeper' && !x.at) {
+    const h = helpKind5(pt)
+    if (h) count(`5m.help.${h}`)
+  }
   const st = sessionNode(g)
   const to = sheetOf(fx, s, s.lang)
   if (reply.back && nodeOf(g, reply.back.back)?.kind === 'obs5m') delete reply.back

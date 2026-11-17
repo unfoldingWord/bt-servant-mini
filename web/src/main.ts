@@ -22,7 +22,7 @@ import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, tod
 import { answer, codeReads, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
-import { shareButton } from './share'
+import { shareButton, shareSession, shareTextButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
@@ -339,7 +339,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
   // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
   const s5 = devOn('obs5m')
-  if (m.card && s5) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav)))
+  if (m.card && s5) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav, m.node)))
   else if (m.text) d.appendChild(el('div', 'plain', m.text))
   // the way back to the 5M session, to the passage this answer left (and to the path it left), on its own row, then the next steps
   const backs = [s5 ? m.sessionBack : undefined, m.back, m.pathBack].filter((f): f is Followup => !!f)
@@ -372,7 +372,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(a)
   }
   // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
-  const sh = m.waiting ? null : shareButton(m, m.ui ?? nav, asked)
+  const sh = m.waiting ? null : (s5 && m.card ? sessionShare(cv, m.ui ?? nav) : null) ?? shareButton(m, m.ui ?? nav, asked)
   if (sh) d.appendChild(sh)
   // ☆ Save and ✎ Note (savedview.ts); with an online answer, Save keeps its text too
   const keep = keepOf(m)
@@ -1198,6 +1198,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // (on any error there, the phone's answer and the passage's context as before, so "writing…" never stays)
     const { helps, history, sources } = await buildContext({
       question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
+      // a 5M session (dev switch): its step, and the answers revealed on that card only
+      ...(devOn('obs5m') && fx5 && c.graph?.session ? { fx: fx5, ui: m.ui ?? nav, revealed: revealed5.get(`${c.id}|${sessionNode(c.graph)?.id}`) ?? new Set<string>() } : {}),
     }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
@@ -1370,13 +1372,33 @@ function fixture5(): Fixture | null {
   }, () => { fx5p = null; return null })
   return null
 }
+/**
+ * The answers the team has revealed, by conversation and card (the point of its step), as question ids. In memory only: never
+ * saved, so a reload forgets them (the manual's answers are never remembered); a card's reveals feed share and the online context.
+ */
+const revealed5 = new Map<string, Set<string>>()
+function revealOn(conv: string, node: string, id: string, shown: boolean) {
+  const k = `${conv}|${node}`
+  const set = revealed5.get(k) ?? new Set<string>()
+  if (shown) set.add(id)
+  else set.delete(id)
+  revealed5.set(k, set)
+}
+/** The share button of a session's card (dev switch): the session as it is when tapped, with the answers revealed so far */
+function sessionShare(cv: Conv | undefined, ui: string): HTMLElement | null {
+  const g = cv?.graph
+  if (!cv || !g?.session || !fx5) return null
+  return shareTextButton(() => shareSession(fx5!, g.session!, new Set([...revealed5].flatMap(([k, v]) => (k.startsWith(`${cv.id}|`) ? [...v] : []))), ui), ui)
+}
 /** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
-function cardHooks(cv: Conv | undefined, ui: string) {
+function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
   const fx = fixture5()
   if (!fx || !cv?.graph?.session) return undefined
   const g = cv.graph
   // the session as it is when tapped (each step replaces g.session; the marks go to the current copy)
   return { fx, get s() { return g.session! }, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui),
+    // an answer shown on a card is remembered here, in memory only, for share and the online context (never saved, never counted)
+    reveal: (id: string, shown: boolean) => { if (node) revealOn(cv.id, node, id, shown) },
     // (a mark is kept with the conversation and the saved place, as any answer is; saveSession asks keepHistory and never throws)
     marked: () => { save(); if (g.session) saveSession(cv.id, g.session) } }
 }
@@ -1458,6 +1480,7 @@ function drawOutlineNow() {
 function end5() {
   closeOutline()
   if (busy) return
+  count('5m.end')
   endSession(conv())
   save()
   // (the cards drawn before keep no live buttons into the ended session)
@@ -1495,6 +1518,7 @@ function resume5(e: Saved5) {
   closePanel()
   // its conversation, still at the session: shown as it was
   const s = c.graph?.session
+  count('5m.resume')
   if (t.k === 'open' && s && s.story === e.s.story) {
     save()
     renderConv()
