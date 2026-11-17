@@ -83,8 +83,8 @@ describe('«Understood: …» under the person\'s message', () => {
   test('it says how the app read the question, in the app\'s language (the book as the composer writes it)', async () => {
     const cases: [string, string, string][] = [
       ['es', 'Rut 2:3 notas', 'Entendí: Rut 2:3 · notas'],
-      // read as a chapter: the line shows it, so the person sees what to correct
-      ['es', 'notas de rut 2 3', 'Entendí: Rut 2 · notas'],
+      // "rut 2 3" is chapter and verse since ms/refcomma (it used to be read as chapter 2)
+      ['es', 'notas de rut 2 3', 'Entendí: Rut 2:3 · notas'],
       ['en', 'Ruth 2:3', 'Understood: Ruth 2:3'],
       ['en', 'Introduction to Jonah', 'Understood: Introduction to Jonah'],
       ['en', 'What does grace mean?', 'Understood: grace'],
