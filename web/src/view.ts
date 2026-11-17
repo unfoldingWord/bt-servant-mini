@@ -30,6 +30,51 @@ export function setViewLang(lang: string) {
 /** A label built in the app's language, the runs of the other direction isolated (bidi.ts). */
 const lbl = (s: string) => bidiLabel(s, uiLang)
 
+// ------------------------------------------------------------------------------------------- helps in three levels
+// (Abel, Nov 17: "listas muy largas de notas… pueden agruparse en un solo grupo de todas las notas y luego dentro el grupo de
+// notas de cada frame. Incluso cada nota podría estar plegada"): a group per kind ("Translation notes (101)"), in it one
+// fold per verse or frame ("3:1 · notes: 6", with `data-at` "3:1" and `data-n` 6: pager.ts shows only the page's and counts
+// them), in it each help folded (its quote, opening to all of it).
+
+/** A group of helps: its name and its count, the count in its own span (pager.ts writes the page's there). */
+export function groupFold(label: string, n: number, cls = ''): HTMLElement {
+  const d = el('details', `fold hgroup ${cls}`.trim())
+  const sm = el('summary', '')
+  sm.append(lbl(label), ' ', el('span', 'hcount', `(${n})`))
+  d.appendChild(sm)
+  return d
+}
+/** A verse's or a frame's helps in a group: "3:1" (or "1:3" of a story) and how many. */
+function atFold(summary: string, at: string, n: number): HTMLElement {
+  const d = el('details', 'fold verse')
+  d.dataset.at = at
+  d.dataset.n = String(n)
+  d.appendChild(el('summary', '', lbl(summary)))
+  return d
+}
+/** One help folded: `head` (its quote, a question) as the button, `body` (the note, the answer) inside. */
+function itemFold(head: Node, body: Node, dir: string): HTMLElement {
+  const d = el('details', 'fold item')
+  const sm = el('summary', '')
+  sm.dir = dir
+  sm.appendChild(head)
+  const b = el('div', 'item-body')
+  b.dir = dir
+  b.appendChild(body)
+  d.append(sm, b)
+  return d
+}
+/** A note's button: its quote, else its first words. */
+const noteHead = (said: string, note: string): Node => {
+  if (said) {
+    const q = el('strong', '', `«${said}»`)
+    q.dir = 'auto'
+    return q
+  }
+  const t = note.replace(/\s+/g, ' ').trim()
+  return document.createTextNode(t.length > 70 ? `${t.slice(0, 70).replace(/\s+\S*$/, '')}…` : t)
+}
+
 export type Hooks = {
   /** A Bible reference was tapped: ask for it in the chat. */
   ref: (ref: string, label: string, lang: string) => void
@@ -47,8 +92,10 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: stri
   if (text !== undefined) e.textContent = text
   return e
 }
+/** A note's words as plain text: no link targets, no Markdown marks. */
+const plainNote = (t: string): string => t.replace(/\[\[[^\]]+\]\]/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim()
 const first = (t: string, n = 140): string => {
-  const x = t.replace(/\[\[[^\]]+\]\]/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_#]/g, '').replace(/\s+/g, ' ').trim()
+  const x = plainNote(t)
   const m = /^.{20,}?[.!?。।؟](?=\s|$)/.exec(x)
   const s = m ? m[0] : x
   return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + ' …' : s
@@ -275,20 +322,28 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   const notes = (idx: number[], focused: boolean) => {
     if (!idx.length) return
     if (s.long) {
-      const host = focused ? el('details', 'fold') : box
-      if (focused) {
-        host.appendChild(el('summary', '', lbl(fill(heads.more, { n: idx.length }))))
-        box.appendChild(host)
-      } else box.appendChild(el('h4', '', lbl(s.heads.notes)))
+      // a chapter's notes in three levels: all of them, a verse's, each note
+      const host = groupFold(ui.notes, idx.length)
+      box.appendChild(host)
       const byRef = new Map<string, number[]>()
       for (const i of idx) {
         const v = s.notes[i]!.ref.split('-')[0]!
         byRef.set(v, [...(byRef.get(v) ?? []), i])
       }
       for (const [ref, list] of byRef) {
-        const d = el('details', 'fold verse')
-        d.appendChild(el('summary', '', lbl(fill(heads.verse, { ref, n: list.length }))))
-        noteList(list, d, false)
+        const d = atFold(fill(heads.verse, { ref, n: list.length }), ref, list.length)
+        for (const i of list) {
+          const n = s.notes[i]!
+          // inside: the note, a tap opens it in the panel as before (its words marked in the passage, its key term, its links)
+          const body = el('button', 'nrow')
+          body.type = 'button'
+          body.textContent = plainNote(n.note)
+          body.onclick = () => {
+            mark(box, null, [`n${i}`])
+            openPanel({ kind: 'note', study: s, i, root: box })
+          }
+          d.appendChild(itemFold(noteHead(n.said, first(n.note)), body, dirOf(n.note || n.said || '')))
+        }
         host.appendChild(d)
       }
       return
@@ -328,14 +383,8 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   if (s.questions.length) {
     const d = el('details', 'qs fold')
     d.appendChild(el('summary', '', lbl(fill(heads.questionsN, { n: s.questions.length }))))
-    for (const q of s.questions) {
-      const p = el('p')
-      p.dir = dirOf(`${q.q} ${q.a}`) // an English question in an Arabic app: its "?" at its end
-      p.appendChild(el('strong', '', q.q))
-      p.appendChild(el('br'))
-      p.appendChild(document.createTextNode(q.a))
-      d.appendChild(p)
-    }
+    // each question folded, its answer inside (an English question in an Arabic app: its "?" at its end)
+    for (const q of s.questions) d.appendChild(itemFold(el('strong', '', q.q), document.createTextNode(q.a), dirOf(`${q.q} ${q.a}`)))
     box.appendChild(d)
   }
   return box
@@ -362,41 +411,48 @@ export function linkObsWords(box: HTMLElement, o: ObsStudy) {
     const head = p.firstElementChild
     const m = head?.tagName === 'STRONG' && p.firstChild === head ? /^(\d{1,2}):(\d{1,2})$/.exec(head.textContent?.trim() ?? '') : null
     if (!m || +m[1]! !== o.n) continue
-    p.classList.add('obs-fr')
-    const quotes = o.frames[String(+m[2]!)]
-    if (!quotes?.length) continue
-    // the text after the frame's number, in order (an emphasis or a link inside it counts too)
-    const nodes: Text[] = []
-    const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT)
-    for (let n = walk.nextNode(); n; n = walk.nextNode()) if (!head!.contains(n) && !n.parentElement?.closest('a')) nodes.push(n as Text)
-    const text = nodes.map((n) => n.data).join('')
-    const spans = wordSpans(text, quotes)
-    if (!spans.length) continue
-    let at = 0
-    for (const node of nodes) {
-      const from = at
-      const to = (at += node.data.length)
-      const here = spans.filter(([a, b]) => a < to && b > from)
-      if (!here.length) continue
-      const frag = document.createDocumentFragment()
-      let k = from
-      for (const [a0, b0, keys] of here) {
-        const a = Math.max(a0, from), b = Math.min(b0, to)
-        if (a > k) frag.appendChild(document.createTextNode(text.slice(k, a)))
-        const word = text.slice(a, b)
-        const w = el('span', /(^| )n/.test(keys) ? 'w n' : 'w t', word)
-        w.dataset.k = keys
-        w.onclick = (e) => {
-          e.stopPropagation()
-          mark(box, w, keys.split(' '))
-          openPanel({ kind: 'word', study: o, word: text.slice(a0, b0), keys: keys.split(' '), root: box })
-        }
-        frag.appendChild(w)
-        k = b
+    linkFrameWords(p, o, +m[2]!, box, head)
+  }
+}
+/**
+ * One frame's text made tappable (`p`: its words, after `head` when the frame's number is inside it; `box`: where the marks
+ * are cleared). Also the frame of a 5M session's card (obs5mview.ts): the same words, the same panel, the session untouched.
+ */
+export function linkFrameWords(p: HTMLElement, o: ObsStudy, f: number, box: HTMLElement, head: Element | null = null) {
+  p.classList.add('obs-fr')
+  const quotes = o.frames[String(f)]
+  if (!quotes?.length) return
+  // the text after the frame's number, in order (an emphasis or a link inside it counts too)
+  const nodes: Text[] = []
+  const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT)
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) if (!head?.contains(n) && !n.parentElement?.closest('a')) nodes.push(n as Text)
+  const text = nodes.map((n) => n.data).join('')
+  const spans = wordSpans(text, quotes)
+  if (!spans.length) return
+  let at = 0
+  for (const node of nodes) {
+    const from = at
+    const to = (at += node.data.length)
+    const here = spans.filter(([a, b]) => a < to && b > from)
+    if (!here.length) continue
+    const frag = document.createDocumentFragment()
+    let k = from
+    for (const [a0, b0, keys] of here) {
+      const a = Math.max(a0, from), b = Math.min(b0, to)
+      if (a > k) frag.appendChild(document.createTextNode(text.slice(k, a)))
+      const word = text.slice(a, b)
+      const w = el('span', /(^| )n/.test(keys) ? 'w n' : 'w t', word)
+      w.dataset.k = keys
+      w.onclick = (e) => {
+        e.stopPropagation()
+        mark(box, w, keys.split(' '))
+        openPanel({ kind: 'word', study: o, word: text.slice(a0, b0), keys: keys.split(' '), root: box })
       }
-      if (k < to) frag.appendChild(document.createTextNode(text.slice(k, to)))
-      node.replaceWith(frag)
+      frag.appendChild(w)
+      k = b
     }
+    if (k < to) frag.appendChild(document.createTextNode(text.slice(k, to)))
+    node.replaceWith(frag)
   }
 }
 
@@ -600,3 +656,63 @@ document.addEventListener('click', (e) => {
     hooks?.ref(t.ref, a.textContent ?? t.ref, lang)
   }
 })
+
+/**
+ * An OBS answer's helps (the folds md.ts draws from obsAnswer) in the same three levels: the frames' notes ("Notes for OBS 1:3
+ * (6)") in one group "Translation notes (101)" when there are several, each note folded; the questions ("Questions (22)",
+ * "1:3 **q** a" in a story) per frame, each folded with its answer inside. Only how it is drawn.
+ */
+export function groupObsHelps(box: HTMLElement) {
+  const folds = [...box.querySelectorAll<HTMLElement>(':scope > details.fold')]
+  const sum = (d: HTMLElement) => d.querySelector(':scope > summary')?.textContent ?? ''
+  const notes = folds.filter((d) => d.querySelector(':scope > ol') && /\d+:\d+/.test(sum(d)))
+  /** A list item as a fold: its first bold words (a quote, a question) the button, the rest inside. */
+  const asItem = (li: HTMLElement, drop: RegExp) => {
+    // a story's question opens with its frame ("1:3 "): gone first (the fold it goes in says it)
+    const lead = li.firstChild
+    if (lead?.nodeType === Node.TEXT_NODE && drop.test(lead.textContent ?? '')) {
+      lead.textContent = (lead.textContent ?? '').replace(drop, '')
+      if (!lead.textContent.trim()) lead.remove()
+    }
+    // (the bold words are the quote only when they open the item: a note without one may have bold words inside)
+    const strong = li.firstChild === li.firstElementChild && li.firstElementChild?.tagName === 'STRONG' ? li.firstElementChild : null
+    const head = strong ? strong.cloneNode(true) : noteHead('', li.textContent ?? '')
+    strong?.remove()
+    const body = el('div', '')
+    body.append(...li.childNodes)
+    const t = body.firstChild
+    if (t?.nodeType === Node.TEXT_NODE) t.textContent = (t.textContent ?? '').replace(drop, '')
+    return itemFold(head, body, li.dir || dirOf(li.textContent ?? ''))
+  }
+  for (const d of notes) {
+    const lis = [...d.querySelectorAll<HTMLElement>(':scope > ol > li')]
+    d.dataset.at = /(\d+:\d+)/.exec(sum(d))![1]!
+    d.dataset.n = String(lis.length)
+    d.classList.add('verse')
+    for (const ol of d.querySelectorAll(':scope > ol')) ol.replaceWith(...[...ol.querySelectorAll<HTMLElement>(':scope > li')].map((li) => asItem(li, /^\s*:\s*/)))
+  }
+  if (notes.length > 1) {
+    const g = groupFold(ui.notes, notes.reduce((a, d) => a + +(d.dataset.n ?? 0), 0))
+    notes[0]!.before(g)
+    g.append(...notes)
+  }
+  // the questions: the fold whose lists hold them (one list per question, md.ts)
+  const qs = folds.find((d) => !notes.includes(d) && d.querySelector(':scope > ul'))
+  if (!qs) return
+  const lis = [...qs.querySelectorAll<HTMLElement>(':scope > ul > li')]
+  const frameOf = (li: HTMLElement) => /^\s*(\d+:\d+)\s/.exec(li.textContent ?? '')?.[1]
+  const sm = qs.querySelector<HTMLElement>(':scope > summary')!
+  const label = sm.textContent!.replace(/\s*\(\d+\)\s*$/, '')
+  sm.replaceChildren(label, ' ', el('span', 'hcount', `(${lis.length})`))
+  qs.classList.add('hgroup')
+  const items = lis.map((li) => ({ at: frameOf(li), item: asItem(li, /^\s*\d+:\d+\s+/) }))
+  for (const ul of qs.querySelectorAll(':scope > ul')) ul.remove()
+  if (!items.some((x) => x.at)) { qs.append(...items.map((x) => x.item)); return }
+  const byAt = new Map<string, HTMLElement[]>()
+  for (const x of items) byAt.set(x.at ?? '', [...(byAt.get(x.at ?? '') ?? []), x.item])
+  for (const [at, list] of byAt) {
+    const d = atFold(`${at} · ${list.length}`, at, list.length)
+    d.append(...list)
+    qs.appendChild(d)
+  }
+}

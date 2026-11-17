@@ -1,15 +1,15 @@
 // BT Servant Mini: a chat page. Question -> offline model (slots) -> call sheet -> recipe over the installed language packs ->
 // a presenting sentence (converse.ts) + the information found + follow-ups. Up to three conversations, kept on the phone.
-import { passageContext, resetLangs, type Sheet } from './answer'
-import { backPanel, fillTitles, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
-import { chooseCards, moreLabel, showsCards } from './helpcards'
+import { isSourceLine, passageContext, resetLangs, type Sheet } from './answer'
+import { backPanel, fillTitles, groupObsHelps, linkFrameWords, linkObsWords, markCited, renderHelpCards, renderHelps, renderStudy, setHooks, setViewLang } from './view'
+import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { resetMacula } from './macula'
 import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
-import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
+import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
 import { has } from './commands'
 import { resetSearch } from './search'
@@ -36,7 +36,8 @@ import { devOn, type Fixture, initDev } from './dev'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel, obsServer, pictureFrame } from './obs'
+import { obsLabel, obsServer, parseObsRef, pictureFrame } from './obs'
+import { type ObsStudy, obsStudyOf } from './obswords'
 import { addObsPictures, addVersePicture } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
@@ -241,9 +242,16 @@ const LIMITS: Record<string, string> = {
   id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
 }
 /** The online answer's text, with its badge ("Online AI · model"). */
+/**
+ * The online answer, last and folded ("Online AI · Llama 3.3 70B", Abel, Nov 17: "la explicación de la IA debería estar colapsada
+ * también"): the phone's answer is read first, the AI's when the person opens it. Sharing and saving still take its text.
+ */
 function aiBlock(a: NonNullable<Msg['ai']>): HTMLElement {
-  const ai = el('div', 'ai')
-  ai.appendChild(el('span', 'ai-badge', bidiLabel(`${OT().label} · ${modelLabel(a.model)}`, nav)))
+  const ai = document.createElement('details')
+  ai.className = 'ai sources'
+  const sum = document.createElement('summary')
+  sum.appendChild(el('span', 'ai-badge', bidiLabel(`${OT().label} · ${modelLabel(a.model)}`, nav)))
+  ai.appendChild(sum)
   const body = el('div', 'ai-text')
   body.dir = mdDir(a.text) // an Arabic answer reads right to left (its English paragraphs left to right: md.ts)
   body.innerHTML = md(a.text)
@@ -314,34 +322,17 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
   const asked = askedFor(m)
-  // with an online answer (or while it is written), it comes first, then the helps the phone found as cards in sight (the
-  // articles it was grounded in first), then the whole phone's answer folded behind what it holds ("See all 66 notes…").
-  // The cards are drawn already while the answer is written and stay where they are when it arrives (fillAi).
   // a one-verse answer: the picture of the Open Bible Stories frame that tells the verse (obs-frames), above the answer and outside
   // any fold, when the phone can show it (obsimg.ts addVersePicture; an OBS answer has its own pictures, never this one)
   const picSlot = el('div', 'verse-pic-slot')
   d.appendChild(picSlot)
   void addVersePicture(picSlot, m.meta, m.ui ?? nav, (ref) => pictureFrame(ref, m.lang ?? 'en'))
-  let host: HTMLElement = d
-  if (showsCards(m, pending)) {
-    d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
-    const ui = m.ui ?? nav
-    const plan = chooseCards({
-      study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: asked,
-      sources: m.ai?.sources?.length ? m.ai.sources : m.sources, cited: m.ai?.sources?.map((s) => s.id),
-    })
-    const src = document.createElement('details')
-    src.className = 'sources fold'
-    src.appendChild(el('summary', '', moreLabel(plan.more, ui)))
-    const reveal = (what: 'text' | 'answer') => {
-      src.open = true
-      const at = (what === 'text' && src.querySelector<HTMLElement>('.study .tx')) || src
-      at.scrollIntoView({ block: 'start', behavior: 'smooth' })
-    }
-    if (plan.cards.length) d.appendChild(renderHelpCards(plan.cards, { ui, lang: m.lang ?? 'en', study: m.study, helps: m.helps, reveal }))
-    d.appendChild(src)
-    host = src
-  }
+  // the phone's answer first, open, as without online AI (the passage, its helps folded as always); with an online answer (or
+  // while it is written), then the helps it was grounded in as cards behind one fold ("Helps of this answer (3)"), then the
+  // online answer itself, last, with its badge (Abel, Nov 17: "primero es el contenido que viene de los datos"). It is drawn
+  // the same while it is written ("Writing…" last) and when it arrives (fillAi puts it in that place).
+  const host: HTMLElement = d
+  let sourceLine = ''
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.study) {
     const sb = host.appendChild(renderStudy(m.study, asked))
@@ -355,14 +346,42 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
     box.dir = mdDir(m.info)
     fillTitles(box, m.lang ?? 'en')
+    // the source line ("Fuente: es-419_gl/es-419/obs v2, …"), technical, goes into the "details" fold below (Abel, Nov 17)
+    const last = box.lastElementChild
+    if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isSourceLine(last.textContent ?? '')) {
+      sourceLine = last.textContent?.trim() ?? ''
+      last.remove()
+    }
     // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
     addObsPictures(box, m.meta, m.ui ?? nav)
     // an OBS story or frame: the words its notes and key terms quote, tappable as a passage's (obswords.ts)
     if (m.obs) linkObsWords(box, m.obs)
+    // its helps in three levels: all the notes, a frame's, each note (view.ts)
+    if (m.obs) groupObsHelps(box)
     host.appendChild(box)
     pageAnswer(box, m.ui ?? nav)
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
+  if (showsCards(m, pending)) {
+    const ui = m.ui ?? nav
+    const plan = chooseCards({
+      study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: asked,
+      sources: m.ai?.sources?.length ? m.ai.sources : m.sources, cited: m.ai?.sources?.map((s) => s.id),
+    })
+    // the cards of the text and of the phone's answer would repeat what is open above: the notes and articles only
+    const cards = plan.cards.filter((c) => c.kind !== 'text' && c.kind !== 'answer')
+    const reveal = () => {}
+    if (cards.length) {
+      const fold = document.createElement('details')
+      fold.className = 'sources fold'
+      fold.appendChild(el('summary', '', `${cardsT(ui).head} (${cards.length})`))
+      const box = renderHelpCards(cards, { ui, lang: m.lang ?? 'en', study: m.study, helps: m.helps, reveal })
+      box.querySelector('.hc-head')?.remove() // the fold says it
+      fold.appendChild(box)
+      d.appendChild(fold)
+    }
+    d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
+  }
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
   // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
   const s5 = devOn('obs5m')
@@ -381,7 +400,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pl.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pl)
   }
-  if (m.follow?.length) d.appendChild(followRow(m, m.follow))
+  if (m.follow?.length) d.appendChild(followRow(m, m.follow, 'follow', backs.length))
   // far from where the conversation started: "Shall we start a new conversation for this?", while it is the last answer
   if (m.drift && cv && cv.msgs[cv.msgs.length - 1] === m && nodeOf(cv.graph, m.node)?.drift === 'offered') d.appendChild(driftOffer(cv, m))
   // the language is missing: straight to where it is added
@@ -441,10 +460,14 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(bar)
     draw()
   }
-  if (m.meta) {
+  if (m.meta || sourceLine) {
     const det = document.createElement('details')
-    det.appendChild(el('summary', '', bidiLabel(m.meta.split('\n')[0]!, m.ui ?? nav)))
-    det.appendChild(el('pre', '', m.meta.split('\n').slice(1).join('\n')))
+    det.appendChild(el('summary', '', bidiLabel(m.meta?.split('\n')[0] || T.details, m.ui ?? nav)))
+    if (sourceLine) {
+      const p = det.appendChild(el('p', 'src-line', sourceLine))
+      p.dir = 'auto'
+    }
+    if (m.meta) det.appendChild(el('pre', '', m.meta.split('\n').slice(1).join('\n')))
     d.appendChild(det)
   }
   return d
@@ -452,45 +475,66 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
 /** An answer that can be asked again (it failed): the same question, the same way. */
 const retries = new WeakMap<Msg, () => void>()
 /** The next steps under an answer: a ready sheet (no model call), Browse at a book or manual, or the question again. */
-function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
+/** "More ▸": the next steps that are not in sight (converse.ts splitFollow). */
+const MORE: Record<string, string> = { en: 'More', es: 'Más', fr: 'Plus', id: 'Lainnya', hi: 'और', ar: 'المزيد' }
+/**
+ * A row of next steps. `backs`: how many ways back are drawn above it (the main row): it then shows only a few, the way back
+ * counted, and the others behind "More ▸" (Abel, Nov 17: ten buttons under Genesis 3 were a wall); the back row shows all.
+ */
+function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTMLElement {
   const f = el('div', cls)
   // in the app's direction (not the answer's: an Arabic answer in an English app keeps English buttons left to right)
   const ui = m.ui ?? nav
   f.dir = rtlLang(ui) ? 'rtl' : 'ltr'
-  for (const x of follow) {
-    const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
+  const { shown, more } = backs < 0 ? { shown: follow, more: [] as Followup[] } : splitFollow(follow, backs)
+  for (const x of shown) f.appendChild(followButton(m, x))
+  if (more.length) {
+    const rtl = rtlLang(ui)
+    const b = el('button', 'more', bidiLabel(`${MORE[ui.split('-')[0]!] ?? MORE.en} ${rtl ? '◂' : '▸'}`, ui)) as HTMLButtonElement
     b.type = 'button'
-    if (x.back || x.toPath || x.toSession) b.className = 'back'
-    else if (x.pathNext) b.className = 'path-next'
     b.onclick = () => {
-      if (x.back) goTo(x.back, 'back')
-      else if (x.browse) {
-        closePanel()
-        openExploreAt(x.browse)
-      } else if (x.again) {
-        if (busy) return
-        // the same question the same way: while the app is open, its own call; after a reload, the button's sheet again, or
-        // the text the person typed (never a button's label as if typed)
-        const again = retries.get(m)
-        if (again) again()
-        else if (x.again.sheet) runSheet(x.again.label ?? x.label, x.again.sheet, m.ui ?? nav)
-        else if (x.again.q) {
-          input.value = x.again.q
-          form.requestSubmit()
-        }
-      } else if (x.add) {
-        // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
-        if (busy || b.disabled) return
-        b.disabled = true
-        addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
-          b.disabled = false
-          b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
-        })
-      } else if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav)
+      const bs = more.map((x) => followButton(m, x))
+      b.replaceWith(...bs)
+      bs[0]?.focus()
     }
     f.appendChild(b)
   }
   return f
+}
+/** One next step's button. */
+function followButton(m: Msg, x: Followup): HTMLButtonElement {
+  const ui = m.ui ?? nav
+  const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
+  b.type = 'button'
+  if (x.back || x.toPath || x.toSession) b.className = 'back'
+  else if (x.pathNext) b.className = 'path-next'
+  b.onclick = () => {
+    if (x.back) goTo(x.back, 'back')
+    else if (x.browse) {
+      closePanel()
+      openExploreAt(x.browse)
+    } else if (x.again) {
+      if (busy) return
+      // the same question the same way: while the app is open, its own call; after a reload, the button's sheet again, or
+      // the text the person typed (never a button's label as if typed)
+      const again = retries.get(m)
+      if (again) again()
+      else if (x.again.sheet) runSheet(x.again.label ?? x.label, x.again.sheet, m.ui ?? nav)
+      else if (x.again.q) {
+        input.value = x.again.q
+        form.requestSubmit()
+      }
+    } else if (x.add) {
+      // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
+      if (busy || b.disabled) return
+      b.disabled = true
+      addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
+        b.disabled = false
+        b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
+      })
+    } else if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav)
+  }
+  return b
 }
 /**
  * The drift offer under an answer (pipeline.ts graphStep): [New conversation] moves this question and its answer to a new
@@ -1432,7 +1476,25 @@ function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
     // an answer shown on a card is remembered here, in memory only, for share and the online context (never saved, never counted)
     reveal: (id: string, shown: boolean) => { if (node) revealOn(cv.id, node, id, shown) },
     // (a mark is kept with the conversation and the saved place, as any answer is; saveSession asks keepHistory and never throws)
-    marked: () => { save(); if (g.session) saveSession(cv.id, g.session) } }
+    marked: () => { save(); if (g.session) saveSession(cv.id, g.session) },
+    // the frame's words: its notes and key terms in the language of the card's text (its quotes must be in it; obswords.ts)
+    words: (text: HTMLElement, ref: string, root: HTMLElement, lang: string) => {
+      const f = parseObsRef(ref)?.f
+      if (f) void frameStudy(ref, lang).then((o) => { if (o) linkFrameWords(text, o, f, root) }).catch(() => {})
+    } }
+}
+/** A frame's helps for its words, read once (a card is drawn again at each turn) */
+const frameStudies = new Map<string, Promise<ObsStudy | null>>()
+function frameStudy(ref: string, lang: string): Promise<ObsStudy | null> {
+  const k = `${ref}|${lang}`
+  // only quotes in the text's language (obsPack falls back to another pack: its quotes would mark wrong words, or none);
+  // nothing found is not kept (a pack added later links the words)
+  if (!frameStudies.has(k)) frameStudies.set(k, obsStudyOf({ ref, lang }).catch(() => null).then((o) => {
+    if (o?.lang.split('-')[0] === lang.split('-')[0]) return o
+    frameStudies.delete(k)
+    return null
+  }))
+  return frameStudies.get(k)!
 }
 /** A step of the session as a turn of the chat */
 function runStep(label: string, s: Session) {

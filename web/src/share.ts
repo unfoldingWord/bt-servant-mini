@@ -17,13 +17,13 @@ const LIMIT = 1000
 /** The part of a Msg that sharing reads. */
 export type ShareMsg = { who: string; text?: string; intro?: string | null; info?: string; ai?: { text: string }; meta?: string; limits?: boolean; packs?: boolean }
 
-const LABELS: Record<string, { label: string; tip: string }> = {
-  en: { label: 'Share', tip: 'Share this answer (WhatsApp…)' },
-  es: { label: 'Compartir', tip: 'Compartir esta respuesta (WhatsApp…)' },
-  fr: { label: 'Partager', tip: 'Partager cette réponse (WhatsApp…)' },
-  id: { label: 'Bagikan', tip: 'Bagikan jawaban ini (WhatsApp…)' },
-  hi: { label: 'साझा करें', tip: 'यह उत्तर साझा करें (WhatsApp…)' },
-  ar: { label: 'مشاركة', tip: 'شارك هذه الإجابة (WhatsApp…)' },
+const LABELS: Record<string, { label: string; tip: string; ai: string }> = {
+  en: { label: 'Share', tip: 'Share this answer (WhatsApp…)', ai: 'Online AI' },
+  es: { label: 'Compartir', tip: 'Compartir esta respuesta (WhatsApp…)', ai: 'IA en línea' },
+  fr: { label: 'Partager', tip: 'Partager cette réponse (WhatsApp…)', ai: 'IA en ligne' },
+  id: { label: 'Bagikan', tip: 'Bagikan jawaban ini (WhatsApp…)', ai: 'AI daring' },
+  hi: { label: 'साझा करें', tip: 'यह उत्तर साझा करें (WhatsApp…)', ai: 'ऑनलाइन AI' },
+  ar: { label: 'مشاركة', tip: 'شارك هذه الإجابة (WhatsApp…)', ai: 'ذكاء اصطناعي عبر الإنترنت' },
 }
 
 /** Markdown to the plain words (what WhatsApp would otherwise show as stars and hashes). */
@@ -79,7 +79,9 @@ export function shareText(m: ShareMsg, ui: string, question?: string): string | 
   if (!body?.trim()) return null
   const parts: string[] = []
   if (question?.trim()) parts.push(question.trim())
-  parts.push(trimAt(plainText(body)))
+  // the online answer says it is one (as its badge in the app): "Online AI: …"
+  const ai = !!m.ai?.text
+  parts.push((ai ? `${(LABELS[ui.split('-')[0]!] ?? LABELS.en!).ai}: ` : '') + trimAt(plainText(body)))
   const ref = referenceOf(m, ui)
   if (ref) parts.push(ref)
   parts.push(APP_LINK)

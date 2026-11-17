@@ -9,9 +9,10 @@ import { OBS_BYTES, obsBytes, withObs } from './obs-fixture'
 import { answer, type ConvState, contextSheet, type Made } from '../src/pipeline'
 import { newGraph, nodeOf } from '../src/graph'
 import { passageContext, type Sheet } from '../src/answer'
-import { namedStory, obsAsked, obsPack, storyByName, obsSteps, OW, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
+import { namedStory, obsAnswer, obsAsked, obsPack, storyByName, obsSteps, OW, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
 import { openLang } from '../src/packs'
 import { strip } from '../src/bidi'
+import { unfold } from '../src/focus'
 
 afterAll(async () => { await installPacks(ALL_PACKS) })
 
@@ -72,6 +73,39 @@ describe('questions that name a story or a frame', () => {
     expect(r.reply.info).toContain('**«to turn to God»**')
     // the question was not asked for: one tap away
     expect(r.reply.info).toContain('▸ Questions (1)')
+  })
+
+  test('a frame with all its helps: each one folded with its count, as under a passage (Abel, Nov 17)', async () => {
+    const r: any = await ask('obs 3:4', 'en')
+    const info: string = r.reply.info
+    expect(info).not.toContain('### ')
+    const folds = info.split('\n\n').filter((b) => b.startsWith('▸ ')).map((b) => b.split('\n')[0])
+    expect(folds).toEqual([expect.stringMatching(/^▸ Notes for OBS 3:4 \(\d+\)$/), '▸ Questions (1)', expect.stringMatching(/^▸ Key terms \(\d+\)$/)])
+    // all of it is still in the answer (sharing, online AI): the notes, the question, the terms' links
+    expect(info).toContain('**«Noah warned the people»**')
+    expect(info).toMatch(/\[Noah\]\(tw:names\/noah\)/)
+    // the frame's text before the folds; "no notes" said before them, not inside the last one
+    expect(info.indexOf('**3:4**')).toBeLessThan(info.indexOf('▸ '))
+    const r5: any = await ask('obs 3:5', 'en')
+    // only the helps there are: no "There are no questions" line between the frame and its folds (Abel, Nov 17)
+    expect(r5.reply.info).not.toContain('There are no')
+    // asked alone, "none" is the answer
+    const q5 = await obsAnswer({ ref: 'obs 3:5', what: ['notes'], lang: 'en' }, 'en')
+    expect(q5.answer).toContain('There are no translation notes for OBS 3:5')
+    // shared or sent to the online AI without the fold marks: every note and the question still there
+    const plain = unfold(info)
+    expect(plain).not.toContain('▸')
+    expect(plain).toContain('**«Noah warned the people»**')
+    expect(plain).toMatch(/^- \*\*/m)
+  })
+
+  test('the one help a frame question asks for stays open; the text and the others folded', async () => {
+    const o = await obsAnswer({ ref: 'obs 3:4', what: ['text', 'notes'], lang: 'en' }, 'en')
+    expect(o.answer).toContain('### Translation notes for OBS 3:4')
+    expect(o.answer).toContain('▸ Questions (1)')
+    const q = await obsAnswer({ ref: 'obs 3:4', what: ['questions'], lang: 'en' }, 'en')
+    expect(q.answer).toContain('### Comprehension questions for OBS 3:4')
+    expect(q.answer).toMatch(/▸ Notes for OBS 3:4 \(\d+\)/)
   })
 
   test('a whole story in five languages, from the English pack (said so), with its Bible passages', async () => {

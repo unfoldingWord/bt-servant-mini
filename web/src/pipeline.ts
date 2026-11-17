@@ -8,7 +8,7 @@ import { articleForQuestion, articlesNamed, asksAbout, GOOD_COVERAGE, introFor, 
 import { academyLabel, bookLabel, browseStep, type Followup, followups, intro, introLabel, MAX_FOLLOW, nextWords, searchIntro, whatWord } from './converse'
 import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
-import { CANON, hasLang, installedLangs, openLang } from './packs'
+import { CANON, hasLang, installedLangs, openLang, uiLangs } from './packs'
 import { type ObsStudy, obsStudyOf } from './obswords'
 import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyName, storyStep } from './obs'
 import { findSections, findStories, resetSections, type Section, type SectionHit, sectionRef } from './storyfind'
@@ -1299,6 +1299,19 @@ async function relatedOf(lang: string, id: string, max = 3): Promise<{ id: strin
   return out
 }
 /** An article's name in a pack (the first of its names), or null when the pack does not list it. */
+/**
+ * A Translation Academy article's title for its button: in the app's language when a pack on the phone has the article (Abel,
+ * Nov 17: "Academia: Introduction of New and Old Participants" in a Spanish app), and that pack is where it opens; else `l`'s.
+ */
+async function taTitle(id: string, l: string, ui: string): Promise<{ title: string | null; lang: string }> {
+  for (const u of uiLangs(ui, await installedLangs().catch(() => [] as string[]))) {
+    if (u === l || !(await hasTa(u, id))) continue
+    const t = await nameIn(u, id).catch(() => null)
+    // (and it opens there: the button says what it opens)
+    if (t) return { title: t, lang: u }
+  }
+  return { title: await nameIn(l, id), lang: l }
+}
 async function nameIn(lang: string, id: string): Promise<string | null> {
   const names = ((await (await openLang(lang)).maps()) as any).map?.core?.names ?? {}
   return names[id]?.length ? String(names[id][0]) : null
@@ -1316,8 +1329,8 @@ async function packSteps(sheet: Sheet, study: Study | null, ui: string): Promise
     if (!id) return []
     for (const l of new Set([sheet.lang, 'en'])) {
       if (!(await hasTa(l, id))) continue
-      const title = await nameIn(l, id)
-      return title ? [{ label: academyLabel(ui, title), sheet: article(id, l) }] : []
+      const { title, lang } = await taTitle(id, l, ui)
+      return title ? [{ label: academyLabel(ui, title), sheet: article(id, lang) }] : []
     }
     return []
   }
@@ -1348,8 +1361,10 @@ const passageSheet = (base: Sheet, ref: string, what: string[], l = base.lang): 
 async function taStep(base: Sheet, id: string, ui: string): Promise<Follow | null> {
   for (const l of new Set([base.lang, 'en', ...(await installedLangs())])) {
     if (!(await hasTa(l, id))) continue
-    const title = await nameIn(l, id)
-    return title ? { label: academyLabel(ui, title), sheet: articleSheet(base, id, l) } : null
+    // its title in the app's language when a pack on the phone has the article (Abel, Nov 17: "Academia: Introduction of New
+    // and Old Participants" in a Spanish app), else the found pack's; the article opens where it was found
+    const { title, lang } = await taTitle(id, l, ui)
+    return title ? { label: academyLabel(ui, title), sheet: articleSheet(base, id, lang) } : null
   }
   return null
 }
@@ -2690,17 +2705,17 @@ ${x.meta}` },
         const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(sheet.ref ?? '')
         if (im && (im[2] !== 'front' || start.length)) {
           const f = await firstSection({ ...sheet, lang: pack }, im[1]!, im[2] === 'front' ? 1 : +im[2]!, ui).catch(() => null)
-          if (f) follow.splice(1, 0, f)
+          if (f) follow.splice(1, 0, { ...f, key: true })
         } else if (!im) {
           const f = await nextSection({ ...sheet, lang: pack }, ui).catch(() => null)
-          if (f) follow.unshift(f)
+          if (f) follow.unshift({ ...f, key: true })
         }
       }
       // the story of Open Bible Stories this passage is told in, at its nearest frame (obs.ts), after the first steps
       if (sheet.intent === 'passage' && pack && !none && follow.length && sheet.ref) {
         const text = study?.texts[0]?.verses.map((v) => v.p.map((p) => p[0]).join('')).join(' ') ?? ''
         const st = await storyStep(sheet.ref, sheet.lang, ui, text).catch(() => null)
-        if (st) follow.splice(Math.min(3, follow.length), 0, { label: st.label, sheet: passageSheet(sheet, st.ref, st.ref.includes(':') ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'], st.lang) })
+        if (st) follow.splice(Math.min(3, follow.length), 0, { label: st.label, key: true, sheet: passageSheet(sheet, st.ref, st.ref.includes(':') ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'], st.lang) })
       }
       // one verse: who is who in it and its sentence structure (macula.ts), before the introductions
       if (sheet.intent === 'passage' && pack && !none && follow.length) {

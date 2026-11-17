@@ -274,3 +274,31 @@ describe('the bar and the outline', () => {
     expect((drawOutline(s, fx, 'ar', { jump() {}, how() {}, end() {} }) as unknown as FakeEl).dir).toBe('rtl')
   })
 })
+
+describe("a card's frame words (Abel, Nov 17: tappable as in an OBS answer)", () => {
+  test('the frame text goes to the `words` hook with its ref and the card; drawing runs no turn and shows no answer', () => {
+    const s = session('m1', atFrame('m1', 'observation', '1:5'))
+    const card = cardOf(fx, s, null, 'en')!
+    const got: [FakeEl, string, FakeEl, string][] = []
+    runs.length = 0
+    const d = drawCard(card, 'en', { ...hooks(s), words: (t: any, ref: string, root: any, lang: string) => void got.push([t, ref, root, lang]) }) as unknown as FakeEl
+    expect(got.length).toBe(1)
+    const [text, ref, root, lang] = got[0]!
+    expect(ref).toBe('obs 1:5')
+    // the language of the card's text (the manual's), not the session's: its quotes are the ones that match that text
+    expect(lang).toBe(card.tfLang)
+    expect(text.textContent).toBe(card.frame!.text) // only the frame's words (not its "OBS 1:5" label)
+    expect(root).toBe(d)
+    expect(runs.length).toBe(0)
+    for (const a of answersOf(card.questions)) expect(d.seen).not.toContain(a)
+    // without the hook (tests, no session): drawn as before
+    expect(() => drawCard(card, 'en', hooks(s))).not.toThrow()
+  })
+  test('main.ts gives the hook: the helps in the language of the card text, read once, the same linking as an OBS answer (the panel, no turn)', () => {
+    const m = readFileSync(join(import.meta.dir, '..', 'src', 'main.ts'), 'utf8')
+    const words = m.slice(m.indexOf('function cardHooks('), m.indexOf('function frameStudy('))
+    expect(words.slice(words.indexOf('words:'))).toContain('frameStudy(ref, lang)')
+    expect(words.slice(words.indexOf('words:'))).toContain('linkFrameWords(text, o, f, root)')
+    expect(words.slice(words.indexOf('words:'))).not.toContain('runSheet')
+  })
+})
