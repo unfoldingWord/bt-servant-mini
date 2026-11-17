@@ -36,6 +36,7 @@ import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type S
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
 import { obsLabel } from './obs'
+import { addObsPictures } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
@@ -343,6 +344,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
     box.dir = mdDir(m.info)
     fillTitles(box, m.lang ?? 'en')
+    // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
+    addObsPictures(box, m.meta, m.ui ?? nav)
     host.appendChild(box)
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
