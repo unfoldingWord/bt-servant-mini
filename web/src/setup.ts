@@ -3,6 +3,7 @@
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { FU } from './firstuse'
 import { rtlLang } from './bidi'
+import { exportImages, imagesInstalled, imagesLine, installImages, isZip, IW, PACK_FILE, removeImages } from './obsimg'
 import { availableLangs, downloadLang, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
 
 type S = {
@@ -265,6 +266,7 @@ export async function languagesSection(lang: string, after: () => void): Promise
     if (o === 'added') row.appendChild(btn(s.remove, async () => { await removeLang(l); after() }, 'small del'))
     box.appendChild(row)
   }
+  box.appendChild(await imagesSection(lang, box, s, after))
   box.appendChild(el('h2', '', s.addLangs))
   const add = el('div', 'langs')
   const list = el('div', '')
@@ -296,14 +298,22 @@ export async function languagesSection(lang: string, after: () => void): Promise
   }))
   const file = document.createElement('input')
   file.type = 'file'
-  file.accept = '.tcpack,application/octet-stream'
+  file.accept = '.tcpack,.zip,application/octet-stream,application/zip'
   file.hidden = true
   file.onchange = async () => {
     const f = file.files?.[0]
     if (!f) return
     alertish(box, s.working)
     try {
-      const r = await importPack(new Uint8Array(await f.arrayBuffer()))
+      const bytes = new Uint8Array(await f.arrayBuffer())
+      // the Open Bible Stories pictures (a zip; a .tcpack starts otherwise): into their own place
+      if (isZip(bytes)) {
+        const got = await installImages(bytes, lang)
+        alertish(box, imagesLine(lang, got))
+        after()
+        return
+      }
+      const r = await importPack(bytes)
       alertish(box, r.langs.length ? r.langs.map((l) => PACK_NAMES[l] ?? l).join(', ') + ' ✓' : `${s.failed} ${r.rejected}`)
       after()
     } catch (e) {
@@ -313,6 +323,51 @@ export async function languagesSection(lang: string, after: () => void): Promise
   add.append(btn(s.loadPack, () => file.click()), file)
   box.append(add, list)
   return box
+}
+
+/**
+ * The Open Bible Stories pictures (obsimg.ts): one pack for every language, from a file (SD card, USB, Bluetooth). What is on
+ * the phone, the credit the license asks for, and load, share or remove.
+ */
+async function imagesSection(lang: string, box: HTMLElement, s: S, after: () => void): Promise<HTMLElement> {
+  const w = IW(lang)
+  const sec = el('div', 'obs-images')
+  sec.appendChild(el('h2', '', w.title))
+  const have = await imagesInstalled().catch(() => null)
+  const row = el('div', 'row')
+  row.appendChild(el('span', 'grow', imagesLine(lang, have)))
+  if (have) {
+    row.appendChild(btn(w.share, async () => {
+      alertish(box, s.working)
+      try {
+        const bytes = await exportImages()
+        const err = bytes ? await saveToDownloads(PACK_FILE, bytes, 'application/zip') : 'no pack'
+        alertish(box, err ? `${s.failed} ${err}` : `${s.saved} (${mb(bytes!.length)})`)
+      } catch (e) {
+        alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
+      }
+    }, 'small'))
+    row.appendChild(btn(w.remove, async () => { await removeImages(); after() }, 'small del'))
+  } else {
+    const file = document.createElement('input')
+    file.type = 'file'
+    file.accept = '.zip,application/zip'
+    file.hidden = true
+    file.onchange = async () => {
+      const f = file.files?.[0]
+      if (!f) return
+      alertish(box, s.working)
+      try {
+        alertish(box, imagesLine(lang, await installImages(new Uint8Array(await f.arrayBuffer()), lang)))
+        after()
+      } catch (e) {
+        alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
+      }
+    }
+    row.append(btn(w.load, () => file.click(), 'small'), file)
+  }
+  sec.append(row, el('p', 'note credit', w.credit))
+  return sec
 }
 
 /** About (and first launch): what BT Servant Mini is, how it differs from BT Servant, the version; the setup of the light build. */
@@ -353,4 +408,4 @@ export const modelNewer = (lang: string) => str(lang).newer
 export const packsTitle = (lang: string) => str(lang).langs
 
 // desktop testing only (no Android bridge): reach the pack functions from the console
-if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, offers, openLang }
+if (!(window as any).Android) (window as any).__packs = { exportPack, importPack, removeLang, origin, installedLangs, availableLangs, offers, openLang, installImages, removeImages, imagesInstalled }
