@@ -508,6 +508,63 @@
   .gm-path .gm-ic { color: var(--accent); }
   .gm-path .ex-row-t { color: var(--accent); font-weight: 600; }
   [dir="rtl"] .gm-path svg { transform: scaleX(-1); }
+  /* The 5M study session (obs5mview.ts; dev switch obs5m): the bar under the header, the step cards, the review and checking cards, the outline */
+  .s5-resume { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 0 auto 18px; max-width: 34ch; }
+  .s5-resume-btn { min-height: 44px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--fg); font: 15px/1.35 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; text-align: start; cursor: pointer; }
+  .s5-bar { display: flex; align-items: center; gap: 2px; margin: 0 10px 6px; padding: 2px 4px; border-radius: 12px; background: var(--accent-soft); color: var(--fg); }
+  .s5-bar.dimmed { opacity: .6; }
+  .s5-bar button { min-height: 44px; min-width: 44px; border: 0; background: transparent; color: inherit; border-radius: 10px; cursor: pointer; font: inherit; }
+  .s5-bar button:active { background: var(--line); }
+  .s5-bar button:disabled { opacity: .35; cursor: default; }
+  .s5-where { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; padding: 4px 6px; text-align: start; }
+  .s5-bar-title { font: 600 13.5px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s5-bar-place { font: 12.5px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; color: var(--accent); max-width: 100%; overflow-wrap: anywhere; }
+  .s5-nav { flex: none; font: 17px/1 system-ui, sans-serif !important; color: var(--accent) !important; }
+  .s5-card { background: var(--card); border-radius: 14px; padding: 12px 14px; margin: 4px 0 8px; font: 15px/1.5 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  .s5-title { font: 600 15.5px/1.3 Georgia, "Noto Serif", serif; margin: 0 0 8px; }
+  .s5-frame { margin: 0 0 10px; }
+  .s5-img { display: block; width: 100%; height: auto; border-radius: 10px; margin-bottom: 6px; background: var(--line); }
+  .s5-frame-text { margin: 0; }
+  .s5-md { margin: 0 0 8px; }
+  .s5-md > :first-child { margin-top: 0; }
+  .s5-md h3 { font: 600 14px/1.3 system-ui, sans-serif; margin: 12px 0 4px; }
+  .s5-md h4 { font: 600 13.5px/1.3 system-ui, sans-serif; margin: 10px 0 4px; color: var(--muted); }
+  .s5-qs { margin: 8px 0 0; padding-inline-start: 22px; }
+  .s5-q { margin: 0 0 12px; }
+  .s5-q-text { margin: 0 0 4px; font-weight: 600; }
+  .s5-a { margin: 4px 0 6px; padding: 6px 10px; border-inline-start: 3px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+  .s5-q-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .s5-card button { min-height: 44px; font: 14px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; color: var(--fg); background: transparent;
+    border: 1px solid var(--line); border-radius: 10px; padding: 7px 11px; text-align: start; cursor: pointer; }
+  .s5-card button:active { background: var(--line); }
+  .s5-card button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .s5-show { color: var(--muted) !important; }
+  .s5-review, .s5-check { list-style: none; margin-inline-start: -22px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+  .s5-review .s5-q-text { font-size: 17px; }
+  .s5-terms { list-style: none; margin: 8px 0 0; padding: 0; }
+  .s5-term { margin: 0 0 10px; }
+  .s5-term-btn { border-color: var(--accent) !important; color: var(--accent) !important; margin-bottom: 4px; }
+  .s5-fold, .s5-allbtn { margin: 4px 0 8px; }
+  .s5-all { border: 1px solid var(--line); }
+  #s5out { position: fixed; inset: 0; z-index: 15; /* like Browse: under the PIN lock (60) */ background: var(--bg); display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  #s5out.open { display: flex; }
+  #s5out:focus { outline: none; }
+  #s5out .ex-head { padding-inline-start: 16px; }
+  .s5-outline { padding-top: 4px; }
+  .s5-out-title { font: 600 15px/1.3 Georgia, "Noto Serif", serif !important; text-transform: none !important; letter-spacing: 0 !important; color: var(--fg) !important; }
+  .s5-parts { list-style: none; margin: 0 0 12px; padding: 0; }
+  .s5-part-btn { width: 100%; min-height: 44px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 6px; border: 0; border-bottom: 1px solid var(--line);
+    background: transparent; color: var(--fg); font: 15px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; text-align: start; cursor: pointer; }
+  .s5-part-btn:active { background: var(--line); }
+  .s5-part-mark { width: 18px; flex: none; color: var(--muted); text-align: center; }
+  .s5-part.cur .s5-part-mark, .s5-part.cur .s5-part-name { color: var(--accent); font-weight: 650; }
+  .s5-part.done .s5-part-mark { color: var(--ok); }
+  .s5-part-name { flex: 1; min-width: 0; }
+  .s5-part-place { flex-basis: 100%; padding-inline-start: 28px; font-size: 13px; color: var(--accent); }
+  .s5-part-time { font-size: 12.5px; color: var(--muted); }
+  .s5-how, .s5-end { min-height: 44px; margin: 4px 6px 0 0; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: 14px system-ui, sans-serif; cursor: pointer; }
+  .s5-end { border-color: var(--accent); color: var(--accent); }
+  [hidden].s5-how { display: none; }
 </style>
 </head>
 <body>

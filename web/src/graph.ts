@@ -4,6 +4,7 @@
 // (`branch`). The person creates nothing; they see the graph (Map), and a tap on a point goes back there to go on from it.
 // No DOM here (main.ts draws it), so the decisions are tested under bun.
 import type { Learn } from './learn'
+import type { Session } from './obs5m'
 
 export type Edge = 'start' | 'line' | 'deeper' | 'branch'
 /** The compact sheet of a turn: what re-opens it (`lang`, `what`) and what the next turn is compared with (`ref`, `concept`). */
@@ -40,7 +41,12 @@ export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefor
   /** the step after `path`, when the last answer was on it (the button "Next: …" under it; the composer offers it too) */
   pathNext?: Path
   /** the learning path through Translation Academy the person started from the welcome (learn.ts), and where it is */
-  learn?: Learn }
+  learn?: Learn
+  /**
+   * the 5M study session in progress (obs5m.ts; dev switch `obs5m`) and its current step: its steps are points of kind `obs5m`,
+   * its frame's helps go deeper from them; `pathPaused`: a light path was on when it started, kept and not offered meanwhile
+   */
+  session?: Session; pathPaused?: boolean }
 
 export const newGraph = (): Graph => ({ nodes: [], cur: null })
 export const nodeOf = (g: Graph | undefined, id: string | null | undefined): GNode | undefined =>
@@ -48,7 +54,16 @@ export const nodeOf = (g: Graph | undefined, id: string | null | undefined): GNo
 
 /** A point where the person was reading: a passage or an introduction, or the verses a search found. */
 const isPassage = (n: GNode) => (n.kind === 'passage' || n.kind === 'intro') && !!n.sheet.ref
-const isPlace = (n: GNode) => isPassage(n) || (n.kind === 'search' && !!n.sheet.ref)
+// (a step of a 5M session too: the way back from its helps stops there; pipeline.ts sessionStep makes it the way back to the session)
+const isPlace = (n: GNode) => isPassage(n) || (n.kind === 'search' && !!n.sheet.ref) || n.kind === 'obs5m'
+/** The point of a 5M session's current step (its latest), if the conversation has one. */
+export function sessionNode(g: Graph | undefined): GNode | undefined {
+  const s = g?.session
+  if (!s) return undefined
+  const id = `obs5m:${s.story}/${s.part}/${s.at}`
+  for (let i = g.nodes.length - 1; i >= 0; i--) if (g.nodes[i]!.kind === 'obs5m' && g.nodes[i]!.sheet.concept === id) return g.nodes[i]
+  return undefined
+}
 
 /** "rut 2:3" -> { book: rut, ch: 2 }; "rut front:intro" -> { book: rut, ch: null, intro }; "rut" -> { book: rut, ch: null } */
 export function place(ref: string | null): { book: string; ch: number | null; intro: boolean } | null {
@@ -116,6 +131,15 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
   if (!c) return { edge: 'start', parent: null }
   const deeper = { edge: 'deeper' as const, parent: c.id }
   const branch = { edge: 'branch' as const, parent: c.id }
+  // in a 5M session: its steps follow each other on one line (from the current step, wherever the conversation is); a help of
+  // the current step's frame (its `links`: key terms, the Academy articles its notes cite, its OBS frame, its Bible passage)
+  // goes deeper from that step, or from the current point when that point offered it (the Academy article of the frame's notes)
+  if (g.session) {
+    const st = sessionNode(g)
+    if (t.kind === 'obs5m' && (st || c.kind === 'obs5m')) return { edge: 'line', parent: (st ?? c).id }
+    const key = [t.sheet.concept, t.sheet.ref].find((k) => k && st?.links?.includes(k))
+    if (st && key) return c.links?.includes(key) ? deeper : { edge: 'deeper', parent: st.id }
+  }
   const p = passageAt(g, c.id)
   const P = place(p?.sheet.ref ?? null)
   const N = place(t.sheet.ref)
@@ -135,7 +159,7 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
       if (c.links?.includes(story)) return deeper
       if (p?.links?.includes(story)) return { edge: 'deeper', parent: p.id }
     }
-    if (c.sheet.ref?.startsWith('obs ') && c.links?.some((l) => l === t.sheet.ref || inChapters(l, N))) return deeper
+    if (c.kind !== 'obs5m' && c.sheet.ref?.startsWith('obs ') && c.links?.some((l) => l === t.sheet.ref || inChapters(l, N))) return deeper
     return branch
   }
   const id = t.sheet.concept
@@ -163,6 +187,8 @@ export function addNode(g: Graph, t: Turn & { label: string; copy?: boolean; fou
 export type MapRow =
   | { k: 'node'; node: GNode; depth: number; cur: boolean }
   | { k: 'more'; n: number; key: string; depth: number }
+  /** a 5M session: "OBS 1 · 5M", its steps one step in under it (`key`: its first step's id) */
+  | { k: 'group'; label: string; key: string; depth: number }
 /** A line of more `line` points than this in a row shows its first and last two and "… N more" between. */
 export const LINE_FOLD = 5
 
@@ -178,6 +204,12 @@ export function mapRows(g: Graph, open: Set<string> = new Set()): MapRow[] {
   }
   const rows: MapRow[] = []
   const walk = (n: GNode, depth: number) => {
+    // the first step of a 5M session: its group row, the steps under it
+    if (n.kind === 'obs5m' && nodeOf(g, n.parent)?.kind !== 'obs5m') {
+      const story = /^obs5m:(\d+)\//.exec(n.sheet.concept ?? '')?.[1]
+      rows.push({ k: 'group', label: `OBS ${story ?? ''} · 5M`, key: n.id, depth })
+      depth++
+    }
     rows.push({ k: 'node', node: n, depth, cur: n.id === g.cur })
     const ks = kids.get(n.id) ?? []
     for (const x of ks.filter((x) => x.edge !== 'line')) walk(x, depth + 1)

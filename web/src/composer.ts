@@ -65,6 +65,8 @@ export type Hooks = {
   browse: () => void
   /** a model or the online reader would read a free question (then no grey line); none given: as if one would */
   reader?: () => boolean
+  /** [Resume] a saved 5M session of this story (dev switch `obs5m`; main.ts) */
+  resume?: (story: number) => void
 }
 /** The box as the composer sees it: the textarea, or a plain object in the tests. */
 export type Box = { value: string; focus(): void; setSelectionRange?(a: number, b: number): void }
@@ -263,6 +265,11 @@ export class Composer {
       if (!composerOn() || this.hooks.busy()) return
       this.hooks.ask(s.label, sheet, ui)
       this.chipSent()
+      return this.clear()
+    }
+    // a saved 5M session: its conversation (or a new one) at its place
+    if (s.resume !== undefined) {
+      this.hooks.resume?.(s.resume)
       return this.clear()
     }
     // an article, the path's next step: asked as the button under an answer asks it

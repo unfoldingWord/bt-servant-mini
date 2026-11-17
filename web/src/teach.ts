@@ -81,7 +81,7 @@ export function understoodLine(got: { label: string }, ui: string, restore: () =
 /** A way of asking under an answer: it writes `fill` in the box, or (`choose`) lists the books in the composer's row. */
 export type Shape = { label: string; fill?: string; choose?: true }
 /** The kinds of answer that are not "found nothing": out of scope, no pack, past a book's end (they say why themselves). */
-const SAYS_WHY = new Set(['outofscope', 'nopack', 'edge', 'choose', 'resources'])
+const SAYS_WHY = new Set(['outofscope', 'nopack', 'edge', 'choose', 'resources', 'nosession'])
 /** An answer that found nothing for a typed question: no point in the graph, no source. */
 export const foundNothing = (r: { answered: string; found: number; node: string | null }): boolean =>
   !r.node && r.found === 0 && !SAYS_WHY.has(r.answered)

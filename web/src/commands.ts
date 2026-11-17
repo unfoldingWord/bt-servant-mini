@@ -9,6 +9,8 @@ export type Command = 'intro' | 'overview' | 'about' | 'tell' | 'chapter' | 'not
   // "how many times in this chapter?", "translate this", and the small words around them ("and", "what about", "show me")
   | 'next' | 'previous' | 'verse' | 'here' | 'thisChapter' | 'howMany' | 'translateThis' | 'this' | 'also'
   | 'there' | 'range' | 'bookWord'
+  // the 5M study session asked for by its words ("5M OBS 1"): the words alone; the caller checks for OBS/story and the number
+  | 'obs5m'
 
 const VOCAB = data as unknown as Record<Command, Record<string, string[]>>
 const cache = new Map<Command, RegExp>()

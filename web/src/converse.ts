@@ -152,6 +152,10 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   toPath?: boolean
   /** "Next: Ruth 1:2 · notes", the light path's next step (first under the answer, marked) */
   pathNext?: boolean
+  /** "← Back to the session: …", the way back to a 5M session's current step (pipeline.ts sessionStep): drawn like the way back */
+  toSession?: boolean
+  /** "Next: Movement 1 · observation · frame 6/16", a 5M session's next step (first under a step's card, marked) */
+  sessionNext?: boolean
   /** a unit to add to a language on a tap ("Add Open Bible Stories (218 KB)"), then `sheet` is asked again (main.ts) */
   add?: { lang: string; unit: string } }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */

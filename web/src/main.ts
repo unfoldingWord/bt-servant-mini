@@ -21,16 +21,22 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, codeReads, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
-import { backLine, GD, GT, mapRows, newGraph, nodeOf } from './graph'
+import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
-import { shareButton } from './share'
+import { shareButton, shareSession, shareTextButton } from './share'
 import { examplesFor, FU, languagePicker, packFor } from './firstuse'
 import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
 import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
+import { devOn, type Fixture, initDev } from './dev'
+import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
+import { drawBar, drawCard, drawOutline } from './obs5mview'
+import { W5 } from './obs5mwords'
+import { obsLabel } from './obs'
+import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
 import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
@@ -295,6 +301,12 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pm)
   }
+  // a step of a 5M session: where it is ("Movement 1 · observation · frame 5/16"), first
+  if (m.sessionMark && devOn('obs5m')) {
+    const sm = el('div', 'path-mark s5-mark', bidiLabel(m.sessionMark, m.ui ?? nav))
+    sm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
+    d.appendChild(sm)
+  }
   // what the person wrote about this verse, article or question (saved.ts), above the answer
   d.appendChild(yourNotes(savedQOf(m)))
   // the question this answers (the person's message before it): the passage shows the notes about its words first
@@ -334,11 +346,17 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     host.appendChild(box)
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
-  if (m.text) d.appendChild(el('div', 'plain', m.text))
+  // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
+  // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
+  const s5 = devOn('obs5m')
+  // (a card always draws hidden: what was revealed on it before is forgotten)
+  if (m.card && s5 && cv && m.node) forgetCard(cv.id, m.node)
+  if (m.card && s5) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav, m.node)))
+  else if (m.text) d.appendChild(el('div', 'plain', m.text))
   // found nothing: the ways of asking code reads, with what it knew of the question written in (a tap writes in the box)
   if (m.shapes?.length) d.appendChild(shapeRow(m.shapes, m.ui ?? nav, (s) => cmp.offer(s)))
-  // the way back to the passage this answer left (and to the path it left), on its own row, then the next steps
-  const backs = [m.back, m.pathBack].filter((f): f is Followup => !!f)
+  // the way back to the 5M session, to the passage this answer left (and to the path it left), on its own row, then the next steps
+  const backs = [s5 ? m.sessionBack : undefined, m.back, m.pathBack].filter((f): f is Followup => !!f)
   if (backs.length) d.appendChild(followRow(m, backs, 'follow back-row'))
   // a path starts: the line that proposes it, just above its first step
   if (m.pathLine) {
@@ -368,7 +386,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(a)
   }
   // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
-  const sh = m.waiting ? null : shareButton(m, m.ui ?? nav, asked)
+  const sh = m.waiting ? null : (s5 && m.card ? sessionShare(cv, m.ui ?? nav) : null) ?? shareButton(m, m.ui ?? nav, asked)
   if (sh) d.appendChild(sh)
   // ☆ Save and ✎ Note (savedview.ts); with an online answer, Save keeps its text too
   const keep = keepOf(m)
@@ -425,7 +443,7 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
   for (const x of follow) {
     const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
     b.type = 'button'
-    if (x.back || x.toPath) b.className = 'back'
+    if (x.back || x.toPath || x.toSession) b.className = 'back'
     else if (x.pathNext) b.className = 'path-next'
     b.onclick = () => {
       if (x.back) goTo(x.back, 'back')
@@ -628,6 +646,9 @@ function renderConv() {
       // few empty conversations; only once the languages are known
       const inv = INSTALLED.length ? offerFirst(nav, c.id, !convs.some((x) => x.msgs.length)) : null
       if (inv) w.appendChild(inv)
+      // a 5M session saved (dev switch): [Resume …], the ones used last
+      const r5 = resumeRow()
+      if (r5) w.appendChild(r5)
       const ex = el('div', 'examples')
       w.appendChild(ex)
       fillExamples(ex)
@@ -980,6 +1001,8 @@ function eraseAll() {
   forgetWelcome()
   forgetFreeHint() // the composer's grey line for a free question shows again the first three times
   eraseSaved() // and the saved items and notes
+  forgetSessions() // and where 5M sessions were
+  forgetAllReveals()
   newConv()
   renderConv()
 }
@@ -995,6 +1018,7 @@ const closePanel = () => panel.classList.remove('show')
   if (backSaved()) return true
   if (backExplore()) return true
   if (mapIsOpen()) { closeMap(); return true }
+  if (outIsOpen()) { closeOutline(); return true }
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
   if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
@@ -1165,6 +1189,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   updateMapBtn()
   c.updated = Date.now()
   save()
+  // a 5M session (dev switch): where it is now, to resume it from another conversation (only while conversations are kept)
+  if (devOn('obs5m') && c.graph?.session) saveSession(c.id, c.graph.session)
   // the row of suggestions shows where the conversation is now (and builds its word index at idle after the first answer)
   cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
@@ -1194,6 +1220,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // (on any error there, the phone's answer and the passage's context as before, so "writing…" never stays)
     const { helps, history, sources } = await buildContext({
       question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
+      // a 5M session (dev switch): its step, and the answers revealed on that card only
+      ...(devOn('obs5m') && fx5 && c.graph?.session ? { fx: fx5, ui: m.ui ?? nav, revealed: revealedOn(c.id, sessionNode(c.graph)?.id ?? '') } : {}),
     }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
@@ -1267,6 +1295,7 @@ const cmp = mountComposer(form, input, {
   send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
   // (a free question is read by the phone's model or online; with neither, the row's grey line says it is searched)
   reader: () => (modelReady() && !modelOff()) || (onlineOn() && onlineAvailable() && isOnline() && (!signInAvailable() || !!onlineSession())),
+  resume: (story) => { const e = savedSessions().find((x) => x.story === story); if (e) resume5(e) },
 })
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
@@ -1350,6 +1379,183 @@ function goTo(id: string, from: 'back' | 'map') {
   updateMapBtn()
 }
 
+// ------------------------------------------------------------------------------------------------------------ the 5M session
+// (dev switch `obs5m`; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
+// has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
+// [≡] opens the outline, full screen like the Map (under the PIN lock like it). With the switch off none of this exists.
+let fx5: Fixture | null = null
+let fx5p: Promise<Fixture | null> | null = null
+/** The story's tables, read once (the dev fixture); the bar and the cards are drawn again when they arrive */
+function fixture5(): Fixture | null {
+  if (fx5 || !devOn('obs5m')) return fx5
+  // (pipeline.ts's loader: the composer's session buttons read the same tables)
+  fx5p ??= loadFixture5().then((f) => {
+    fx5 = f
+    if (conv()?.msgs.some((m) => m.card) || !conv()?.msgs.length) renderConv()
+    else updateBar()
+    cmp.answered() // the composer's row asks again: [Resume] and the step's buttons need the tables
+    return f
+  }, () => { fx5p = null; return null })
+  return null
+}
+/** The share button of a session's card (dev switch): the session as it is when tapped, with the answers revealed so far */
+function sessionShare(cv: Conv | undefined, ui: string): HTMLElement | null {
+  const g = cv?.graph
+  if (!cv || !g?.session || !fx5) return null
+  return shareTextButton(() => shareSession(fx5!, g.session!, revealedIn(cv.id), ui), ui)
+}
+/** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
+function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
+  const fx = fixture5()
+  if (!fx || !cv?.graph?.session) return undefined
+  const g = cv.graph
+  // the session as it is when tapped (each step replaces g.session; the marks go to the current copy)
+  return { fx, get s() { return g.session! }, run: (label: string, sheet: Sheet) => runSheet(label, sheet, ui),
+    // an answer shown on a card is remembered here, in memory only, for share and the online context (never saved, never counted)
+    reveal: (id: string, shown: boolean) => { if (node) revealOn(cv.id, node, id, shown) },
+    // (a mark is kept with the conversation and the saved place, as any answer is; saveSession asks keepHistory and never throws)
+    marked: () => { save(); if (g.session) saveSession(cv.id, g.session) } }
+}
+/** A step of the session as a turn of the chat */
+function runStep(label: string, s: Session) {
+  if (!fx5) return
+  runSheet(label, sheetOf5(fx5, s, s.lang), nav)
+}
+function updateBar() {
+  const g = conv()?.graph
+  const s = devOn('obs5m') ? g?.session : undefined
+  const fx = s ? fixture5() : null
+  const old = document.querySelector('#s5bar')
+  if (!g || !s || !fx) {
+    old?.remove()
+    return
+  }
+  const dimmed = nodeOf(g, g.cur)?.kind !== 'obs5m'
+  const bar = drawBar(s, fx, nav, {
+    prev: () => { const p = prev5(fx, s); if (p) runStep(stepPlace(fx, p, nav), p) },
+    next: () => { const n = next5(fx, s); if (n) runStep(W5(nav).next.replace('{place}', stepPlace(fx, n, nav)), n) },
+    outline: () => openOutline(),
+    back: () => { const n = sessionNode(g); if (n) goTo(n.id, 'back') },
+  }, dimmed)
+  if (old) old.replaceWith(bar)
+  else document.querySelector('#notice')!.before(bar)
+  if (outIsOpen()) drawOutlineNow()
+}
+let s5out: { root: HTMLElement; title: HTMLElement; body: HTMLElement; close: HTMLButtonElement } | null = null
+const outIsOpen = () => !!s5out?.root.classList.contains('open')
+function ensureOutline() {
+  if (s5out) return s5out
+  const root = el('div', '')
+  root.id = 's5out'
+  root.tabIndex = -1
+  root.setAttribute('role', 'dialog')
+  root.setAttribute('aria-modal', 'true')
+  root.setAttribute('aria-labelledby', 's5-out-h')
+  const head = el('div', 'ex-head')
+  const title = el('h2', 'ex-title')
+  title.id = 's5-out-h'
+  const close = el('button', 'ex-btn', '✕') as HTMLButtonElement
+  close.type = 'button'
+  close.onclick = () => closeOutline()
+  head.append(title, close)
+  const body = el('div', 'ex-body')
+  root.append(head, body)
+  document.body.appendChild(root)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && outIsOpen()) {
+      e.preventDefault()
+      closeOutline()
+    }
+  })
+  // the PIN lock covers the outline: it closes under the lock
+  new MutationObserver(() => { if (outIsOpen() && document.querySelector('#lock')) closeOutline() }).observe(document.body, { childList: true })
+  s5out = { root, title, body, close }
+  return s5out
+}
+function drawOutlineNow() {
+  const o = ensureOutline()
+  const s = conv()?.graph?.session
+  if (!s || !fx5) return closeOutline()
+  const fx = fx5
+  o.root.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  o.title.textContent = W5(nav).outline
+  o.close.setAttribute('aria-label', W5(nav).view.close)
+  o.body.replaceChildren(drawOutline(s, fx, nav, {
+    jump: (p: Code5) => {
+      closeOutline()
+      const to = jump5(fx, s, p, p === s.part ? s.at : 0)
+      runStep(stepPlace(fx, to, nav), to)
+    },
+    how: () => {}, // "How the five movements work" ships after the licence check (decision 5): hidden in the mock
+    end: () => end5(),
+  }))
+}
+/** [End session]: the conversation leaves the session (its light path back); its notes stay, and so does [Resume] */
+function end5() {
+  closeOutline()
+  if (busy) return
+  count('5m.end')
+  forgetReveals(conv().id)
+  endSession(conv())
+  save()
+  // (the cards drawn before keep no live buttons into the ended session)
+  renderConv()
+  updateBar()
+  cmp.answered()
+}
+/** The resume buttons of the welcome: the sessions used last (up to 3) */
+function resumeRow(): HTMLElement | null {
+  const fx = fixture5()
+  if (!devOn('obs5m') || !fx) return null
+  const list = savedSessions().filter((e) => e.story === fx.story).slice(0, 3)
+  if (!list.length) return null
+  const row = el('div', 's5-resume')
+  row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  for (const e of list) {
+    const b = el('button', 's5-resume-btn', bidiLabel(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), nav)) as HTMLButtonElement
+    b.type = 'button'
+    b.onclick = () => resume5(e)
+    row.appendChild(b)
+  }
+  return row
+}
+/**
+ * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this
+ * one, where the saved place is put back and its step asked again. Its earlier consultations may be gone; its place is not.
+ */
+function resume5(e: Saved5) {
+  const fx = fixture5()
+  if (busy || locked() || !fx) return
+  const t = resumeTarget(e.conv, convs.map((c) => ({ id: c.id, empty: !c.msgs.length })), current, MAX)
+  if (t.k === 'open' || t.k === 'empty') current = t.id
+  else if (t.k === 'new' && !newConv()) return
+  const c = conv()
+  closePanel()
+  // its conversation, still at the session: shown as it was
+  const s = c.graph?.session
+  count('5m.resume')
+  if (t.k === 'open' && s && s.story === e.s.story) {
+    save()
+    renderConv()
+    return
+  }
+  resumeIn(c, e.s)
+  save()
+  renderConv()
+  runStep(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), e.s)
+}
+function openOutline() {
+  if (locked() || document.querySelector('#lock')) return
+  closeMap(false)
+  closeExplore(false)
+  drawOutlineNow()
+  s5out?.root.classList.add('open')
+  s5out?.root.focus({ preventScroll: true })
+}
+function closeOutline() {
+  s5out?.root.classList.remove('open')
+}
+
 // ------------------------------------------------------------------------------------------------------------ the map
 // The conversation's graph as a list, full screen like Browse (and under the PIN lock like it): each point its name and a small
 // mark for how it joined the one above (same passage, from it, new topic), indented when it went deeper or branched; the
@@ -1375,6 +1581,7 @@ mapBtn.onclick = () => {
 }
 const points = () => conv().graph?.nodes.length ?? 0
 function updateMapBtn() {
+  updateBar()
   mapBtn.hidden = points() < MAP_MIN
   mapBtn.setAttribute('aria-label', GT(nav).mapLong)
   mapBtn.title = GT(nav).map
@@ -1495,6 +1702,13 @@ function drawMap() {
         mapOpened.add(r.key)
         drawMap()
       }
+    } else if (r.k === 'group') {
+      // a 5M session (dev switch `obs5m`): its name over its steps; the steps themselves are the points to go back to
+      row.classList.add('gm-group')
+      row.disabled = true
+      const name = el('span', 'ex-row-t', r.label)
+      name.dir = 'ltr'
+      row.appendChild(name)
     } else {
       const ic = el('span', `gm-ic gm-${r.node.edge}`)
       ic.innerHTML = svg(ICONS[r.node.edge] ?? ICONS.start!)
@@ -1635,4 +1849,7 @@ function firstSafety() {
 try {
   if (!localStorage.getItem('btsm.onboarded')) localStorage.setItem('btsm.onboarded', '1')
 } catch {}
+initDev()
+// the 5M session's tables, read early so its cards and bar are drawn whole (dev switch only)
+fixture5()
 firstSafety()
