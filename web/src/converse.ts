@@ -157,9 +157,28 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   /** "Next: Movement 1 · observation · frame 6/16", a 5M session's next step (first under a step's card, marked) */
   sessionNext?: boolean
   /** a unit to add to a language on a tap ("Add Open Bible Stories (218 KB)"), then `sheet` is asked again (main.ts) */
-  add?: { lang: string; unit: string } }
+  add?: { lang: string; unit: string }
+  /** one of the steps that stay in sight when the others go behind "More ▸" (the verse or chapter before and after, the next
+   *  section, the story this passage is told in, an introduction's chapter to read) */
+  key?: boolean }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
+/** The buttons in sight under an answer, the way back included; the others behind "More ▸" (Abel, Nov 17: ten were too many). */
+export const SHOWN = 5
+/**
+ * The buttons in sight and the ones behind "More ▸", each in its order. `backs`: how many ways back are drawn above them (they
+ * count). In sight first: a path's or a session's next step, a unit to add, try again, the key steps; then the others in their
+ * order, until there is no room. One button alone behind "More ▸" is shown instead.
+ */
+export function splitFollow(follow: Followup[], backs = 0): { shown: Followup[]; more: Followup[] } {
+  const room = Math.max(3, SHOWN - backs)
+  if (follow.length <= room + 1) return { shown: follow, more: [] }
+  const first = (f: Followup) => !!(f.pathNext || f.sessionNext || f.add || f.again || f.back || f.toPath || f.toSession || f.key)
+  const pick = new Set<Followup>()
+  for (const f of follow) if (pick.size < room && first(f)) pick.add(f)
+  for (const f of follow) if (pick.size < room) pick.add(f)
+  return { shown: follow.filter((f) => pick.has(f)), more: follow.filter((f) => !pick.has(f)) }
+}
 
 /** The words of the next steps that are not about one verse: a chapter to read, Browse, try again. */
 const NX: Record<L, { read: string; notesOf: string; termsOf: string; browseBook: string; browseAcademy: string; browse: string; again: string; howName: string; howThing: string }> = {
@@ -199,7 +218,7 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, 
     const n = NX[lang(ui)]
     const label = INTRO[lang(ui)].label
     const ch = at === 'front' ? 1 : +at!
-    const out: Followup[] = [{ label: fill(n.read, { ref: `${book} ${ch}` }), sheet: same(['text', 'notes'], `${code} ${ch}`) }]
+    const out: Followup[] = [{ label: fill(n.read, { ref: `${book} ${ch}` }), sheet: same(['text', 'notes'], `${code} ${ch}`), key: true }]
     if (at === 'front') out.push({ label: fill(label, { what: `${book} 1` }), sheet: same(['intro'], `${code} 1:intro`) })
     out.push({ label: fill(n.notesOf, { ref: `${book} ${ch}:1` }), sheet: same(['notes'], `${code} ${ch}:1`) })
     out.push(...extra)
@@ -224,12 +243,12 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, 
   const c = +ch!
   if (v1) {
     const prev = +v1 > 1 ? `${c}:${+v1 - 1}` : c > 1 && bounds?.get(c - 1) ? `${c - 1}:${bounds.get(c - 1)}` : null
-    if (prev) out.push({ label: `${w.lPrev} (${book} ${prev})`, sheet: same(sheet.what, `${code} ${prev}`) })
-    if (facts.next) out.push({ label: `${w.lNext} (${book} ${facts.next})`, sheet: same(sheet.what, `${code} ${facts.next}`) })
+    if (prev) out.push({ label: `${w.lPrev} (${book} ${prev})`, sheet: same(sheet.what, `${code} ${prev}`), key: true })
+    if (facts.next) out.push({ label: `${w.lNext} (${book} ${facts.next})`, sheet: same(sheet.what, `${code} ${facts.next}`), key: true })
     out.push({ label: `${w.lChapter} (${book} ${ch})`, sheet: same(['text', 'notes'], `${code} ${ch}`) })
   } else {
-    if (c > 1) out.push({ label: `${w.lPrevCh} (${book} ${c - 1})`, sheet: same(sheet.what, `${code} ${c - 1}`) })
-    if (bounds?.has(c + 1)) out.push({ label: `${w.lNextCh} (${book} ${c + 1})`, sheet: same(sheet.what, `${code} ${c + 1}`) })
+    if (c > 1) out.push({ label: `${w.lPrevCh} (${book} ${c - 1})`, sheet: same(sheet.what, `${code} ${c - 1}`), key: true })
+    if (bounds?.has(c + 1)) out.push({ label: `${w.lNextCh} (${book} ${c + 1})`, sheet: same(sheet.what, `${code} ${c + 1}`), key: true })
   }
   out.push(...extra)
   // the chapter's and the book's introductions: the context a translator needs, one tap away

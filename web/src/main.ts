@@ -9,7 +9,7 @@ import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, mo
 import { resetMacula } from './macula'
 import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
-import { type Again, againStep, bookLabel, browseStep, type Followup } from './converse'
+import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
 import { has } from './commands'
 import { resetSearch } from './search'
@@ -242,9 +242,16 @@ const LIMITS: Record<string, string> = {
   id: 'Apa yang bisa dan tidak bisa dilakukan aplikasi ini ›', hi: 'यह ऐप क्या कर सकता है और क्या नहीं ›', ar: 'ما يستطيع هذا التطبيق فعله وما لا يستطيع ›',
 }
 /** The online answer's text, with its badge ("Online AI · model"). */
+/**
+ * The online answer, last and folded ("Online AI · Llama 3.3 70B", Abel, Nov 17: "la explicación de la IA debería estar colapsada
+ * también"): the phone's answer is read first, the AI's when the person opens it. Sharing and saving still take its text.
+ */
 function aiBlock(a: NonNullable<Msg['ai']>): HTMLElement {
-  const ai = el('div', 'ai')
-  ai.appendChild(el('span', 'ai-badge', bidiLabel(`${OT().label} · ${modelLabel(a.model)}`, nav)))
+  const ai = document.createElement('details')
+  ai.className = 'ai sources'
+  const sum = document.createElement('summary')
+  sum.appendChild(el('span', 'ai-badge', bidiLabel(`${OT().label} · ${modelLabel(a.model)}`, nav)))
+  ai.appendChild(sum)
   const body = el('div', 'ai-text')
   body.dir = mdDir(a.text) // an Arabic answer reads right to left (its English paragraphs left to right: md.ts)
   body.innerHTML = md(a.text)
@@ -386,7 +393,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pl.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(pl)
   }
-  if (m.follow?.length) d.appendChild(followRow(m, m.follow))
+  if (m.follow?.length) d.appendChild(followRow(m, m.follow, 'follow', backs.length))
   // far from where the conversation started: "Shall we start a new conversation for this?", while it is the last answer
   if (m.drift && cv && cv.msgs[cv.msgs.length - 1] === m && nodeOf(cv.graph, m.node)?.drift === 'offered') d.appendChild(driftOffer(cv, m))
   // the language is missing: straight to where it is added
@@ -457,45 +464,66 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
 /** An answer that can be asked again (it failed): the same question, the same way. */
 const retries = new WeakMap<Msg, () => void>()
 /** The next steps under an answer: a ready sheet (no model call), Browse at a book or manual, or the question again. */
-function followRow(m: Msg, follow: Followup[], cls = 'follow'): HTMLElement {
+/** "More ▸": the next steps that are not in sight (converse.ts splitFollow). */
+const MORE: Record<string, string> = { en: 'More', es: 'Más', fr: 'Plus', id: 'Lainnya', hi: 'और', ar: 'المزيد' }
+/**
+ * A row of next steps. `backs`: how many ways back are drawn above it (the main row): it then shows only a few, the way back
+ * counted, and the others behind "More ▸" (Abel, Nov 17: ten buttons under Genesis 3 were a wall); the back row shows all.
+ */
+function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTMLElement {
   const f = el('div', cls)
   // in the app's direction (not the answer's: an Arabic answer in an English app keeps English buttons left to right)
   const ui = m.ui ?? nav
   f.dir = rtlLang(ui) ? 'rtl' : 'ltr'
-  for (const x of follow) {
-    const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
+  const { shown, more } = backs < 0 ? { shown: follow, more: [] as Followup[] } : splitFollow(follow, backs)
+  for (const x of shown) f.appendChild(followButton(m, x))
+  if (more.length) {
+    const rtl = rtlLang(ui)
+    const b = el('button', 'more', bidiLabel(`${MORE[ui.split('-')[0]!] ?? MORE.en} ${rtl ? '◂' : '▸'}`, ui)) as HTMLButtonElement
     b.type = 'button'
-    if (x.back || x.toPath || x.toSession) b.className = 'back'
-    else if (x.pathNext) b.className = 'path-next'
     b.onclick = () => {
-      if (x.back) goTo(x.back, 'back')
-      else if (x.browse) {
-        closePanel()
-        openExploreAt(x.browse)
-      } else if (x.again) {
-        if (busy) return
-        // the same question the same way: while the app is open, its own call; after a reload, the button's sheet again, or
-        // the text the person typed (never a button's label as if typed)
-        const again = retries.get(m)
-        if (again) again()
-        else if (x.again.sheet) runSheet(x.again.label ?? x.label, x.again.sheet, m.ui ?? nav)
-        else if (x.again.q) {
-          input.value = x.again.q
-          form.requestSubmit()
-        }
-      } else if (x.add) {
-        // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
-        if (busy || b.disabled) return
-        b.disabled = true
-        addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
-          b.disabled = false
-          b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
-        })
-      } else if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav)
+      const bs = more.map((x) => followButton(m, x))
+      b.replaceWith(...bs)
+      bs[0]?.focus()
     }
     f.appendChild(b)
   }
   return f
+}
+/** One next step's button. */
+function followButton(m: Msg, x: Followup): HTMLButtonElement {
+  const ui = m.ui ?? nav
+  const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
+  b.type = 'button'
+  if (x.back || x.toPath || x.toSession) b.className = 'back'
+  else if (x.pathNext) b.className = 'path-next'
+  b.onclick = () => {
+    if (x.back) goTo(x.back, 'back')
+    else if (x.browse) {
+      closePanel()
+      openExploreAt(x.browse)
+    } else if (x.again) {
+      if (busy) return
+      // the same question the same way: while the app is open, its own call; after a reload, the button's sheet again, or
+      // the text the person typed (never a button's label as if typed)
+      const again = retries.get(m)
+      if (again) again()
+      else if (x.again.sheet) runSheet(x.again.label ?? x.label, x.again.sheet, m.ui ?? nav)
+      else if (x.again.q) {
+        input.value = x.again.q
+        form.requestSubmit()
+      }
+    } else if (x.add) {
+      // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
+      if (busy || b.disabled) return
+      b.disabled = true
+      addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
+        b.disabled = false
+        b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
+      })
+    } else if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav)
+  }
+  return b
 }
 /**
  * The drift offer under an answer (pipeline.ts graphStep): [New conversation] moves this question and its answer to a new

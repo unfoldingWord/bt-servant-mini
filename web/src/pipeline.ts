@@ -2597,17 +2597,17 @@ ${x.meta}` },
         const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(sheet.ref ?? '')
         if (im && (im[2] !== 'front' || start.length)) {
           const f = await firstSection({ ...sheet, lang: pack }, im[1]!, im[2] === 'front' ? 1 : +im[2]!, ui).catch(() => null)
-          if (f) follow.splice(1, 0, f)
+          if (f) follow.splice(1, 0, { ...f, key: true })
         } else if (!im) {
           const f = await nextSection({ ...sheet, lang: pack }, ui).catch(() => null)
-          if (f) follow.unshift(f)
+          if (f) follow.unshift({ ...f, key: true })
         }
       }
       // the story of Open Bible Stories this passage is told in, at its nearest frame (obs.ts), after the first steps
       if (sheet.intent === 'passage' && pack && !none && follow.length && sheet.ref) {
         const text = study?.texts[0]?.verses.map((v) => v.p.map((p) => p[0]).join('')).join(' ') ?? ''
         const st = await storyStep(sheet.ref, sheet.lang, ui, text).catch(() => null)
-        if (st) follow.splice(Math.min(3, follow.length), 0, { label: st.label, sheet: passageSheet(sheet, st.ref, st.ref.includes(':') ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'], st.lang) })
+        if (st) follow.splice(Math.min(3, follow.length), 0, { label: st.label, key: true, sheet: passageSheet(sheet, st.ref, st.ref.includes(':') ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'], st.lang) })
       }
       // one verse: who is who in it and its sentence structure (macula.ts), before the introductions
       if (sheet.intent === 'passage' && pack && !none && follow.length) {
