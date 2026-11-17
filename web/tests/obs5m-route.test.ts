@@ -219,6 +219,12 @@ describe('a 5M session (dev on)', () => {
     const rb: any = await press(c, bible)
     expect([node(c, rb).edge, node(c, rb).parent]).toEqual(['deeper', step.id])
     expect(backs(rb)[0]).toMatchObject({ toSession: true, back: step.id })
+    // on that passage, follow-ups are about it (R11), not the session's frame or next step
+    const bn: any = await turn(c, { q: 'and the notes?' }, 'en')
+    expect([bn.answered, /^gen /.test(bn.ref)]).toEqual(['passage', true])
+    const bv: any = await turn(c, { q: 'the next verse' }, 'en')
+    expect([bv.answered, /^gen /.test(bv.ref)]).toEqual(['passage', true])
+    expect(c.graph!.session).toMatchObject({ part: 'm1', at: 18 })
   }, 60_000)
 
   test('a story with no session says so; the obs unit missing keeps the card and the next step, no helps', async () => {

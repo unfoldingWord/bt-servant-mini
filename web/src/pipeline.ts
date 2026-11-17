@@ -2830,6 +2830,9 @@ function atSession(g: Graph): boolean {
   for (let n = nodeOf(g, g.cur); n; n = nodeOf(g, n.parent)) {
     if (n.kind === 'obs5m') return true
     if (n.edge !== 'deeper') return false
+    // a Bible passage, even one the step offers (the story's range), is read as everywhere else (R11): only the frame's OBS helps
+    // and the articles under them are the session's
+    if (n.sheet.ref && !n.sheet.ref.startsWith('obs ')) return false
   }
   return false
 }
