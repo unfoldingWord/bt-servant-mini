@@ -278,6 +278,10 @@ function button(text: string, on: () => void, cls = ''): HTMLButtonElement {
 }
 
 let opener: HTMLElement | null = null
+/** Looks again at the 5M door of the welcome on screen (null when none) */
+let syncFive: (() => void) | null = null
+/** 5M came or went (a pack was added or removed): the welcome on screen adds or removes its 5M door. */
+export const refreshWelcome5 = (): void => syncFive?.()
 let quiet: HTMLElement[] = []
 // a door (or Skip) was chosen on the welcome on screen: closing it then records nothing more
 let chosen = true
@@ -294,6 +298,7 @@ export function closeWelcome(): boolean {
   if (!g) return false
   if (!chosen) remember({ door: 'skip' })
   chosen = true
+  syncFive = null
   g.remove()
   for (const q of quiet) q.inert = false
   quiet = []
@@ -396,16 +401,22 @@ export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}): b
       nav(false)
       // what the phone has decides two doors (read, so a moment after the screen shows): the 5M's, before "Just explore", and
       // "Just explore" naming the Bible Stories when the phone has them
-      void Promise.all([fiveStories(h.packs()), h.packs()[0] ? obsPack(h.packs()[0]!).catch(() => null) : null]).then(([five, obs]) => {
-        if (!list.isConnected) return
-        const ex = list.querySelector('.wl-door[data-door="explore"]')
-        if (obs && ex) ex.children[1]!.textContent = s.exploreObs
-        if (!fiveOffered(five) || list.querySelector('.wl-door[data-door="five"]')) return
-        const b = button('', () => { done('five'); h.openFive() }, 'wl-door')
-        b.dataset.door = 'five'
-        b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m')), ui)))
-        list.insertBefore(b, ex)
-      }).catch(() => {})
+      const sync = () => {
+        void Promise.all([fiveStories(h.packs()), h.packs()[0] ? obsPack(h.packs()[0]!).catch(() => null) : null]).then(([five, obs]) => {
+          if (!list.isConnected) return
+          const ex = list.querySelector('.wl-door[data-door="explore"]')
+          if (obs && ex) ex.children[1]!.textContent = s.exploreObs
+          const has = list.querySelector('.wl-door[data-door="five"]')
+          if (!fiveOffered(five)) return void has?.remove() // (the pack with the tables went away)
+          if (has) return
+          const b = button('', () => { done('five'); h.openFive() }, 'wl-door')
+          b.dataset.door = 'five'
+          b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m')), ui)))
+          list.insertBefore(b, ex)
+        }).catch(() => {})
+      }
+      syncFive = sync
+      sync()
     } else if (v.k === 'book') {
       t = title(s.whichBook)
       box.appendChild(el('p', 'wl-sub', s.bookNote))

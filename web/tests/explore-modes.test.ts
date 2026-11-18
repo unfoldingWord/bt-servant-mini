@@ -6,7 +6,7 @@ import { fiveOn } from './five-on'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { withObs } from './obs-fixture'
-import { closeExplore, exploreOpen, openExplore, openExploreAt, resetExplore, setExploreHooks, backExplore, type ExploreHooks } from '../src/explore'
+import { closeExplore, exploreOpen, openExplore, openExploreAt, redrawExplore, resetExplore, setExploreHooks, backExplore, type ExploreHooks } from '../src/explore'
 import { fiveText, MT, modeTitle } from '../src/modes'
 import { forgetSessions, saveSession, savedSessions } from '../src/obs5mstore'
 import { loadFixture } from '../src/dev'
@@ -237,6 +237,42 @@ describe('review fixes', () => {
     expect(exploreOpen()).toBe(false)
     expect(did.resume).toEqual([1, 1])
     forgetSessions()
+  })
+  test('a resume that stays "loading" is given up after the tries: no "Opening…" left, nothing said', async () => {
+    await on()
+    const fx = await loadFixture()
+    forgetSessions()
+    saveSession('c1', sheetOfSession(fx))
+    openExploreAt({ mode: 'obs5m' })
+    await until('.ex-row[data-resume="1"]')
+    loading = 1000
+    $('.ex-row[data-resume="1"]')!.click()
+    for (let t = 0; t < 4000 && $('.ex-opening') !== null || did.resume.length < 2; t += 20) await sleep(20)
+    await sleep(100)
+    expect($('.ex-opening')).toBeNull()
+    expect($('.ex-busy')).toBeNull()
+    expect(exploreOpen()).toBe(true)
+    expect(did.resume.length).toBe(21) // the first call and twenty tries
+    forgetSessions()
+  })
+  test('5M going away with its view open: redrawExplore pops the view; coming back, the modes list gets the row', async () => {
+    await on()
+    openExplore('bar')
+    await until('.ex-modes .ex-row')
+    expect(modeIds()).toContain('obs5m')
+    await off()
+    redrawExplore()
+    await sleep(100)
+    expect(modeIds()).not.toContain('obs5m')
+    await on()
+    redrawExplore()
+    await until('.ex-row[data-mode="obs5m"]')
+    $('.ex-row[data-mode="obs5m"]')!.click()
+    await until('.ex-five .ex-row')
+    await off()
+    redrawExplore()
+    await until('.ex-modes .ex-row, .ex-row[data-mode="book"]')
+    expect($('.ex-five')).toBeNull()
   })
   test('a second tap while "Opening…" does not start a second try; a resume that failed for another reason says nothing', async () => {
     await on()

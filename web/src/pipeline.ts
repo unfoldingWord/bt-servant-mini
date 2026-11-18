@@ -3081,7 +3081,7 @@ export type Chip5 = { kind: 'next' | 'place' | 'ok'; label: string; sheet?: Shee
  * [OBS 1:5 ▸]; away from it (a help, a branch), the way back to it first (`rest` 'place': the passage the conversation is on
  * follows, never the paused light path); with no session here, [Resume OBS 1 · …] for the session used last, if one is saved
  * (`rest` 'all': the usual first button follows).
- * Null with the switch off, or before the story's tables are read.
+ * Null without 5M (no pack has the tables), or before the story's tables are read.
  */
 export function sessionChips(c: ConvState, ui: string): { items: Chip5[]; rest: 'all' | 'place' | null } | null {
   if (!on5m()) return null
@@ -3120,7 +3120,7 @@ const rtlArrow = (ui: string) => (ui === 'ar' ? '◂' : '▸')
 /**
  * What a question typed in a 5M session reads as, for the composer's "✓" (state D): "notes" → "✓ OBS 1:5 · notes", "next" →
  * "✓ Next: …", a frame's number in a part that goes frame by frame → "✓ frame 7". Its tap sends the box's text, which
- * readQuestion reads the same way (sessionAsks). Null when it is none of these, or with the switch off.
+ * readQuestion reads the same way (sessionAsks). Null when it is none of these, or without 5M.
  */
 export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | null {
   const asked = sessionAsks(q, c)

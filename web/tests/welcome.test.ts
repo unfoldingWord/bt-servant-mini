@@ -9,7 +9,7 @@ import { turn } from './harness'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Answer, LT, learnSeq, learnStep, levelOf, ORDER, resetLearn, START, startOf, TRIPS, tryVerse } from '../src/learn'
-import { bookStart, closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, translatingText, welcomeDue, welcomeSaved, WT } from '../src/welcome'
+import { bookStart, closeWelcome, forgetWelcome, offerFirst, openWelcome, refreshWelcome5, setWelcomeHooks, translatingText, welcomeDue, welcomeSaved, WT } from '../src/welcome'
 import { closeHowto, forgetHowto, setHowtoHooks } from '../src/howto'
 import { manualArticles } from '../src/explore'
 import { openLang, CANON } from '../src/packs'
@@ -894,6 +894,26 @@ test('the 5M door: only with its dev switch on, before "Just explore"; it closes
   }
   expect(WT('ar').five[0]).toBe('أريد أن أدرس قصة مع فريقي')
   await fiveOn(false)
+})
+
+test('the 5M door follows the packs while the welcome is open: gone when 5M goes, back when it returns', async () => {
+  await installPacks(['en'])
+  packs = ['en']
+  freshPhone()
+  await fiveOn(false)
+  openWelcome('en')
+  await sleep(300)
+  expect($('.wl-door[data-door="five"]')).toBeNull()
+  await fiveOn()
+  refreshWelcome5()
+  await until('.wl-door[data-door="five"]')
+  expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'five', 'explore'])
+  await fiveOn(false)
+  refreshWelcome5()
+  await sleep(300)
+  expect($('.wl-door[data-door="five"]')).toBeNull()
+  closeWelcome()
+  refreshWelcome5() // (no welcome: nothing happens)
 })
 
 test('"Just explore" names the Bible Stories when the phone has them, and keeps today’s line when it has none', async () => {

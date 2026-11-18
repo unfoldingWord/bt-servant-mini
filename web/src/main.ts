@@ -27,12 +27,12 @@ import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './grap
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
 import { FU, languagePicker, packFor, emptyLine, quickSpec, quickTap } from './firstuse'
-import { backExplore, closeExplore, modesOn, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
+import { backExplore, closeExplore, modesOn, openExplore, openExploreAt, redrawExplore, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
 import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHooks } from './howto'
 import { helpLines } from './helplines'
-import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
+import { closeWelcome, forgetWelcome, offerFirst, openWelcome, refreshWelcome5, setWelcomeHooks, welcomeLabel } from './welcome'
 import type { Fixture } from './dev'
 import { covered5, fixtureNow5, on5m, onFive, refresh5 } from './five'
 import { fiveText, sendTyped } from './modes'
@@ -1394,7 +1394,9 @@ setExploreHooks({
   saved5: () => savedSessions(),
   resume5: (e) => {
     if (busy || locked()) return false
-    if (!fixture5(e.story)) return 'loading'
+    // (a story no pack covers, or whose tables did not come, is not waited for)
+    if (!on5m() || !covered5().includes(e.story) || failed5.has(e.story)) return 'failed'
+    if (!fixture5(e.story)) return failed5.has(e.story) ? 'failed' : 'loading'
     return resume5(e) ? true : 'failed'
   },
 })
@@ -1511,7 +1513,7 @@ function goTo(id: string, from: 'back' | 'map') {
 // ------------------------------------------------------------------------------------------------------------ the 5M session
 // (5M from the packs; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
 // has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
-// [≡] opens the outline, full screen like the Map (under the PIN lock like it). With the switch off none of this exists.
+// [≡] opens the outline, full screen like the Map (under the PIN lock like it). With no pack that has the 5M tables none of this exists.
 const loading5 = new Set<number>()
 const failed5 = new Set<number>() // covered stories whose tables did not come: not asked again until the packs change
 /** A story's tables (read once from the packs): null until they arrive; then the bar and the cards are drawn again */
@@ -1995,7 +1997,7 @@ try {
 } catch {}
 // 5M: the installed packs asked at the start (and after each change) for the tables; the saved sessions' stories read early so
 // their cards and bar are drawn whole
-const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story); fiveReady() }
+const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story); fiveReady(); redrawExplore(); refreshWelcome5() }
 onFive(looked5)
 void refresh5().then(looked5)
 firstSafety()

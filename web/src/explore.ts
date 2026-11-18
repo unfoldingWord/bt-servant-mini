@@ -387,6 +387,11 @@ export function closeExplore(refocus = true) {
   opener = null
   if (refocus && to?.isConnected) to.focus({ preventScroll: true })
 }
+/** 5M came or went: Browse's home, its list of modes and the 5M view on screen are drawn again (the 5M view pops itself when the stories are gone). */
+export function redrawExplore(): void {
+  const v = stack[stack.length - 1]
+  if (exploreOpen() && v && (v.k === 'home' || v.k === 'modes' || v.k === 'obs5m')) void draw()
+}
 export const exploreOpen = () => !!box?.root.classList.contains('open')
 /** Android's back: one step back in Browse, or closes it. False when it is not open. */
 export function backExplore(): boolean {
@@ -470,7 +475,7 @@ async function resumeFive(e: Saved5) {
   }
 }
 async function resumeFiveNow(e: Saved5) {
-  let r = hooks?.resume5(e)
+  let r: boolean | 'loading' | 'failed' | undefined = hooks?.resume5(e)
   for (let i = 0; r === 'loading' && i < 20; i++) {
     const b = ensure()
     if (!b.body.querySelector('.ex-opening')) b.body.prepend(el('p', 'ex-note ex-opening', XT(hooks?.ui() ?? 'en').loading))
@@ -480,8 +485,9 @@ async function resumeFiveNow(e: Saved5) {
     r = hooks?.resume5(e)
   }
   ensure().body.querySelector('.ex-opening')?.remove()
+  // (still 'loading' after the tries counts as failed: no more waiting, nothing said)
   if (r === true) closeExplore(false)
-  else if (r !== 'failed' && r !== 'loading') busyNote()
+  else if (r === false || r === undefined) busyNote()
 }
 
 let drawing = 0
