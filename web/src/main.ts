@@ -2027,7 +2027,8 @@ function refreshInstalled() {
     if (had !== true && ls.length) reaskWaiting()
     // the people index of each language, at idle (kin.ts): a family question then skips the readers (the app's language first)
     const mine = ls.filter((l) => l.split('-')[0] === nav.split('-')[0])
-    warmKin([...mine, ...ls.filter((l) => !mine.includes(l))])
+    // (only the app's language at idle: another one is built when a question needs it, on a phone with many packs too)
+    warmKin(mine.length ? mine : ls.slice(0, 1))
   }).catch(() => {})
 }
 refreshInstalled()

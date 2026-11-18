@@ -116,3 +116,11 @@ describe('review fixes (Nov 18)', () => {
     expect(kinShape('wives of Jacob')?.kind).toBe('partners')
   })
 })
+test('Indonesian forms of address are not «the father of» unless asked (whole-branch review)', () => {
+  expect(kinShape('Bapa Abraham')).toBeNull()
+  expect(kinShape('Ibu Maria')).toBeNull()
+  expect(kinShape('Saudara Petrus')).toBeNull()
+  expect(kinShape('Siapa ibu Musa?')).toMatchObject({ kind: 'mother', name: 'Musa' })
+  expect(kinShape('ibu dari Musa')).toMatchObject({ kind: 'mother', name: 'Musa' })
+  expect(kinShape('ayah Rut')).toMatchObject({ kind: 'father' })
+})

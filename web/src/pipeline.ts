@@ -2217,6 +2217,7 @@ function pairRef(ui: string, [a, z]: [number, number]): { label: string; ref: st
 /** The buttons of verse pairs (a book no pack has: its reference in `plain`, and the way to download it in a language the person added). */
 async function pairSteps(base: Sheet, ui: string, pairs: [number, number][], plain: string[], back: Sheet): Promise<Follow[]> {
   const out: Follow[] = []
+  const gets: Follow[] = []
   const seen = new Set<string>()
   for (const p of pairs) {
     const r = pairRef(ui, p)
@@ -2226,11 +2227,11 @@ async function pairSteps(base: Sheet, ui: string, pairs: [number, number][], pla
     if (pack) out.push({ label: r.label, sheet: passageSheet(base, r.ref, ['text', 'notes'], pack) })
     else {
       plain.push(r.label)
-      if ((await origin(base.lang).catch(() => null)) === 'added' && !out.some((f) => f.add?.unit === `book:${r.book}`))
-        out.push({ label: KT(ui).getBook.replace('{book}', bookLabel(ui, r.book)), sheet: back, add: { lang: base.lang, unit: `book:${r.book}` } })
+      if ((await origin(base.lang).catch(() => null)) === 'added' && !gets.length)
+        gets.push({ label: KT(ui).getBook.replace('{book}', bookLabel(ui, r.book)), sheet: back, add: { lang: base.lang, unit: `book:${r.book}` } })
     }
   }
-  return out
+  return [...out, ...gets]
 }
 /** The stories of Open Bible Stories a person is in, each a button (from a pack that has the stories). */
 async function storySteps(base: Sheet, id: string, n = 2): Promise<Follow[]> {
@@ -2328,7 +2329,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
       follow.push({ label: p ? personLabel(p) : id, sheet: kinSheet(sheet, 'who', { concept: id }) })
     }
     return { answered: 'family', ref, concept: null, found: ids.length,
-      reply: { ui, intro: (ids.length ? t.hereHead : t.hereNone).replace('{ref}', at), follow, lang: sheet.lang, meta: meta(`here ${ref}: ${ids.join(', ')}`) } }
+      reply: { ui, intro: (ids.length ? t.hereHead : t.hereNone).replace('{ref}', at), info: creditLine(ui, ['STEPBible/STEPBible-Data/TIPNR']), follow, lang: sheet.lang, meta: meta(`here ${ref}: ${ids.join(', ')}`) } }
   }
   const a = await familyOf(sheet.lang, sheet.concept!)
   const f = a.data
@@ -2347,10 +2348,13 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const named = (l: Relative[]) => Promise.all(l.map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
     Object.assign(f, { parents: await named(f.parents), partners: await named(f.partners), children: await named(f.children), siblings: await named(f.siblings) })
     const rel = [...f.parents, ...f.partners, ...f.children, ...f.siblings]
+    // (a story the person is in comes from Theographic's events: named in the credit line when one is offered)
+    const stories = await storySteps(sheet, f.id, 1)
+    if (stories.length) f.sources = [...f.sources, 'robertrouse/theographic-bible-metadata']
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
     // (MAX_FOLLOW: the other one of that name and the download first, a few relatives, then verses and a story)
     const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...rel.slice(0, 4).map(person),
-      ...verses, ...(await storySteps(sheet, f.id, 1))]
+      ...verses, ...stories]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
       line(t.siblings, f.siblings), t.named.replace('{n}', String(f.verses)) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}`) } }

@@ -177,6 +177,9 @@ export function kinShape(q: string): KinShape | null {
     // («les fils de David» is plural: David's sons; «fils de David», «putra Daud», «दाऊद का पुत्र» the title)
     const plural = /^les\s/i.test(rest)
     if ((w.kind === 'sons' || w.kind === 'children') && (w.one || / का /.test(rest)) && !plural && DAVID.has(f)) return null
+    // Indonesian «Bapa Abraham», «Ibu Maria», «Saudara Petrus» are how people are called, not «the father of»: only asked («siapa…»,
+    // «…dari X»)
+    if (s.lang === 'id' && /^(?:bapa|bapak|ibu|saudara)$/.test(key) && !wrapped && !/\sdari\s/i.test(rest)) return null
     const out: KinShape = { kind: w.kind, name, alts, lang: s.lang }
     if (w.one && !plural) out.one = true
     if (s.lang === 'ar' && (key === 'أبو' || key === 'ابو')) out.abu = true
@@ -532,7 +535,7 @@ export function joinNames(ui: string, names: string[]): string {
   return `${names.slice(0, -1).join(ui === 'ar' ? '، ' : ', ')} ${last}`
 }
 /** The sources of family data as the credit line names them. */
-export const SOURCE_NAMES: Record<string, string> = { 'STEPBible/STEPBible-Data/TIPNR': 'TIPNR (STEPBible)', 'BibleAquifer/ACAI': 'ACAI (BiblioNexus)' }
+export const SOURCE_NAMES: Record<string, string> = { 'STEPBible/STEPBible-Data/TIPNR': 'TIPNR (STEPBible)', 'BibleAquifer/ACAI': 'ACAI (BiblioNexus)', 'robertrouse/theographic-bible-metadata': 'Theographic' }
 
 /** The relatives a kind asks for, by gender when the data has it (a relative with no gender stays in both). */
 export function relativesOf(kind: Exclude<KinKind, 'who'>, f: FamilyData): FamilyData['children'] {
