@@ -501,6 +501,8 @@ export const KIN_T: Record<KinLang, KinText> = {
   },
 }
 export const KT = (ui: string): KinText => KIN_T[ui as KinLang] ?? KIN_T.en
+/** "Hijos de Isaac:" and French "Fils d’Isaac :" (a space before the colon). */
+export const colon = (ui: string, head: string): string => (ui === 'fr' ? `${head} :` : `${head}:`)
 /** A text with the person's name in it: French «de» before a vowel or h is «d’» («Enfants d’Isaac»). */
 export const withName = (ui: string, text: string, x: string): string =>
   (ui === 'fr' && /^[aeiouyhâàäéèêëîïôöûüœ]/i.test(x) ? text.replace(/\bde \{x\}/, 'd’{x}') : text).replace('{x}', x)

@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { askedName, colon, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2340,7 +2340,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const person = (r: { id: string; name: string }) => ({ label: r.name, sheet: kinSheet(sheet, 'who', { concept: r.id }) })
   if (kind === 'who') {
     // a person's card: parents, spouses, children, siblings, each a button; its article, its first verses, its stories
-    const line = (head: string, list: Relative[]) => (list.length ? `**${head}:** ${joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))}.` : '')
+    const line = (head: string, list: Relative[]) => (list.length ? `**${colon(ui, head)}** ${joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))}.` : '')
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
     const rel = [...f.parents, ...f.partners, ...f.children, ...f.siblings]
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
@@ -2364,7 +2364,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   }
   const verses = await pairSteps(sheet, ui, list.flatMap((r) => r.verses.slice(0, 1)), plain, sheet)
   const names = joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))
-  const info = [`**${head}:** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
+  const info = [`**${colon(ui, head)}** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
   // (MAX_FOLLOW: the other one of that name and the download first; then up to five relatives, two verses, the article)
   const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...list.slice(0, 5).map(person), ...verses.slice(0, 2), ...(tw ? [tw] : [])]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }

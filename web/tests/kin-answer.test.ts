@@ -117,7 +117,7 @@ describe('with the hand-made reader (gender, Spanish names, homonyms)', () => {
 describe('review fixes (Nov 18)', () => {
   beforeAll(fullPhone)
   test('French: «Fils d’Isaac» (elision before a vowel)', async () => {
-    expect((await ask('Qui étaient les fils d’Isaac ?', 'fr')).reply.info).toMatch(/^\*\*Fils d’Isaac:\*\*/)
+    expect((await ask('Qui étaient les fils d’Isaac ?', 'fr')).reply.info).toMatch(/^\*\*Fils d’Isaac :\*\*/)
   })
   test('«¿Otro Jacob?» stays in sight however many children (it is first)', async () => {
     setKinReader(async () => kinFixture())
