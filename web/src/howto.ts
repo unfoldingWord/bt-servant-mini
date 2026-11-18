@@ -6,9 +6,8 @@
 //
 // The examples come from what the installed packs have (the composer's own reading, suggest.ts `understood`, and the notes and
 // questions the pack has for that verse), so none of them answers with nothing: the Hindi pack has no notes for Ruth or Jonah,
-// so it gets a book it covers. A one-line invitation shows in the welcome on at most 3 occasions (empty conversations
-// or app starts), and never again once tapped or dismissed (`btsm.howto`: how many times it showed, or "done"); the menu has the
-// guide for good. Nothing here is counted in the usage counts (usage.ts): opening the guide is no one's business.
+// so it gets a book it covers. The guide is one of the empty conversation's quick actions (main.ts) and the menu has it too (the
+// old one-line invitation is gone; a phone that had it keeps `btsm.howto`, and the welcome is not shown there). Nothing here is counted in the usage counts (usage.ts): opening the guide is no one's business.
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { CANON, openLang } from './packs'
 import { booksOf, type Ctx, firstPack, fillName, helpsKnown, loadHelps, ST, understood } from './suggest'
@@ -26,7 +25,7 @@ import { ST as SVT } from './saved'
 const KEY = 'btsm.howto'
 
 type H = {
-  menu: string; invite: string; dismiss: string; step: string; back: string; next: string; done: string; close: string; tryIt: string
+  menu: string; step: string; back: string; next: string; done: string; close: string; tryIt: string
   free: string; online: string
   /** the "Open Saved" and "Open the menu" buttons; the "without typing" card without the Bible Stories; the menu card without online AI */
   openSaved: string; openMenu: string; browsePlain: string; menuPlain: string
@@ -46,7 +45,7 @@ export type CardId = 'passage' | 'word' | 'obs' | 'who' | 'follow' | 'save' | 'b
 // {map}, {back} (with its arrow, → in Arabic), {browse}, {saved}: the names the app shows for them (graph.ts, explore.ts, saved.ts), so the card says what the screen says
 const STR: Record<string, H> = {
   en: {
-    menu: 'How to ask', invite: 'New here? See how to ask (2 min)', dismiss: 'Dismiss', step: '{n} of {m}', back: 'Back', next: 'Next',
+    menu: 'How to ask', step: '{n} of {m}', back: 'Back', next: 'Next',
     done: 'Done', close: 'Close', tryIt: 'Try it',
     free: 'You can also write freely, in your own words: that works too. These short forms are just the fastest way.',
     online: 'Online AI settings',
@@ -70,7 +69,7 @@ const STR: Record<string, H> = {
     topics: [['How do I translate a metaphor?', 'ta:translate/figs-metaphor'], ['How do I translate an idiom?', 'ta:translate/figs-idiom']],
   },
   es: {
-    menu: 'Cómo preguntar', invite: '¿Primera vez aquí? Mira cómo preguntar (2 min)', dismiss: 'Descartar', step: '{n} de {m}', back: 'Atrás',
+    menu: 'Cómo preguntar', step: '{n} de {m}', back: 'Atrás',
     next: 'Siguiente', done: 'Listo', close: 'Cerrar', tryIt: 'Pruébalo',
     free: 'También puedes escribir libremente, con tus palabras: funciona igual. Estas formas cortas son solo el camino más rápido.',
     online: 'Ajustes de la IA en línea',
@@ -94,7 +93,7 @@ const STR: Record<string, H> = {
     topics: [['¿Cómo traduzco una metáfora?', 'ta:translate/figs-metaphor'], ['¿Cómo traduzco una expresión idiomática?', 'ta:translate/figs-idiom']],
   },
   fr: {
-    menu: 'Comment poser une question', invite: 'Nouveau ici ? Voyez comment poser une question (2 min)', dismiss: 'Ignorer', step: '{n} sur {m}',
+    menu: 'Comment poser une question', step: '{n} sur {m}',
     back: 'Retour', next: 'Suivant', done: 'Terminé', close: 'Fermer', tryIt: 'Essayer',
     free: 'Vous pouvez aussi écrire librement, avec vos mots : cela marche aussi. Ces formes courtes sont seulement le chemin le plus rapide.',
     online: "Réglages de l'IA en ligne",
@@ -118,7 +117,7 @@ const STR: Record<string, H> = {
     topics: [['Comment traduire une métaphore ?', 'ta:translate/figs-metaphor'], ['Comment traduire une expression idiomatique ?', 'ta:translate/figs-idiom']],
   },
   id: {
-    menu: 'Cara bertanya', invite: 'Baru di sini? Lihat cara bertanya (2 menit)', dismiss: 'Abaikan', step: '{n} dari {m}', back: 'Kembali',
+    menu: 'Cara bertanya', step: '{n} dari {m}', back: 'Kembali',
     next: 'Berikutnya', done: 'Selesai', close: 'Tutup', tryIt: 'Coba',
     free: 'Anda juga bisa menulis bebas dengan kata-kata Anda sendiri: itu juga berhasil. Bentuk singkat ini hanya cara yang paling cepat.',
     online: 'Pengaturan AI daring',
@@ -142,7 +141,7 @@ const STR: Record<string, H> = {
     topics: [['Bagaimana menerjemahkan metafora?', 'ta:translate/figs-metaphor'], ['Bagaimana menerjemahkan ungkapan?', 'ta:translate/figs-idiom']],
   },
   hi: {
-    menu: 'कैसे पूछें', invite: 'नए हैं? देखें कैसे पूछें (2 मिनट)', dismiss: 'हटाएँ', step: '{m} में से {n}', back: 'पीछे', next: 'आगे',
+    menu: 'कैसे पूछें', step: '{m} में से {n}', back: 'पीछे', next: 'आगे',
     done: 'हो गया', close: 'बंद करें', tryIt: 'आज़माएँ',
     free: 'आप अपने शब्दों में खुलकर भी लिख सकते हैं: वह भी काम करता है। ये छोटे रूप बस सबसे तेज़ तरीका हैं।',
     online: 'ऑनलाइन AI सेटिंग',
@@ -166,7 +165,7 @@ const STR: Record<string, H> = {
     topics: [['रूपक का अनुवाद कैसे करें?', 'ta:translate/figs-metaphor'], ['मुहावरे का अनुवाद कैसे करें?', 'ta:translate/figs-idiom']],
   },
   ar: {
-    menu: 'كيف تسأل', invite: 'جديد هنا؟ تعرّف على طريقة السؤال (دقيقتان)', dismiss: 'تجاهل', step: '{n} من {m}', back: 'السابق', next: 'التالي',
+    menu: 'كيف تسأل', step: '{n} من {m}', back: 'السابق', next: 'التالي',
     done: 'تم', close: 'إغلاق', tryIt: 'جرّبه',
     free: 'يمكنك أيضًا أن تكتب بحرية وبكلماتك: هذا ينجح أيضًا. هذه الصيغ القصيرة هي أسرع طريق فقط.',
     online: 'إعدادات الذكاء الاصطناعي عبر الإنترنت',
@@ -197,59 +196,19 @@ export const howtoStep = (ui: string): Followup => ({ label: HT(ui).menu, howto:
 
 // ------------------------------------------------------------------------------------------------------------ remembered
 
-/** The occasions the invitation shows on, at most (decided Nov 16): then it goes by itself. */
-export const INVITE_MAX = 3
-// tapped or dismissed in this run: kept here too, so a storage that cannot be written does not bring the line back
-let ended = false
-// the occasions counted in this run (a conversation drawn again is the same occasion)
-const counted = new Set<string>()
-// (the occasions of this run count too: a storage that reads but does not write still stops it after INVITE_MAX)
-const shownTimes = (): number => {
-  const v = localStorage.getItem(KEY)
-  return v === 'done' ? Infinity : Math.max(Number(v) || 0, counted.size)
-}
-/** Whether the welcome shows the invitation on this occasion (a conversation's id; a new run counts it again). */
-export function inviteDue(occasion = ''): boolean {
-  if (ended) return false
-  try {
-    const n = shownTimes()
-    return n < INVITE_MAX || (n === INVITE_MAX && counted.has(occasion)) // the third one stays while it is on screen
-  } catch {
-    return false // no storage: better never than every time
-  }
-}
-/** The invitation showed on this occasion: counted once per occasion and run. */
-export function inviteShown(occasion: string) {
-  if (counted.has(occasion)) return
-  let n = 0
-  try {
-    n = shownTimes()
-  } catch {}
-  counted.add(occasion)
-  try {
-    localStorage.setItem(KEY, String(Math.max(n + 1, counted.size)))
-  } catch {}
-}
-/** Whether the invitation ever showed, or was ended, on this phone (welcome.ts: the welcome takes its slot only before); true when the storage cannot be read. */
+/**
+ * Whether How to ask's old invitation line ever showed on this phone (a phone that had it before the welcome and the quick actions
+ * keeps `btsm.howto`): the welcome (welcome.ts) is not shown there. The line itself is gone; true when the storage cannot be read.
+ */
 export function inviteUsed(): boolean {
-  if (ended || counted.size) return true
   try {
     return localStorage.getItem(KEY) !== null
   } catch {
     return true
   }
 }
-/** Tapped, dismissed, or the guide opened from the menu: never again. */
-export function endInvite() {
-  ended = true
-  try {
-    localStorage.setItem(KEY, 'done')
-  } catch {}
-}
-/** "Erase everything" (menu > Safety): a phone handed to someone new shows the invitation again. */
+/** "Erase everything" (menu > Safety): the old invitation's mark goes, so a phone handed to someone new is new. */
 export function forgetHowto() {
-  ended = false
-  counted.clear()
   try {
     localStorage.removeItem(KEY)
   } catch {}
@@ -579,8 +538,6 @@ export function closeHowto(): boolean {
 export function openHowTo(ui: string, start?: CardId) {
   const h = hooks
   if (!h) return
-  endInvite()
-  document.querySelector('.howto-invite')?.remove()
   closeHowto()
   opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
   const s = HT(ui)
@@ -687,25 +644,4 @@ export function openHowTo(ui: string, start?: CardId) {
     found = ex
     refresh()
   }).catch(() => {})
-}
-
-/**
- * What the welcome offers someone new once a language is on the phone: today one line to the guide, on at most INVITE_MAX
- * occasions (`occasion`: the empty conversation it shows in), until it is tapped or dismissed; null after that. One function, called from one place (main.ts renderConv), so a later welcome screen
- * can take this slot whole.
- */
-export function offerAfterFirstUse(ui: string, occasion: string): HTMLElement | null {
-  if (!inviteDue(occasion) || !hooks) return null
-  inviteShown(occasion)
-  const s = HT(ui)
-  const line = el('div', 'howto-invite')
-  line.dir = rtlLang(ui) ? 'rtl' : 'ltr'
-  line.appendChild(button(s.invite, () => openHowTo(ui), 'howto-go'))
-  const x = button('×', () => {
-    endInvite()
-    line.remove()
-  }, 'howto-x')
-  x.setAttribute('aria-label', s.dismiss)
-  line.appendChild(x)
-  return line
 }

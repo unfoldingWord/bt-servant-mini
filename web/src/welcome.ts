@@ -1,6 +1,5 @@
 // The welcome "What would you like to do today?" (Fase 2e, Abel, Nov 16: "Sí, agrégala"). One screen once a language is on the
-// phone, in the slot where How to ask offered its invitation (howto.ts offerAfterFirstUse): this screen takes that slot, so
-// someone new never gets two welcomes in a row. Four doors: translating a book (its light path, graph.ts), learning to translate
+// phone, in the slot where How to ask once offered its invitation (a phone that had it never gets this screen). Four doors: translating a book (its light path, graph.ts), learning to translate
 // (learn.ts: Translation Academy in the manuals' order), looking up a passage or a word (the chat, with How to ask), or just
 // exploring (Browse). It never blocks: Skip is always there, and the menu's "Start over" brings it back.
 //
@@ -13,7 +12,7 @@ import { bookShown } from './firstuse'
 import { XT } from './explore'
 import { fiveOffered, fiveStories, modeTitle } from './modes'
 import { obsPack } from './obs'
-import { inviteUsed, offerAfterFirstUse, openHowTo } from './howto'
+import { inviteUsed, openHowTo } from './howto'
 import { type Answer, type Learn, type LearnKind, levelOf, partName, START, startOf } from './learn'
 import type { Sheet } from './answer'
 import { type ConvState, type Made, pathStart, readQuestion } from './pipeline'
@@ -513,27 +512,20 @@ let pending = false
 /** The other screens the welcome waits for: the PIN, the first questions, About, a report, How to ask, Browse, the Map, Saved, the menu. */
 const BUSY = '#lock, #safety, #about, #report, #howto, #welcome, #explore.open, #gmap.open, #saved.open, #panel.show'
 /**
- * What the welcome offers once a language is on the phone, in the one slot main.ts renderConv has for it (`occasion`: the empty
- * conversation it shows in; `fresh`: nothing asked yet on this phone): the first time, this screen, opened over the empty
- * conversation as soon as nothing else is on screen; after it showed, nothing (it replaced How to ask's invitation, still in the
- * menu); on a phone that had the invitation before this screen existed, the invitation as before.
+ * The welcome, when it is due: once on a phone with a language and no question asked yet (`fresh`), opened over the empty conversation
+ * as soon as nothing else is on screen. Draws nothing and records nothing when it is not due, so drawing empty conversations over
+ * and over never uses it up (howto.ts: only the old invitation's mark keeps it away).
  */
-export function offerFirst(ui: string, occasion: string, fresh: boolean): HTMLElement | null {
-  if (welcomeDue(fresh) && hooks) {
-    if (!pending) {
-      pending = true
-      // (the first screens, the PIN, may be on top: it opens when they are gone, if the conversation is still empty)
-      const tick = (n: number) => {
-        if (!pending) return
-        if (!document.querySelector('#log .welcome')) { pending = false; return }
-        if (document.querySelector(BUSY) || hooks?.busy()) { if (n < 2000) setTimeout(() => tick(n + 1), 300); else pending = false; return }
-        pending = false
-        openWelcome(ui)
-      }
-      setTimeout(() => tick(0), 0)
-    }
-    return null
+export function offerFirst(ui: string, fresh: boolean): void {
+  if (!welcomeDue(fresh) || !hooks || pending) return
+  pending = true
+  // (the first screens, the PIN, may be on top: it opens when they are gone, if the conversation is still empty)
+  const tick = (n: number) => {
+    if (!pending) return
+    if (!document.querySelector('#log .welcome')) { pending = false; return }
+    if (document.querySelector(BUSY) || hooks?.busy()) { if (n < 2000) setTimeout(() => tick(n + 1), 300); else pending = false; return }
+    pending = false
+    openWelcome(ui)
   }
-  if (welcomeShown() || pending) return null
-  return offerAfterFirstUse(ui, occasion)
+  setTimeout(() => tick(0), 0)
 }

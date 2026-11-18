@@ -2,37 +2,10 @@
 // question's / app's / phone's language, and the download fetches a few segments at a time without changing what the client sees.
 import { test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
-import { emptyLine, examplesFor, packFor, preferred, quickSpec } from '../src/firstuse'
+import { emptyLine, packFor, preferred, quickSpec } from '../src/firstuse'
 import { exportPack, installedLangs, markPartial, missingUnits, openLang, partialLangs, prefetching, updateLang } from '../src/packs'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
-
-for (const pack of ALL_PACKS) {
-  test(`examples from ${pack} name only what it has`, async () => {
-    await installPacks([pack])
-    const r = await openLang(pack)
-    for (const ui of UIS) {
-      const ex = await examplesFor(ui, pack)
-      expect(ex.length).toBeGreaterThanOrEqual(2)
-      for (const e of ex) {
-        expect(e.lang).toBe(pack)
-        if (e.ref) expect(r.installed(`book:${e.ref.split(' ')[0]}`)).toBe(true)
-        if (e.concept) expect((await r.article(e.concept)).data).toBeTruthy()
-      }
-      // a verse, then the notes of one
-      expect(ex[0]!.intent).toBe('passage')
-      expect(ex[1]!.what).toEqual(['notes'])
-    }
-  })
-}
-
-test('Indonesian has no Ruth: its examples do not offer it', async () => {
-  if (!ALL_PACKS.includes('id')) return
-  await installPacks(['id'])
-  const ex = await examplesFor('id', 'id')
-  expect(ex.some((e) => e.ref?.startsWith('rut '))).toBe(false)
-  expect(ex.map((e) => e.label).join(' ')).not.toMatch(/\bRut\b/)
-})
 
 test('the pack of a language code', () => {
   expect(packFor('es')).toBe('es-419')

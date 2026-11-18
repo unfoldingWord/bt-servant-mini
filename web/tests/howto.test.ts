@@ -4,7 +4,7 @@
 import { test, expect, beforeAll, afterAll } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { turn } from './harness'
-import { cardsFor, endInvite, examplesOf, type Examples, forgetHowto, HT, INVITE_MAX, inviteDue, inviteShown } from '../src/howto'
+import { cardsFor, examplesOf, type Examples, HT } from '../src/howto'
 import { type ConvState, directSheet } from '../src/pipeline'
 import { bookCode } from '../src/sheet'
 
@@ -124,59 +124,6 @@ test('the examples parse in every app language, with or without a pack for it', 
     expect(s.terms.length).toBeGreaterThan(0)
     expect(s.topics.length).toBeGreaterThan(0)
   }
-})
-
-test('the invitation shows on at most 3 occasions, and ends at once when tapped or dismissed', () => {
-  store.clear()
-  forgetHowto()
-  expect(INVITE_MAX).toBe(3)
-  expect(inviteDue('c1')).toBe(true)
-  inviteShown('c1')
-  inviteShown('c1') // the same conversation drawn again: the same occasion
-  expect(store.get('btsm.howto')).toBe('1')
-  inviteShown('c2')
-  inviteShown('c3')
-  expect(inviteDue('c3')).toBe(true) // the third stays while it is on screen
-  expect(inviteDue('c4')).toBe(false) // a fourth occasion: gone by itself
-  expect(inviteDue('c4')).toBe(false)
-  // tapped or dismissed: at once, even on its first occasion
-  forgetHowto() // erase everything: shown again
-  expect(inviteDue('c1')).toBe(true)
-  inviteShown('c1')
-  endInvite()
-  expect(inviteDue('c1')).toBe(false)
-  expect(store.get('btsm.howto')).toBe('done')
-  // a storage that cannot be written: dismissed stays dismissed in this run
-  forgetHowto()
-  const ls = (globalThis as any).localStorage
-  const set = ls.setItem
-  ls.setItem = () => { throw new Error('full') }
-  try {
-    expect(inviteDue('c1')).toBe(true)
-    endInvite()
-    expect(inviteDue('c1')).toBe(false)
-  } finally {
-    ls.setItem = set
-  }
-  // a storage that reads but does not write: the occasions of this run still stop it after 3
-  forgetHowto()
-  ls.setItem = () => { throw new Error('full') }
-  try {
-    for (const o of ['r1', 'r2', 'r3']) {
-      expect(inviteDue(o)).toBe(true)
-      inviteShown(o)
-    }
-    expect(inviteDue('r3')).toBe(true)
-    expect(inviteDue('r4')).toBe(false)
-  } finally {
-    ls.setItem = set
-  }
-  // no storage at all: never shown (better than every time)
-  ;(globalThis as any).localStorage = { getItem: () => { throw new Error('denied') } }
-  forgetHowto()
-  expect(inviteDue('c1')).toBe(false)
-  ;(globalThis as any).localStorage = ls
-  endInvite()
 })
 
 test('the examples are read once per app language, packs and helps language', async () => {

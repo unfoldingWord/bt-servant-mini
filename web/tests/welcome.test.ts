@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Answer, LT, learnSeq, learnStep, levelOf, ORDER, resetLearn, START, startOf, TRIPS, tryVerse } from '../src/learn'
 import { bookStart, closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, translatingText, welcomeDue, welcomeSaved, WT } from '../src/welcome'
-import { closeHowto, endInvite, forgetHowto, setHowtoHooks } from '../src/howto'
+import { closeHowto, forgetHowto, setHowtoHooks } from '../src/howto'
 import { manualArticles } from '../src/explore'
 import { openLang, CANON } from '../src/packs'
 import { booksOf } from '../src/suggest'
@@ -154,11 +154,9 @@ function freshPhone() {
   log.replaceChildren(Object.assign(new FakeEl('div'), { className: 'welcome' }))
   did.start = []; did.learn = []; did.browse = 0; did.five = 0; did.busy = false; did.asked = []
 }
-/** What main.ts renderConv does in the welcome's slot: the welcome, else How to ask's line (appended to the empty conversation). */
-function slot(ui: string, occasion: string, fresh: boolean) {
-  const line = offerFirst(ui, occasion, fresh)
-  if (line) log.querySelector('div.welcome')!.appendChild(line as unknown as FakeEl)
-  return line
+/** What main.ts renderConv does in the welcome's slot: the welcome, when due (nothing is drawn, nothing recorded otherwise). */
+function slot(ui: string, _occasion: string, fresh: boolean) {
+  return offerFirst(ui, fresh)
 }
 
 // ------------------------------------------------------------------------------------------------------- the screen
@@ -169,7 +167,7 @@ test('the first time a language is on the phone: the welcome, once, as a dialog 
   packs = ['en']
   freshPhone()
   expect(welcomeDue(true)).toBe(true)
-  expect(slot('en', 'c1', true)).toBeNull() // no invitation line next to it
+  slot('en', 'c1', true)
   const box = await until('#welcome .card')
   expect(box.getAttribute('role')).toBe('dialog')
   expect(box.getAttribute('aria-modal')).toBe('true')
@@ -181,42 +179,47 @@ test('the first time a language is on the phone: the welcome, once, as a dialog 
   expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'explore'])
   expect(store.has('btsm.welcome.v1')).toBe(true)
   // drawn again (the same conversation, another one): never a second time, and never How to ask's line instead
-  expect(slot('en', 'c1', true)).toBeNull()
+  slot('en', 'c1', true)
   expect($$('#welcome').length).toBe(1)
   key('Escape')
   expect($('#welcome')).toBeNull()
   expect(log.inert).toBe(false)
   expect(welcomeSaved()?.door).toBe('skip') // closed with no door chosen: skipped
-  expect(slot('en', 'c2', true)).toBeNull()
-  expect(slot('en', 'c3', false)).toBeNull()
+  slot('en', 'c2', true)
+  slot('en', 'c3', false)
   await sleep(50)
   expect($('#welcome')).toBeNull()
-  expect($('.howto-invite')).toBeNull()
   // "Erase everything": a phone handed to someone new shows it again
   forgetWelcome()
   forgetHowto()
   expect(welcomeDue(true)).toBe(true)
 })
 
-test('never two welcomes: a phone that had How to ask’s line keeps it, and a phone already used gets the line', async () => {
+test('a phone that had the old How to ask line, or already asked questions, never gets the welcome', async () => {
   freshPhone()
-  store.set('btsm.howto', '1') // the invitation showed before this version
+  store.set('btsm.howto', '1') // the old invitation showed before this version
   expect(welcomeDue(true)).toBe(false)
-  expect(slot('en', 'c1', true)).not.toBeNull()
+  slot('en', 'c1', true)
   await sleep(30)
   expect($('#welcome')).toBeNull()
-  expect($$('.howto-invite').length).toBe(1)
-  // questions already asked on this phone (an update): the line, not the screen
+  // questions already asked on this phone (an update): not the screen either
   freshPhone()
-  expect(slot('en', 'c1', false)).not.toBeNull()
+  slot('en', 'c1', false)
   await sleep(30)
   expect($('#welcome')).toBeNull()
-  // the line was tapped or dismissed: nothing
+})
+
+test('empty conversations drawn again and again never use up a due welcome', async () => {
+  if (!ALL_PACKS.includes('en')) return
+  await installPacks(['en'])
+  packs = ['en']
   freshPhone()
-  endInvite()
-  expect(slot('en', 'c1', true)).toBeNull()
-  await sleep(30)
-  expect($('#welcome')).toBeNull()
+  // (conversations that are not the first, drawn empty: not due; then the first one: due)
+  for (let i = 0; i < 5; i++) slot('en', 'c' + i, false)
+  expect(store.has('btsm.howto')).toBe(false) // nothing recorded on the old invitation mark
+  expect(welcomeDue(true)).toBe(true)
+  slot('en', 'c9', true)
+  await until('#welcome .card')
 })
 
 test('it waits for the first questions and the PIN, and never covers the lock', async () => {
@@ -295,7 +298,7 @@ test('a storage that throws: never shown (better than every time); one that cann
   ;(globalThis as any).localStorage = { getItem: () => { throw new Error('denied') }, setItem: () => { throw new Error('denied') }, removeItem: () => { throw new Error('denied') } }
   forgetWelcome()
   expect(welcomeDue(true)).toBe(false)
-  expect(slot('en', 'c1', true)).toBeNull()
+  slot('en', 'c1', true)
   await sleep(30)
   expect($('#welcome')).toBeNull()
   expect(welcomeSaved()).toBeNull()
@@ -308,7 +311,7 @@ test('a storage that throws: never shown (better than every time); one that cann
   $('.wl-door[data-door="explore"]')!.click()
   expect(did.browse).toBe(1)
   expect(welcomeDue(true)).toBe(false)
-  expect(slot('en', 'c2', true)).toBeNull()
+  slot('en', 'c2', true)
   await sleep(30)
   expect($('#welcome')).toBeNull()
   ;(globalThis as any).localStorage = goodStorage

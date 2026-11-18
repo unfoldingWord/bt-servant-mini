@@ -46,13 +46,12 @@ describe('how many cards, and which', () => {
     expect(await phoneHas([])).toEqual({ obs: false, books: false })
   })
 
-  test('every card has a title and a body with no placeholder left, in every language, and the guide says "2 min"', () => {
+  test('every card has a title and a body with no placeholder left, in every language', () => {
     for (const ui of UIS) {
       for (const c of cardsFor(ui, null, true, true, { obs: true, books: true })) {
         expect(c.title.length, `${ui} ${c.id}`).toBeGreaterThan(0)
         expect(c.body, `${ui} ${c.id}`).not.toMatch(/\{\w+\}/)
       }
-      expect(HT(ui).invite, ui).not.toMatch(/\b1\b|١|१/)
     }
   })
 

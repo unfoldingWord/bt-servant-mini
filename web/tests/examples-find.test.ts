@@ -1,5 +1,5 @@
 // Every example the app shows finds something: the About's "What you can ask" and "Short commands" (also the answer to "what
-// can you do?", setup.ts whatYouCanAsk) and the welcome's buttons (firstuse.ts examplesFor), in every app language, on a phone
+// can you do?", setup.ts whatYouCanAsk) in every app language, on a phone
 // with only that language's pack and on the full build. The Hindi pack has translation notes for Acts only and no questions,
 // and the Indonesian one has no Ruth or Jonah, so examples about Jonah answered "nothing found" there (Nov 16).
 // Each one goes through the app's own path (pipeline.ts, code only: no model).
@@ -7,8 +7,7 @@ import { expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { turn } from './harness'
-import { examplesFor, packFor } from '../src/firstuse'
-import type { Sheet } from '../src/answer'
+import { packFor } from '../src/firstuse'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
 // ANSWERS=fast (build.py's default): Hindi and Indonesian alone on their packs, the two with books missing (under a minute);
@@ -46,23 +45,6 @@ async function emptyAbout(ui: string): Promise<string[]> {
   }
   return empty
 }
-async function emptyWelcome(ui: string, pack: string): Promise<string[]> {
-  const ex = await examplesFor(ui, pack)
-  expect(ex.length).toBeGreaterThanOrEqual(2)
-  expect(ex[1]!.what).toEqual(['notes'])
-  const empty: string[] = []
-  for (const e of ex) {
-    // as main.ts runSheet sends a welcome button
-    const sheet = {
-      id: 'ex', intent: e.intent, ref: e.ref ?? null, what: e.what ?? [], version: null, concept: e.concept ?? null, term: null,
-      phrase: null, candidates: null, lang: e.lang,
-    } as Sheet
-    const r = await turn({ last: null }, { q: e.label, sheet }, ui)
-    if (!(r.found > 0)) empty.push(`${pack}: ${e.label} → ${r.answered} ${r.ref ?? ''}`)
-  }
-  return empty
-}
-
 for (const ui of UIS) {
   const own = packFor(ui)
   const phones: [string, () => string[]][] = []
@@ -73,11 +55,6 @@ for (const ui of UIS) {
       await installPacks(packs())
       expect(aboutExamples(ui).length).toBeGreaterThanOrEqual(10)
       expect(await emptyAbout(ui)).toEqual([])
-    }, 240_000)
-    // the welcome's examples come from the helps language: the app's pack, else (French) English
-    test.skipIf(FAST && (name === 'the full build' || !QUICK.includes(ui)))(`${ui}: the welcome's examples find something (${name})`, async () => {
-      await installPacks(packs())
-      expect(await emptyWelcome(ui, own && packs().includes(own) ? own : 'en')).toEqual([])
     }, 240_000)
   }
 }
