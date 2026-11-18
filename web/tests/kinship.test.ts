@@ -26,7 +26,8 @@ describe('who were the sons of Isaac', () => {
     test(`${q}: Isaac's sons, Genesis 25:26 as a button, and Isaac's article in sight`, async () => {
       const r = await turn({ last: null } as ConvState, { q, slots: null }, ui)
       expect(r.answered).toBe('family')
-      expect(r.reply.info ?? '').toMatch(/Esau/)
+      // (Esau as each pack names him: «Esau» in the packs on disk, «Esaú», «عِيسُو» with ACAI's names, common rev 6)
+      expect(r.reply.info ?? '').toMatch(/Esau|Esaú|عِيسُو/)
       const { shown } = splitFollow(r.reply.follow ?? [], 0)
       const all = r.reply.follow ?? []
       expect(all.some((f) => f.sheet?.ref === 'gen 25:26')).toBe(true)
