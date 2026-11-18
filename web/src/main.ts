@@ -1347,7 +1347,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     if (cs && onlineOn() && onlineAvailable()) onlineCtx = await passageContext(cs).catch(() => '')
   } catch (err: any) {
     // an error: the same question again, or Browse (no dead end)
-    m = err?.done ?? { who: 'bot', text: `${T.failed} ${err instanceof Error ? err.message : String(err)}`, ui: nav, follow: [...againStep(nav, again), browseStep(nav)] }
+    // the raw error only in the details (English, and it may name packs): the text says something went wrong
+    m = err?.done ?? { who: 'bot', text: T.failed.replace(/\s*:$/, nav.startsWith('hi') ? '।' : '.'), meta: `${T.details}\nerror: ${err instanceof Error ? err.message : String(err)}`, ui: nav, follow: [...againStep(nav, again), browseStep(nav)] }
     if (!err?.done) answered = 'failed'
   }
   count('answers')

@@ -1514,8 +1514,8 @@ const LANG_NAMES: Record<string, Record<string, string>> = {
 }
 // ("Questions in English, from the English pack.": a step of a path, or a question, answered by another pack: helpsElsewhere)
 const FROM_T: Record<string, string> = {
-  en: '{what} in {notes}, from the {pack} pack.', es: '{what} en {notes}, del paquete de {pack}.', fr: '{what} en {notes}, du paquet {pack}.',
-  id: '{what} dalam bahasa {notes}, dari paket bahasa {pack}.', hi: '{notes} में {what}, {pack} पैकेज से।', ar: '{what} باللغة {notes}، من حزمة اللغة {pack}.',
+  en: '{what} in {notes}, from the {pack} resources.', es: '{what} en {notes}, de los recursos en {pack}.', fr: '{what} en {notes}, des ressources en {pack}.',
+  id: '{what} dalam bahasa {notes}, dari sumber daya bahasa {pack}.', hi: '{notes} में {what}, {pack} संसाधनों से।', ar: '{what} باللغة {notes}، من موارد اللغة {pack}.',
 }
 export type HelpKind = 'notes' | 'questions' | 'terms'
 const FROM_WHAT: Record<string, Record<HelpKind, string>> = {
@@ -2637,7 +2637,7 @@ ${x.meta}` },
         // (an OBS answer's key terms are linked in it: their buttons go; an article's "See also" links are not passed here, they
         // go somewhere new)
         reply: { intro: said, info: x.r?.answer, follow: dropShown([...x.others, ...follow], null, new Set(), x.r?.answer ?? '').slice(0, MAX_FOLLOW), ui, lang: f.pack ?? sheet.lang, obs: obs ?? undefined,
-          meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nobs: ${f.state}${f.pack ? ` (${f.pack} pack)` : ''}\n${JSON.stringify(sheet, null, 1)}` },
+          meta: `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nobs: ${f.state}${f.pack ? ` (${f.pack})` : ''}\n${JSON.stringify(sheet, null, 1)}` },
       }
     },
   },

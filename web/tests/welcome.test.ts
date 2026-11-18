@@ -622,7 +622,7 @@ async function hindiPath(q: string) {
   }
   return { c, out }
 }
-const FROM_EN = (what: string) => new RegExp(`अंग्रेज़ी में ${what}, अंग्रेज़ी पैकेज से।`)
+const FROM_EN = (what: string) => new RegExp(`अंग्रेज़ी में ${what}, अंग्रेज़ी संसाधनों से।`)
 
 test('helps the path’s pack lacks come from another pack, saying so: Hindi Ruth with English has 5 steps, 4–5 from English', async () => {
   if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('en')) return
@@ -636,7 +636,7 @@ test('helps the path’s pack lacks come from another pack, saying so: Hindi Rut
   // introduction already came from the English pack before this, intro-elsewhere, and says so too)
   expect(out[3]!.said).toMatch(FROM_EN('टिप्पणियाँ'))
   expect(out[4]!.said).toMatch(FROM_EN('प्रश्न'))
-  for (const s of out.slice(1, 3)) expect(s.said).not.toContain('पैकेज से')
+  for (const s of out.slice(1, 3)) expect(s.said).not.toContain('संसाधनों से')
 })
 
 test('Hindi-only phone: Ruth has 3 steps and Acts 4, as before (nothing to take from)', async () => {
@@ -650,7 +650,7 @@ test('Hindi-only phone: Ruth has 3 steps and Acts 4, as before (nothing to take 
   // (every step but the introductions: the Hindi pack has none for Ruth, and a path always starts there)
   for (const s of [...ruth.out.slice(1), ...acts.out.slice(1)]) {
     expect(s.found, s.mark).toBeGreaterThan(0)
-    expect(s.said).not.toContain('पैकेज से')
+    expect(s.said).not.toContain('संसाधनों से')
   }
 })
 
@@ -660,7 +660,7 @@ test('Hindi Acts with English: the notes from Hindi, the questions from English'
   const { c, out } = await hindiPath('मैं प्रेरितों के काम का अनुवाद करने जा रहा हूँ')
   expect(c.graph?.path?.has).toEqual([1, 2, 3, 4, 5])
   expect(out[3]!.mark).toMatch(/चरण 4\/5: टिप्पणियाँ$/)
-  expect(out[3]!.said).not.toContain('पैकेज से') // the Hindi pack's own notes
+  expect(out[3]!.said).not.toContain('संसाधनों से') // the Hindi pack's own notes
   expect(out[3]!.found).toBeGreaterThan(0)
   expect(out[4]!.mark).toMatch(/चरण 5\/5: प्रश्न$/)
   expect(out[4]!.said).toMatch(FROM_EN('प्रश्न'))
@@ -740,12 +740,12 @@ test('the notice says what came from which pack, in the 6 app languages', async 
   if (!ALL_PACKS.includes('hi') || !ALL_PACKS.includes('en')) return
   await installPacks(['hi', 'en'])
   const SAYS: Record<string, string[]> = {
-    en: ['Notes in English, from the English pack.', 'Questions in English, from the English pack.'],
-    es: ['Notas en inglés, del paquete de inglés.', 'Preguntas en inglés, del paquete de inglés.'],
-    fr: ['Notes en anglais, du paquet anglais.', 'Questions en anglais, du paquet anglais.'],
-    id: ['Catatan dalam bahasa Inggris, dari paket bahasa Inggris.', 'Pertanyaan dalam bahasa Inggris, dari paket bahasa Inggris.'],
-    hi: ['अंग्रेज़ी में टिप्पणियाँ, अंग्रेज़ी पैकेज से।', 'अंग्रेज़ी में प्रश्न, अंग्रेज़ी पैकेज से।'],
-    ar: ['ملاحظات باللغة الإنجليزية، من حزمة اللغة الإنجليزية.', 'أسئلة باللغة الإنجليزية، من حزمة اللغة الإنجليزية.'],
+    en: ['Notes in English, from the English resources.', 'Questions in English, from the English resources.'],
+    es: ['Notas en inglés, de los recursos en inglés.', 'Preguntas en inglés, de los recursos en inglés.'],
+    fr: ['Notes en anglais, des ressources en anglais.', 'Questions en anglais, des ressources en anglais.'],
+    id: ['Catatan dalam bahasa Inggris, dari sumber daya bahasa Inggris.', 'Pertanyaan dalam bahasa Inggris, dari sumber daya bahasa Inggris.'],
+    hi: ['अंग्रेज़ी में टिप्पणियाँ, अंग्रेज़ी संसाधनों से।', 'अंग्रेज़ी में प्रश्न, अंग्रेज़ी संसाधनों से।'],
+    ar: ['ملاحظات باللغة الإنجليزية، من موارد اللغة الإنجليزية.', 'أسئلة باللغة الإنجليزية، من موارد اللغة الإنجليزية.'],
   }
   for (const ui of UIS) for (const [i, what] of (['notes', 'questions'] as const).entries()) {
     // a Ruth section asked in the Hindi pack (a Hindi path's step, whatever the app's language)
@@ -766,21 +766,21 @@ test('the notice names the language the helps are written in, from their own row
   await installPacks(['hi', 'en'])
   const a = await turn({ last: null }, { q: 'x', sheet: passageSheet('hi', 'rut 3:1-5', 'notes') }, 'hi')
   expect(a.found).toBeGreaterThan(0)
-  expect(a.reply.intro).toContain('अंग्रेज़ी में टिप्पणियाँ, अंग्रेज़ी पैकेज से।')
+  expect(a.reply.intro).toContain('अंग्रेज़ी में टिप्पणियाँ, अंग्रेज़ी संसाधनों से।')
   // Hindi + Spanish in a Spanish app: Spanish (not French)
   await installPacks(['hi', 'es-419'])
   const b = await turn({ last: null }, { q: 'x', sheet: passageSheet('hi', 'rut 3:1-5', 'notes') }, 'es')
   expect(b.found).toBeGreaterThan(0)
-  expect(b.reply.intro).toContain('Notas en español, del paquete de español.')
+  expect(b.reply.intro).toContain('Notas en español, de los recursos en español.')
   // English + Arabic in an Arabic app, Numbers 6:2 asked in the English pack (which has no notes for Numbers): the Arabic
   // pack's notes of Numbers are English, and the notice says so
   await installPacks(['en', 'ar'])
   const c = await turn({ last: null }, { q: 'x', sheet: passageSheet('en', 'num 6:2', 'notes') }, 'ar')
   expect(c.found).toBeGreaterThan(0)
-  expect(c.reply.intro).toContain('ملاحظات باللغة الإنجليزية، من حزمة اللغة العربية.')
+  expect(c.reply.intro).toContain('ملاحظات باللغة الإنجليزية، من موارد اللغة العربية.')
   // and in an English app the Arabic pack is neither English nor the app's language: nothing is taken from it
   const d = await turn({ last: null }, { q: 'notes on Numbers 6:2' }, 'en')
-  expect(d.reply.intro ?? '').not.toContain('pack.')
+  expect(d.reply.intro ?? '').not.toContain('resources.')
 })
 
 test('the order follows the app’s language, not the reply’s: an English question in the Arabic app tries the Arabic pack', async () => {
@@ -790,7 +790,7 @@ test('the order follows the app’s language, not the reply’s: an English ques
   const r = await turn({ last: null }, { q: 'notes on Numbers 6:2' }, 'ar')
   expect(r.ref).toBe('num 6:2')
   expect(r.found).toBeGreaterThan(0)
-  expect(r.reply.intro).toMatch(/from the Arabic pack\.|من حزمة اللغة العربية/)
+  expect(r.reply.intro).toMatch(/from the Arabic resources\.|من موارد اللغة العربية/)
 })
 
 test('a path keeps the app language it started with: its steps and their answers agree when the app language changes', async () => {
@@ -807,7 +807,7 @@ test('a path keeps the app language it started with: its steps and their answers
   }
   expect(r.reply.pathMark).toMatch(/चरण 5\/5: प्रश्न$/)
   expect(r.found).toBeGreaterThan(0)
-  expect(r.reply.intro).toContain('स्पेनिश पैकेज से।')
+  expect(r.reply.intro).toContain('स्पेनिश संसाधनों से।')
   // a path started in the Hindi app has 3 steps (Spanish is neither English nor the app's language)
   const h: ConvState = { last: null }
   await turn(h, { q: 'मैं रूत का अनुवाद कर रहा हूँ' }, 'hi')
@@ -842,7 +842,7 @@ test('a question that names the language of its helps never gets another pack’
   // with no language named, the same question still gets the English notes, saying so
   const plain = await turn({ last: null }, { q: 'रूत 2:3 के नोट्स' }, 'hi')
   expect(plain.found).toBeGreaterThan(0)
-  expect(plain.reply.intro).toContain('अंग्रेज़ी में टिप्पणियाँ, अंग्रेज़ी पैकेज से।')
+  expect(plain.reply.intro).toContain('अंग्रेज़ी में टिप्पणियाँ, अंग्रेज़ी संसाधनों से।')
 })
 
 test('a failed read of a book is not kept as "this pack lacks it"', async () => {

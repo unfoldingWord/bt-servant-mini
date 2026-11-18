@@ -325,7 +325,7 @@ def reports():
         ('chapter-intro-section', 'en', 'Introduction to Ruth 1', [], {'ref': 'rut 1:intro', 'follow': ['^rut 1:1-5 text,notes$', '^rut 1 text']}),
         ('section-next', 'es', 'Rut 1:1-5', [], {'ref': 'rut 1:1-5', 'follow': ['^rut 1:6-18 text,notes$']}),
         ('intro-num-6', 'en', 'Introduction to Numbers 6', [{'q': 'Ruth 1:16'}], {**num6, 'follow': ['^num 6 text', '^num front:intro']}),
-        ('intro-num-6-es', 'es', 'Introducción a Números 6', [{'q': 'Rut 1:16'}], {**num6, 'has': ['Nazirite', 'Números 6', 'del paquete']}),
+        ('intro-num-6-es', 'es', 'Introducción a Números 6', [{'q': 'Rut 1:16'}], {**num6, 'has': ['Nazirite', 'Números 6', 'de los recursos en']}),
     ]
     out += [{'id': i, 'set': 'reports', 'lang': lang, 'q': q, 'slots': None, 'before': b, 'expect': e, 'from': 'user reports Nov 15 (0.10.0)'}
             for i, lang, q, b, e in sections]
