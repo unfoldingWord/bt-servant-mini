@@ -141,6 +141,9 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
 export type Browse = { book?: string; manual?: string; lang?: string
   /** the list of Open Bible Stories (obs.ts) */
   obs?: boolean
+  /** only these stories of the list (their numbers), under this title (a question that several stories answer: pipeline.ts, storychoice.ts) */
+  only?: number[]
+  title?: string
   /** a guided mode's own view (modes.ts): the stories that have a 5M session */
   mode?: 'obs5m' }
 /** What "Try again" asks again: the question as the person typed it, or the button's sheet (with its label) */

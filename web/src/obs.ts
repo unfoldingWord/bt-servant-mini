@@ -455,7 +455,7 @@ const GOSPELS = new Set(['mat', 'mrk', 'luk', 'jhn'].map((b) => bookNumber(b)))
 /** A word score this high says the frame tells the passage (about two rare words in common). */
 const MIN_WORDS = 1.5
 /** The words of a text as the stories are matched: folded, split at what is no letter, mark or digit (Hindi vowel signs are marks). */
-const wordsOf = (s: string): string[] => fold(s).split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean)
+export const wordsOf = (s: string): string[] => fold(s).split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean)
 /** Each frame's score: the rare words it shares with `text` (a word in fewer frames counts more). */
 function wordScores(frames: { text: string }[], text: string): number[] {
   const want = new Set(wordsOf(text).filter((w) => w.length >= 4))
@@ -770,7 +770,7 @@ export function obsAsked(q0: string): { ref: string; what: string[] } | null {
   return { ref: obsRef(n, f), what: asks.length ? asks : f ? ['text', 'notes', 'questions', 'terms'] : ['text', 'notes'] }
 }
 /** "the story of Noah", "la historia de José", "l'histoire de …", "cerita tentang …", "… की कहानी", "قصة …": what it names. */
-const NAMED = [
+export const NAMED = [
   /(?:^|\s)(?:the\s+)?story\s+(?:of|about)\s+(.+)$/i,
   /(?:^|\s)(?:la\s+)?historia\s+(?:de|del|sobre)\s+(.+)$/i,
   /(?:^|\s)(?:l['’]\s*)?histoire\s+(?:de|du|d['’]|sur)\s*(.+)$/i,
@@ -881,7 +881,7 @@ export async function namedStory(q: string, lang: string): Promise<{ ref: string
 export type ObsHit = { ref: string; label: string; snippet: string; lang: string }
 /** Each frame's words, read once per unit (a whole unit is about 600 frames). */
 const FRAME_WORDS = new WeakMap<ObsModel, Map<object, string[]>>()
-function frameWords(model: ObsModel): Map<object, string[]> {
+export function frameWords(model: ObsModel): Map<object, string[]> {
   let m = FRAME_WORDS.get(model)
   if (!m) {
     m = new Map()
