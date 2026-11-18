@@ -5,6 +5,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { keywords } from '../src/search'
+import { foldName } from '../src/kin'
 import { splitFollow } from '../src/converse'
 import type { ConvState } from '../src/pipeline'
 
@@ -26,7 +27,8 @@ describe('who were the sons of Isaac', () => {
     test(`${q}: Isaac's sons, Genesis 25:26 as a button, and Isaac's article in sight`, async () => {
       const r = await turn({ last: null } as ConvState, { q, slots: null }, ui)
       expect(r.answered).toBe('family')
-      expect(r.reply.info ?? '').toMatch(/Esau/)
+      // (Esau as each pack names him, «Esau», «Esaú», «Ésaü», «عِيسُو»: compared without accents and vowel marks, kin.ts foldName)
+      expect(foldName(r.reply.info ?? '')).toMatch(/esau|عيسو/)
       const { shown } = splitFollow(r.reply.follow ?? [], 0)
       const all = r.reply.follow ?? []
       expect(all.some((f) => f.sheet?.ref === 'gen 25:26')).toBe(true)
