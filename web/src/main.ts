@@ -5,9 +5,11 @@ import { backPanel, fillTitles, groupObsHelps, linkFrameWords, linkObsWords, mar
 import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
-import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
+import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, showAbout } from './setup'
+import { anyOf, backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
+import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
-import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
+import { addUnits, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
@@ -41,9 +43,9 @@ import { waiting } from './waiting'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel, obsServer, parseObsRef, pictureFrame } from './obs'
+import { obsLabel, obsPack, obsServer, parseObsRef, pictureFrame } from './obs'
 import { type ObsStudy, obsStudyOf } from './obswords'
-import { addObsPictures, addVersePicture } from './obsimg'
+import { addObsPictures, addVersePicture, imagesInstalled } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
@@ -51,7 +53,7 @@ import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes
 
 type UiText = {
   ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string
-  chats: string; newChat: string; max: string; del: string; confirmDel: string; untitled: string; appLang: string; packs: string; welcome: string; helps: string; auto: string
+  chats: string; newChat: string; max: string; del: string; confirmDel: string; untitled: string; appLang: string; welcome: string; auto: string
 }
 const UI: Record<string, UiText> = {
   en: {
@@ -59,51 +61,51 @@ const UI: Record<string, UiText> = {
     thinking: 'Looking in the translation helps…', failed: 'Something went wrong:', details: 'details',
     chats: 'Conversations', newChat: 'New conversation', max: 'You can keep up to 3 conversations. Delete one to start another.',
     del: 'Delete', confirmDel: 'Delete this conversation?', untitled: 'New conversation',
-    appLang: 'App language', packs: 'Installed language packs', welcome: 'How can I help with your translation?', helps: 'Language of the helps', auto: 'Same as my question',
+    appLang: 'App language', welcome: 'How can I help with your translation?', auto: 'Same as my question',
   },
   es: {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
     ready: 'Funciona sin internet', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
     del: 'Borrar', confirmDel: '¿Borrar esta conversación?', untitled: 'Conversación nueva',
-    appLang: 'Idioma de la app', packs: 'Paquetes de idioma instalados', welcome: '¿En qué te ayudo con tu traducción?', helps: 'Idioma de las ayudas', auto: 'El de mi pregunta',
+    appLang: 'Idioma de la app', welcome: '¿En qué te ayudo con tu traducción?', auto: 'El de mi pregunta',
   },
   fr: {
     ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Fonctionne sans internet',
     thinking: 'Je cherche dans les aides à la traduction…', failed: 'Une erreur est survenue :', details: 'détails',
     chats: 'Conversations', newChat: 'Nouvelle conversation', max: "Vous pouvez garder 3 conversations. Supprimez-en une pour en commencer une autre.",
     del: 'Supprimer', confirmDel: 'Supprimer cette conversation ?', untitled: 'Nouvelle conversation',
-    appLang: "Langue de l'application", packs: 'Paquets de langue installés', welcome: 'Comment puis-je aider votre traduction ?', helps: 'Langue des aides', auto: 'Celle de ma question',
+    appLang: "Langue de l'application", welcome: 'Comment puis-je aider votre traduction ?', auto: 'Celle de ma question',
   },
   id: {
     ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Bisa tanpa internet',
     thinking: 'Mencari di bahan bantu penerjemahan…', failed: 'Terjadi kesalahan:', details: 'detail',
     chats: 'Percakapan', newChat: 'Percakapan baru', max: 'Anda bisa menyimpan 3 percakapan. Hapus satu untuk memulai yang lain.',
     del: 'Hapus', confirmDel: 'Hapus percakapan ini?', untitled: 'Percakapan baru',
-    appLang: 'Bahasa aplikasi', packs: 'Paket bahasa terpasang', welcome: 'Apa yang bisa saya bantu untuk terjemahan Anda?', helps: 'Bahasa bahan bantu', auto: 'Sesuai pertanyaan saya',
+    appLang: 'Bahasa aplikasi', welcome: 'Apa yang bisa saya bantu untuk terjemahan Anda?', auto: 'Sesuai pertanyaan saya',
   },
   hi: {
     ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'बिना इंटरनेट चलता है',
     thinking: 'अनुवाद सहायता में खोज रहा हूँ…', failed: 'कुछ गलत हो गया:', details: 'विवरण',
     chats: 'बातचीत', newChat: 'नई बातचीत', max: 'आप 3 बातचीत रख सकते हैं। नई शुरू करने के लिए एक हटाएँ।',
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
-    appLang: 'ऐप की भाषा', packs: 'स्थापित भाषा पैकेज', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?', helps: 'सहायता की भाषा', auto: 'मेरे प्रश्न वाली',
+    appLang: 'ऐप की भाषा', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?', auto: 'मेरे प्रश्न वाली',
   },
   ar: {
     ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'يعمل دون إنترنت',
     thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
     chats: 'المحادثات', newChat: 'محادثة جديدة', max: 'يمكنك الاحتفاظ بثلاث محادثات. احذف واحدة لتبدأ أخرى.',
     del: 'حذف', confirmDel: 'حذف هذه المحادثة؟', untitled: 'محادثة جديدة',
-    appLang: 'لغة التطبيق', packs: 'حزم اللغات المثبتة', welcome: 'كيف أساعدك في ترجمتك؟', helps: 'لغة المساعدات', auto: 'لغة سؤالي',
+    appLang: 'لغة التطبيق', welcome: 'كيف أساعدك في ترجمتك؟', auto: 'لغة سؤالي',
   },
 }
 const ONLINE_T: Record<string, { label: string; writing: string; sources: string; toggle: string; note: string; signIn: string; signedIn: string; signOut: string; signInNote: string; relogin: string; limit: string }> = {
-  en: { label: 'Online AI', writing: 'Writing with online AI…', sources: 'Helps found (sources)', toggle: 'Answers with online AI (when there is internet)', note: 'Your question and the helps found are sent to an online model. Without internet the app answers as usual.', signIn: "Sign in with Google", signedIn: "Signed in{n}", signOut: "Sign out", signInNote: "Online AI asks you to sign in with Google. The service keeps only a code for your account, to count your answers of the day.", relogin: "Your online AI session ended: sign in again in the menu.", limit: "Online AI has reached today's limit; the answer below is from the phone." },
-  es: { label: 'IA en línea', writing: 'Escribiendo con IA en línea…', sources: 'Ayudas encontradas (fuentes)', toggle: 'Respuestas con IA en línea (cuando haya internet)', note: 'Tu pregunta y las ayudas encontradas se envían a un modelo en línea. Sin internet, la app responde como siempre.', signIn: "Iniciar sesión con Google", signedIn: "Sesión iniciada{n}", signOut: "Cerrar sesión", signInNote: "La IA en línea pide iniciar sesión con Google. El servicio solo guarda un código de tu cuenta, para contar tus respuestas del día.", relogin: "Tu sesión de IA en línea terminó: vuelve a iniciarla en el menú.", limit: "La IA en línea llegó al límite de hoy; la respuesta de abajo es la del teléfono." },
-  fr: { label: 'IA en ligne', writing: "Rédaction avec l'IA en ligne…", sources: 'Aides trouvées (sources)', toggle: 'Réponses avec IA en ligne (quand il y a internet)', note: "Votre question et les aides trouvées sont envoyées à un modèle en ligne. Sans internet, l'application répond comme d'habitude.", signIn: "Se connecter avec Google", signedIn: "Connecté{n}", signOut: "Se déconnecter", signInNote: "L'IA en ligne demande de se connecter avec Google. Le service ne garde qu'un code de votre compte, pour compter vos réponses du jour.", relogin: "Votre session d'IA en ligne a pris fin : reconnectez-vous dans le menu.", limit: "L'IA en ligne a atteint la limite du jour ; la réponse ci-dessous vient du téléphone." },
-  id: { label: 'AI daring', writing: 'Menulis dengan AI daring…', sources: 'Bahan bantu yang ditemukan (sumber)', toggle: 'Jawaban dengan AI daring (saat ada internet)', note: 'Pertanyaan Anda dan bahan bantu yang ditemukan dikirim ke model daring. Tanpa internet, aplikasi menjawab seperti biasa.', signIn: "Masuk dengan Google", signedIn: "Sudah masuk{n}", signOut: "Keluar", signInNote: "AI daring meminta Anda masuk dengan Google. Layanan hanya menyimpan sebuah kode akun Anda, untuk menghitung jawaban Anda hari ini.", relogin: "Sesi AI daring Anda berakhir: masuk lagi di menu.", limit: "AI daring sudah mencapai batas hari ini; jawaban di bawah berasal dari ponsel." },
-  hi: { label: 'ऑनलाइन AI', writing: 'ऑनलाइन AI से लिखा जा रहा है…', sources: 'मिली सहायता (स्रोत)', toggle: 'ऑनलाइन AI से उत्तर (जब इंटरनेट हो)', note: 'आपका प्रश्न और मिली सहायता एक ऑनलाइन मॉडल को भेजी जाती है। इंटरनेट के बिना ऐप सामान्य रूप से उत्तर देता है।', signIn: "Google से साइन इन करें", signedIn: "साइन इन है{n}", signOut: "साइन आउट", signInNote: "ऑनलाइन AI के लिए Google से साइन इन करना होता है। सेवा आपके खाते का केवल एक कोड रखती है, आज के आपके उत्तर गिनने के लिए।", relogin: "आपका ऑनलाइन AI सत्र समाप्त हो गया: मेनू में फिर से साइन इन करें।", limit: "ऑनलाइन AI आज की सीमा तक पहुँच गया; नीचे का उत्तर फ़ोन से है।" },
-  ar: { label: 'ذكاء اصطناعي عبر الإنترنت', writing: 'جارٍ الكتابة بالذكاء الاصطناعي عبر الإنترنت…', sources: 'المساعدات التي وُجدت (المصادر)', toggle: 'إجابات بالذكاء الاصطناعي عبر الإنترنت (عند توفر الإنترنت)', note: 'يُرسَل سؤالك والمساعدات التي وُجدت إلى نموذج عبر الإنترنت. دون إنترنت يجيب التطبيق كالمعتاد.', signIn: "تسجيل الدخول باستخدام Google", signedIn: "تم تسجيل الدخول{n}", signOut: "تسجيل الخروج", signInNote: "يطلب الذكاء الاصطناعي عبر الإنترنت تسجيل الدخول باستخدام Google. لا تحتفظ الخدمة إلا برمز لحسابك، لعدّ إجاباتك اليومية.", relogin: "انتهت جلسة الذكاء الاصطناعي عبر الإنترنت: سجّل الدخول مجددًا من القائمة.", limit: "بلغ الذكاء الاصطناعي عبر الإنترنت حدّ اليوم؛ الإجابة أدناه من الهاتف." },
+  en: { label: 'Online AI', writing: 'Writing with online AI…', sources: 'Helps found (sources)', toggle: 'Answers with online AI (when there is internet)', note: 'Your question and the helps found are sent to an online model. Without internet the app answers as usual.', signIn: "Sign in with Google", signedIn: "Signed in{n}", signOut: "Sign out", signInNote: "Online AI asks you to sign in with Google. The service keeps only a code for your account, to count your answers of the day.", relogin: "Your online AI session ended: sign in again in Menu → Settings → Online AI.", limit: "Online AI has reached today's limit; the answer below is from the phone." },
+  es: { label: 'IA en línea', writing: 'Escribiendo con IA en línea…', sources: 'Ayudas encontradas (fuentes)', toggle: 'Respuestas con IA en línea (cuando haya internet)', note: 'Tu pregunta y las ayudas encontradas se envían a un modelo en línea. Sin internet, la app responde como siempre.', signIn: "Iniciar sesión con Google", signedIn: "Sesión iniciada{n}", signOut: "Cerrar sesión", signInNote: "La IA en línea pide iniciar sesión con Google. El servicio solo guarda un código de tu cuenta, para contar tus respuestas del día.", relogin: "Tu sesión de IA en línea terminó: vuelve a iniciarla en Menú → Ajustes → IA en línea.", limit: "La IA en línea llegó al límite de hoy; la respuesta de abajo es la del teléfono." },
+  fr: { label: 'IA en ligne', writing: "Rédaction avec l'IA en ligne…", sources: 'Aides trouvées (sources)', toggle: 'Réponses avec IA en ligne (quand il y a internet)', note: "Votre question et les aides trouvées sont envoyées à un modèle en ligne. Sans internet, l'application répond comme d'habitude.", signIn: "Se connecter avec Google", signedIn: "Connecté{n}", signOut: "Se déconnecter", signInNote: "L'IA en ligne demande de se connecter avec Google. Le service ne garde qu'un code de votre compte, pour compter vos réponses du jour.", relogin: "Votre session d'IA en ligne a pris fin : reconnectez-vous dans Menu → Réglages → IA en ligne.", limit: "L'IA en ligne a atteint la limite du jour ; la réponse ci-dessous vient du téléphone." },
+  id: { label: 'AI daring', writing: 'Menulis dengan AI daring…', sources: 'Bahan bantu yang ditemukan (sumber)', toggle: 'Jawaban dengan AI daring (saat ada internet)', note: 'Pertanyaan Anda dan bahan bantu yang ditemukan dikirim ke model daring. Tanpa internet, aplikasi menjawab seperti biasa.', signIn: "Masuk dengan Google", signedIn: "Sudah masuk{n}", signOut: "Keluar", signInNote: "AI daring meminta Anda masuk dengan Google. Layanan hanya menyimpan sebuah kode akun Anda, untuk menghitung jawaban Anda hari ini.", relogin: "Sesi AI daring Anda berakhir: masuk lagi di Menu → Pengaturan → AI daring.", limit: "AI daring sudah mencapai batas hari ini; jawaban di bawah berasal dari ponsel." },
+  hi: { label: 'ऑनलाइन AI', writing: 'ऑनलाइन AI से लिखा जा रहा है…', sources: 'मिली सहायता (स्रोत)', toggle: 'ऑनलाइन AI से उत्तर (जब इंटरनेट हो)', note: 'आपका प्रश्न और मिली सहायता एक ऑनलाइन मॉडल को भेजी जाती है। इंटरनेट के बिना ऐप सामान्य रूप से उत्तर देता है।', signIn: "Google से साइन इन करें", signedIn: "साइन इन है{n}", signOut: "साइन आउट", signInNote: "ऑनलाइन AI के लिए Google से साइन इन करना होता है। सेवा आपके खाते का केवल एक कोड रखती है, आज के आपके उत्तर गिनने के लिए।", relogin: "आपका ऑनलाइन AI सत्र समाप्त हो गया: मेनू → सेटिंग → ऑनलाइन AI में फिर से साइन इन करें।", limit: "ऑनलाइन AI आज की सीमा तक पहुँच गया; नीचे का उत्तर फ़ोन से है।" },
+  ar: { label: 'ذكاء اصطناعي عبر الإنترنت', writing: 'جارٍ الكتابة بالذكاء الاصطناعي عبر الإنترنت…', sources: 'المساعدات التي وُجدت (المصادر)', toggle: 'إجابات بالذكاء الاصطناعي عبر الإنترنت (عند توفر الإنترنت)', note: 'يُرسَل سؤالك والمساعدات التي وُجدت إلى نموذج عبر الإنترنت. دون إنترنت يجيب التطبيق كالمعتاد.', signIn: "تسجيل الدخول باستخدام Google", signedIn: "تم تسجيل الدخول{n}", signOut: "تسجيل الخروج", signInNote: "يطلب الذكاء الاصطناعي عبر الإنترنت تسجيل الدخول باستخدام Google. لا تحتفظ الخدمة إلا برمز لحسابك، لعدّ إجاباتك اليومية.", relogin: "انتهت جلسة الذكاء الاصطناعي عبر الإنترنت: سجّل الدخول مجددًا من القائمة ← الإعدادات ← ذكاء اصطناعي عبر الإنترنت.", limit: "بلغ الذكاء الاصطناعي عبر الإنترنت حدّ اليوم؛ الإجابة أدناه من الهاتف." },
 }
 const OT = () => ONLINE_T[nav] ?? ONLINE_T.en!
 const UI_LANGS: [string, string][] = [['en', 'English'], ['es', 'Español'], ['fr', 'Français'], ['id', 'Bahasa Indonesia'], ['hi', 'हिन्दी'], ['ar', 'العربية']]
@@ -411,7 +413,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     const a = el('button', 'about-link', NP(m.ui ?? nav).add) as HTMLButtonElement
     a.type = 'button'
     a.onclick = () => {
-      panelView = 'packs'
+      panelView = 'resources'
       panel.classList.add('show')
       renderPanel()
     }
@@ -538,7 +540,7 @@ function followButton(m: Msg, x: Followup): HTMLButtonElement {
       // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
       if (busy || b.disabled) return
       b.disabled = true
-      addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
+      addUnits(x.add.lang, [x.add.unit]).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
         b.disabled = false
         b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
       })
@@ -627,7 +629,7 @@ function pickerFor(prefer: string[]): HTMLElement {
     // the download's end reaches refreshInstalled through onPacksChanged too: the waiting question is asked from there
     done: async () => { await refreshInstalled() },
     file: () => {
-      panelView = 'packs'
+      panelView = 'resources'
       panel.classList.add('show')
       renderPanel()
     },
@@ -763,19 +765,19 @@ function renderConv() {
   placeModelOffer()
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
-type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs' | 'usage' | 'safety'
 let panelView: PanelView = 'main'
-const MTS: Record<string, { language: string; on: string; off: string; none: string; installed: string; back: string }> = {
-  en: { language: 'Language', on: 'On', off: 'Off', none: 'None', installed: 'installed', back: 'Back' },
-  es: { language: 'Idioma', on: 'Activada', off: 'Apagada', none: 'Ninguno', installed: 'instalados', back: 'Atrás' },
-  fr: { language: 'Langue', on: 'Activée', off: 'Désactivée', none: 'Aucun', installed: 'installées', back: 'Retour' },
-  id: { language: 'Bahasa', on: 'Aktif', off: 'Mati', none: 'Tidak ada', installed: 'terpasang', back: 'Kembali' },
-  hi: { language: 'भाषा', on: 'चालू', off: 'बंद', none: 'कोई नहीं', installed: 'इंस्टॉल', back: 'वापस' },
-  ar: { language: 'اللغة', on: 'مفعّل', off: 'مُطفأ', none: 'لا شيء', installed: 'مثبّتة', back: 'رجوع' },
+const MTS: Record<string, { language: string; on: string; off: string; none: string; back: string }> = {
+  en: { language: 'Language', on: 'On', off: 'Off', none: 'None', back: 'Back' },
+  es: { language: 'Idioma', on: 'Activada', off: 'Apagada', none: 'Ninguno', back: 'Atrás' },
+  fr: { language: 'Langue', on: 'Activée', off: 'Désactivée', none: 'Aucun', back: 'Retour' },
+  id: { language: 'Bahasa', on: 'Aktif', off: 'Mati', none: 'Tidak ada', back: 'Kembali' },
+  hi: { language: 'भाषा', on: 'चालू', off: 'बंद', none: 'कोई नहीं', back: 'वापस' },
+  ar: { language: 'اللغة', on: 'مفعّل', off: 'مُطفأ', none: 'لا شيء', back: 'رجوع' },
 }
 const MT = () => MTS[nav] ?? MTS.en!
 
 function renderPanel() {
+  disposeScreen()
   panel.classList.remove('sub')
   if (panelView !== 'main') return renderSubPanel(panelView)
   panel.innerHTML = ''
@@ -828,65 +830,103 @@ function renderPanel() {
   }
   panel.appendChild(add)
   if (convs.length >= MAX) panel.appendChild(el('p', 'note', T.max))
-  // under the conversations, one row per setting: its name, what it is now, and a tap opens it
-  const list = el('div', 'mrows')
-  const row = (title: string, sub: string, open: () => void) => {
-    const b = el('button', 'mrow') as HTMLButtonElement
+  // under the conversations, three groups of rows: its name, what it is now, and a tap opens it
+  readMenuFacts()
+  const st = menuState()
+  const titles: Record<string, string> = {
+    explore: XT(nav).browse, saved: SVT(nav).title, map: GT(nav).mapLong, resources: MNT(nav).resources, language: MT().language, settings: MNT(nav).settingsRow,
+  }
+  const opens: Record<string, () => void> = {
+    explore: () => { closePanel(); openExplore('menu') },
+    saved: () => { closePanel(); openSaved() },
+    map: () => { closePanel(); openMap('menu') },
+    resources: () => go('resources')(),
+    language: () => go('language')(),
+    settings: () => go('settings')(),
+  }
+  resSubEl = null
+  for (const g of menuGroups(st)) {
+    panel.appendChild(el('h3', '', MNT(nav)[g.group]))
+    const list = el('div', 'mrows')
+    for (const r of g.rows) {
+      const sub = mrow(list, titles[r.id]!, r.sub, opens[r.id]!)
+      if (r.id === 'resources') resSubEl = sub
+    }
+    panel.appendChild(list)
+  }
+  const foot = el('div', 'foot')
+  const link = (label: string, open: () => void) => {
+    const b = el('button', 'about-link', label) as HTMLButtonElement
     b.type = 'button'
-    b.append(el('span', 'mrow-t', title), el('span', 'mrow-s', sub), el('span', 'mrow-c', '›'))
     b.onclick = open
-    list.appendChild(b)
+    foot.appendChild(b)
   }
-  const go = (v: PanelView) => () => {
-    panelView = v
-    renderPanel()
-  }
-  row(XT(nav).browse, `${XT(nav).bible} · ${XT(nav).academy}`, () => {
-    closePanel()
-    openExplore('menu')
-  })
-  row(SVT(nav).title, savedSummary(nav), () => { closePanel(); openSaved() })
-  // the Map of the conversation open now: how many points, and where it is
-  if (points() >= MAP_MIN) {
-    const c = conv()
-    const at = nodeOf(c.graph, c.graph?.cur)
-    row(GT(nav).mapLong, [GT(nav).points.replace('{n}', String(points())), at?.label].filter(Boolean).join(' · '), () => {
-      closePanel()
-      openMap('menu')
-    })
-  }
-  const uiName = UI_LANGS.find(([c]) => c === nav)?.[1] ?? nav
-  row(MT().language, `${uiName} · ${helpsLang ? PACK_NAMES[helpsLang] ?? helpsLang : T.auto}`, go('language'))
-  if (onlineAvailable()) row(OT().label, onlineOn() && (!signInAvailable() || onlineSession()) ? MT().on : MT().off, go('online'))
-  row(modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
-  row(packsTitle(nav), `${INSTALLED.length} ${MT().installed}`, go('packs'))
-  row(UT().title, usageOn() ? MT().on : MT().off, go('usage'))
-  if (updateSupported()) {
-    const u = updateRow(nav)
-    row(u.title, u.sub, () => { checkForUpdate(nav, true, () => renderPanel()) })
-  }
-  list.appendChild(composerSwitch(nav, MT().on, MT().off))
-  row(PT(nav).title, protectSummary(nav, MT().off), go('safety'))
-  row(howtoLabel(nav), '', () => {
-    closePanel()
-    openHowTo(nav)
-  })
-  row(welcomeLabel(nav), '', () => {
-    closePanel()
-    openWelcome(nav)
-  })
-  const aboutRow = el('button', 'mrow') as HTMLButtonElement
-  aboutRow.type = 'button'
-  aboutRow.append(el('span', 'mrow-t', aboutLabel(nav)), el('span', 'mrow-c', '›'))
-  aboutRow.onclick = () => {
-    closePanel()
-    showAbout(nav, () => setReady())
-  }
-  list.appendChild(aboutRow)
-  panel.appendChild(list)
+  link(howtoLabel(nav), () => { closePanel(); openHowTo(nav) })
+  link(welcomeLabel(nav), () => { closePanel(); openWelcome(nav) })
+  link(aboutLabel(nav), () => { closePanel(); showAbout(nav, () => setReady()) })
+  panel.appendChild(foot)
 }
 
-/** One setting's own view in the panel, with a way back to the menu. */
+/** One row of the menu or of Settings: title, line, arrow; returns the line's element (the menu keeps the downloads' line fresh). */
+function mrow(list: HTMLElement, title: string, sub: string, open: () => void): HTMLElement {
+  const b = el('button', 'mrow') as HTMLButtonElement
+  b.type = 'button'
+  const s = el('span', 'mrow-s', sub)
+  b.append(el('span', 'mrow-t', title), s, el('span', 'mrow-c', '›'))
+  b.onclick = open
+  list.appendChild(b)
+  return s
+}
+const go = (v: PanelView) => () => {
+  panelView = v
+  renderPanel()
+}
+// what Browse and Resources have on the phone, read between draws (the menu draws at once and again if these changed)
+let facts = { stories: false, modes: false, images: false }
+let resSubEl: HTMLElement | null = null
+function readMenuFacts() {
+  const langs = INSTALLED
+  void Promise.all([
+    anyOf(langs, (l) => obsPack(l).then((o) => !!o, () => false)),
+    langs.length ? modesOn(langs).then((m) => m.length > 0, () => false) : false,
+    imagesInstalled().then((i) => !!i && 'bytes' in i, () => false),
+  ]).then(([stories, modes, images]) => {
+    if (stories === facts.stories && modes === facts.modes && images === facts.images) return
+    facts = { stories, modes, images }
+    if (panel.classList.contains('show') && panelView === 'main') renderPanel()
+  })
+}
+function menuState(): MenuState {
+  const c = conv()
+  const at = nodeOf(c.graph, c.graph?.cur)
+  const uiName = UI_LANGS.find(([code]) => code === nav)?.[1] ?? nav
+  return {
+    ui: nav, hasLang: INSTALLED.length > 0, ...facts, savedSub: savedSummary(nav),
+    map: points() >= MAP_MIN ? [GT(nav).points.replace('{n}', String(points())), at?.label].filter(Boolean).join(' · ') : null,
+    langs: INSTALLED.length, uiName, answersName: helpsLang ? PACK_NAMES[helpsLang] ?? helpsLang : T.auto,
+    online: onlineAvailable(), update: updateSupported(), safety: protectSummary(nav, '') || null,
+  }
+}
+// a download moved: the Resources row's line says how far (only that line is written, so a half-armed delete is not lost)
+onDownloads(() => {
+  if (!resSubEl || !panel.contains(resSubEl) || panelView !== 'main') return
+  const t = resourcesSub(menuState())
+  if (resSubEl.textContent !== t) resSubEl.textContent = t
+})
+
+// the screen drawn by resources.ts in the panel: dropped when the view changes or the panel closes
+let screenOff: (() => void) | null = null
+let screenHost: HTMLElement | null = null
+let screenTurn = 0
+function disposeScreen() {
+  screenTurn++
+  screenOff?.()
+  screenOff = null
+  if (screenHost) disposeHost(screenHost)
+  screenHost = null
+}
+
+/** One screen of the panel (Settings, Resources, the server, or one setting), with a way back one level up. */
 function renderSubPanel(v: Exclude<PanelView, 'main'>) {
   panel.innerHTML = ''
   panel.classList.add('sub')
@@ -895,13 +935,17 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
   back.type = 'button'
   back.setAttribute('aria-label', MT().back)
   back.onclick = () => {
-    panelView = 'main'
+    panelView = backOf(v) ?? 'main'
     renderPanel()
   }
-  const titles = { language: MT().language, online: OT().label, model: modelTitle(nav), packs: packsTitle(nav), usage: UT().title, safety: PT(nav).title }
+  const titles: Record<Exclude<PanelView, 'main'>, string> = {
+    language: MT().language, online: OT().label, model: modelTitle(nav), resources: MNT(nav).resources, server: RT(nav).serverTitle,
+    settings: MNT(nav).settingsRow, usage: UT().title, safety: PT(nav).title,
+  }
   head.append(back, el('h2', '', titles[v]))
   panel.appendChild(head)
   if (v === 'language') renderLanguageView()
+  else if (v === 'settings') renderSettingsView()
   else if (v === 'online') renderOnlineView()
   else if (v === 'usage') renderUsageView()
   else if (v === 'safety') panel.appendChild(protectView(nav, eraseAll, () => renderPanel()))
@@ -910,14 +954,38 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
     renderPanel()
   }))
   else {
+    const host = el('div', 'setup')
+    screenHost = host
+    panel.appendChild(host)
+    const mine = screenTurn
     const panelLang = nav
-    languagesSection(nav, () => {
-      refreshInstalled()
-      renderPanel()
-    }).then((box) => {
-      if (panel.classList.contains('show') && panelView === 'packs' && panelLang === nav) panel.appendChild(box)
+    const ctx: ResCtx = {
+      ui: nav, refresh: () => { refreshInstalled(); renderPanel() }, openServer: go('server'), openLanguage: go('language'),
+    }
+    void (v === 'server' ? renderServer : renderResources)(host, ctx).then((off) => {
+      // the person went elsewhere while it drew: let it go
+      if (mine === screenTurn && panel.classList.contains('show') && panelView === v && panelLang === nav) screenOff = off
+      else off()
     })
   }
+}
+
+/** Settings: the rows of the old menu that are about how the app works, each opening its own screen. */
+function renderSettingsView() {
+  const list = el('div', 'mrows')
+  const onOff = (b: boolean) => (b ? MT().on : MT().off)
+  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported() })) {
+    if (id === 'online') mrow(list, OT().label, onOff(onlineOn() && (!signInAvailable() || !!onlineSession())), go('online'))
+    else if (id === 'model') mrow(list, modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
+    else if (id === 'suggest') list.appendChild(composerSwitch(nav, MT().on, MT().off))
+    else if (id === 'safety') mrow(list, PT(nav).title, protectSummary(nav, MT().off), go('safety'))
+    else if (id === 'usage') mrow(list, UT().title, onOff(usageOn()), go('usage'))
+    else if (id === 'update') {
+      const u = updateRow(nav)
+      mrow(list, u.title, u.sub, () => { checkForUpdate(nav, true, () => renderPanel()) })
+    }
+  }
+  panel.appendChild(list)
 }
 
 function renderLanguageView() {
@@ -930,7 +998,7 @@ function renderLanguageView() {
     langs.appendChild(b)
   }
   panel.appendChild(langs)
-  panel.appendChild(el('h3', '', T.helps))
+  panel.appendChild(el('h3', '', MNT(nav).answersTitle))
   const hl = el('div', 'langs')
   for (const code of [null, ...INSTALLED]) {
     const b = el('button', code === helpsLang ? 'on' : '', code ? PACK_NAMES[code] ?? code : T.auto) as HTMLButtonElement
@@ -946,6 +1014,12 @@ function renderLanguageView() {
     hl.appendChild(b)
   }
   panel.appendChild(hl)
+  // the languages on the phone are the ones listed; more come from Resources
+  panel.appendChild(el('p', 'note', MNT(nav).missing))
+  const more = el('button', 'about-link', MNT(nav).toResources) as HTMLButtonElement
+  more.type = 'button'
+  more.onclick = go('resources')
+  panel.appendChild(more)
 }
 
 /** Online AI on, after a Google sign-in when this build requires one: '' when it is on, else why not. */
@@ -1101,7 +1175,10 @@ function eraseAll() {
   newConv()
   renderConv()
 }
-const closePanel = () => panel.classList.remove('show')
+const closePanel = () => {
+  panel.classList.remove('show')
+  disposeScreen()
+}
 // Android's back button (MainActivity.onBackPressed): the bottom panel, then the About page, then the menu; else it leaves
 ;(window as any).__back = (): boolean => {
   if (locked()) return false // the back button leaves the app; it never opens it
@@ -1116,7 +1193,7 @@ const closePanel = () => panel.classList.remove('show')
   if (outIsOpen()) { closeOutline(); return true }
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
-  if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
+  if (panel.classList.contains('show') && panelView !== 'main') { panelView = backOf(panelView) ?? 'main'; renderPanel(); return true }
   if (panel.classList.contains('show')) { closePanel(); return true }
   return false
 }
@@ -1130,7 +1207,11 @@ menu.onclick = () => {
   closeExplore()
   closeMap(false)
   panelView = 'main'
-  if (panel.classList.toggle('show')) renderPanel()
+  if (panel.classList.contains('show')) closePanel() // the same path as every other close: the screen in it stops drawing
+  else {
+    panel.classList.add('show')
+    renderPanel()
+  }
 }
 
 // -------------------------------------------------------------------------------------------------------------- answering
@@ -1248,7 +1329,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // picker comes under it, and the question is asked again when the download ends (reaskWaiting)
     if (!(await installedLangs()).length) {
       answered = 'nopacks'
-      throw { done: { who: 'bot', intro: FU(nav).kept, ui: nav, waiting: true, meta: `${T.details} · 0.0 s\nno language packs on this phone: the question waits for one` } }
+      throw { done: { who: 'bot', intro: FU(nav).kept, ui: nav, waiting: true, meta: `${T.details} · 0.0 s\nno language on this phone: the question waits for one` } }
     }
     const made = await make()
     qLang = made.sheet.lang ?? made.ui
@@ -1373,7 +1454,7 @@ setExploreHooks({
     return true
   },
   addLang: () => {
-    panelView = 'packs'
+    panelView = 'resources'
     panel.classList.add('show')
     renderPanel()
   },
@@ -1405,7 +1486,7 @@ setSavedHooks({
   ui: () => nav, busy: () => busy || locked(), packName: (l) => PACK_NAMES[l] ?? l,
   run: (label, sheet) => runSheet(label, sheet, nav),
   ask: (q) => { const typed = input.value; input.value = q; form.requestSubmit(); input.value = typed },
-  addLang: () => { panelView = 'packs'; panel.classList.add('show'); renderPanel() },
+  addLang: () => { panelView = 'resources'; panel.classList.add('show'); renderPanel() },
   closeOthers: () => { closePanel(); closeExplore(false); closeMap(false) },
 })
 
@@ -1437,6 +1518,7 @@ setHowtoHooks({
     input.dispatchEvent(new Event('input'))
   },
   browse: () => openExplore('menu'),
+  // opens Online AI directly; Back goes to Settings (backOf: one level up), as the design says
   onlineSettings: () => {
     panelView = 'online'
     panel.classList.add('show')
