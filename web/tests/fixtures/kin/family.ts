@@ -73,7 +73,7 @@ const TOPICS: TopicsCore = {
   names: { 'per:isaac': [['Isaac', 'alignment', 3, ['gen']]], 'per:esau': [['él', 'alignment', 9, ['gen']]] },
   people: {
     names: { 'per:esau': 'Esaú', 'per:sarah': 'Sara', 'per:rebekah': 'Rebeca', 'per:hagar': 'Agar', 'per:keturah': 'Cetura', 'per:ishmael': 'Ismael', 'per:zimran': 'Zimrán' },
-    notes: { 'per:jacob': 'padre de José', 'per:judas-iscariot': 'Iscariote', 'per:judas-son-of-james': 'hijo de Jacobo' },
+    notes: { 'per:jacob': 'padre de José', 'per:judas-iscariot': 'uno de los doce', 'per:judas-son-of-james': 'hijo de Jacobo' },
     aliases: { Saray: ['per:sarah'] },
   },
 } as TopicsCore

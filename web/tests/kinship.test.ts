@@ -1,7 +1,7 @@
 // "¿Quiénes fueron los hijos de Isaac?" (Abel, Nov 17): the search kept «quiénes» and «fueron» as words to look for, found «fueron
 // hijos» in the Spanish pack (no Genesis) and never Isaac's sons; only online AI answered. Now the question words are left out
 // (search.ts STOP), family words go to English when the language's pack lacks the passage (story-words-more.json), and Isaac's
-// article is a button in sight (a person the question names).
+// article is a button in sight (a person the question names). Since ms/kin the question is answered from the family data.
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { keywords } from '../src/search'
@@ -21,18 +21,17 @@ describe('who were the sons of Isaac', () => {
     expect(keywords('من هم أبناء إسحاق؟')).not.toContain('هم')
   })
   beforeAll(fullPhone)
+  // (since ms/kin, Nov 18: a family question whose name is a person is answered from the family data, kin.ts; before, a search)
   for (const [q, ui] of [['¿Quiénes fueron los hijos de Isaac?', 'es'], ['Qui étaient les fils d’Isaac ?', 'fr'], ['من هم أبناء إسحاق؟', 'ar']] as const) {
-    test(`${q}: verses with Isaac and his son(s), and Isaac's article in sight`, async () => {
+    test(`${q}: Isaac's sons, Genesis 25:26 as a button, and Isaac's article in sight`, async () => {
       const r = await turn({ last: null } as ConvState, { q, slots: null }, ui)
-      expect(r.answered).toBe('search')
-      const info = r.reply.info ?? ''
-      // every verse shown names Isaac (in the English text, or the Arabic)
-      expect(info).toMatch(/Isaac|إِسْحَاقَ|إِسْحاقَ/)
-      // and a son of his (the English text, or the Arabic «ٱبْنَا»/«ابْنَهُ»)
-      expect(info).toMatch(/sons?|ٱبْنَا|ابْنَهُ|بَنُو|بني/)
-      expect(r.reply.meta).toMatch(/findall: verses/)
+      expect(r.answered).toBe('family')
+      expect(r.reply.info ?? '').toMatch(/Esau/)
       const { shown } = splitFollow(r.reply.follow ?? [], 0)
+      const all = r.reply.follow ?? []
+      expect(all.some((f) => f.sheet?.ref === 'gen 25:26')).toBe(true)
       expect(shown.some((f) => f.sheet?.concept === 'tw:names/isaac')).toBe(true)
+      expect(shown.length).toBeGreaterThan(0)
     })
   }
 })

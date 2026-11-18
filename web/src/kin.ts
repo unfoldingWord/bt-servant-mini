@@ -419,3 +419,112 @@ export async function peopleAt(pack: string, ref: string): Promise<string[]> {
   return [...count.entries()].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).map(([id]) => id)
 }
 export type { FamilyData }
+
+// ------------------------------------------------------------------------------------------------------------ the words
+type KinText = {
+  /** the head of a family answer, per kind ("Hijos de {x}") */
+  head: Record<Exclude<KinKind, 'who'>, string>
+  /** a card's lines */
+  parents: string; partners: string; children: string; siblings: string
+  half: [man: string, woman: string]
+  named: string
+  none: string
+  choose: string
+  other: string
+  versesN: string
+  credit: string
+  family: string
+  here: string
+  hereHead: string
+  hereNone: string
+  getPeople: string
+  getBook: string
+  and: string
+}
+export const KIN_T: Record<KinLang, KinText> = {
+  en: {
+    head: { children: 'Children of {x}', sons: 'Sons of {x}', daughters: 'Daughters of {x}', father: 'Father of {x}', mother: 'Mother of {x}', parents: 'Parents of {x}',
+      partners: 'Spouses of {x}', wife: 'Wife of {x}', husband: 'Husband of {x}', siblings: 'Brothers and sisters of {x}', brothers: 'Brothers of {x}', sisters: 'Sisters of {x}' },
+    parents: 'Parents', partners: 'Spouses', children: 'Children', siblings: 'Brothers and sisters', half: ['half brother', 'half sister'],
+    named: 'Named in {n} verses.', none: '{head}: the data I have names no one.', choose: 'Several people are called {x}. Which one?',
+    other: 'Another {x}?', versesN: '{n} verses', credit: 'Family data: {src}.', family: 'Family of {x}', here: 'People here: {names}',
+    hereHead: 'People named in {ref}:', hereNone: 'The data I have names no one in {ref}.', getPeople: 'Download the verses of people and places', getBook: 'Download {book}', and: 'and',
+  },
+  es: {
+    head: { children: 'Hijos de {x}', sons: 'Hijos de {x}', daughters: 'Hijas de {x}', father: 'Padre de {x}', mother: 'Madre de {x}', parents: 'Padres de {x}',
+      partners: 'Cónyuges de {x}', wife: 'Esposa de {x}', husband: 'Esposo de {x}', siblings: 'Hermanos de {x}', brothers: 'Hermanos de {x}', sisters: 'Hermanas de {x}' },
+    parents: 'Padres', partners: 'Cónyuges', children: 'Hijos', siblings: 'Hermanos', half: ['medio hermano', 'media hermana'],
+    named: 'Se nombra en {n} versículos.', none: '{head}: los datos que tengo no nombran a nadie.', choose: 'Hay varias personas llamadas {x}. ¿Cuál?',
+    other: '¿Otro {x}?', versesN: '{n} versículos', credit: 'Datos de familia: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
+    hereHead: 'Personas nombradas en {ref}:', hereNone: 'Los datos que tengo no nombran a nadie en {ref}.', getPeople: 'Descargar los versículos de personas y lugares', getBook: 'Descargar {book}', and: 'y',
+  },
+  fr: {
+    head: { children: 'Enfants de {x}', sons: 'Fils de {x}', daughters: 'Filles de {x}', father: 'Père de {x}', mother: 'Mère de {x}', parents: 'Parents de {x}',
+      partners: 'Conjoints de {x}', wife: 'Femme de {x}', husband: 'Mari de {x}', siblings: 'Frères et sœurs de {x}', brothers: 'Frères de {x}', sisters: 'Sœurs de {x}' },
+    parents: 'Parents', partners: 'Conjoints', children: 'Enfants', siblings: 'Frères et sœurs', half: ['demi-frère', 'demi-sœur'],
+    named: 'Nommé dans {n} versets.', none: '{head} : les données que j’ai ne nomment personne.', choose: 'Plusieurs personnes s’appellent {x}. Laquelle ?',
+    other: 'Un autre {x} ?', versesN: '{n} versets', credit: 'Données familiales : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
+    hereHead: 'Personnes nommées dans {ref} :', hereNone: 'Les données que j’ai ne nomment personne dans {ref}.', getPeople: 'Télécharger les versets des personnes et des lieux', getBook: 'Télécharger {book}', and: 'et',
+  },
+  id: {
+    head: { children: 'Anak-anak {x}', sons: 'Anak-anak laki-laki {x}', daughters: 'Anak-anak perempuan {x}', father: 'Ayah {x}', mother: 'Ibu {x}', parents: 'Orang tua {x}',
+      partners: 'Pasangan {x}', wife: 'Istri {x}', husband: 'Suami {x}', siblings: 'Saudara-saudara {x}', brothers: 'Saudara laki-laki {x}', sisters: 'Saudara perempuan {x}' },
+    parents: 'Orang tua', partners: 'Pasangan', children: 'Anak-anak', siblings: 'Saudara-saudara', half: ['saudara tiri', 'saudara tiri'],
+    named: 'Disebut dalam {n} ayat.', none: '{head}: data yang saya punya tidak menyebut siapa pun.', choose: 'Ada beberapa orang bernama {x}. Yang mana?',
+    other: '{x} yang lain?', versesN: '{n} ayat', credit: 'Data keluarga: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
+    hereHead: 'Tokoh yang disebut dalam {ref}:', hereNone: 'Data yang saya punya tidak menyebut siapa pun dalam {ref}.', getPeople: 'Unduh ayat-ayat tokoh dan tempat', getBook: 'Unduh {book}', and: 'dan',
+  },
+  hi: {
+    head: { children: '{x} की संतान', sons: '{x} के पुत्र', daughters: '{x} की पुत्रियाँ', father: '{x} के पिता', mother: '{x} की माता', parents: '{x} के माता-पिता',
+      partners: '{x} के जीवनसाथी', wife: '{x} की पत्नी', husband: '{x} के पति', siblings: '{x} के भाई-बहन', brothers: '{x} के भाई', sisters: '{x} की बहनें' },
+    parents: 'माता-पिता', partners: 'जीवनसाथी', children: 'संतान', siblings: 'भाई-बहन', half: ['सौतेला भाई', 'सौतेली बहन'],
+    named: '{n} पदों में नाम आता है।', none: '{head}: मेरे पास के आँकड़ों में किसी का नाम नहीं है।', choose: '{x} नाम के कई लोग हैं। कौन-सा?',
+    other: 'कोई दूसरा {x}?', versesN: '{n} पद', credit: 'परिवार के आँकड़े: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
+    hereHead: '{ref} में जिनका नाम है:', hereNone: 'मेरे पास के आँकड़ों में {ref} में किसी का नाम नहीं है।', getPeople: 'लोगों और स्थानों के पद डाउनलोड करें', getBook: '{book} डाउनलोड करें', and: 'और',
+  },
+  ar: {
+    head: { children: 'أولاد {x}', sons: 'أبناء {x}', daughters: 'بنات {x}', father: 'والد {x}', mother: 'أم {x}', parents: 'والدا {x}',
+      partners: 'أزواج {x}', wife: 'زوجة {x}', husband: 'زوج {x}', siblings: 'إخوة {x}', brothers: 'إخوة {x}', sisters: 'أخوات {x}' },
+    parents: 'الوالدان', partners: 'الأزواج', children: 'الأولاد', siblings: 'الإخوة والأخوات', half: ['أخ غير شقيق', 'أخت غير شقيقة'],
+    named: 'يُذكر في {n} آية.', none: '{head}: البيانات التي لدي لا تذكر أحدًا.', choose: 'هناك عدة أشخاص اسمهم {x}. أيهم تقصد؟',
+    other: '{x} آخر؟', versesN: '{n} آية', credit: 'بيانات العائلة: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
+    hereHead: 'الأشخاص المذكورون في {ref}:', hereNone: 'البيانات التي لدي لا تذكر أحدًا في {ref}.', getPeople: 'تنزيل آيات الأشخاص والأماكن', getBook: 'تنزيل {book}', and: 'و',
+  },
+}
+export const KT = (ui: string): KinText => KIN_T[ui as KinLang] ?? KIN_T.en
+/** "Esaú y Jacob", "Abraham, Sara y Agar" ("A, B و C": the Arabic «و» joins the next word). */
+export function joinNames(ui: string, names: string[]): string {
+  if (names.length < 2) return names[0] ?? ''
+  const and = KT(ui).and
+  const last = ui === 'ar' ? `${and}${names.at(-1)}` : `${and} ${names.at(-1)}`
+  return `${names.slice(0, -1).join(ui === 'ar' ? '، ' : ', ')} ${last}`
+}
+/** The sources of family data as the credit line names them. */
+export const SOURCE_NAMES: Record<string, string> = { 'STEPBible/STEPBible-Data/TIPNR': 'TIPNR (STEPBible)', 'BibleAquifer/ACAI': 'ACAI (BiblioNexus)' }
+
+/** The relatives a kind asks for, by gender when the data has it (a relative with no gender stays in both). */
+export function relativesOf(kind: Exclude<KinKind, 'who'>, f: FamilyData): FamilyData['children'] {
+  const not = (g: 1 | 2) => (r: { gender?: 1 | 2 }) => r.gender !== g
+  switch (kind) {
+    case 'children': return f.children
+    case 'sons': return f.children.filter(not(2))
+    case 'daughters': return f.children.filter(not(1))
+    case 'father': return f.parents.filter(not(2))
+    case 'mother': return f.parents.filter(not(1))
+    case 'parents': return f.parents
+    case 'partners': return f.partners
+    case 'wife': return f.partners.filter(not(1))
+    case 'husband': return f.partners.filter(not(2))
+    case 'siblings': return f.siblings
+    case 'brothers': return f.siblings.filter(not(2))
+    case 'sisters': return f.siblings.filter(not(1))
+  }
+}
+/** The kind said in the head: a father or mother asked with relatives of no gender is "parents" (§4.6). */
+export function headKind(kind: Exclude<KinKind, 'who'>, shown: { gender?: 1 | 2 }[]): Exclude<KinKind, 'who'> {
+  if ((kind === 'father' || kind === 'mother') && shown.some((r) => r.gender === undefined)) return 'parents'
+  return kind
+}
+/** The name shown for the person asked: as written when that is not its name ("Jacob (Israel)"), else its name. */
+export const askedName = (written: string | null | undefined, name: string): string =>
+  written && foldName(written) !== foldName(name) ? `${written} (${name})` : name
