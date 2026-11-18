@@ -133,3 +133,9 @@ export function backOf(v: PanelView): PanelView | null {
   if (v === 'server') return 'resources'
   return 'main'
 }
+
+/** Whether `f` holds for any of the languages on the phone (Browse names Stories when any language has them). */
+export async function anyOf(langs: readonly string[], f: (l: string) => Promise<boolean>): Promise<boolean> {
+  for (const l of langs) if (await f(l)) return true
+  return false
+}

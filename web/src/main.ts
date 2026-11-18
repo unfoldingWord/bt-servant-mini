@@ -6,7 +6,7 @@ import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, showAbout } from './setup'
-import { backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
+import { anyOf, backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
 import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
 import { addUnits, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
@@ -887,7 +887,7 @@ let resSubEl: HTMLElement | null = null
 function readMenuFacts() {
   const langs = INSTALLED
   void Promise.all([
-    langs.length ? obsPack(langs[0]!).then((o) => !!o, () => false) : false,
+    anyOf(langs, (l) => obsPack(l).then((o) => !!o, () => false)),
     langs.length ? modesOn(langs).then((m) => m.length > 0, () => false) : false,
     imagesInstalled().then((i) => !!i && 'bytes' in i, () => false),
   ]).then(([stories, modes, images]) => {
@@ -1207,7 +1207,11 @@ menu.onclick = () => {
   closeExplore()
   closeMap(false)
   panelView = 'main'
-  if (panel.classList.toggle('show')) renderPanel()
+  if (panel.classList.contains('show')) closePanel() // the same path as every other close: the screen in it stops drawing
+  else {
+    panel.classList.add('show')
+    renderPanel()
+  }
 }
 
 // -------------------------------------------------------------------------------------------------------------- answering
@@ -1514,6 +1518,7 @@ setHowtoHooks({
     input.dispatchEvent(new Event('input'))
   },
   browse: () => openExplore('menu'),
+  // opens Online AI directly; Back goes to Settings (backOf: one level up), as the design says
   onlineSettings: () => {
     panelView = 'online'
     panel.classList.add('show')

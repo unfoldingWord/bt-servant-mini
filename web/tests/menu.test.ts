@@ -1,7 +1,7 @@
 // The menu's rows and lines (menu.ts): three groups, 5 or 6 rows, the Resources line, the Settings screen and Back by levels.
 // menu.ts has no page, so this does not load main.ts.
 import { afterEach, describe, expect, test } from 'bun:test'
-import { backOf, languageSub, menuGroups, MNT, resourcesSub, settingsRows, type MenuState, type PanelView } from '../src/menu'
+import { anyOf, backOf, languageSub, menuGroups, MNT, resourcesSub, settingsRows, type MenuState, type PanelView } from '../src/menu'
 import { resetDownloads, startDownload } from '../src/resources'
 
 const base: MenuState = {
@@ -120,5 +120,16 @@ describe('the words', () => {
   })
   test('the Arabic menu has the design\'s group names', () => {
     expect([MNT('ar').study, MNT('ar').phone, MNT('ar').settings]).toEqual(['الدراسة', 'على هذا الهاتف', 'الإعدادات'])
+  })
+})
+
+describe('anyOf', () => {
+  test('a hit in any language counts, not only the first', async () => {
+    const asked: string[] = []
+    const has = (l: string) => { asked.push(l); return Promise.resolve(l === 'hi') }
+    expect(await anyOf(['es-419', 'ar', 'hi'], has)).toBe(true)
+    expect(asked).toEqual(['es-419', 'ar', 'hi'])
+    expect(await anyOf(['es-419'], has)).toBe(false)
+    expect(await anyOf([], has)).toBe(false)
   })
 })
