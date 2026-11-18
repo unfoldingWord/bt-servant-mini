@@ -380,7 +380,13 @@ export function openExploreAt(at: { book?: string; manual?: string; lang?: strin
     stack.push(at.book ? { k: 'book', code: at.book, lang: at.lang } : { k: 'manual', m: at.manual as Manual, lang: at.lang })
   }
   // the mode is counted once, when Browse really opened (not under the PIN lock)
-  if (openExplore(at.from ?? 'answer') && at.mode === 'obs5m') count(modeCount('obs5m'))
+  const opened = openExplore(at.from ?? 'answer')
+  if (opened && at.mode === 'obs5m') count(modeCount('obs5m'))
+  // refused (the PIN lock): a modes or 5M target is not left on the stack for the next plain opening
+  if (!opened && target) {
+    stack.length = 0
+    target = false
+  }
 }
 /** Closes Browse; the focus goes back to what opened it (not under the lock: `refocus` false). */
 export function closeExplore(refocus = true) {

@@ -104,13 +104,14 @@ export function initToBottom(log: HTMLElement, form: HTMLElement): { setLang(l: 
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(soon).observe(form)
   new MutationObserver((list) => {
     for (const r of list) {
-      if (r.target !== log) continue
+      // a class or `hidden` change inside the log (a fold opened, a card grown) only changes the heights: soon() reads them
+      if (r.type === 'attributes' || r.target !== log) continue
       direct = true
       r.addedNodes.forEach((n) => { if (n instanceof HTMLElement && isAnswerNode(n.className)) answers++ })
       r.removedNodes.forEach((n) => { if (n instanceof HTMLElement && !n.classList.contains('pending')) redraw = true })
     }
     soon()
-  }).observe(log, { childList: true, subtree: true })
+  }).observe(log, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'open'] })
   // overlays opening or closing: a card added to or taken off the body (its direct children only: not every redraw inside the page), or
   // the `open` class of the ones that stay (Browse, the map, saved items, the outline)
   const watchClass = new MutationObserver(later)

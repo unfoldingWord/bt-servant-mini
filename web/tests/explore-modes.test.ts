@@ -326,6 +326,10 @@ describe('review fixes', () => {
     expect(exploreOpen()).toBe(false)
     expect(counts()['explore.mode.obs5m']).toBeUndefined()
     expect(counts()['explore.from.welcome']).toBeUndefined()
+    // refused, the 5M target is not left behind: the next plain opening is Browse's home
+    openExplore('bar')
+    await until('.ex-modes .ex-row')
+    expect($('.ex-row[data-story="1"]')).toBeNull()
   })
   test('Arabic: "OBS 1:" is isolated, so it stays beside a Latin title', async () => {
     ui = 'ar'
