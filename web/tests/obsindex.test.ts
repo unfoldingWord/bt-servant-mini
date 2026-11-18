@@ -55,14 +55,14 @@ describe('A: a story word and a topic', () => {
   for (const [q, ui] of jesus)
     test(`${q} (${ui}): stories with Jesus in order, at most 4 + All, then the key term`, async () => {
       const r = await row(q, ui)
-      // the story a sent question opens goes first (obs.ts namedStory, which counts the frames' words: the fixture has only some frames),
-      // then the titles in the stories' order
-      const sent = await namedStory(q.replace(/^(historia de|story of|histoire de|cerita) /, ''), ui === 'hi' ? 'hi' : 'en')
+      // the design's order (Abel, Nov 17): the titles that name Jesus in the stories' order, so OBS 23 (the birth) first
       const top = nums(r)
-      const named = /\d+/.exec((await namedStory(q, ui === 'hi' ? 'hi' : 'en'))?.ref ?? '')
-      if (named) expect(top[0]).toBe(Number(named[0]))
-      void sent
+      expect(top[0], q).toBe(23)
       for (const n of [23, 24, 25]) expect(top, `${q}: ${n}`).toContain(n)
+      // (the story the send answers, when it names one, is among all the offered: the "All" list)
+      const sent = await namedStory(q.replace(/^(historia de|story of|histoire de|cerita) /, ''), ui === 'hi' ? 'hi' : 'en')
+      const n = /\d+/.exec(sent?.ref ?? '')
+      if (n) expect(r.find((x) => x.kind === 'stories')!.list!.ids, q).toContain(Number(n[0]))
       const all = r.find((x) => x.kind === 'stories')!
       expect(all.list!.ids.length).toBeGreaterThan(4)
       expect(all.list!.ids.slice(0, 4)).toEqual(nums(r))
@@ -70,13 +70,13 @@ describe('A: a story word and a topic', () => {
       expect(r.length).toBeLessThanOrEqual(6)
     })
   test('the label is "OBS n · title ▸" (◂ in Arabic), in the title\'s pack language; Hindi titles with the Hindi pack', async () => {
-    expect((await row('historia de Jesús', 'es'))[0]!.label).toBe('OBS 26 · Jesus Starts His Ministry ▸')
+    expect((await row('historia de Jesús', 'es'))[0]!.label).toBe('OBS 23 · The Birth of Jesus ▸')
     expect((await row('قصة يسوع', 'ar'))[0]!.label).toBe('OBS 23 · The Birth of Jesus ◂')
     expect(rtlLang('ar')).toBe(true)
     const hi = (await row('यीशु की कहानी', 'hi'))[0]!
-    expect(hi.label).toBe('OBS 34 · यीशु दूसरी कहानियों की शिक्षा देता है ▸') // (the story namedStory sends, from the Hindi frames of the fixture)
-    expect(hi.sheet).toMatchObject({ intent: 'passage', ref: 'obs 34', what: ['text', 'notes'], lang: 'hi' })
-    expect(hi.aria).toContain('OBS 34')
+    expect(hi.label).toBe('OBS 23 · यीशु का जन्म ▸')
+    expect(hi.sheet).toMatchObject({ intent: 'passage', ref: 'obs 23', what: ['text', 'notes'], lang: 'hi' })
+    expect(hi.aria).toContain('OBS 23')
   })
   test('a long title is cut with "…" so two buttons fit a line', async () => {
     const [s] = await row('la historia del hijo pródigo', 'es')
