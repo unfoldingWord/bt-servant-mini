@@ -2,14 +2,21 @@
 # 1. llama.cpp for iPhone and the simulator (cached: it only changes with LLAMA_TAG).
 # 2. The Xcode project from ios/project.yml (XcodeGen).
 # 3. The app in the simulator with --selftest: download the model, add English, ask; the steps and screenshots are artifacts.
-# 4. An unsigned .ipa for the device (sideloading for testing). Signing and TestFlight come when unfoldingWord's Apple
-#    Developer account is connected (repository secrets).
+# 4. An unsigned .ipa for the device (sideloading for testing).
+# 5. TestFlight: when run by hand (workflow_dispatch) or for a v* tag, and only if unfoldingWord's App Store Connect API key
+#    is in the repository secrets (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID), the app is archived, signed with
+#    that key (cloud-managed certificate, automatic profile) and uploaded. Otherwise the archive is made unsigned, to check
+#    that it archives. Both only after the self-test passed. Before the first upload, unfoldingWord creates the app
+#    (org.unfoldingword.btservantmini) in App Store Connect and an Admin team API key (cloud-managed signing); the steps are
+#    in the workspace handoff (ios-instrucciones-uw.md). For more control, the secrets can move to a GitHub Environment
+#    with required reviewers (then HAS_ASC below must come from a vars flag: job env cannot see environment secrets).
 name: iOS
 
 on:
   workflow_dispatch:
   push:
-    branches: [master, ios-native]
+    branches: [master, ios-native, ms/ios-testflight]
+    tags: ['v*'] # path filters do not apply to tags
     paths: ['ios/**', '.github/workflows/ios.yml']
 
 env:
@@ -23,6 +30,10 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 90
+    env:
+      # Only whether the key is there: the secrets themselves go to the one step that signs.
+      HAS_ASC: ${{ secrets.ASC_KEY_ID != '' && 'yes' || '' }}
+      UPLOAD: ${{ (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')) && 'yes' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -102,6 +113,46 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/BTServantMini.app ipa/Payload/
           (cd ipa && zip -qry ../out/BTServantMini-unsigned.ipa Payload)
           ls -la out
+
+      - name: Build number
+        # TestFlight refuses a build number it has seen: one per run and per re-run, above the 29 of 0.12.0.
+        run: echo "BUILD_NUMBER=$((GITHUB_RUN_NUMBER * 10 + GITHUB_RUN_ATTEMPT))" >> "$GITHUB_ENV"
+
+      - name: Archive (unsigned, to check that it archives)
+        if: env.HAS_ASC != 'yes' || env.UPLOAD != 'yes'
+        working-directory: ios
+        run: |
+          xcodebuild archive -project BTServantMini.xcodeproj -scheme BTServantMini -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/BTServantMini.xcarchive \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" CODE_SIGNING_ALLOWED=NO | tail -20
+          test -d build/BTServantMini.xcarchive/Products/Applications/BTServantMini.app
+          test -f build/BTServantMini.xcarchive/Products/Applications/BTServantMini.app/PrivacyInfo.xcprivacy
+
+      - name: Sign and upload to TestFlight
+        if: env.HAS_ASC == 'yes' && env.UPLOAD == 'yes'
+        working-directory: ios
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          KEY="$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
+          mkdir -p "$(dirname "$KEY")"
+          trap 'rm -rf "$RUNNER_TEMP/keys"' EXIT
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY"
+                -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          xcodebuild archive -project BTServantMini.xcodeproj -scheme BTServantMini -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/BTServantMini.xcarchive \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            "${AUTH[@]}" | tail -40
+          cp ExportOptions.plist "$RUNNER_TEMP/ExportOptions.plist"
+          plutil -insert teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive -archivePath build/BTServantMini.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export "${AUTH[@]}" | tail -40
+          echo "Uploaded build $BUILD_NUMBER; it shows in App Store Connect -> TestFlight after Apple processes it." \
+            | tee out/testflight.txt
 
       - uses: actions/upload-artifact@v4
         if: always()
