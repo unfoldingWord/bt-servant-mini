@@ -488,10 +488,13 @@ export type { FamilyData }
 type KinText = {
   /** the head of a family answer, per kind ("Hijos de {x}") */
   head: Record<Exclude<KinKind, 'who'>, string>
-  /** a card's lines */
+  /** a card's lines; `credit`: the answer's source line, the app's own form («Fuente: …»: answer.ts isSourceLine), which goes into
+   *  the «detalles» fold under the answer like every source line (Abel, Nov 18: the line was too big) */
   parents: string; partners: string; children: string; siblings: string
   half: [man: string, woman: string]
   named: string
+  /** the same for one verse */
+  named1: string
   none: string
   choose: string
   other: string
@@ -515,52 +518,54 @@ export const KIN_T: Record<KinLang, KinText> = {
     head: { children: 'Children of {x}', sons: 'Sons of {x}', daughters: 'Daughters of {x}', father: 'Father of {x}', mother: 'Mother of {x}', parents: 'Parents of {x}',
       partners: 'Spouses of {x}', wife: 'Wife of {x}', husband: 'Husband of {x}', siblings: 'Brothers and sisters of {x}', brothers: 'Brothers of {x}', sisters: 'Sisters of {x}' },
     parents: 'Parents', partners: 'Spouses', children: 'Children', siblings: 'Brothers and sisters', half: ['half brother', 'half sister'],
-    named: 'Named in {n} verses.', none: '{head}: the data I have names no one.', choose: 'Several people are called {x}. Which one?',
-    other: 'Another {x}?', versesN: '{n} verses', credit: 'Family data: {src}.', family: 'Family of {x}', here: 'People here: {names}',
+    named: 'Named in {n} verses.', named1: 'Named in 1 verse.', none: '{head}: the data I have names no one.', choose: 'Several people are called {x}. Which one?',
+    other: 'Another {x}?', versesN: '{n} verses', credit: 'Source: {src}.', family: 'Family of {x}', here: 'People here: {names}',
     hereHead: 'People named in {ref}:', hereNone: 'The data I have names no one in {ref}.', getPeople: 'Download the verses of people and places', getBook: 'Download {book}', and: 'and', moreFamily: 'More family', whereNamed: 'Where {x} is named', article: 'Article: {x}',
   },
   es: {
     head: { children: 'Hijos de {x}', sons: 'Hijos de {x}', daughters: 'Hijas de {x}', father: 'Padre de {x}', mother: 'Madre de {x}', parents: 'Padres de {x}',
       partners: 'Cónyuges de {x}', wife: 'Esposa de {x}', husband: 'Esposo de {x}', siblings: 'Hermanos de {x}', brothers: 'Hermanos de {x}', sisters: 'Hermanas de {x}' },
     parents: 'Padres', partners: 'Cónyuges', children: 'Hijos', siblings: 'Hermanos', half: ['medio hermano', 'media hermana'],
-    named: 'Se nombra en {n} versículos.', none: '{head}: los datos que tengo no nombran a nadie.', choose: 'Hay varias personas llamadas {x}. ¿Cuál?',
-    other: '¿Otro {x}?', versesN: '{n} versículos', credit: 'Datos de familia: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
+    named: 'Se nombra en {n} versículos.', named1: 'Se nombra en 1 versículo.', none: '{head}: los datos que tengo no nombran a nadie.', choose: 'Hay varias personas llamadas {x}. ¿Cuál?',
+    other: '¿Otro {x}?', versesN: '{n} versículos', credit: 'Fuente: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
     hereHead: 'Personas nombradas en {ref}:', hereNone: 'Los datos que tengo no nombran a nadie en {ref}.', getPeople: 'Descargar los versículos de personas y lugares', getBook: 'Descargar {book}', and: 'y', moreFamily: 'Más familia', whereNamed: 'Dónde se nombra a {x}', article: 'Artículo: {x}',
   },
   fr: {
     head: { children: 'Enfants de {x}', sons: 'Fils de {x}', daughters: 'Filles de {x}', father: 'Père de {x}', mother: 'Mère de {x}', parents: 'Parents de {x}',
       partners: 'Conjoints de {x}', wife: 'Femme de {x}', husband: 'Mari de {x}', siblings: 'Frères et sœurs de {x}', brothers: 'Frères de {x}', sisters: 'Sœurs de {x}' },
     parents: 'Parents', partners: 'Conjoints', children: 'Enfants', siblings: 'Frères et sœurs', half: ['demi-frère', 'demi-sœur'],
-    named: 'Nommé dans {n} versets.', none: '{head} : les données que j’ai ne nomment personne.', choose: 'Plusieurs personnes s’appellent {x}. Laquelle ?',
-    other: 'Un autre {x} ?', versesN: '{n} versets', credit: 'Données familiales : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
+    named: 'Nommé dans {n} versets.', named1: 'Nommé dans 1 verset.', none: '{head} : les données que j’ai ne nomment personne.', choose: 'Plusieurs personnes s’appellent {x}. Laquelle ?',
+    other: 'Un autre {x} ?', versesN: '{n} versets', credit: 'Source : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
     hereHead: 'Personnes nommées dans {ref} :', hereNone: 'Les données que j’ai ne nomment personne dans {ref}.', getPeople: 'Télécharger les versets des personnes et des lieux', getBook: 'Télécharger {book}', and: 'et', moreFamily: 'Plus de famille', whereNamed: 'Où {x} est nommé', article: 'Article : {x}',
   },
   id: {
     head: { children: 'Anak-anak {x}', sons: 'Anak-anak laki-laki {x}', daughters: 'Anak-anak perempuan {x}', father: 'Ayah {x}', mother: 'Ibu {x}', parents: 'Orang tua {x}',
       partners: 'Pasangan {x}', wife: 'Istri {x}', husband: 'Suami {x}', siblings: 'Saudara-saudara {x}', brothers: 'Saudara laki-laki {x}', sisters: 'Saudara perempuan {x}' },
     parents: 'Orang tua', partners: 'Pasangan', children: 'Anak-anak', siblings: 'Saudara-saudara', half: ['saudara tiri', 'saudara tiri'],
-    named: 'Disebut dalam {n} ayat.', none: '{head}: data yang saya punya tidak menyebut siapa pun.', choose: 'Ada beberapa orang bernama {x}. Yang mana?',
-    other: '{x} yang lain?', versesN: '{n} ayat', credit: 'Data keluarga: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
+    named: 'Disebut dalam {n} ayat.', named1: 'Disebut dalam 1 ayat.', none: '{head}: data yang saya punya tidak menyebut siapa pun.', choose: 'Ada beberapa orang bernama {x}. Yang mana?',
+    other: '{x} yang lain?', versesN: '{n} ayat', credit: 'Sumber: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
     hereHead: 'Tokoh yang disebut dalam {ref}:', hereNone: 'Data yang saya punya tidak menyebut siapa pun dalam {ref}.', getPeople: 'Unduh ayat-ayat tokoh dan tempat', getBook: 'Unduh {book}', and: 'dan', moreFamily: 'Keluarga lainnya', whereNamed: 'Di mana {x} disebut', article: 'Artikel: {x}',
   },
   hi: {
     head: { children: '{x} की संतान', sons: '{x} के पुत्र', daughters: '{x} की पुत्रियाँ', father: '{x} के पिता', mother: '{x} की माता', parents: '{x} के माता-पिता',
       partners: '{x} के जीवनसाथी', wife: '{x} की पत्नी', husband: '{x} के पति', siblings: '{x} के भाई-बहन', brothers: '{x} के भाई', sisters: '{x} की बहनें' },
     parents: 'माता-पिता', partners: 'जीवनसाथी', children: 'संतान', siblings: 'भाई-बहन', half: ['सौतेला भाई', 'सौतेली बहन'],
-    named: '{n} पदों में नाम आता है।', none: '{head}: मेरे पास के आँकड़ों में किसी का नाम नहीं है।', choose: '{x} नाम के कई लोग हैं। कौन-सा?',
-    other: 'कोई दूसरा {x}?', versesN: '{n} पद', credit: 'परिवार के आँकड़े: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
+    named: '{n} पदों में नाम आता है।', named1: '1 पद में नाम आता है।', none: '{head}: मेरे पास के आँकड़ों में किसी का नाम नहीं है।', choose: '{x} नाम के कई लोग हैं। कौन-सा?',
+    other: 'कोई दूसरा {x}?', versesN: '{n} पद', credit: 'स्रोत: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
     hereHead: '{ref} में जिनका नाम है:', hereNone: 'मेरे पास के आँकड़ों में {ref} में किसी का नाम नहीं है।', getPeople: 'लोगों और स्थानों के पद डाउनलोड करें', getBook: '{book} डाउनलोड करें', and: 'और', moreFamily: 'और परिवार', whereNamed: '{x} का नाम कहाँ आता है', article: 'लेख: {x}',
   },
   ar: {
     head: { children: 'أولاد {x}', sons: 'أبناء {x}', daughters: 'بنات {x}', father: 'والد {x}', mother: 'أم {x}', parents: 'والدا {x}',
       partners: 'أزواج {x}', wife: 'زوجة {x}', husband: 'زوج {x}', siblings: 'إخوة {x}', brothers: 'إخوة {x}', sisters: 'أخوات {x}' },
     parents: 'الوالدان', partners: 'الأزواج', children: 'الأولاد', siblings: 'الإخوة والأخوات', half: ['أخ غير شقيق', 'أخت غير شقيقة'],
-    named: 'يُذكر في {n} آية.', none: '{head}: البيانات التي لدي لا تذكر أحدًا.', choose: 'هناك عدة أشخاص اسمهم {x}. أيهم تقصد؟',
-    other: '{x} آخر؟', versesN: '{n} آية', credit: 'بيانات العائلة: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
+    named: 'يُذكر في {n} آية.', named1: 'يُذكر في آية واحدة.', none: '{head}: البيانات التي لدي لا تذكر أحدًا.', choose: 'هناك عدة أشخاص اسمهم {x}. أيهم تقصد؟',
+    other: '{x} آخر؟', versesN: '{n} آية', credit: 'المصدر: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
     hereHead: 'الأشخاص المذكورون في {ref}:', hereNone: 'البيانات التي لدي لا تذكر أحدًا في {ref}.', getPeople: 'تنزيل آيات الأشخاص والأماكن', getBook: 'تنزيل {book}', and: 'و', moreFamily: 'المزيد من العائلة', whereNamed: 'أين يُذكر {x}', article: 'مقالة: {x}',
   },
 }
 export const KT = (ui: string): KinText => KIN_T[ui as KinLang] ?? KIN_T.en
+/** "Se nombra en 12 versículos.", "Se nombra en 1 versículo." */
+export const namedIn = (ui: string, n: number): string => (n === 1 ? KT(ui).named1 : KT(ui).named.replace('{n}', String(n)))
 /** "Hijos de Isaac:" and French "Fils d’Isaac :" (a space before the colon). */
 export const colon = (ui: string, head: string): string => (ui === 'fr' ? `${head} :` : `${head}:`)
 /** A text with the person's name in it: French «de» before a vowel or h is «d’» («Enfants d’Isaac»). */

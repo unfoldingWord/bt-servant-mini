@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, colon, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { askedName, colon, namedIn, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2305,7 +2305,8 @@ async function articleFamily(sheet: Sheet, ui: string): Promise<{ line: string; 
   const label = withName(ui, t.family, name)
   const text = tiesLine(ui, p?.gender, ties, (x) => names.get(x) ?? x)
   const sources = ['STEPBible/STEPBible-Data/TIPNR', ...((await openLang(pack).catch(() => null)) && (p?.gender !== undefined || p?.note) ? ['BibleAquifer/ACAI'] : [])]
-  return { line: text ? `${colon(ui, label)} ${text}.\n\n${creditLine(ui, sources)}` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }] }
+  // (its sources in a short parenthesis: inside the fold, not the answer's last line, so no source line of its own)
+  return { line: text ? `${colon(ui, label)} ${text} (${sources.map((x) => (SOURCE_NAMES[x] ?? x).replace(/ \(.*\)$/, '')).join(', ')}).` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }] }
 }
 /** Under one verse (or verses of one chapter) or a frame of Open Bible Stories: "People here: Isaac, Esau…", when the data names any. */
 async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | null> {
@@ -2381,7 +2382,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     // (MAX_FOLLOW: the other one of that name and the download first, the article, the family, the verses, a story)
     const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...more, ...verses, ...where, ...stories]
     const head = [tieText, f.note].filter(Boolean).join('; ')
-    const info = [`**${shownName}**${head ? ` — ${head}` : ''}`, t.named.replace('{n}', String(f.verses)) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].join('\n\n')
+    const info = [`**${shownName}**${head ? ` — ${head}` : ''}`, namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}: ${ties.map((tt) => `${tt.kind} ${tt.ids.join('+')}`).join(', ') || 'no ties'}`) } }
   }
   if (kind === 'verses') {
@@ -2390,7 +2391,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
     const follow: Follow[] = [...verses, ...(tw ? [tw] : []), { label: shownName, sheet: kinSheet(sheet, 'who', { concept: f.id, term: sheet.term }) },
       ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0))]
-    const info = [`**${shownName}** — ${t.named.replace('{n}', String(f.verses))}`, plain.join(', '), creditLine(ui, ['STEPBible/STEPBible-Data/TIPNR'])].filter(Boolean).join('\n\n')
+    const info = [`**${shownName}** — ${namedIn(ui, f.verses)}`, plain.join(', '), creditLine(ui, ['STEPBible/STEPBible-Data/TIPNR'])].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: Math.max(1, own.verses.length), reply: { ui, info, follow, lang: sheet.lang, meta: meta(`verses of ${f.id}`) } }
   }
   if (kind === 'family') {
@@ -2405,11 +2406,11 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     // (a copy: the family data is the reader's)
     const sources = stories.length ? [...f.sources, 'robertrouse/theographic-bible-metadata'] : f.sources
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
-    // (MAX_FOLLOW: the other one of that name and the download first, a few relatives, then verses and a story)
-    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...rel.slice(0, 4).map(person),
+    // (MAX_FOLLOW: the other one of that name and the download first, the article, every relative that fits, then verses and a story)
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...rel.map(person),
       ...verses, ...stories]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
-      line(t.siblings, f.siblings), t.named.replace('{n}', String(f.verses)) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
+      line(t.siblings, f.siblings), namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`family ${f.id}`) } }
   }
   const k = kind as Exclude<KinKind, 'who'>
@@ -2426,9 +2427,9 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const verses = await pairSteps(sheet, ui, list.flatMap((r) => r.verses.slice(0, 1)), plain, sheet)
   const names = joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))
   const info = [`**${colon(ui, head)}** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
-  // (MAX_FOLLOW: the other one of that name and the download first; then up to five relatives, two verses, the article)
-  // (the person's article first: who X is, then X's family; Abel, Nov 18)
-  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), ...list.slice(0, 5).map(person), ...verses.slice(0, others.length ? 1 : 2)]
+  // (MAX_FOLLOW: the other one of that name and the download first, the person's article, then every relative that fits, the verses
+  // last: Abel, Nov 18, missed Madián among Abraham's sons when only five relatives were buttons)
+  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), ...list.map(person), ...verses.slice(0, others.length ? 1 : 2)]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }
 }
 

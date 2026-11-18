@@ -122,3 +122,18 @@ describe('the reader does not decide a name alone (Abel’s phone, Nov 18)', () 
     expect(r.reply.meta ?? '').not.toMatch(/a name alone/)
   })
 })
+
+describe('Abel’s look at 375 px (Nov 18)', () => {
+  test('every son of Abraham is a button (Madián too), after his article', async () => {
+    const r = await ask('hijos de Abraham', 'es')
+    const sons = (r.reply.info ?? '').match(/^\*\*Hijos de Abraham:\*\* (.*)\.$/m)![1]!.split(/, | y /)
+    for (const s of sons) expect(labels(r)).toContain(s)
+  })
+  test('the source line is the app’s own («Fuente: …»), so it goes into «detalles» as every source line does', async () => {
+    const { isSourceLine } = await import('../src/answer')
+    const r = await ask('hijos de Abraham', 'es')
+    const last = (r.reply.info ?? '').split('\n\n').at(-1)!
+    expect(last).toMatch(/^\*Fuente: TIPNR/)
+    expect(isSourceLine(last.replace(/^\*|\*$/g, ''))).toBe(true)
+  })
+})

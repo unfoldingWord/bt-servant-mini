@@ -52,7 +52,8 @@ describe('with the packs on disk', () => {
     expect(r.concept).toBe('tw:names/isaac')
     const info = r.reply.info!
     // the line is plain (not bold), and inside the fold: before its end mark «◂», after the article's own text
-    expect(info).toMatch(/\nFamily of Isaac: son of (Sarah and Abraham|Abraham and Sarah)[^\n]*\.\n\n\*Family data: TIPNR \(STEPBible\)\.\*\n\n◂/)
+    // (its sources in a short parenthesis: no source line of its own inside the fold)
+    expect(info).toMatch(/\nFamily of Isaac: son of (Sarah and Abraham|Abraham and Sarah)[^\n]* \(TIPNR\)\.\n\n◂/)
     expect(info).not.toMatch(/\*\*Family of Isaac\*\*/)
     expect(info.indexOf('Family of Isaac')).toBeGreaterThan(info.indexOf('▸'))
     expect((r.reply.follow ?? []).some((f) => f.sheet?.intent === 'kin' && f.sheet.concept === 'per:isaac' && f.sheet.what[0] === 'family')).toBe(true)

@@ -22,7 +22,7 @@ describe('with the packs on disk (TIPNR relations, Genesis)', () => {
     expect(r.answered).toBe('family')
     expect(r.concept).toBe('per:isaac')
     expect(r.reply.info).toMatch(/^\*\*Hijos de Isaac:\*\* Esau y /)
-    expect(r.reply.info).toMatch(/Datos de familia: TIPNR \(STEPBible\)/)
+    expect(r.reply.info).toMatch(/Fuente: TIPNR \(STEPBible\)/)
     expect(labels(r)).toContain('Génesis 25:26')
     expect(r.reply.meta).toMatch(/read by code/)
   })
@@ -107,7 +107,7 @@ describe('with the hand-made reader (gender, Spanish names, homonyms)', () => {
     const r = await ask('¿Quién fue Cetura?')
     expect(r.route).toBe('kin')
     expect(r.reply.info).toMatch(/^\*\*Cetura\*\*/)
-    expect(r.reply.info).toMatch(/Datos de familia: TIPNR \(STEPBible\), ACAI \(BiblioNexus\)/)
+    expect(r.reply.info).toMatch(/Fuente: TIPNR \(STEPBible\), ACAI \(BiblioNexus\)/)
   })
   test('without the parts: the same people, no verse buttons', async () => {
     setKinReader(async () => kinFixture({ parts: false }))
