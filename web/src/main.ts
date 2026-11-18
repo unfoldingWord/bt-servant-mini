@@ -1457,13 +1457,14 @@ function goTo(id: string, from: 'back' | 'map') {
 // has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
 // [≡] opens the outline, full screen like the Map (under the PIN lock like it). With the switch off none of this exists.
 const loading5 = new Set<number>()
+const failed5 = new Set<number>() // covered stories whose tables did not come: not asked again until the packs change
 /** A story's tables (read once from the packs): null until they arrive; then the bar and the cards are drawn again */
 function fixture5(story: number): Fixture | null {
   const f = fixtureNow5(story)
-  if (f || !on5m() || !covered5().includes(story) || loading5.has(story)) return f
+  if (f || !on5m() || !covered5().includes(story) || loading5.has(story) || failed5.has(story)) return f
   loading5.add(story)
   // (pipeline.ts's loader: the composer's session buttons read the same tables)
-  loadFixture5(story).then(() => { loading5.delete(story); fiveReady() }, () => { loading5.delete(story) })
+  loadFixture5(story).then((t) => { loading5.delete(story); if (t) fiveReady(); else failed5.add(story) }, () => { loading5.delete(story); failed5.add(story) })
   return null
 }
 /** Tables arrived (or 5M turned on or off): what shows 5M is drawn again */
@@ -1600,7 +1601,7 @@ function end5() {
 /** The resume buttons of the welcome: the sessions used last (up to 3) */
 function resumeRow(): HTMLElement | null {
   if (!on5m()) return null
-  const list = savedSessions().slice(0, 3).filter((e) => fixture5(e.story))
+  const list = savedSessions().filter((e) => covered5().includes(e.story)).slice(0, 3).filter((e) => fixture5(e.story))
   if (!list.length) return null
   const row = el('div', 's5-resume')
   row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
@@ -1946,7 +1947,7 @@ try {
 } catch {}
 // 5M: the installed packs asked at the start (and after each change) for the tables; the saved sessions' stories read early so
 // their cards and bar are drawn whole
-const looked5 = () => { for (const e of savedSessions().slice(0, 3)) fixture5(e.story); fiveReady() }
+const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story); fiveReady() }
 onFive(looked5)
 void refresh5().then(looked5)
 firstSafety()

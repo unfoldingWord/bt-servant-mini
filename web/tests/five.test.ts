@@ -12,7 +12,7 @@ const session = {
     { code: 'frames', lists: [] },
     { code: 'community', block: { key: 'dev#C', title: 'Community', text: 'Body' }, lists: [] },
     { code: 'm1', title: 'Movement 1', text: 'Open', lists: [
-      { code: 'observation', title: 'Observe', text: 'Ask', questions: [{ id: '3/m1/1', q: 'Who?', a: 'Eve', frames: [1] }, { id: '3/m1/2', q: 'Why?', frames: [] }], terms: [] },
+      { code: 'observation', title: 'Observe', text: 'Ask', questions: [{ id: '3/m1/1', q: 'Who?', a: 'Eve', frames: [301] }, { id: '3/m1/2', q: 'Why?', frames: [] }], terms: [] },
       { code: 'terms', title: 'Terms', terms: [{ frame: 302, terms: [{ id: '3:2/1', term: 'sin', text: '**sin** is' }, { id: '3:2/2', text: 'no term' }] }], questions: [] },
     ] },
   ],
@@ -41,6 +41,24 @@ describe('a pack session as the tables', () => {
   test('the session reads it', () => {
     expect(steps(fx, 'frames').length).toBe(2)
     expect(steps(fx, 'm1').length).toBeGreaterThan(2)
+  })
+})
+
+describe('details of the conversion', () => {
+  test('a part with lists and no heading of its own gets no heading row; a bare part (frames) keeps its row', () => {
+    const fx = fixtureOfSession({ ...session, parts: [{ code: 'frames', lists: [] }, { code: 'm2', lists: [{ code: 'discourse', questions: [{ id: '3/m2/1', q: 'Q', frames: [302] }], terms: [] }] }] }, 'en')
+    expect(fx.parts.map((p) => [p.part, p.list])).toEqual([['frames', null], ['m2', 'discourse']])
+    expect(fx.questions[0]!.frames).toEqual(['3:2'])
+  })
+  test('a read that started before a refresh leaves nothing behind', async () => {
+    let release = (_: unknown) => {}
+    setSource5({ coverage: async () => new Map([[3, ['en']]]), session: () => new Promise((r) => { release = () => r(fixtureOfSession(session, 'en')) }) })
+    await refresh5()
+    const p = fixtureOf5(3)
+    await refresh5(true)
+    release(null)
+    await p
+    expect(fixtureNow5(3)).toBeNull()
   })
 })
 

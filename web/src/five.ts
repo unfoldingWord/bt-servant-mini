@@ -31,12 +31,13 @@ export function fixtureOfSession(s: TfSession, lang: string): Fixture {
     parts: [], shared: {}, questions: [], terms: [],
   }
   for (const p of s.parts) {
-    const row: FxPart = { part: p.code as Code, list: null, title: p.title ?? null, text: p.text ?? null, shared: p.block?.key ?? null }
+    // (a part that has lists but no heading row of its own has no heading step: the client's empty row is left out)
     if (p.block) fx.shared[p.block.key] = { title: p.block.title, text: p.block.text ?? '' }
-    fx.parts.push(row)
+    if (p.lists.length === 0 || p.title !== undefined || p.text !== undefined || p.block)
+      fx.parts.push({ part: p.code as Code, list: null, title: p.title ?? null, text: p.text ?? null, shared: p.block?.key ?? null })
     for (const l of p.lists) {
       fx.parts.push({ part: p.code as Code, list: l.code as FxList, title: l.title ?? null, text: l.text ?? null, shared: null })
-      for (const q of l.questions) fx.questions.push({ id: q.id, part: p.code as Code, list: l.code as FxList, frames: q.frames.map(ref), q: q.q, a: q.a ?? null })
+      for (const q of l.questions) fx.questions.push({ id: q.id, part: p.code as Code, list: l.code as FxList, frames: q.frames.map((f) => ref(f % 100)), q: q.q, a: q.a ?? null })
       for (const g of l.terms) for (const t of g.terms) fx.terms.push({ frame: ref(g.frame % 100), k: +(t.id.split('/')[1] ?? 0), term: t.term ?? '', text: t.text })
     }
   }
@@ -75,17 +76,29 @@ const fromPacks: Source5 = {
 let src: Source5 = fromPacks
 let covered: Map<number, string[]> = new Map()
 let cache = new Map<string, Promise<Fixture | null>>()
+let gen = 0 // changes with every refresh: a read that started before it does not leave its tables behind
 const now = new Map<string, Fixture>()
 
 /** Does this phone have 5M (some installed pack carries the tables)? Sync: what `refresh5` last found. */
 export const on5m = (): boolean => covered.size > 0
 /** The stories that have a session, in order */
 export const covered5 = (): number[] => [...covered.keys()].sort((a, b) => a - b)
-/** Looks for the tables again (at the app's start, after a pack is added or removed); resolves to whether 5M is on */
-export async function refresh5(): Promise<boolean> {
-  cache = new Map()
-  now.clear()
-  covered = await src.coverage().catch(() => new Map<number, string[]>())
+/**
+ * Looks for the tables again (at the app's start, after a pack is added or removed); resolves to whether 5M is on. When the
+ * stories and the packs that carry them are the same as before, what was read stays (nothing flickers; the manual's release is
+ * fixed, so the same coverage is the same tables); `force` reads everything again.
+ */
+export async function refresh5(force = false): Promise<boolean> {
+  const mine = src
+  const next = await mine.coverage().catch(() => new Map<number, string[]>())
+  if (mine !== src) return covered.size > 0 // (the source was changed meanwhile: that change decides)
+  const key = (m: Map<number, string[]>) => JSON.stringify([...m].sort((x, y) => x[0] - y[0]))
+  if (force || key(next) !== key(covered)) {
+    gen++
+    cache = new Map()
+    now.clear()
+    covered = next
+  }
   return covered.size > 0
 }
 /** The pack tables of a story (read once per story and language); null when no pack has it */
@@ -93,7 +106,8 @@ export function fixtureOf5(n: number, prefer?: string | null): Promise<Fixture |
   const k = `${n}|${prefer ?? ''}`
   let p = cache.get(k)
   if (!p) {
-    p = src.session(n, prefer).then((f) => { if (f) now.set(String(n), f); return f }, () => { cache.delete(k); return null })
+    const g = gen
+    p = src.session(n, prefer).then((f) => { if (f && g === gen) now.set(String(n), f); return f }, () => { if (g === gen) cache.delete(k); return null })
     cache.set(k, p)
   }
   return p
@@ -103,6 +117,7 @@ export const fixtureNow5 = (n: number): Fixture | null => now.get(String(n)) ?? 
 /** Tests: another source (null: the packs again); the caches go */
 export function setSource5(s: Source5 | null): void {
   src = s ?? fromPacks
+  gen++
   cache = new Map(); now.clear(); covered = new Map()
 }
 

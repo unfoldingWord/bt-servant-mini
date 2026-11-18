@@ -2,8 +2,7 @@
 import { fixtureSource } from '../src/dev'
 import { fixtureOf5, refresh5, setSource5 } from '../src/five'
 
-/** 5M on (`prime`: story 1's tables read already)
- *  — 5M on (story 1 from the fixture) or off (no pack with the tables) */
+/** 5M on (story 1 from the fixture) or off (no pack with the tables) */
 export async function fiveOn(on = true, prime = true): Promise<void> {
   setSource5(on ? fixtureSource() : { coverage: async () => new Map(), session: async () => null })
   await refresh5()

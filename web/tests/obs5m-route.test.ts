@@ -44,7 +44,7 @@ const answers = fx.questions.map((q) => q.a).filter((a): a is string => !!a)
 const backTo = (place: string) => `← ${W5('en').back.replace('{place}', place)}`
 const at = (c: ConvState) => `${c.graph!.session!.part}/${c.graph!.session!.at}`
 
-describe('a 5M session (dev on)', () => {
+describe('a 5M session (5M on)', () => {
   test('5M OBS 1 → … → M1 frame 5 → notes (deeper) → Academy (deeper) → back to the session → next (line) → Genesis 1:20 (branch)', async () => {
     const c: ConvState = { last: null }
     const r0: any = await turn(c, { q: '5M OBS 1' }, 'en')
