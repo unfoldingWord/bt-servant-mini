@@ -136,6 +136,7 @@ export function resetExplore() {
   plans.clear()
   planned.clear()
   stack.length = 0
+  target = false
 }
 
 // ---------------------------------------------------------------------------------------------------------------- strings
@@ -276,6 +277,7 @@ type View =
   | { k: 'modes' }
 // kept while the app is open: Browse opens again where the person left it (the next verse is one tap away)
 const stack: View[] = []
+let target = false // the views on the stack were set by openExploreAt for the modes list or the 5M view: closing from them forgets them
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
 let reached = false // whether this opening of the app has reached a help through Browse (counted once)
 let opener: HTMLElement | null = null // where the focus goes back to
@@ -359,6 +361,7 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer'): boolea
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
 export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; only?: number[]; title?: string; mode?: ModeId | 'list'; from?: 'welcome' }) {
+  target = at.mode === 'list' || at.mode === 'obs5m'
   if (at.mode === 'list') {
     // the guided modes alone (the empty conversation's [Start a mode]), Browse's home behind it
     const home = stack.find((x): x is Extract<View, { k: 'home' }> => x.k === 'home')
@@ -382,6 +385,10 @@ export function openExploreAt(at: { book?: string; manual?: string; lang?: strin
 /** Closes Browse; the focus goes back to what opened it (not under the lock: `refocus` false). */
 export function closeExplore(refocus = true) {
   if (!box?.root.classList.contains('open')) return
+  // opened as a target (the modes list, the 5M view) and closed from it: the next plain opening is Browse's home, not that view
+  const top = stack[stack.length - 1]
+  if (target && (top?.k === 'modes' || top?.k === 'obs5m')) stack.length = 0
+  target = false
   box.root.classList.remove('open')
   const to = opener
   opener = null

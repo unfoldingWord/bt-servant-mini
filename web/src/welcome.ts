@@ -10,7 +10,8 @@ import { CANON, openLang } from './packs'
 import { booksOf, fillName } from './suggest'
 import { bookShown } from './firstuse'
 import { XT } from './explore'
-import { fiveOffered, fiveStories, modeTitle } from './modes'
+import { on5m } from './five'
+import { modeTitle } from './modes'
 import { obsPack } from './obs'
 import { inviteUsed, openHowTo } from './howto'
 import { type Answer, type Learn, type LearnKind, levelOf, partName, START, startOf } from './learn'
@@ -390,33 +391,45 @@ export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}): b
       const door = (d: Exclude<Door, 'five'>, on: () => void) => {
         const b = button('', on, 'wl-door')
         b.dataset.door = d
-        b.append(el('span', 'wl-door-t', s.doors[d][0]), el('span', 'wl-door-s', s.doors[d][1]))
+        const sub = el('span', 'wl-door-s')
+        sub.appendChild(el('span', 'wl-door-st', s.doors[d][1]))
+        // "Just explore" may name the Bible Stories a moment later: its room is kept (the longer line is the hidden sizer), so nothing jumps
+        if (d === 'explore') sub.dataset.sizer = s.exploreObs
+        b.append(el('span', 'wl-door-t', s.doors[d][0]), sub)
         list.appendChild(b)
+      }
+      // the 5M door: on5m() is known now (the packs were read at the app's start), so its place is decided before the first paint
+      const fiveDoor = () => {
+        const b = button('', () => { done('five'); h.openFive() }, 'wl-door')
+        b.dataset.door = 'five'
+        b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m')), ui)))
+        return b
       }
       door('book', () => go({ k: 'book' }))
       door('learn', () => go({ k: 'q1' }))
       door('look', () => { done('look'); openHowTo(ui) })
+      if (on5m()) list.appendChild(fiveDoor())
       door('explore', () => { done('explore'); h.browse() })
       box.appendChild(list)
       nav(false)
-      // what the phone has decides two doors (read, so a moment after the screen shows): the 5M's, before "Just explore", and
-      // "Just explore" naming the Bible Stories when the phone has them
-      const sync = () => {
-        void Promise.all([fiveStories(h.packs()), h.packs()[0] ? obsPack(h.packs()[0]!).catch(() => null) : null]).then(([five, obs]) => {
+      // what the phone has decides "Just explore" naming the Bible Stories (read, so a moment after the screen shows)
+      const naming = () => {
+        void (h.packs()[0] ? obsPack(h.packs()[0]!).catch(() => null) : Promise.resolve(null)).then((obs) => {
           if (!list.isConnected) return
-          const ex = list.querySelector('.wl-door[data-door="explore"]')
-          if (obs && ex) ex.children[1]!.textContent = s.exploreObs
-          const has = list.querySelector('.wl-door[data-door="five"]')
-          if (!fiveOffered(five)) return void has?.remove() // (the pack with the tables went away)
-          if (has) return
-          const b = button('', () => { done('five'); h.openFive() }, 'wl-door')
-          b.dataset.door = 'five'
-          b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m')), ui)))
-          list.insertBefore(b, ex)
+          const st = list.querySelector('.wl-door[data-door="explore"] .wl-door-st')
+          if (st) st.textContent = obs ? s.exploreObs : s.doors.explore[1]
         }).catch(() => {})
       }
+      // 5M came or went while the welcome is open: the door comes or goes (the same place, before "Just explore")
+      const sync = () => {
+        if (!list.isConnected) return
+        const has = list.querySelector('.wl-door[data-door="five"]')
+        if (!on5m()) has?.remove()
+        else if (!has) list.insertBefore(fiveDoor(), list.querySelector('.wl-door[data-door="explore"]'))
+        naming()
+      }
       syncFive = sync
-      sync()
+      naming()
     } else if (v.k === 'book') {
       t = title(s.whichBook)
       box.appendChild(el('p', 'wl-sub', s.bookNote))

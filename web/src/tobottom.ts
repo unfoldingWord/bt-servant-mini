@@ -31,6 +31,9 @@ export function syncOverlay(body: { querySelector(q: string): unknown; hasAttrib
   return open
 }
 
+/** The frame reads the layout only when the log, the box or the window changed, or an overlay opened or closed; a body change that is neither costs nothing. */
+export const needsRead = (s: { logDirty: boolean; overlayWas: boolean; overlayNow: boolean }): boolean => s.logDirty || s.overlayWas !== s.overlayNow
+
 /** The arrow's `bottom` in px: just above the box, but never lower than the visible area (a keyboard over the page shrinks it). */
 export const arrowBottom = (inner: number, formTop: number, vvEdge?: number): number =>
   Math.max(0, Math.round(inner - Math.min(formTop, vvEdge ?? inner) + 10))
@@ -75,8 +78,13 @@ export function initToBottom(log: HTMLElement, form: HTMLElement): { setLang(l: 
   let answers = 0
   let redraw = false
   let direct = false
+  let logDirty = true // the log, the box or the window changed since the last read
+  let overlayWas = false
   const draw = () => {
     const hidden = syncOverlay(document.body)
+    if (!needsRead({ logDirty, overlayWas, overlayNow: hidden })) return
+    logDirty = false
+    overlayWas = hidden
     const m = metrics()
     if (direct) dot = nextDot(dot, { away, answers, redraw, bottom: false })
     answers = 0; redraw = false; direct = false
@@ -87,7 +95,8 @@ export function initToBottom(log: HTMLElement, form: HTMLElement): { setLang(l: 
     if (!b.hidden) place()
   }
   let queued = 0
-  const soon = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; draw() }) }
+  const later = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; draw() }) } // (a body change: draws, but reads the layout only if an overlay changed)
+  const soon = () => { logDirty = true; if (!queued) queued = requestAnimationFrame(() => { queued = 0; draw() }) }
   log.addEventListener('scroll', soon, { passive: true })
   window.addEventListener('resize', soon)
   vv?.addEventListener('resize', soon)
@@ -102,8 +111,12 @@ export function initToBottom(log: HTMLElement, form: HTMLElement): { setLang(l: 
     }
     soon()
   }).observe(log, { childList: true, subtree: true })
-  // overlays opening or closing (a card added to the body, or its `open` class): the attribute on body follows
-  new MutationObserver(soon).observe(document.body, { childList: true, attributes: true, attributeFilter: ['class'], subtree: true })
+  // overlays opening or closing: a card added to or taken off the body (its direct children only: not every redraw inside the page), or
+  // the `open` class of the ones that stay (Browse, the map, saved items, the outline)
+  const watchClass = new MutationObserver(later)
+  const watchOpen = () => document.querySelectorAll('#explore, #gmap, #saved, #s5out').forEach((n) => watchClass.observe(n, { attributes: true, attributeFilter: ['class'] }))
+  new MutationObserver(() => { watchOpen(); later() }).observe(document.body, { childList: true })
+  watchOpen()
   b.addEventListener('click', () => {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
     log.scrollTo({ top: log.scrollHeight, behavior: scrollBehavior(reduce) })

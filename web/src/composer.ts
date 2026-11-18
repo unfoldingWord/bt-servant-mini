@@ -303,8 +303,6 @@ export class Composer {
     if (s.sheet) {
       this.hooks.ask(s.ask ?? s.label, { ...s.sheet, id: `c${Date.now()}` }, this.hooks.ui())
       this.chipSent()
-      // (a story's button is read by code like the "✓": no model, no reader)
-      if (s.kind === 'story') count('sent.code')
       return this.clear()
     }
     // Passage: the books, in the row

@@ -1,6 +1,6 @@
 // The arrow back to the latest message (tobottom.ts): when it shows, when the dot lights, the labels.
 import { describe, expect, test } from 'bun:test'
-import { arrowBottom, AT_BOTTOM_PX, atBottom, distance, isAnswerNode, nextDot, scrollBehavior, shouldShow, syncOverlay, toBottomLabel } from '../src/tobottom'
+import { arrowBottom, AT_BOTTOM_PX, atBottom, distance, isAnswerNode, needsRead, nextDot, scrollBehavior, shouldShow, syncOverlay, toBottomLabel } from '../src/tobottom'
 
 const m = (scrollTop: number, clientHeight = 600, scrollHeight = 3000) => ({ scrollTop, clientHeight, scrollHeight })
 
@@ -73,5 +73,13 @@ describe('tobottom', () => {
     expect(arrowBottom(800, 700)).toBe(110)
     expect(arrowBottom(800, 700, 500)).toBe(310) // the visible area ends above the box
     expect(arrowBottom(800, 790, 800)).toBe(20)
+  })
+
+  test('the frame reads the layout only when the log changed or an overlay opened or closed', () => {
+    expect(needsRead({ logDirty: false, overlayWas: false, overlayNow: false })).toBe(false)
+    expect(needsRead({ logDirty: false, overlayWas: true, overlayNow: true })).toBe(false)
+    expect(needsRead({ logDirty: true, overlayWas: false, overlayNow: false })).toBe(true)
+    expect(needsRead({ logDirty: false, overlayWas: false, overlayNow: true })).toBe(true)
+    expect(needsRead({ logDirty: false, overlayWas: true, overlayNow: false })).toBe(true)
   })
 })

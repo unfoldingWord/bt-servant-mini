@@ -1,5 +1,6 @@
 // What "What can you do?" adds after About's text: a few lines naming what this phone has (the Bible Stories, who is who, the guided
 // modes), each only when the phone has it, so the answer never names what is not there.
+import { bidiLabel } from './bidi'
 import { bookLabel } from './converse'
 import { academyManuals, bibleBooks, XT } from './explore'
 import { dataOf, fiveStories, modesFor, noFive } from './modes'
@@ -21,7 +22,8 @@ export async function helpLines(ui: string, packs: string[]): Promise<string> {
   const [has, books, manuals, five] = await Promise.all([phoneHas(packs), bibleBooks(packs), academyManuals(packs), fiveStories(packs).catch(noFive)])
   const lines: string[] = []
   if (has.obs) lines.push(t.obs)
-  if (has.books) lines.push(t.who.replace('{ref}', `${bookLabel(ui, 'rut')} 2:4`))
+  // (the example names Ruth: only when Ruth is on the phone; its reference stays in order inside a right-to-left line)
+  if (books.some((b) => b.code === 'rut')) lines.push(t.who.replace('{ref}', bidiLabel(`${bookLabel(ui, 'rut')} 2:4`, ui)))
   const list = modesFor(dataOf(books.length, manuals.length, five)).map((id) => t.list[id === 'book' ? 0 : id === 'learn' ? 1 : 2])
   if (list.length) lines.push(t.modes.replace('{browse}', XT(ui).browse).replace('{list}', list.join(t.sep)))
   return lines.length ? `\n\n${lines.map((x) => `- ${x}`).join('\n')}` : ''
