@@ -120,7 +120,7 @@ test('after the packs change: another pack that has the book, else said plainly'
     await installPacks(['id'])
     const gone = await reopen(gen, 'Genesis 1:1')
     expect(gone).toEqual({ k: 'missing', lang: 'en', why: 'pack' })
-    if (gone.k === 'missing') expect(missingText(gone, 'en', (l) => (l === 'en' ? 'English' : l))).toBe('This needs the English language pack, which is no longer on this phone.')
+    if (gone.k === 'missing') expect(missingText(gone, 'en', (l) => (l === 'en' ? 'English' : l))).toBe('This needs English, which is no longer on this phone.')
     // saved from the Indonesian pack, which is here without Genesis: not "no longer on this phone"
     const here = await reopen({ ...gen, lang: 'id' }, 'Genesis 1:1')
     expect(here).toEqual({ k: 'missing', lang: 'id', why: 'content' })
@@ -132,7 +132,7 @@ test('after the packs change: another pack that has the book, else said plainly'
       expect(p.sheet.lang).toBe('id')
       // opened from another pack than its own: the chat says which
       expect(p.from).toBe('id')
-      expect(planLabel(p, 'en', (l) => (l === 'id' ? 'Bahasa Indonesia' : l))).toBe('Jonah 1:3 · from the Bahasa Indonesia pack')
+      expect(planLabel(p, 'en', (l) => (l === 'id' ? 'Bahasa Indonesia' : l))).toBe('Jonah 1:3 · from the Bahasa Indonesia resources')
     }
   }
   if (ALL_PACKS.includes('es-419')) {

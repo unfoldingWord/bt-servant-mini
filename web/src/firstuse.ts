@@ -5,6 +5,7 @@ import { CANDIDATES, downloadLang, offers, PACK_NAMES, type Offer, type Progress
 import { bookLabel } from './converse'
 import books from './data/books.json'
 import { rtlLang } from './bidi'
+import { isNetError, RT } from './resources'
 
 type F = {
   title: string; lead: string; looking: string; download: string; cancel: string; retry: string; offline: string
@@ -193,7 +194,9 @@ async function start() {
     const canceled = st.abort?.signal.aborted
     st.abort = null
     st.phase = 'failed'
-    st.error = canceled ? FU(st.ui).canceled : `${FU(st.ui).stopped} ${e instanceof Error ? e.message : String(e)}`
+    if (!canceled) console.warn('first download failed:', e)
+    // never the raw message on screen (English, and it names packs), as in Resources
+    st.error = canceled ? FU(st.ui).canceled : isNetError(e) ? `${FU(st.ui).stopped} ${RT(st.ui).needNet}` : RT(st.ui).failedGen
     redraw()
   }
 }

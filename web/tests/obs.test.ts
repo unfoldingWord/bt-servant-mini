@@ -112,12 +112,12 @@ describe('questions that name a story or a frame', () => {
 
   test('a whole story in five languages, from the English pack (said so), with its Bible passages', async () => {
     const say: Record<string, [string, RegExp]> = {
-      es: ['historia 34', /^Aquí está la historia OBS 34: Jesus Teaches Other Stories\. Del paquete English/],
+      es: ['historia 34', /^Aquí está la historia OBS 34: Jesus Teaches Other Stories\. De los recursos en English/],
       // (no French pack on this phone: the question is answered from English, which has them, so nothing to say)
       fr: ['histoire 34', /^Voici l’histoire OBS 34 : Jesus Teaches Other Stories\.$/],
-      id: ['cerita 34', /^Ini cerita OBS 34: Jesus Teaches Other Stories\. Dari paket English/],
-      hi: ['कहानी 34', /^यह कहानी OBS 34 है: Jesus Teaches Other Stories। English पैक से/],
-      ar: ['القصة 34', /^هذه القصة OBS 34: Jesus Teaches Other Stories\. من حزمة English/],
+      id: ['cerita 34', /^Ini cerita OBS 34: Jesus Teaches Other Stories\. Dari sumber daya English/],
+      hi: ['कहानी 34', /^यह कहानी OBS 34 है: Jesus Teaches Other Stories। English संसाधनों से/],
+      ar: ['القصة 34', /^هذه القصة OBS 34: Jesus Teaches Other Stories\. من موارد English/],
     }
     for (const [ui, [q, intro]] of Object.entries(say)) {
       const r: any = await ask(q, ui)
@@ -308,7 +308,7 @@ describe('a phone without the unit', () => {
     const r: any = await ask('What does OBS 3:5 say?', 'en')
     expect(r.answered).toBe('passage')
     // the packs on disk came with the app: the unit comes with its next version (a downloaded pack offers to add it)
-    expect(r.reply.info).toMatch(/^Open Bible Stories are not on this phone yet \(English, 218 KB\)\. They will come with the next update of this pack\./)
+    expect(r.reply.info).toMatch(/^Open Bible Stories are not on this phone yet \(English, 218 KB\)\. They will come with the next update of this language\./)
     expect(r.reply.info).toContain('Genesis 6:1–8:22')
     expect(targets(r)).toContain('gen 6:1-8:22 text,notes')
     expect(r.reply.fallback).toBeUndefined()
@@ -332,7 +332,7 @@ describe('a phone without the unit', () => {
     await installPacks(ALL_PACKS)
     await withObs('en', 'none')
     const r: any = await ask('historia 34', 'es')
-    expect(r.reply.info).toMatch(/^Los paquetes de idioma de este teléfono todavía no traen Historias de la Biblia \(OBS\), así que no puedo mostrar OBS 34\./)
+    expect(r.reply.info).toMatch(/^Los idiomas de este teléfono todavía no traen Historias de la Biblia \(OBS\), así que no puedo mostrar OBS 34\./)
     // the story's passages are known without the unit (the common topics)
     expect(targets(r)).toContain('mat 13:31-46 text,notes')
     expect(await searchObs('Noah boat', 'en')).toEqual([])
