@@ -1,6 +1,6 @@
 // How to ask (howto.ts): every card's example, in every app language, is read by the router to what its card says (a passage
 // read by code alone, a verse's notes, a chapter's questions, a word's article, a translation topic, a follow-up of the
-// passage) and gets a non-empty answer with the packs there are; the invitation shows on at most 3 occasions and ends when tapped or dismissed; no online AI card where it is not.
+// passage) and gets a non-empty answer with the packs there are; the menu card has the online AI settings only where it is.
 import { test, expect, beforeAll, afterAll } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { turn } from './harness'

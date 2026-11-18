@@ -689,9 +689,12 @@ function placeModelOffer() {
  * and the focus is not lost.
  */
 let quickModes: boolean | null = null
+let quickKey = '' // what quickModes was read for: the packs and the dev switch (a change reads it again)
 function quickRow(): HTMLElement {
   const row = el('div', 'quick')
   row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  const key = `${INSTALLED.join()}|${devOn('obs5m')}`
+  if (quickKey !== key) { quickKey = key; quickModes = null }
   const saved = resumeEntries()
   const note = el('p', 'quick-note')
   note.setAttribute('role', 'status')
@@ -717,11 +720,11 @@ function quickRow(): HTMLElement {
   }
   if (quickModes === null) {
     modesOn(INSTALLED).then((m) => {
-      quickModes = m.length > 0
+      if (quickKey === key) quickModes = m.length > 0 // (not kept if the packs changed while it was read)
       const b = modeBtn.b
       if (!b?.isConnected) return
-      if (quickModes) { b.style.visibility = ''; b.disabled = false; b.removeAttribute('aria-hidden') } else b.remove()
-    }).catch(() => {})
+      if (m.length) { b.style.visibility = ''; b.disabled = false; b.removeAttribute('aria-hidden') } else b.remove()
+    }).catch(() => modeBtn.b?.remove()) // a failed read: no gap, and it is read again next time
   }
   const box = el('div', 'quick-box')
   box.append(row, note)

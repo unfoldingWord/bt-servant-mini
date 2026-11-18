@@ -583,11 +583,15 @@ export function openHowTo(ui: string, start?: CardId) {
   const make = () => cardsFor(ui, found, onlineHere(), typingOn(), has, who ?? null)
   let cards = make()
   let at = Math.max(0, cards.findIndex((c) => c.id === (start ?? atId)))
+  // a requested card the phone has not added yet (the Bible Stories, who is who): the guide jumps to it when it does, unless the person moved
+  let want: CardId | null = start && !cards.some((c) => c.id === start) ? start : null
   /** The cards again with what arrived; the card on screen stays. */
   const refresh = () => {
     const id = cards[at]?.id
     cards = make()
-    const i = cards.findIndex((c) => c.id === id)
+    const w = want ? cards.findIndex((c) => c.id === want) : -1
+    const i = w >= 0 ? w : cards.findIndex((c) => c.id === id)
+    if (w >= 0) want = null
     if (i >= 0) at = i
     draw()
   }
@@ -640,11 +644,11 @@ export function openHowTo(ui: string, start?: CardId) {
     if (acts.childElementCount) box.appendChild(acts)
     box.appendChild(el('p', 'howto-free', s.free))
     const nav = el('div', 'howto-nav')
-    const prev = btn('back', s.back, () => { at--; draw(true) }, 'secondary')
+    const prev = btn('back', s.back, () => { want = null; at--; draw(true) }, 'secondary')
     prev.disabled = at === 0
     const last = at === cards.length - 1
     nav.append(prev, btn('next', last ? s.done : s.next, () => {
-      if (last) { atId = null; closeHowto() } else { at++; draw(true) }
+      if (last) { atId = null; closeHowto() } else { want = null; at++; draw(true) }
     }, 'primary'))
     box.appendChild(nav)
     const again = !toTitle && key ? box.querySelector<HTMLElement>(`[data-k="${key}"]:not(:disabled)`) : null
