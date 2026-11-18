@@ -176,7 +176,8 @@ export function kinShape(q: string): KinShape | null {
     const f = foldName(name)
     if (PRONOUNS.has(f)) return null
     // («hijas de Israel», «las mujeres de Israel» are the people too)
-    if ((w.kind === 'children' || w.kind === 'sons' || w.kind === 'daughters' || w.kind === 'partners') && PEOPLES.has(f)) return null
+    // («familia de Israel», «family of Judah» too: the people or the tribe)
+    if ((w.kind === 'children' || w.kind === 'sons' || w.kind === 'daughters' || w.kind === 'partners' || w.kind === 'family') && PEOPLES.has(f)) return null
     // («les fils de David» is plural: David's sons; «fils de David», «putra Daud», «दाऊद का पुत्र» the title)
     const plural = /^les\s/i.test(rest)
     if ((w.kind === 'sons' || w.kind === 'children') && (w.one || / का /.test(rest)) && !plural && DAVID.has(f)) return null
