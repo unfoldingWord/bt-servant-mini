@@ -144,8 +144,8 @@ export function classify(g: Graph, t: Turn): { edge: Edge; parent: string | null
   const P = place(p?.sheet.ref ?? null)
   const N = place(t.sheet.ref)
   if ((t.kind === 'passage' || t.kind === 'intro') && N) {
-    // a verse the search found
-    if (c.kind === 'search' && c.links?.includes(t.sheet.ref!)) return deeper
+    // a verse the search found, or that a family answer showed (kin.ts: the verse of a relation, a person's first verses)
+    if ((c.kind === 'search' || c.kind === 'family') && c.links?.includes(t.sheet.ref!)) return deeper
     // the line of the nearest passage above that it continues (Ruth 2:3 → Mark 1:1 → Ruth 2:5 goes back on Ruth's line)
     for (let a: GNode | undefined = p; a; a = passageAt(g, a.id, false)) {
       const A = place(a.sheet.ref)

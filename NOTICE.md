@@ -10,6 +10,19 @@ BT Servant Mini (alpha) ships these inside the APK:
 - **Language packs (format 3)**: unfoldingWord translation helps (ULT, UST, Translation Notes, Questions, Words, Words Links,
   Academy) and their Gateway Language versions, CC BY-SA 4.0. Berean Standard Bible (BSB): public domain. Built from Door43
   resources by the unfoldingWord language-pack builder.
+- **People, places, events and families in the language packs** (the `xtopics` and `topics` units; Mini reads them for family
+  questions, a person's card and who is named in a verse or a story, and builds every link in memory):
+  - **TIPNR** (Translators Individualised Proper Names with all References), STEPBible / Tyndale House, Cambridge
+    (https://github.com/STEPBible/STEPBible-Data), CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/): the people and places,
+    the verses that name them, and the family relations (parent, sibling, spouse).
+  - **ACAI Biblical Entity Data** © 2024 by BiblioNexus (https://github.com/BibleAquifer/ACAI), CC BY-SA 4.0
+    (https://creativecommons.org/licenses/by-sa/4.0/). Changed: only the gender, the names and other names of each person in the
+    app's languages, and the links to Translation Words articles are used, joined to TIPNR by ACAI's own TIPNR keys; ACAI's
+    relations, descriptions and versification are not used.
+  - **Theographic Bible Metadata** (Robert Rouse, https://github.com/robertrouse/theographic-bible-metadata), CC BY-SA 4.0: the
+    events and the people and places that take part in them (which Open Bible Stories tell an event a person is in).
+  The packs are built from these by the unfoldingWord language-pack builder and shared under CC BY-SA 4.0; each family answer
+  names its sources under it.
 - **Open Bible Stories pictures** (the optional format-3 catalog `zxx-obsimg`, not inside the APK; downloaded from the packs
   server on a tap in the menu, or passed as a `.tcpack` file): illustrations © Sweet Publishing (https://sweetpublishing.com),
   CC BY-SA 3.0 Unported (https://creativecommons.org/licenses/by-sa/3.0/). Converted to WebP (quality 75) from Door43's
