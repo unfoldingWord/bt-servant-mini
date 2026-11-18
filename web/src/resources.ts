@@ -239,7 +239,7 @@ export function pair(a: number, b: number): string {
 }
 const prog = (ui: string, a: number, b: number) => `${RT(ui).downloading} ${pair(a, b)}`
 /** Whether a failure is about the connection: by its type (fetch fails with a TypeError, a timeout is an AbortError or TimeoutError), then by our own words. */
-function isNetError(err: unknown): boolean {
+export function isNetError(err: unknown): boolean {
   const name = (err as { name?: string } | null)?.name
   if (err instanceof TypeError || name === 'AbortError' || name === 'TimeoutError' || name === 'NetworkError') return true
   const m = err instanceof Error ? err.message : String(err)
