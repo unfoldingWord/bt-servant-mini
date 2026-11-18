@@ -32,8 +32,12 @@ describe('About and relogin name the menu rows', () => {
     }
   })
   test('About: no "in the menu" and no packs', () => {
+    // the body paragraphs only (code and comments may say pack), without the .tcpack file extension
+    const body = setup.split('
+').filter((x) => /^\s+"/.test(x)).join('
+').replace(/\.tcpack/g, '').toLowerCase()
     for (const bad of ['in the menu', 'en el menú', 'dans le menu', 'मेनू में', 'pack', 'paquete', 'paquet', 'paket', 'पैक', 'حزم'])
-      expect(setup.toLowerCase()).not.toContain(bad)
-    expect(setup).not.toMatch(/di menu(?! →)/i)
+      expect(body).not.toContain(bad)
+    expect(body).not.toMatch(/di menu(?! →)/)
   })
 })
