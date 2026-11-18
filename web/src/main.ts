@@ -35,6 +35,7 @@ import { helpLines } from './helplines'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
 import { devOn, type Fixture, initDev } from './dev'
 import { fiveText, sendTyped } from './modes'
+import { initToBottom } from './tobottom'
 import { waiting } from './waiting'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
@@ -197,6 +198,7 @@ const $ = <E extends HTMLElement>(s: string) => document.querySelector(s) as E
 const log = $('#log'), form = $<HTMLFormElement>('#ask'), input = $<HTMLTextAreaElement>('#q'), btn = $<HTMLButtonElement>('#send')
 const status = $('#status'), notice = $<HTMLButtonElement>('#notice'), panel = $('#panel'), menu = $<HTMLButtonElement>('#menu')
 const browse = $<HTMLButtonElement>('#browse')
+const toBottom = initToBottom(log, form) // the arrow back to the latest message (tobottom.ts)
 function applyUi() {
   document.documentElement.lang = nav
   document.documentElement.dir = nav === 'ar' ? 'rtl' : 'ltr'
@@ -205,6 +207,7 @@ function applyUi() {
   menu.setAttribute('aria-label', T.chats)
   browse.setAttribute('aria-label', XT(nav).browseLong)
   browse.title = XT(nav).browse
+  toBottom.setLang(nav)
   applyBrand(nav)
 }
 function setUi(l: string) {
