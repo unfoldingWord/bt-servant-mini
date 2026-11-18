@@ -4,7 +4,7 @@ import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelO
 import { rtlLang } from './bidi'
 import { downloadImages, imagesInstalled, removeImages } from './obsimg'
 import { availableLangs, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
-import { renderResources, renderServer } from './resources'
+import { resourcesBox } from './resources'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
@@ -237,16 +237,8 @@ function alertish(box: HTMLElement, text: string) {
   box.appendChild(el('p', 'note', text))
 }
 
-/**
- * The Resources screen in a box, for main.ts until it draws the screens itself (resources.ts): the server screen replaces it
- * in the same box.
- */
-export async function languagesSection(lang: string, after: () => void): Promise<HTMLElement> {
-  const box = el('div', 'setup')
-  const ctx = { ui: lang, refresh: after, openServer: () => void renderServer(box, ctx), openLanguage: () => {} }
-  await renderResources(box, ctx)
-  return box
-}
+/** The old name main.ts calls for the Resources screen (resources.ts draws it, and the server screen with a way back). */
+export const languagesSection = (lang: string, after: () => void): Promise<HTMLElement> => resourcesBox(lang, after)
 
 /** About (and first launch): what BT Servant Mini is, how it differs from BT Servant, the version; the setup of the light build. */
 export function showAbout(lang: string, refresh: () => void) {

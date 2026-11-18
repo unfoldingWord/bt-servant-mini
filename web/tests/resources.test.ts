@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { installPacks } from './fs-packs'
 import {
-  cancelDownload, deps, downloads, downloadsSummary, onDownloads, renderResources, renderServer, resetDownloads, RT, startDownload, type ResCtx,
+  cancelDownload, deps, downloads, downloadsSummary, onDownloads, renderResources, renderServer, resetDownloads, resourcesBox, RT, startDownload, watching, type ResCtx,
 } from '../src/resources'
 
 class FakeEl {
@@ -159,12 +159,16 @@ describe('downloads outside the screen', () => {
     expect(downloads()).toMatchObject([{ key: 'part:hi:obs', error: 'timeout' }])
     const h = host()
     await renderResources(h, ctx())
-    expect(h.textContent).toContain('No se pudo descargar: timeout')
+    expect(h.textContent).toContain('Hace falta internet para descargar.') // a timeout, in words (the raw message is only in the console)
+    expect(h.textContent).not.toContain('timeout')
     fail = false
+    Object.assign(deps, { serverUnitSize: async () => 1_500_000, addUnits: async () => { runs++ } })
     h.button(/Reintentar/)!.click()
     await sleep(5)
     expect(runs).toBe(2)
-    expect(downloads()[0]!.error).toBeUndefined()
+    await sleep(10)
+    expect(downloads()).toEqual([]) // the retry went through the gate and finished
+    startDownload('part:hi:obs', (signal) => new Promise<void>((_, rej) => signal.addEventListener('abort', () => rej(new Error('canceled')))))
     cancelDownload('part:hi:obs')
     await sleep(5)
     expect(downloads()).toEqual([])
@@ -274,5 +278,235 @@ describe('the server screen', () => {
     expect((got as { lang: string }).lang).toBe('hi')
     expect(h2.textContent).toContain('Descargando… 0.5 / 1.0 MB')
     await sleep(40)
+  })
+})
+
+describe('the gate on every kind of download, and on a retry', () => {
+  const warn = console.warn
+  beforeAll(() => { console.warn = () => {} })
+  afterAll(() => { console.warn = warn })
+
+  test('a language that stopped: [Continue] asks the offer again; mobile data asks first; a size 20 % off is said', async () => {
+    const started: unknown[] = []
+    Object.assign(deps, {
+      installedLangs: async () => [], partialLangs: () => ['hi'], partialMark: () => ({ b: 10_485_760 }), meteredNow: () => true,
+      offerOf: async () => ({ lang: 'hi', books: [], bytes: 10_485_760, segments: [], sizes: {}, units: [], parts: [] }),
+      downloadLang: async (_l: string, _p: unknown, o: { offer: unknown }) => void started.push(o.offer),
+    })
+    const h = host()
+    await renderResources(h, ctx())
+    h.button(/Seguir/)!.click()
+    await sleep(10)
+    expect(h.button(/por datos móviles/)!.textContent).toBe('10.0 MB por datos móviles. ¿Seguir?')
+    expect(started).toEqual([])
+    h.button(/por datos móviles/)!.click()
+    await sleep(20)
+    expect(started.length).toBe(1)
+    // not metered, but the plan grew: said first
+    resetDownloads()
+    Object.assign(deps, { meteredNow: () => false, offerOf: async () => ({ lang: 'hi', books: [], bytes: 20_971_520, segments: [], sizes: {}, units: [], parts: [] }) })
+    const h2 = host()
+    await renderResources(h2, ctx())
+    h2.button(/Seguir/)!.click()
+    await sleep(10)
+    expect(h2.button(/¿Seguir\?/)!.textContent).toBe('Son 20.0 MB. ¿Seguir?')
+  })
+
+  test('the pictures: the same two-tap rule', async () => {
+    const got: unknown[] = []
+    Object.assign(deps, {
+      installedLangs: async () => [], partialLangs: () => [], meteredNow: () => true,
+      imagesOffer: async () => ({ bytes: 21_076_377, segments: [], sizes: {} }),
+      downloadImages: async (_p: unknown, _s: unknown, o: unknown) => void got.push(o),
+    })
+    const h = host()
+    await renderResources(h, ctx())
+    h.button(/Descargar/)!.click()
+    await sleep(10)
+    expect(h.button(/por datos móviles/)!.textContent).toBe('20.1 MB por datos móviles. ¿Seguir?')
+    h.button(/por datos móviles/)!.click()
+    await sleep(20)
+    expect(got.length).toBe(1)
+  })
+
+  test('the confirming tap checks the connection first', async () => {
+    withDownloaded()
+    const asked: string[][] = []
+    Object.assign(deps, { meteredNow: () => true, serverUnitSize: async () => 1_500_000, addUnits: async (_l: string, u: string[]) => void asked.push(u) })
+    const h = host()
+    await renderResources(h, ctx())
+    h.button(/Descargar/)!.click()
+    await sleep(10)
+    deps.online = () => false
+    h.button(/por datos móviles/)!.click()
+    await sleep(10)
+    expect(h.button(/Hace falta internet/)).toBeDefined()
+    expect(asked).toEqual([])
+  })
+
+  test('a retry goes through the gate again, and a failure is never shown raw', async () => {
+    withDownloaded()
+    startDownload('part:hi:obs', async () => { throw new Error('pack segment 3 failed') })
+    await sleep(5)
+    Object.assign(deps, { meteredNow: () => true, serverUnitSize: async () => 1_500_000, addUnits: async () => {} })
+    const h = host()
+    await renderResources(h, ctx())
+    expect(h.textContent).toContain('No se pudo descargar.')
+    expect(h.textContent).not.toContain('pack')
+    h.button(/Reintentar/)!.click()
+    await sleep(10)
+    // mobile data: the retry asked first, nothing started
+    expect(h.button(/por datos móviles/)).toBeDefined()
+    expect(downloads()[0]!.error).toBeDefined()
+    deps.online = () => false
+    h.button(/por datos móviles/)!.click()
+    await sleep(10)
+    expect(h.button(/Hace falta internet/)).toBeDefined()
+  })
+
+  test('the progress uses one unit for both numbers', async () => {
+    withDownloaded()
+    startDownload('images', (_s, progress) => { progress(200_000, 524_288); return new Promise<void>(() => {}) })
+    const h = host()
+    await renderResources(h, ctx())
+    expect(h.textContent).toContain('Descargando… 195 / 512 KB')
+    expect(h.textContent).not.toContain('0.2 / 512 KB')
+  })
+})
+
+describe('several downloads, a closed screen, disposing', () => {
+  test('two downloads at once are both kept, and the summary adds them', async () => {
+    withDownloaded()
+    startDownload('part:hi:obs', (_s, p) => { p(1_000_000, 4_000_000); return new Promise<void>(() => {}) })
+    startDownload('images', (signal, p) => { p(2_000_000, 20_000_000); return new Promise<void>((_, rej) => signal.addEventListener('abort', () => rej(new Error('canceled')))) })
+    expect(downloads().map((d) => d.key).sort()).toEqual(['images', 'part:hi:obs'])
+    expect(downloadsSummary()).toEqual({ a: 3_000_000, b: 24_000_000 })
+    cancelDownload('images')
+    await sleep(5)
+    expect(downloads().map((d) => d.key)).toEqual(['part:hi:obs'])
+  })
+
+  test('a download that finishes with the screen closed: no watcher is left, and the next screen shows it done', async () => {
+    withDownloaded()
+    let finish!: () => void
+    startDownload('part:hi:obs', () => new Promise<void>((r) => { finish = r }))
+    const h = host()
+    const dispose = await renderResources(h, ctx())
+    expect(watching()).toBe(1)
+    dispose()
+    expect(watching()).toBe(0)
+    const before = h.textContent
+    // the Stories are on the phone by the time it ends
+    Object.assign(deps, { openLang: async () => fakeReader(['book:tit', 'art:tw:kt', 'obs'], ['book:tit', 'art:tw:kt', 'obs']) })
+    finish()
+    await sleep(10)
+    expect(h.textContent).toBe(before) // nothing painted after dispose
+    const h2 = host()
+    await renderResources(h2, ctx())
+    expect(h2.cards().find((c) => c.dataset.lang === 'hi')!.textContent).toContain('✓ Historias de la Biblia')
+    expect(watching()).toBe(1)
+  })
+
+  test('a new render into the same host disposes the one before; a disconnected host stops following', async () => {
+    withDownloaded()
+    const h = host()
+    await renderResources(h, ctx())
+    await renderResources(h, ctx())
+    expect(watching()).toBe(1)
+    ;(h as any).isConnected = false
+    startDownload('images', () => new Promise<void>(() => {}))
+    expect(watching()).toBe(0)
+  })
+
+  test('the server screen paints nothing after dispose, even when the server answers later', async () => {
+    let late!: (o: unknown, l: string) => void
+    let end!: () => void
+    Object.assign(deps, { offerCandidates: async () => ['hi'], offers: (on: typeof late) => new Promise<[]>((r) => { late = on; end = () => r([]) }) })
+    const h = host()
+    void renderServer(h, ctx())
+    await sleep(10)
+    await renderResources(h, ctx()) // a render into the same host disposes the server screen
+    const text = h.textContent
+    late({ lang: 'hi', books: [], bytes: 1, segments: [], sizes: {}, units: [], parts: [] }, 'hi')
+    end()
+    await sleep(10)
+    expect(h.textContent).toBe(text)
+  })
+
+  test('the server screen: a failed question gives the usual message; a language that arrived leaves the list', async () => {
+    Object.assign(deps, { offerCandidates: async () => ['hi'], offers: async () => { throw new Error('boom') }, online: () => true })
+    const warn = console.warn
+    console.warn = () => {}
+    const h = host()
+    await renderServer(h, ctx())
+    expect(h.textContent).toContain('El servidor todavía no tiene otros idiomas.')
+    let have: string[] = []
+    const o = { lang: 'hi', books: [], bytes: 1_048_576, segments: [], sizes: {}, units: [], parts: [] }
+    Object.assign(deps, {
+      installedLangs: async () => have,
+      offers: async (on: (x: unknown, l: string) => void) => { on(o, 'hi'); return [] },
+      offerOf: async () => o,
+      downloadLang: async () => { have = ['hi'] },
+    })
+    const h2 = host()
+    await renderServer(h2, ctx())
+    h2.button(/Descargar/)!.click()
+    await sleep(40)
+    expect(h2.cards().filter((c) => c.dataset.lang)).toEqual([])
+    console.warn = warn
+  })
+
+  test('the server screen: a plan 20 % bigger than the size it was found with is said at the tap', async () => {
+    Object.assign(deps, {
+      offerCandidates: async () => ['hi'], meteredNow: () => false,
+      offers: async (on: (o: unknown, l: string) => void) => { on({ lang: 'hi', books: [], bytes: 1_048_576, segments: [], sizes: {}, units: [], parts: [] }, 'hi'); return [] },
+      offerOf: async () => ({ lang: 'hi', books: [], bytes: 2_097_152, segments: [], sizes: {}, units: [], parts: [] }),
+    })
+    const h = host()
+    await renderServer(h, ctx())
+    h.button(/Descargar/)!.click()
+    await sleep(10)
+    expect(h.button(/¿Seguir\?/)!.textContent).toBe('Son 2.0 MB. ¿Seguir?')
+  })
+})
+
+describe('the box main.ts still calls (Resources, the server screen and the way back)', () => {
+  test('the server screen is not repainted over by Resources on a download tick, and the way back works', async () => {
+    withDownloaded()
+    Object.assign(deps, { offerCandidates: async () => [], offers: async () => [] })
+    const box = (await resourcesBox('es', () => {})) as unknown as FakeEl
+    expect(box.textContent).toContain('Lo que la app puede leer sin internet')
+    box.button(/Buscar más idiomas/)!.click()
+    await sleep(20)
+    expect(box.textContent).toContain('La app busca en una lista fija de idiomas.')
+    expect(box.textContent).not.toContain('Lo que la app puede leer')
+    startDownload('images', (_s, p) => { p(1, 2); return new Promise<void>(() => {}) })
+    await sleep(10)
+    expect(box.textContent).toContain('La app busca en una lista fija de idiomas.')
+    expect(box.textContent).not.toContain('Lo que la app puede leer')
+    expect(watching()).toBe(1) // Resources was disposed
+    box.button(/Recursos/)!.click()
+    await sleep(20)
+    expect(box.textContent).toContain('Lo que la app puede leer sin internet')
+    expect(box.textContent).not.toContain('La app busca')
+    startDownload('part:hi:obs', () => new Promise<void>(() => {}))
+    await sleep(10)
+    expect(box.textContent).not.toContain('La app busca')
+    expect(watching()).toBe(1)
+  })
+})
+
+describe('plurals and lists', () => {
+  test('Arabic: one book and the pictures count take their own forms; French has no "(s)"', async () => {
+    withDownloaded()
+    Object.assign(deps, { imagesInstalled: async () => ({ bytes: 21_076_377 }) })
+    const h = host()
+    await renderResources(h, ctx('ar'))
+    expect(h.textContent).toContain('سفر واحد')
+    expect(h.textContent).toContain('598 صورة')
+    const f = host()
+    await renderResources(f, ctx('fr'))
+    expect(f.textContent).toContain('598 images')
+    expect(RT('fr').lack).not.toContain('(s)')
   })
 })
