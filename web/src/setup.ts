@@ -1,18 +1,16 @@
-// The "About" screen (also shown on first launch), and the menu's Model and Languages sections: download or load the
-// model, add languages from the packs server or from a .tcpack file, share them with another phone.
+// The "About" screen (also shown on first launch), and the menu's Model section: download or load the model. The languages
+// (resources.ts) are drawn there; `languagesSection` is the old name main.ts still calls.
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
-import { FU } from './firstuse'
 import { rtlLang } from './bidi'
-import {
-  downloadImages, exportImages, fill, imagesCredit, imagesInstalled, imagesLine, imagesOffer, importedLine, IW, PACK_FILE, removeImages,
-} from './obsimg'
-import { availableLangs, downloadLang, exportPack, importPack, installedLangs, meteredNow, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
+import { downloadImages, imagesInstalled, removeImages } from './obsimg'
+import { availableLangs, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
+import { renderResources, renderServer } from './resources'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
   model: string; mReady: string; mMissing: string; mDown: string; mImport: string; mStart: string; mError: string; mOff: string; none: string
-  download: string; loadFile: string; share: string; saved: string; langs: string; shipped: string; added: string; remove: string
-  addLangs: string; online: string; offline: string; noneNew: string; loadPack: string; working: string; failed: string
+  download: string; loadFile: string; share: string; saved: string; langs: string
+  failed: string
   setup: string; newer: string; update: string
 }
 const STR: Record<string, S> = {
@@ -35,9 +33,8 @@ const STR: Record<string, S> = {
     newer: 'A newer model is available: it understands more questions, in more languages.', update: 'Update the model',
     model: 'Model', mReady: 'Ready', mMissing: 'Not on this phone yet: only references and searches work', mDown: 'Downloading', mImport: 'Loading',
     mStart: 'Starting', mOff: 'Off: references and searches only', none: 'None (references and searches only)', mError: 'Problem', download: 'Download', loadFile: 'Load from a file (SD card, phone memory)', share: 'Share (save to Downloads)',
-    saved: 'Saved in Downloads', langs: 'Languages on this phone', shipped: 'included', added: 'added', remove: 'Remove',
-    addLangs: 'Add languages', online: 'Look on the server (internet)', offline: 'No internet, or the server did not answer.',
-    noneNew: 'The server has no other languages yet.', loadPack: 'Load a .tcpack file', working: 'Working…', failed: 'It did not work:',
+    saved: 'Saved in Downloads', langs: 'Languages on this phone',
+    failed: 'It did not work:',
   },
   es: {
     about: 'Acerca de BT Servant Mini', title: 'BT Servant Mini',
@@ -58,9 +55,8 @@ const STR: Record<string, S> = {
     newer: 'Hay un modelo más nuevo: entiende más preguntas, en más idiomas.', update: 'Actualizar el modelo',
     model: 'Modelo', mReady: 'Listo', mMissing: 'Aún no está en este teléfono: solo funcionan referencias y búsquedas', mDown: 'Descargando', mImport: 'Cargando',
     mStart: 'Iniciando', mOff: 'Apagado: solo referencias y búsquedas', none: 'Ninguno (solo referencias y búsquedas)', mError: 'Problema', download: 'Descargar', loadFile: 'Cargar desde un archivo (tarjeta SD, memoria)', share: 'Compartir (guardar en Descargas)',
-    saved: 'Guardado en Descargas', langs: 'Idiomas en este teléfono', shipped: 'incluido', added: 'agregado', remove: 'Quitar',
-    addLangs: 'Agregar idiomas', online: 'Buscar en el servidor (internet)', offline: 'Sin internet, o el servidor no respondió.',
-    noneNew: 'El servidor todavía no tiene otros idiomas.', loadPack: 'Cargar un archivo .tcpack', working: 'Trabajando…', failed: 'No funcionó:',
+    saved: 'Guardado en Descargas', langs: 'Idiomas en este teléfono',
+    failed: 'No funcionó:',
   },
   fr: {
     about: 'À propos de BT Servant Mini', title: 'BT Servant Mini',
@@ -81,9 +77,8 @@ const STR: Record<string, S> = {
     newer: 'Un modèle plus récent est disponible : il comprend plus de questions, dans plus de langues.', update: 'Mettre à jour le modèle',
     model: 'Modèle', mReady: 'Prêt', mMissing: 'Pas encore sur ce téléphone : seules les références et recherches fonctionnent', mDown: 'Téléchargement', mImport: 'Chargement',
     mStart: 'Démarrage', mOff: 'Éteint : références et recherches seulement', none: 'Aucun (références et recherches seulement)', mError: 'Problème', download: 'Télécharger', loadFile: 'Charger un fichier (carte SD, mémoire)', share: 'Partager (enregistrer dans Téléchargements)',
-    saved: 'Enregistré dans Téléchargements', langs: 'Langues sur ce téléphone', shipped: 'incluse', added: 'ajoutée', remove: 'Retirer',
-    addLangs: 'Ajouter des langues', online: 'Chercher sur le serveur (internet)', offline: "Pas d'internet, ou le serveur n'a pas répondu.",
-    noneNew: "Le serveur n'a pas encore d'autres langues.", loadPack: 'Charger un fichier .tcpack', working: 'En cours…', failed: 'Échec :',
+    saved: 'Enregistré dans Téléchargements', langs: 'Langues sur ce téléphone',
+    failed: 'Échec :',
   },
   // the Indonesian pack has Colossians to Philemon, 2 Peter and 3 John (no Ruth, no Jonah): its examples are Titus and
   // Philemon, and each one finds something on a phone with only that pack (tests/examples-find.test.ts)
@@ -106,9 +101,8 @@ const STR: Record<string, S> = {
     newer: 'Ada model yang lebih baru: memahami lebih banyak pertanyaan, dalam lebih banyak bahasa.', update: 'Perbarui model',
     model: 'Model', mReady: 'Siap', mMissing: 'Belum ada di ponsel ini: hanya rujukan dan pencarian yang bekerja', mDown: 'Mengunduh', mImport: 'Memuat',
     mStart: 'Memulai', mOff: 'Mati: hanya rujukan dan pencarian', none: 'Tidak ada (hanya rujukan dan pencarian)', mError: 'Masalah', download: 'Unduh', loadFile: 'Muat dari berkas (kartu SD, memori ponsel)', share: 'Bagikan (simpan ke Unduhan)',
-    saved: 'Tersimpan di Unduhan', langs: 'Bahasa di ponsel ini', shipped: 'bawaan', added: 'ditambahkan', remove: 'Hapus',
-    addLangs: 'Tambah bahasa', online: 'Cari di server (internet)', offline: 'Tidak ada internet, atau server tidak menjawab.',
-    noneNew: 'Server belum punya bahasa lain.', loadPack: 'Muat berkas .tcpack', working: 'Sedang bekerja…', failed: 'Gagal:',
+    saved: 'Tersimpan di Unduhan', langs: 'Bahasa di ponsel ini',
+    failed: 'Gagal:',
   },
   // the Hindi pack has translation notes only for Acts and no questions: its examples are Acts (not Jonah) and key terms, and
   // each one finds something (tests/examples-find.test.ts)
@@ -131,9 +125,8 @@ const STR: Record<string, S> = {
     newer: 'एक नया मॉडल उपलब्ध है: यह ज़्यादा प्रश्न, ज़्यादा भाषाओं में समझता है।', update: 'मॉडल अपडेट करें',
     model: 'मॉडल', mReady: 'तैयार', mMissing: 'अभी इस फ़ोन पर नहीं: केवल संदर्भ और खोज चलते हैं', mDown: 'डाउनलोड हो रहा है', mImport: 'लोड हो रहा है',
     mStart: 'शुरू हो रहा है', mOff: 'बंद: केवल संदर्भ और खोज', none: 'कोई नहीं (केवल संदर्भ और खोज)', mError: 'समस्या', download: 'डाउनलोड करें', loadFile: 'फ़ाइल से लोड करें (SD कार्ड, फ़ोन मेमोरी)', share: 'साझा करें (डाउनलोड में सहेजें)',
-    saved: 'डाउनलोड में सहेजा गया', langs: 'इस फ़ोन पर भाषाएँ', shipped: 'शामिल', added: 'जोड़ी गई', remove: 'हटाएँ',
-    addLangs: 'भाषाएँ जोड़ें', online: 'सर्वर पर खोजें (इंटरनेट)', offline: 'इंटरनेट नहीं है, या सर्वर ने उत्तर नहीं दिया।',
-    noneNew: 'सर्वर पर अभी और भाषाएँ नहीं हैं।', loadPack: '.tcpack फ़ाइल लोड करें', working: 'काम हो रहा है…', failed: 'नहीं हुआ:',
+    saved: 'डाउनलोड में सहेजा गया', langs: 'इस फ़ोन पर भाषाएँ',
+    failed: 'नहीं हुआ:',
   },
   ar: {
     about: 'حول BT Servant Mini', title: 'BT Servant Mini',
@@ -154,9 +147,8 @@ const STR: Record<string, S> = {
     newer: 'يتوفر نموذج أحدث: يفهم أسئلة أكثر بلغات أكثر.', update: 'تحديث النموذج',
     model: 'النموذج', mReady: 'جاهز', mMissing: 'ليس على هذا الهاتف بعد: تعمل المراجع والبحث فقط', mDown: 'جارٍ التنزيل', mImport: 'جارٍ التحميل',
     mStart: 'جارٍ التشغيل', mOff: 'مُطفأ: الشواهد والبحث فقط', none: 'لا شيء (الشواهد والبحث فقط)', mError: 'مشكلة', download: 'تنزيل', loadFile: 'تحميل من ملف (بطاقة SD، ذاكرة الهاتف)', share: 'مشاركة (حفظ في التنزيلات)',
-    saved: 'حُفظ في التنزيلات', langs: 'اللغات على هذا الهاتف', shipped: 'مضمّنة', added: 'مضافة', remove: 'إزالة',
-    addLangs: 'إضافة لغات', online: 'البحث في الخادم (إنترنت)', offline: 'لا يوجد إنترنت، أو لم يُجب الخادم.',
-    noneNew: 'لا توجد لغات أخرى على الخادم بعد.', loadPack: 'تحميل ملف ‎.tcpack', working: 'جارٍ العمل…', failed: 'لم ينجح:',
+    saved: 'حُفظ في التنزيلات', langs: 'اللغات على هذا الهاتف',
+    failed: 'لم ينجح:',
   },
 }
 /** The packs' names (kept in packs.ts, so code without a page can use them). */
@@ -176,8 +168,6 @@ function btn(text: string, on: () => void, cls = ''): HTMLButtonElement {
   return b
 }
 const mb = (n: number) => `${Math.max(1, Math.round(n / 1048576))} MB`
-/** A pack's size: "2.6 MB". */
-const mb1 = (n: number) => `${(n / 1048576).toFixed(1)} MB`
 
 /** The model's state in words. */
 export function modelLine(lang: string): string {
@@ -247,149 +237,15 @@ function alertish(box: HTMLElement, text: string) {
   box.appendChild(el('p', 'note', text))
 }
 
-/** The languages section: what is here, add from the server or a file, share or remove. */
-export async function languagesSection(lang: string, after: () => void): Promise<HTMLElement> {
-  const s = str(lang)
-  const box = el('div', 'setup')
-  box.appendChild(el('h2', '', s.langs))
-  for (const l of await installedLangs()) {
-    const row = el('div', 'row')
-    const o = await origin(l)
-    row.appendChild(el('span', 'grow', `${PACK_NAMES[l] ?? l} · ${o === 'added' ? s.added : s.shipped}`))
-    row.appendChild(btn(s.share.split(' (')[0]!, async () => {
-      alertish(box, s.working)
-      try {
-        const bytes = await exportPack(l)
-        const err = await saveToDownloads(`bt-servant-mini-${l}.tcpack`, bytes)
-        alertish(box, err ? `${s.failed} ${err}` : `${s.saved} (${mb(bytes.length)})`)
-      } catch (e) {
-        alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
-      }
-    }, 'small'))
-    if (o === 'added') row.appendChild(btn(s.remove, async () => { await removeLang(l); after() }, 'small del'))
-    box.appendChild(row)
-  }
-  box.appendChild(await imagesSection(lang, box, s, after))
-  box.appendChild(el('h2', '', s.addLangs))
-  const add = el('div', 'langs')
-  const list = el('div', '')
-  add.appendChild(btn(s.online, async () => {
-    list.textContent = s.working
-    const avail = await offers()
-    list.textContent = ''
-    if (!avail.length) {
-      list.appendChild(el('p', 'note', navigator.onLine ? s.noneNew : s.offline))
-      return
-    }
-    for (const offer of avail) {
-      const l = offer.lang
-      const row = el('div', 'row')
-      const label = el('span', 'grow', `${PACK_NAMES[l] ?? l} · ${mb1(offer.bytes)}`)
-      // a download that did not end goes on from where it stopped
-      row.append(label, btn(offer.partial ? FU(lang).resume : s.download, async () => {
-        try {
-          label.textContent = `${PACK_NAMES[l] ?? l} · ${s.working}`
-          const r = await downloadLang(l, (p) => (label.textContent = `${PACK_NAMES[l] ?? l} · ${mb1(p.bytes)} / ${mb1(p.totalBytes)}`), { offer })
-          label.textContent = `${PACK_NAMES[l] ?? l} · ${r.books} · ${mb1(r.bytes)} ✓`
-          after()
-        } catch (e) {
-          label.textContent = `${PACK_NAMES[l] ?? l} · ${s.failed} ${e instanceof Error ? e.message : e}`
-        }
-      }, 'small'))
-      list.appendChild(row)
-    }
-  }))
-  const file = document.createElement('input')
-  file.type = 'file'
-  file.accept = '.tcpack,application/octet-stream'
-  file.hidden = true
-  file.onchange = async () => {
-    const f = file.files?.[0]
-    if (!f) return
-    alertish(box, s.working)
-    try {
-      // languages, the Open Bible Stories pictures (zxx-obsimg), or both: one kind of file
-      const r = await importPack(new Uint8Array(await f.arrayBuffer()))
-      alertish(box, importedLine(lang, r, r.images ? await imagesInstalled().catch(() => null) : null, s.failed))
-      after()
-    } catch (e) {
-      alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
-    }
-  }
-  add.append(btn(s.loadPack, () => file.click()), file)
-  box.append(add, list)
-  return box
-}
-
 /**
- * The Open Bible Stories pictures (obsimg.ts): their own catalog `zxx-obsimg`, for every language, below the languages and
- * behaving like one. Without them: their size and "Download" (or "Continue" after a cut download) when the server answers,
- * else how to get them; with them: their count and size, share and remove. Always the credit (the catalog's own once installed).
+ * The Resources screen in a box, for main.ts until it draws the screens itself (resources.ts): the server screen replaces it
+ * in the same box.
  */
-async function imagesSection(lang: string, box: HTMLElement, s: S, after: () => void): Promise<HTMLElement> {
-  const w = IW(lang)
-  const f = FU(lang)
-  const sec = el('div', 'obs-images')
-  sec.appendChild(el('h2', '', w.title))
-  const have = await imagesInstalled().catch(() => null)
-  const row = el('div', 'row')
-  const label = row.appendChild(el('span', 'grow', imagesLine(lang, have)))
-  const credit = el('p', 'note credit', w.credit)
-  if (have && 'bytes' in have) {
-    row.appendChild(btn(w.share, async () => {
-      alertish(box, s.working)
-      try {
-        const bytes = await exportImages()
-        const err = await saveToDownloads(PACK_FILE, bytes, 'application/octet-stream')
-        alertish(box, err ? `${s.failed} ${err}` : `${s.saved} (${mb(bytes.length)})`)
-      } catch (e) {
-        alertish(box, `${s.failed} ${e instanceof Error ? e.message : e}`)
-      }
-    }, 'small'))
-    row.appendChild(btn(w.remove, async () => { await removeImages(); after() }, 'small del'))
-    void imagesCredit().then((c) => { if (c) credit.textContent = c })
-  } else {
-    // a download that did not end can always be removed (what arrived is kept by the store until then, even without internet)
-    const remove = btn(w.remove, async () => { await removeImages(); after() }, 'small del')
-    if (have) row.appendChild(remove)
-    // the size from the catalog (a few KB), read while the menu is already drawn; meanwhile the line says how to get them (a
-    // phone in airplane mode may still say it is online, and the request then waits until it gives up)
-    if (navigator.onLine !== false) {
-      void imagesOffer().then((offer) => {
-        if (!offer) return void (label.textContent = imagesLine(lang, have))
-        const size = mb1(offer.bytes)
-        if (!have) label.textContent = size
-        let asked = false
-        const go = btn(have ? w.resume : w.download, async () => {
-          // over mobile data the first tap asks, the second downloads (Android's WebView shows no confirm())
-          if (!asked && meteredNow() === true) {
-            asked = true
-            label.textContent = fill(w.metered, { mb: size })
-            return
-          }
-          const c = new AbortController()
-          const stop = btn(f.cancel, () => c.abort(new Error('canceled')), 'small')
-          go.replaceWith(stop)
-          remove.remove()
-          label.textContent = w.downloading
-          try {
-            await downloadImages((p) => (label.textContent = `${mb1(p.bytes)} / ${mb1(p.totalBytes)}`), c.signal, offer)
-            after()
-          } catch (e) {
-            // what arrived stays: the button goes on from there, or it is removed
-            label.textContent = c.signal.aborted ? f.canceled : `${s.failed} ${e instanceof Error ? e.message : e}`
-            go.textContent = w.resume
-            asked = false
-            stop.replaceWith(go)
-            row.appendChild(remove)
-          }
-        }, 'small')
-        row.insertBefore(go, remove.isConnected ? remove : null)
-      })
-    }
-  }
-  sec.append(row, credit)
-  return sec
+export async function languagesSection(lang: string, after: () => void): Promise<HTMLElement> {
+  const box = el('div', 'setup')
+  const ctx = { ui: lang, refresh: after, openServer: () => void renderServer(box, ctx), openLanguage: () => {} }
+  await renderResources(box, ctx)
+  return box
 }
 
 /** About (and first launch): what BT Servant Mini is, how it differs from BT Servant, the version; the setup of the light build. */
