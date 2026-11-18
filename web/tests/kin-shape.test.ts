@@ -124,3 +124,7 @@ test('Indonesian forms of address are not «the father of» unless asked (whole-
   expect(kinShape('ibu dari Musa')).toMatchObject({ kind: 'mother', name: 'Musa' })
   expect(kinShape('ayah Rut')).toMatchObject({ kind: 'father' })
 })
+test('«dari» only right after the family word: «Ibu Maria dari Magdala» is a form of address', () => {
+  expect(kinShape('Ibu Maria dari Magdala')).toBeNull()
+  expect(kinShape('Apa nama ibu Musa?')).toBeNull()
+})

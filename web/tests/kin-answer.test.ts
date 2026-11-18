@@ -128,3 +128,16 @@ describe('review fixes (Nov 18)', () => {
     }
   })
 })
+test('a card asked twice credits its sources once (the reader’s family data is not changed)', async () => {
+  await fullPhone()
+  setKinReader(async () => kinFixture())
+  try {
+    const s = { id: 's', intent: 'kin', what: ['who'], ref: null, version: null, concept: 'per:isaac', term: null, phrase: null, candidates: null, lang: 'es-419' }
+    const one = await turn({ last: null }, { q: '', sheet: s }, 'es')
+    const two = await turn({ last: null }, { q: '', sheet: s }, 'es')
+    expect(two.reply.info).toBe(one.reply.info)
+    expect(two.reply.info!.match(/Theographic/g)?.length ?? 0).toBeLessThanOrEqual(1)
+  } finally {
+    setKinReader()
+  }
+})

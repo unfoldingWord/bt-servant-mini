@@ -179,7 +179,7 @@ export function kinShape(q: string): KinShape | null {
     if ((w.kind === 'sons' || w.kind === 'children') && (w.one || / का /.test(rest)) && !plural && DAVID.has(f)) return null
     // Indonesian «Bapa Abraham», «Ibu Maria», «Saudara Petrus» are how people are called, not «the father of»: only asked («siapa…»,
     // «…dari X»)
-    if (s.lang === 'id' && /^(?:bapa|bapak|ibu|saudara)$/.test(key) && !wrapped && !/\sdari\s/i.test(rest)) return null
+    if (s.lang === 'id' && /^(?:bapa|bapak|ibu|saudara)$/.test(key) && !wrapped && !/^\S+\s+dari\s/i.test(rest)) return null
     const out: KinShape = { kind: w.kind, name, alts, lang: s.lang }
     if (w.one && !plural) out.one = true
     if (s.lang === 'ar' && (key === 'أبو' || key === 'ابو')) out.abu = true

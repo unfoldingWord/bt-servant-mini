@@ -2332,7 +2332,8 @@ async function kinAnswer(x: Ctx): Promise<Done> {
       reply: { ui, intro: (ids.length ? t.hereHead : t.hereNone).replace('{ref}', at), info: creditLine(ui, ['STEPBible/STEPBible-Data/TIPNR']), follow, lang: sheet.lang, meta: meta(`here ${ref}: ${ids.join(', ')}`) } }
   }
   const a = await familyOf(sheet.lang, sheet.concept!)
-  const f = a.data
+  // (a copy: the family data is the reader's, and the card renames its relatives)
+  const f = a.data ? { ...a.data } : null
   if (!f) throw new Error(`no family data for ${sheet.concept}`)
   const missingParts = a.notInstalled.some((n) => n.unit === 'xtopics' && n.what === 'part')
   const shownName = askedName(sheet.term, f.name)
@@ -2350,13 +2351,14 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const rel = [...f.parents, ...f.partners, ...f.children, ...f.siblings]
     // (a story the person is in comes from Theographic's events: named in the credit line when one is offered)
     const stories = await storySteps(sheet, f.id, 1)
-    if (stories.length) f.sources = [...f.sources, 'robertrouse/theographic-bible-metadata']
+    // (a copy: the family data is the reader's)
+    const sources = stories.length ? [...f.sources, 'robertrouse/theographic-bible-metadata'] : f.sources
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
     // (MAX_FOLLOW: the other one of that name and the download first, a few relatives, then verses and a story)
     const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...rel.slice(0, 4).map(person),
       ...verses, ...stories]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
-      line(t.siblings, f.siblings), t.named.replace('{n}', String(f.verses)) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
+      line(t.siblings, f.siblings), t.named.replace('{n}', String(f.verses)) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}`) } }
   }
   const k = kind as Exclude<KinKind, 'who'>
