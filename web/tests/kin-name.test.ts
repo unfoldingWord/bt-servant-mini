@@ -82,6 +82,8 @@ describe('«hijos de X»: the family answer, the article first among its buttons
       const r = await ask(q, ui)
       expect(r.answered).toBe('family')
       expect(r.reply.follow![0]!.sheet?.concept).toBe(ui === 'ar' ? 'tw:names/isaac' : 'tw:names/abraham')
+      // («Artículo: Abraham»: not one more person among the relatives' buttons)
+      expect(r.reply.follow![0]!.label).toMatch(/^(Artículo|Article|Artikel|مقالة): /)
     })
   }
 })

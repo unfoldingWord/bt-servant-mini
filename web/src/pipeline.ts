@@ -2356,7 +2356,9 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const shownName = askedName(sheet.term, f.name)
   const others: Follow[] = (sheet.candidates ?? []).length
     ? [{ label: withName(ui, t.other, sheet.term ?? f.name), sheet: kinSheet(sheet, kind, { candidates: sheet.candidates, term: sheet.term }) }] : []
-  const tw = f.tw.length ? await twStep(sheet, f.tw[0]!).catch(() => null) : null
+  // («Artículo: Abraham»: the person's article, not one more person among the relatives' buttons)
+  const tw0 = f.tw.length ? await twStep(sheet, f.tw[0]!).catch(() => null) : null
+  const tw = tw0 ? { ...tw0, label: withName(ui, t.article, tw0.label) } : null
   const plain: string[] = []
   const person = (r: { id: string; name: string }) => ({ label: r.name, sheet: kinSheet(sheet, 'who', { concept: r.id }) })
   if (kind === 'who') {
