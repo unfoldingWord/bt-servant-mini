@@ -494,6 +494,24 @@ describe('the modes list, when there is nothing to list or Browse was left on a 
     expect($$('.ex-tabs button')[1]!.className).toContain('on')
   })
 })
+describe('the stories the typing row listed ("All (n)", obsindex.ts)', () => {
+  test('Browse opens the Bible stories filtered to those, under the row\'s title; Back goes to Browse home', async () => {
+    openExploreAt({ obs: true, lang: 'en', only: [3, 35], title: 'Stories with Noah' })
+    await until('.ex-rows .ex-row')
+    expect($('#ex-title')!.textContent).toBe('Stories with Noah')
+    const rows = $$('.ex-rows .ex-row').map((r) => r.textContent)
+    expect(rows.length).toBe(2)
+    expect(rows[0]).toContain('OBS 3')
+    expect(rows[1]).toContain('OBS 35')
+    expect(backExplore()).toBe(true)
+    await until('.ex-tabs')
+  })
+  test('without a filter: all the stories', async () => {
+    openExploreAt({ obs: true, lang: 'en' })
+    await until('.ex-rows .ex-row')
+    expect($$('.ex-rows .ex-row').length).toBe(50)
+  })
+})
 function sheetOfSession(_fx: Awaited<ReturnType<typeof loadFixture>>) {
   return { story: 1, part: 'm1' as const, at: 2, lang: 'en', tfLang: 'en' as const, started: Date.now(), done: [] }
 }
