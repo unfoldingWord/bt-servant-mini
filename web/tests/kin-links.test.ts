@@ -46,13 +46,16 @@ describe('with the packs on disk', () => {
     expect(f.some((x) => x.sheet?.concept === 'tw:names/isaac')).toBe(true)
     expect(f.some((x) => x.sheet?.intent === 'passage' && /^gen /.test(x.sheet.ref ?? ''))).toBe(true)
   })
-  test('article → family: «Who was Isaac?» opens the article as today, with his family at the end and the way to his card', async () => {
+  test('article → family: «Who was Isaac?» opens the article as today; one plain family line inside its fold, the whole family behind a button', async () => {
     const r = await turn({ last: null }, { q: 'Who was Isaac?', slots: null }, 'en')
     expect(r.answered).toBe('article')
     expect(r.concept).toBe('tw:names/isaac')
-    expect(r.reply.info).toMatch(/\*\*Family of Isaac\*\* — Parents: Sarah and Abraham · Spouses: Rebekah · Children: Esau/)
-    expect(r.reply.info).toMatch(/\*Family data: TIPNR \(STEPBible\)\.\*$/)
-    expect((r.reply.follow ?? []).some((f) => f.sheet?.intent === 'kin' && f.sheet.concept === 'per:isaac')).toBe(true)
+    const info = r.reply.info!
+    // the line is plain (not bold), and inside the fold: before its end mark «◂», after the article's own text
+    expect(info).toMatch(/\nFamily of Isaac: son of (Sarah and Abraham|Abraham and Sarah)[^\n]*\.\n\n\*Family data: TIPNR \(STEPBible\)\.\*\n\n◂/)
+    expect(info).not.toMatch(/\*\*Family of Isaac\*\*/)
+    expect(info.indexOf('Family of Isaac')).toBeGreaterThan(info.indexOf('▸'))
+    expect((r.reply.follow ?? []).some((f) => f.sheet?.intent === 'kin' && f.sheet.concept === 'per:isaac' && f.sheet.what[0] === 'family')).toBe(true)
   })
 })
 

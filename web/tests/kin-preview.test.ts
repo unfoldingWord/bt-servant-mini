@@ -89,6 +89,15 @@ describe.skipIf(!ON)('family answers on the preview packs', () => {
     expect(pick.answered).toBe('choose')
     expect(labels(pick).length).toBeGreaterThanOrEqual(3)
   })
+  test('a name alone (Abel, Nov 18): «Abraham» is his article; minor people by the nearest known person', async () => {
+    const ab = await ask('Abraham', 'es')
+    expect(ab.answered).toBe('article')
+    expect((ab.reply.info ?? '').split('\n')[0]).toMatch(/^## /)
+    expect((await ask('Fares', 'es')).reply.info).toMatch(/^\*\*Fares\*\* — hijo de Judá y Tamar/)
+    expect((await ask('Salmón', 'es')).reply.info).toMatch(/^\*\*Salmón\*\* — padre de Booz, esposo de Rahab/)
+    expect((await ask('Hamul', 'es')).reply.info).toMatch(/^\*\*Hamul\*\* — descendiente de Judá/)
+    expect((await ask('hijos de Abraham', 'es')).reply.follow![0]!.sheet?.concept).toBe('tw:names/abraham')
+  })
   test('verse and frame → people: Genesis 25:26 and an OBS frame that tells it', async () => {
     const v = await turn({ last: null } as ConvState, { q: '', sheet: { id: 's', intent: 'kin', what: ['here'], ref: 'gen 25:26', version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'en' } }, 'en')
     expect(labels(v)).toEqual(expect.arrayContaining(['Isaac']))
