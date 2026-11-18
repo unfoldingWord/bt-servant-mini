@@ -14,8 +14,7 @@ const LANGS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
 const MENU: Record<string, string> = { en: 'Menu', es: 'Menú', fr: 'Menu', id: 'Menu', hi: 'मेनू', ar: 'القائمة' }
 const arrow = (l: string) => (l === 'ar' ? ' ← ' : ' → ')
 // main.ts has side effects, so its ONLINE_T row label is read from the source
-const onlineLabel = (l: string) => new RegExp(`^  ${l}: \{ label: '([^']*)'`, 'm').exec(main)![1]!
-/** the line of the About body (or relogin) that starts a given sentence of `l` is found by its path text */
+const onlineLabel = (l: string) => new RegExp(`^  ${l}: \\{ label: '([^']*)'`, 'm').exec(main)![1]!
 const path = (l: string, ...rows: string[]) => [MENU[l]!, ...rows].join(arrow(l))
 
 describe('About and relogin name the menu rows', () => {
@@ -33,9 +32,7 @@ describe('About and relogin name the menu rows', () => {
   })
   test('About: no "in the menu" and no packs', () => {
     // the body paragraphs only (code and comments may say pack), without the .tcpack file extension
-    const body = setup.split('
-').filter((x) => /^\s+"/.test(x)).join('
-').replace(/\.tcpack/g, '').toLowerCase()
+    const body = setup.split(/\r?\n/).filter((x) => /^\s+"/.test(x)).join(' ').replace(/\.tcpack/g, '').toLowerCase()
     for (const bad of ['in the menu', 'en el menú', 'dans le menu', 'मेनू में', 'pack', 'paquete', 'paquet', 'paket', 'पैक', 'حزم'])
       expect(body).not.toContain(bad)
     expect(body).not.toMatch(/di menu(?! →)/)
