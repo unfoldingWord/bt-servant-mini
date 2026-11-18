@@ -10,6 +10,9 @@ import { openLang } from '../src/packs'
 import { Composer } from '../src/composer'
 import { buildTermIndex, resetTermIndex } from '../src/termindex'
 import { has } from '../src/commands'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { forgetFrameTables } from '../src/obs'
 import { ALL_PACKS } from './fs-packs'
 import { fullPhone } from './harness'
 import { withObs } from './obs-fixture'
@@ -17,15 +20,31 @@ import { withObs } from './obs-fixture'
 const store = new Map<string, string>()
 ;(globalThis as any).localStorage ??= { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k), key: () => null, length: 0 }
 
+// the frame map (obs-frames), put in the packs' xtopics core as tests/obs-frames.test.ts does
+const FRAMES = JSON.parse(readFileSync(resolve(import.meta.dir, 'fixtures/obs-frames-c07d4539.json'), 'utf8')).obsFrames as Record<string, [number, number][]>
+const origMaps = new Map<string, any>()
+async function withFrames(lang: string) {
+  const r = await openLang(lang)
+  if (!origMaps.has(lang)) origMaps.set(lang, r.mapsOf)
+  const orig = origMaps.get(lang)
+  r.mapsOf = (async (units: any, o: any) => {
+    const m = await orig.call(r, units, o)
+    return m.xtopics ? { ...m, xtopics: { ...m.xtopics, core: { ...m.xtopics.core, obsFrames: FRAMES } } } : m
+  }) as any
+}
 let all: Ctx['books'] = null
 beforeAll(async () => {
   await fullPhone()
   await withObs('hi')
+  for (const l of ['en', 'hi']) await withFrames(l)
+  forgetFrameTables()
   all = await booksOf(ALL_PACKS)
   await buildTermIndex(ALL_PACKS)
   await buildObsIndex(ALL_PACKS)
 })
-afterAll(() => {
+afterAll(async () => {
+  for (const [l, f] of origMaps) (await openLang(l)).mapsOf = f
+  forgetFrameTables()
   resetObsIndex()
   resetTermIndex()
 })
@@ -88,7 +107,7 @@ describe('story words', () => {
 
 describe('the row agrees with the answer and the send', () => {
   test('case C names the story storyAt names (given no passage text) for several passages', async () => {
-    const refs = ['gen 6', 'gen 7:1', 'gen 6:9-22', 'luk 2:7', 'mat 3:13-17', 'mrk 1:21-28', 'exo 12:29', 'exo 14', 'jhn 3:16', 'act 2:1-4', 'gen 1:1', 'gen 22:1-14', 'mat 28:1-10', 'jhn 1:1', 'dan 6']
+    const refs = ['gen 6', 'gen 7:1', 'gen 6:9-22', 'luk 2:7', 'mat 3:13-17', 'mrk 1:21-28', 'exo 12:29', 'exo 14', 'jhn 3:16', 'act 2:1-4', 'gen 1:1', 'gen 22:1-14', 'mat 28:1-10', 'jhn 1:1', 'dan 6', 'gen 1:7', 'mat 13:31', 'gen 8:20', 'gen 3:6', 'gen 1:6-8', 'gen 6-8']
     let told = 0
     for (const ref of refs) {
       const chip = storyTelling(rangeOfRef(ref)!, ALL_PACKS)
@@ -97,7 +116,9 @@ describe('the row agrees with the answer and the send', () => {
       if (at) told++
     }
     console.log(`case C vs storyAt: ${told} of ${refs.length} passages told by a story, all the same`)
-    expect(told).toBeGreaterThan(8)
+    expect(told).toBeGreaterThan(12)
+    // the map is really read at the build: Genesis 3:6 is OBS 2 by the frame map (its ranges alone would say another)
+    expect(storyTelling(rangeOfRef('gen 3:6')!, ALL_PACKS)?.n).toBe(2)
   })
   test('the top story of a request is the one namedStory sends; every title findStories finds is offered', async () => {
     const texts: [string, string][] = [['historia de Noé', 'es'], ['story of Noah', 'en'], ['la historia del hijo pródigo', 'es'], ['the story of the Flood', 'en'], ['historia de Moisés', 'es'], ['story of the Passover', 'en'], ['historia de Jesús', 'es'], ['story of Jesus', 'en']]

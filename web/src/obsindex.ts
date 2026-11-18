@@ -281,7 +281,7 @@ function find(words: string[], o: FindOpts): { hits: StoryHit[]; lang: string } 
 /** The verse ids of a passage of one book, by the versification (obs.ts idsOf, which is not exported). */
 function idsOf(from: number, to: number): number[] {
   const book = BOOKS[Math.floor(from / 1_000_000) - 1]
-  const counts = book ? (VERSES as Record<string, number[]>)[book] : undefined
+  const counts = book ? (versification as Record<string, number[]>)[book] : undefined
   const out: number[] = []
   const ch = (id: number) => Math.floor(id / 1000) % 1000
   for (let c = ch(from); c <= ch(to) && counts; c++) {
