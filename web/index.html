@@ -48,14 +48,14 @@
   .me { align-self: flex-end; max-width: 85%; background: var(--me); border-radius: 14px; padding: 9px 14px; white-space: pre-wrap; }
   .bot { align-self: stretch; font-family: Georgia, "Noto Serif", "Noto Serif Devanagari", serif; font-size: 16.5px; line-height: 1.6; }
   .pending { color: var(--faint); font-style: italic; }
-  /* the waiting line: a small orb that breathes and a text that shimmers, never fully opaque (waiting.ts) */
-  .wait { display: flex; align-items: center; font: 14px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; font-style: normal; color: var(--faint); }
-  .wait .orb { flex: none; width: 12px; height: 12px; border-radius: 50%; margin-inline-end: 8px; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--accent) 55%, #fff), var(--accent) 70%);
+  /* the waiting line: a small orb that breathes and a text that shimmers, never fully opaque, and legible at its dimmest (waiting.ts) */
+  .wait { display: flex; align-items: center; font: 14px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; font-style: normal; color: var(--muted); }
+  .wait .orb { flex: none; width: 12px; height: 12px; border-radius: 50%; margin-inline-end: 8px; background: var(--accent); background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--accent) 55%, #fff), var(--accent) 70%);
     animation: orb-breathe 2.4s ease-in-out infinite; }
   .wait .wt { animation: wait-shimmer 2s ease-in-out infinite; }
   @keyframes orb-breathe { 0%, 100% { transform: scale(.72); opacity: .6; } 50% { transform: scale(1); opacity: 1; } }
-  @keyframes wait-shimmer { 0%, 100% { opacity: .45; } 50% { opacity: .85; } }
-  @media (prefers-reduced-motion: reduce) { .wait .orb { animation: none; transform: none; opacity: .85; } .wait .wt { animation: none; opacity: .7; } }
+  @keyframes wait-shimmer { 0%, 100% { opacity: .6; } 50% { opacity: .9; } }
+  @media (prefers-reduced-motion: reduce) { .wait .orb { animation: none; transform: none; opacity: .85; } .wait .wt { animation: none; opacity: .8; } }
   .intro { margin: 0 0 10px; }
   .info { font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--card);
     border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
@@ -173,7 +173,7 @@
   #panel button.small { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; }
   #panel button.small.del { color: #b4432f; }
   #panel .about-link { margin-top: 14px; width: 100%; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 14.5px; text-align: start; padding: 8px 0; }
-  #about, #safety, #report { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #about, #safety, #report { position: fixed; inset: 0; z-index: 10; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #about .card, #safety .card, #report .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; max-width: 520px; max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
   #about h2, #safety h2, #report h2 { font: 600 22px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 12px; }
   #about p, #safety p, #report p { margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
@@ -186,7 +186,7 @@
   #safety { z-index: 11; }
   #report { z-index: 12; }
   /* How to ask (howto.ts): one card at a time over the chat, like About; under the PIN lock (20) */
-  #howto { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #howto { position: fixed; inset: 0; z-index: 10; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #howto .card { background: var(--card); border-radius: 18px; padding: 16px 20px 18px; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 12px 40px rgba(0,0,0,.18); outline: none; }
   .howto-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
   .howto-step { font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px; color: var(--faint); }
@@ -203,7 +203,7 @@
   .howto-nav { display: flex; gap: 8px; }
   .howto-x { border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; min-width: 44px; min-height: 44px; cursor: pointer; }
   /* The welcome (welcome.ts): one screen over the chat, like How to ask; under the PIN lock (20) */
-  #welcome { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #welcome { position: fixed; inset: 0; z-index: 10; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #welcome .card { background: var(--card); border-radius: 18px; padding: 12px 18px 16px; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 12px 40px rgba(0,0,0,.18); outline: none; }
   .wl-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
   .wl-step { font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px; color: var(--faint); }
