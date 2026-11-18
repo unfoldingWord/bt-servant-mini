@@ -158,15 +158,8 @@ export class Composer {
   }
   compositionEnd() {
     this.composing = false
-    // a story's button tapped while the keyboard composed: asked now, if the box holds what it held and the row still offers it
-    if (this.waiting) {
-      const w = this.waiting
-      this.waiting = null
-      if (this.box.value !== w.text) return this.onInput()
-      this.refresh()
-      const again = this.row.items.find((x) => (x.kind === 'story' || x.kind === 'stories') && x.label === w.label)
-      return again ? void this.tap(again) : undefined
-    }
+    const waiting = this.waiting
+    this.waiting = null
     // a "✓" tapped while the keyboard composed: sent now, if it still says the same for what the box now holds
     if (this.sendLabel !== null) {
       const label = this.sendLabel
@@ -183,7 +176,18 @@ export class Composer {
       const t = this.pending
       this.pending = null
       this.write(t)
-    } else this.onInput()
+    } else if (waiting) void this.retap(waiting)
+    else this.onInput()
+  }
+  /**
+   * A story's button tapped while the keyboard composed: tapped again now if the box holds what it held, after the row is made
+   * again for it and still offers that very button (else nothing: the row is new, as for the "✓").
+   */
+  private async retap(w: { label: string; text: string }) {
+    if (this.box.value !== w.text) return this.onInput()
+    this.refresh()
+    const again = this.row.items.find((x) => (x.kind === 'story' || x.kind === 'stories') && x.label === w.label)
+    if (again) await this.tap(again)
   }
   /** Makes the row for the box's text now. */
   refresh() {
@@ -362,6 +366,7 @@ export class Composer {
   }
   /** After a question is sent: an empty row (state A, if the box keeps the focus). */
   clear() {
+    this.waiting = null
     if (!this.composing) this.box.value = ''
     this.filled = null
     this.pending = null
@@ -449,7 +454,8 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
     } else {
       for (const it of row.items) {
         const b = chip(`cmp-chip cmp-${it.kind}`, it.label, () => void c.tap(it), ui)
-        if (it.aria) b.setAttribute('aria-label', it.aria)
+        if (it.aria) b.setAttribute('aria-label', bidiLabel(it.aria, ui))
+        if (it.alang) b.lang = it.alang
         if (it.kind === 'missing') b.setAttribute('aria-disabled', 'true')
         wrap.appendChild(b)
       }

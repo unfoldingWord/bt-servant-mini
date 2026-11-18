@@ -48,6 +48,8 @@ export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true
   resume?: number
   /** the label a screen reader says when it is not the button's text (a story's title behind "Told in OBS 3") */
   aria?: string
+  /** the language of the title in `aria` and in the label (the OBS pack's), for a screen reader */
+  alang?: string
   /** a `stories` button: Browse's list of Bible stories, filtered to these (their numbers), in the OBS pack of this language, under this title */
   list?: { lang: string; ids: number[]; title: string } }
 /** The chapter or verse strip: numbers 1…max; a tap writes `base + sep + n` in the box. */
@@ -356,9 +358,9 @@ export function suggest(text: string, ctx: Ctx): Row {
   const story = storyWords(t)
   if (story) {
     const stories = storyRow(t, ctx, story)
-    if (stories.length) return { items: [...stories, ...termRow(t, ctx, MAX - stories.length)].slice(0, MAX) }
+    if (stories.length) return { items: [...stories, ...termRow(t, ctx, MAX - stories.length, story)].slice(0, MAX) }
   }
-  const terms = termRow(t, ctx, MAX - b.items.length)
+  const terms = termRow(t, ctx, MAX - b.items.length, story)
   // a name alone ("Moisés"): after its article, at most two stories (case B)
   const after = story ? [] : storyRow(t, ctx, null, Math.min(2, MAX - b.items.length - terms.length))
   return terms.length || after.length ? { items: [...b.items, ...terms, ...after] } : b
@@ -554,11 +556,15 @@ const LEADS: string[] = (() => {
  * box may be started only (not when the box ends in a space, nor when the story word is the last).
  */
 type Topic = { words: string[]; partial: boolean }
+let storyRe: RegExp | null = null
 function storyWords(t: string): Topic | null {
   const plain = t.replace(/[¿?!¡.,;:«»"“”؟،()]/g, ' ')
   if (!has('story', plain)) return null
-  const re = new RegExp(pattern('story').source, 'giu')
-  const words = keywords(plain.replace(re, ' '))
+  // a question about the meaning of a word or how to translate it ("¿qué significa historia?") is not a story request
+  const f = fold(t).replace(/^[\s¿¡]+/, '')
+  if (LEADS.some((h) => f.startsWith(h + ' '))) return null
+  storyRe ??= new RegExp(pattern('story').source, 'giu')
+  const words = keywords(plain.replace(storyRe, ' '))
   const last = plain.trim().split(/\s+/).pop() ?? ''
   const partial = !/\s$/.test(plain) && !has('story', last) && words.length > 0 && fold(words[words.length - 1]!) === fold(last)
   return { words, partial }
@@ -567,8 +573,15 @@ function storyWords(t: string): Topic | null {
 const storiesOn = (ctx: Ctx): boolean => !ctx.conv.graph?.session && hasStories(storyOrder(ctx))
 /** The OBS packs in the order the send looks in them: the sheet's pack, English, the others. */
 const storyOrder = (ctx: Ctx): string[] => [...new Set([firstPack({ lang: ctx.ui }, ctx), 'en', ...ctx.packs])]
+/** The first `max` graphemes of a text ("…" after them when cut): never half a surrogate pair, a combining mark or a joined sequence. */
+export function cutGraphemes(text: string, max: number): string {
+  const Seg = (Intl as any).Segmenter as (new (l?: string, o?: { granularity: string }) => { segment(s: string): Iterable<{ segment: string }> }) | undefined
+  // (without Segmenter: a letter with the marks after it, as one)
+  const parts = Seg ? [...new Seg(undefined, { granularity: 'grapheme' }).segment(text)].map((x) => x.segment) : (text.match(/\P{M}\p{M}*/gu) ?? [])
+  return parts.length <= max ? text : `${parts.slice(0, max - 1).join('').trimEnd()}…`
+}
 const shownTitle = (e: { n: number; title: string }): string => {
-  const t = e.title.length > 34 ? `${e.title.slice(0, 33).trimEnd()}…` : e.title
+  const t = cutGraphemes(e.title, 34)
   return t ? `${obsLabel(e.n)} · ${t}` : obsLabel(e.n)
 }
 const upFirst = (w: string) => w.charAt(0).toLocaleUpperCase() + w.slice(1)
@@ -602,10 +615,10 @@ function storyRow(t: string, ctx: Ctx, topic: Topic | null, room = MAX): Suggest
   const max = topic ? 4 : room
   const items = found.hits.slice(0, max).map((e): Suggestion => {
     const sheet: Sheet = { id: `c${Date.now()}`, intent: 'passage', ref: `obs ${e.n}`, what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: found.lang }
-    return { kind: 'story', label: `${shownTitle(e)} ${arrow}`, aria: `${obsLabel(e.n)}: ${e.title}`, sheet, ask: e.title ? `${obsLabel(e.n)}: ${e.title}` : obsLabel(e.n) }
+    return { kind: 'story', label: `${shownTitle(e)} ${arrow}`, aria: e.title ? `${obsLabel(e.n)} · ${e.title}` : obsLabel(e.n), alang: found.lang, sheet, ask: e.title ? `${obsLabel(e.n)}: ${e.title}` : obsLabel(e.n) }
   })
   if (topic && found.hits.length > max)
-    items.push({ kind: 'stories', label: `${fillT(s.all, { n: String(found.hits.length) })} ${arrow}`, list: { lang: found.lang, ids: found.hits.map((e) => e.n), title: fillT(s.withTopic, { topic: upFirst(words.join(' ')) }) } })
+    items.push({ kind: 'stories', label: `${fillT(s.all, { n: String(found.hits.length) })} ${arrow}`, aria: fillT(s.all, { n: String(found.hits.length) }), list: { lang: found.lang, ids: found.hits.map((e) => e.n), title: fillT(s.withTopic, { topic: upFirst(words.join(' ')) }) } })
   return items
 }
 /** C: under a passage's "✓", the story that tells it ("Told in OBS 3 ▸"): one button at the end, when the row has room. */
@@ -618,19 +631,18 @@ function told(u: Understood, items: Suggestion[], ctx: Ctx): Suggestion[] {
   if (!hit) return items
   const s = ST(ctx.ui)
   const sheet: Sheet = { id: `c${Date.now()}`, intent: 'passage', ref: `obs ${hit.n}`, what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: hit.lang }
-  return [...items, { kind: 'story', label: `${fillT(s.told, { n: String(hit.n) })} ${rtlLang(ctx.ui) ? '◂' : '▸'}`, aria: `${obsLabel(hit.n)}: ${hit.title}`, sheet, ask: hit.title ? `${obsLabel(hit.n)}: ${hit.title}` : obsLabel(hit.n) }]
+  return [...items, { kind: 'story', label: `${fillT(s.told, { n: String(hit.n) })} ${rtlLang(ctx.ui) ? '◂' : '▸'}`, aria: hit.title ? `${fillT(s.told, { n: String(hit.n) })}: ${hit.title}` : fillT(s.told, { n: String(hit.n) }), alang: hit.lang, sheet, ask: hit.title ? `${obsLabel(hit.n)}: ${hit.title}` : obsLabel(hit.n) }]
 }
 
 /** How many syllables a Devanagari text has: its letters, a consonant joined by a virama to the one before not counted. */
 const syllables = (s: string) => [...s.matchAll(/(?<!\u094D)\p{L}/gu)].length
 /** C: the articles a word being typed names (alone, or after the words of a meaning question), from the pack in its language. */
-function termRow(t: string, ctx: Ctx, room: number): Suggestion[] {
+function termRow(t: string, ctx: Ctx, room: number, sw: Topic | null = null): Suggestion[] {
   if (room <= 0) return []
   const ui = ctx.ui
   const f = fold(t).replace(/^[\s¿¡]+/, '')
   const lead = LEADS.find((h) => f.startsWith(h + ' '))
   // (a story word and the small words around it go: "historia de Jesús" still offers "Jesús · palabra clave")
-  const sw = storyWords(t)
   const rest = sw ? fold(sw.words.join(' ')) : (lead ? f.slice(lead.length) : f).replace(/[¿?¡!؟.,;:«»"“”]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!rest || /\d/.test(rest) || rest.split(' ').length > 4) return []
   const enough = /[ऀ-ॿ]/.test(rest) ? syllables(rest) >= 2 : /[؀-ۿ]/.test(rest) ? rest.replace(/\s/g, '').length >= 2 : rest.replace(/\s/g, '').length >= (lead ? 2 : 3)
