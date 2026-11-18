@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { installPacks } from './fs-packs'
 import {
-  cancelDownload, count, deps, downloads, downloadsSummary, onDownloads, renderResources, renderServer, resetDownloads, resourcesBox, RT, startDownload, watching, type ResCtx,
+  cancelDownload, count, deps, downloads, downloadsSummary, onDownloads, renderResources, renderServer, resetDownloads, RT, disposeHost, startDownload, watching, type ResCtx,
 } from '../src/resources'
 
 class FakeEl {
@@ -36,6 +36,32 @@ const fakeReader = (listed: string[], installed: string[]) => ({
 let refreshed = 0
 const ctx = (ui = 'es'): ResCtx => ({ ui, refresh: () => void refreshed++, openServer: () => {}, openLanguage: () => {} })
 const host = () => new FakeEl('div') as unknown as FakeEl & HTMLElement
+/** What main.ts does around the two screens, in a box: the server screen one tap away and a "‹ Recursos" back button. */
+async function resourcesBox(ui: string, after: () => void): Promise<HTMLElement> {
+  const box = new FakeEl('div')
+  let dispose: (() => void) | null = null
+  let turn = 0
+  let current: FakeEl | null = null
+  const show = async (server: boolean) => {
+    const mine = ++turn
+    dispose?.()
+    dispose = null
+    if (current) disposeHost(current as unknown as HTMLElement)
+    const inner = new FakeEl('div')
+    current = inner
+    const back = new FakeEl('button')
+    back.className = 'small'
+    back.text = `‹ ${RT(ui).back}`
+    back.onclick = () => void show(false)
+    box.replaceChildren(...(server ? [back, inner] : [inner]))
+    const c: ResCtx = { ui, refresh: after, openServer: () => void show(true), openLanguage: () => {} }
+    const d = await (server ? renderServer : renderResources)(inner as unknown as HTMLElement, c)
+    if (mine === turn) dispose = d
+    else d()
+  }
+  await show(false)
+  return box as unknown as HTMLElement
+}
 
 beforeAll(async () => {
   ;(globalThis as any).document = { createElement: (t: string) => new FakeEl(t) }
@@ -648,7 +674,7 @@ describe('correction 3', () => {
     await sleep(10)
     h.button(/por datos móviles/)?.click()
     await sleep(20)
-    expect(used).not.toContain(1_500_000) // only the size the list showed, never the plan of the old tap
+    expect(used).toEqual([1_048_576]) // only the size the list showed, never the 1.5 MB plan of the old tap
     // and with a plan of today, the confirming tap downloads that one
     failNow = false
     today = 1_100_000

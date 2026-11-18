@@ -1,10 +1,9 @@
 // The "About" screen (also shown on first launch), and the menu's Model section: download or load the model. The languages
-// (resources.ts) are drawn there; `languagesSection` is the old name main.ts still calls.
+// are drawn by resources.ts.
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { rtlLang } from './bidi'
 import { downloadImages, imagesInstalled, removeImages } from './obsimg'
 import { availableLangs, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
-import { resourcesBox } from './resources'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
@@ -236,9 +235,6 @@ function alertish(box: HTMLElement, text: string) {
   box.querySelector('.note:not(.credit)')?.remove()
   box.appendChild(el('p', 'note', text))
 }
-
-/** The old name main.ts calls for the Resources screen (resources.ts draws it, and the server screen with a way back). */
-export const languagesSection = (lang: string, after: () => void): Promise<HTMLElement> => resourcesBox(lang, after)
 
 /** About (and first launch): what BT Servant Mini is, how it differs from BT Servant, the version; the setup of the light build. */
 export function showAbout(lang: string, refresh: () => void) {

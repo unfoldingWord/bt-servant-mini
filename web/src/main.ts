@@ -5,7 +5,9 @@ import { backPanel, fillTitles, groupObsHelps, linkFrameWords, linkObsWords, mar
 import { cardsT, chooseCards, showsCards } from './helpcards'
 import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
-import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
+import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, showAbout } from './setup'
+import { backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
+import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
 import { addUnits, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
@@ -41,9 +43,9 @@ import { waiting } from './waiting'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
-import { obsLabel, obsServer, parseObsRef, pictureFrame } from './obs'
+import { obsLabel, obsPack, obsServer, parseObsRef, pictureFrame } from './obs'
 import { type ObsStudy, obsStudyOf } from './obswords'
-import { addObsPictures, addVersePicture } from './obsimg'
+import { addObsPictures, addVersePicture, imagesInstalled } from './obsimg'
 import { endSession, forgetAllReveals, forgetCard, forgetReveals, forgetSessions, revealedIn, revealedOn, revealOn, resumeIn, resumeTarget, type Saved5, savedSessions, saveSession } from './obs5mstore'
 import { learnLabel, learnSheet, resetLearn } from './learn'
 import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from './saved'
@@ -411,7 +413,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     const a = el('button', 'about-link', NP(m.ui ?? nav).add) as HTMLButtonElement
     a.type = 'button'
     a.onclick = () => {
-      panelView = 'packs'
+      panelView = 'resources'
       panel.classList.add('show')
       renderPanel()
     }
@@ -627,7 +629,7 @@ function pickerFor(prefer: string[]): HTMLElement {
     // the download's end reaches refreshInstalled through onPacksChanged too: the waiting question is asked from there
     done: async () => { await refreshInstalled() },
     file: () => {
-      panelView = 'packs'
+      panelView = 'resources'
       panel.classList.add('show')
       renderPanel()
     },
@@ -763,7 +765,6 @@ function renderConv() {
   placeModelOffer()
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
-type PanelView = 'main' | 'language' | 'online' | 'model' | 'packs' | 'usage' | 'safety'
 let panelView: PanelView = 'main'
 const MTS: Record<string, { language: string; on: string; off: string; none: string; installed: string; back: string }> = {
   en: { language: 'Language', on: 'On', off: 'Off', none: 'None', installed: 'installed', back: 'Back' },
@@ -776,6 +777,7 @@ const MTS: Record<string, { language: string; on: string; off: string; none: str
 const MT = () => MTS[nav] ?? MTS.en!
 
 function renderPanel() {
+  disposeScreen()
   panel.classList.remove('sub')
   if (panelView !== 'main') return renderSubPanel(panelView)
   panel.innerHTML = ''
@@ -828,65 +830,103 @@ function renderPanel() {
   }
   panel.appendChild(add)
   if (convs.length >= MAX) panel.appendChild(el('p', 'note', T.max))
-  // under the conversations, one row per setting: its name, what it is now, and a tap opens it
-  const list = el('div', 'mrows')
-  const row = (title: string, sub: string, open: () => void) => {
-    const b = el('button', 'mrow') as HTMLButtonElement
+  // under the conversations, three groups of rows: its name, what it is now, and a tap opens it
+  readMenuFacts()
+  const st = menuState()
+  const titles: Record<string, string> = {
+    explore: XT(nav).browse, saved: SVT(nav).title, map: GT(nav).mapLong, resources: MNT(nav).resources, language: MT().language, settings: MNT(nav).settingsRow,
+  }
+  const opens: Record<string, () => void> = {
+    explore: () => { closePanel(); openExplore('menu') },
+    saved: () => { closePanel(); openSaved() },
+    map: () => { closePanel(); openMap('menu') },
+    resources: () => go('resources')(),
+    language: () => go('language')(),
+    settings: () => go('settings')(),
+  }
+  resSubEl = null
+  for (const g of menuGroups(st)) {
+    panel.appendChild(el('h3', '', MNT(nav)[g.group]))
+    const list = el('div', 'mrows')
+    for (const r of g.rows) {
+      const sub = mrow(list, titles[r.id]!, r.sub, opens[r.id]!)
+      if (r.id === 'resources') resSubEl = sub
+    }
+    panel.appendChild(list)
+  }
+  const foot = el('div', 'foot')
+  const link = (label: string, open: () => void) => {
+    const b = el('button', 'about-link', label) as HTMLButtonElement
     b.type = 'button'
-    b.append(el('span', 'mrow-t', title), el('span', 'mrow-s', sub), el('span', 'mrow-c', '›'))
     b.onclick = open
-    list.appendChild(b)
+    foot.appendChild(b)
   }
-  const go = (v: PanelView) => () => {
-    panelView = v
-    renderPanel()
-  }
-  row(XT(nav).browse, `${XT(nav).bible} · ${XT(nav).academy}`, () => {
-    closePanel()
-    openExplore('menu')
-  })
-  row(SVT(nav).title, savedSummary(nav), () => { closePanel(); openSaved() })
-  // the Map of the conversation open now: how many points, and where it is
-  if (points() >= MAP_MIN) {
-    const c = conv()
-    const at = nodeOf(c.graph, c.graph?.cur)
-    row(GT(nav).mapLong, [GT(nav).points.replace('{n}', String(points())), at?.label].filter(Boolean).join(' · '), () => {
-      closePanel()
-      openMap('menu')
-    })
-  }
-  const uiName = UI_LANGS.find(([c]) => c === nav)?.[1] ?? nav
-  row(MT().language, `${uiName} · ${helpsLang ? PACK_NAMES[helpsLang] ?? helpsLang : T.auto}`, go('language'))
-  if (onlineAvailable()) row(OT().label, onlineOn() && (!signInAvailable() || onlineSession()) ? MT().on : MT().off, go('online'))
-  row(modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
-  row(packsTitle(nav), `${INSTALLED.length} ${MT().installed}`, go('packs'))
-  row(UT().title, usageOn() ? MT().on : MT().off, go('usage'))
-  if (updateSupported()) {
-    const u = updateRow(nav)
-    row(u.title, u.sub, () => { checkForUpdate(nav, true, () => renderPanel()) })
-  }
-  list.appendChild(composerSwitch(nav, MT().on, MT().off))
-  row(PT(nav).title, protectSummary(nav, MT().off), go('safety'))
-  row(howtoLabel(nav), '', () => {
-    closePanel()
-    openHowTo(nav)
-  })
-  row(welcomeLabel(nav), '', () => {
-    closePanel()
-    openWelcome(nav)
-  })
-  const aboutRow = el('button', 'mrow') as HTMLButtonElement
-  aboutRow.type = 'button'
-  aboutRow.append(el('span', 'mrow-t', aboutLabel(nav)), el('span', 'mrow-c', '›'))
-  aboutRow.onclick = () => {
-    closePanel()
-    showAbout(nav, () => setReady())
-  }
-  list.appendChild(aboutRow)
-  panel.appendChild(list)
+  link(howtoLabel(nav), () => { closePanel(); openHowTo(nav) })
+  link(welcomeLabel(nav), () => { closePanel(); openWelcome(nav) })
+  link(aboutLabel(nav), () => { closePanel(); showAbout(nav, () => setReady()) })
+  panel.appendChild(foot)
 }
 
-/** One setting's own view in the panel, with a way back to the menu. */
+/** One row of the menu or of Settings: title, line, arrow; returns the line's element (the menu keeps the downloads' line fresh). */
+function mrow(list: HTMLElement, title: string, sub: string, open: () => void): HTMLElement {
+  const b = el('button', 'mrow') as HTMLButtonElement
+  b.type = 'button'
+  const s = el('span', 'mrow-s', sub)
+  b.append(el('span', 'mrow-t', title), s, el('span', 'mrow-c', '›'))
+  b.onclick = open
+  list.appendChild(b)
+  return s
+}
+const go = (v: PanelView) => () => {
+  panelView = v
+  renderPanel()
+}
+// what Browse and Resources have on the phone, read between draws (the menu draws at once and again if these changed)
+let facts = { stories: false, modes: false, images: false }
+let resSubEl: HTMLElement | null = null
+function readMenuFacts() {
+  const langs = INSTALLED
+  void Promise.all([
+    langs.length ? obsPack(langs[0]!).then((o) => !!o, () => false) : false,
+    langs.length ? modesOn(langs).then((m) => m.length > 0, () => false) : false,
+    imagesInstalled().then((i) => !!i && 'bytes' in i, () => false),
+  ]).then(([stories, modes, images]) => {
+    if (stories === facts.stories && modes === facts.modes && images === facts.images) return
+    facts = { stories, modes, images }
+    if (panel.classList.contains('show') && panelView === 'main') renderPanel()
+  })
+}
+function menuState(): MenuState {
+  const c = conv()
+  const at = nodeOf(c.graph, c.graph?.cur)
+  const uiName = UI_LANGS.find(([code]) => code === nav)?.[1] ?? nav
+  return {
+    ui: nav, hasLang: INSTALLED.length > 0, ...facts, savedSub: savedSummary(nav),
+    map: points() >= MAP_MIN ? [GT(nav).points.replace('{n}', String(points())), at?.label].filter(Boolean).join(' · ') : null,
+    langs: INSTALLED.length, uiName, answersName: helpsLang ? PACK_NAMES[helpsLang] ?? helpsLang : T.auto,
+    online: onlineAvailable(), update: updateSupported(), safety: protectSummary(nav, '') || null,
+  }
+}
+// a download moved: the Resources row's line says how far (only that line is written, so a half-armed delete is not lost)
+onDownloads(() => {
+  if (!resSubEl || !panel.contains(resSubEl) || panelView !== 'main') return
+  const t = resourcesSub(menuState())
+  if (resSubEl.textContent !== t) resSubEl.textContent = t
+})
+
+// the screen drawn by resources.ts in the panel: dropped when the view changes or the panel closes
+let screenOff: (() => void) | null = null
+let screenHost: HTMLElement | null = null
+let screenTurn = 0
+function disposeScreen() {
+  screenTurn++
+  screenOff?.()
+  screenOff = null
+  if (screenHost) disposeHost(screenHost)
+  screenHost = null
+}
+
+/** One screen of the panel (Settings, Resources, the server, or one setting), with a way back one level up. */
 function renderSubPanel(v: Exclude<PanelView, 'main'>) {
   panel.innerHTML = ''
   panel.classList.add('sub')
@@ -895,13 +935,17 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
   back.type = 'button'
   back.setAttribute('aria-label', MT().back)
   back.onclick = () => {
-    panelView = 'main'
+    panelView = backOf(v) ?? 'main'
     renderPanel()
   }
-  const titles = { language: MT().language, online: OT().label, model: modelTitle(nav), packs: packsTitle(nav), usage: UT().title, safety: PT(nav).title }
+  const titles: Record<Exclude<PanelView, 'main'>, string> = {
+    language: MT().language, online: OT().label, model: modelTitle(nav), resources: MNT(nav).resources, server: RT(nav).serverTitle,
+    settings: MNT(nav).settingsRow, usage: UT().title, safety: PT(nav).title,
+  }
   head.append(back, el('h2', '', titles[v]))
   panel.appendChild(head)
   if (v === 'language') renderLanguageView()
+  else if (v === 'settings') renderSettingsView()
   else if (v === 'online') renderOnlineView()
   else if (v === 'usage') renderUsageView()
   else if (v === 'safety') panel.appendChild(protectView(nav, eraseAll, () => renderPanel()))
@@ -910,14 +954,38 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
     renderPanel()
   }))
   else {
+    const host = el('div', 'setup')
+    screenHost = host
+    panel.appendChild(host)
+    const mine = screenTurn
     const panelLang = nav
-    languagesSection(nav, () => {
-      refreshInstalled()
-      renderPanel()
-    }).then((box) => {
-      if (panel.classList.contains('show') && panelView === 'packs' && panelLang === nav) panel.appendChild(box)
+    const ctx: ResCtx = {
+      ui: nav, refresh: () => { refreshInstalled(); renderPanel() }, openServer: go('server'), openLanguage: go('language'),
+    }
+    void (v === 'server' ? renderServer : renderResources)(host, ctx).then((off) => {
+      // the person went elsewhere while it drew: let it go
+      if (mine === screenTurn && panel.classList.contains('show') && panelView === v && panelLang === nav) screenOff = off
+      else off()
     })
   }
+}
+
+/** Settings: the rows of the old menu that are about how the app works, each opening its own screen. */
+function renderSettingsView() {
+  const list = el('div', 'mrows')
+  const onOff = (b: boolean) => (b ? MT().on : MT().off)
+  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported() })) {
+    if (id === 'online') mrow(list, OT().label, onOff(onlineOn() && (!signInAvailable() || !!onlineSession())), go('online'))
+    else if (id === 'model') mrow(list, modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
+    else if (id === 'suggest') list.appendChild(composerSwitch(nav, MT().on, MT().off))
+    else if (id === 'safety') mrow(list, PT(nav).title, protectSummary(nav, MT().off), go('safety'))
+    else if (id === 'usage') mrow(list, UT().title, onOff(usageOn()), go('usage'))
+    else if (id === 'update') {
+      const u = updateRow(nav)
+      mrow(list, u.title, u.sub, () => { checkForUpdate(nav, true, () => renderPanel()) })
+    }
+  }
+  panel.appendChild(list)
 }
 
 function renderLanguageView() {
@@ -930,7 +998,7 @@ function renderLanguageView() {
     langs.appendChild(b)
   }
   panel.appendChild(langs)
-  panel.appendChild(el('h3', '', T.helps))
+  panel.appendChild(el('h3', '', MNT(nav).answersTitle))
   const hl = el('div', 'langs')
   for (const code of [null, ...INSTALLED]) {
     const b = el('button', code === helpsLang ? 'on' : '', code ? PACK_NAMES[code] ?? code : T.auto) as HTMLButtonElement
@@ -946,6 +1014,12 @@ function renderLanguageView() {
     hl.appendChild(b)
   }
   panel.appendChild(hl)
+  // the languages on the phone are the ones listed; more come from Resources
+  panel.appendChild(el('p', 'note', MNT(nav).missing))
+  const more = el('button', 'about-link', MNT(nav).toResources) as HTMLButtonElement
+  more.type = 'button'
+  more.onclick = go('resources')
+  panel.appendChild(more)
 }
 
 /** Online AI on, after a Google sign-in when this build requires one: '' when it is on, else why not. */
@@ -1101,7 +1175,10 @@ function eraseAll() {
   newConv()
   renderConv()
 }
-const closePanel = () => panel.classList.remove('show')
+const closePanel = () => {
+  panel.classList.remove('show')
+  disposeScreen()
+}
 // Android's back button (MainActivity.onBackPressed): the bottom panel, then the About page, then the menu; else it leaves
 ;(window as any).__back = (): boolean => {
   if (locked()) return false // the back button leaves the app; it never opens it
@@ -1116,7 +1193,7 @@ const closePanel = () => panel.classList.remove('show')
   if (outIsOpen()) { closeOutline(); return true }
   const about = document.querySelector('#about')
   if (about) { about.remove(); return true }
-  if (panel.classList.contains('show') && panelView !== 'main') { panelView = 'main'; renderPanel(); return true }
+  if (panel.classList.contains('show') && panelView !== 'main') { panelView = backOf(panelView) ?? 'main'; renderPanel(); return true }
   if (panel.classList.contains('show')) { closePanel(); return true }
   return false
 }
@@ -1373,7 +1450,7 @@ setExploreHooks({
     return true
   },
   addLang: () => {
-    panelView = 'packs'
+    panelView = 'resources'
     panel.classList.add('show')
     renderPanel()
   },
@@ -1405,7 +1482,7 @@ setSavedHooks({
   ui: () => nav, busy: () => busy || locked(), packName: (l) => PACK_NAMES[l] ?? l,
   run: (label, sheet) => runSheet(label, sheet, nav),
   ask: (q) => { const typed = input.value; input.value = q; form.requestSubmit(); input.value = typed },
-  addLang: () => { panelView = 'packs'; panel.classList.add('show'); renderPanel() },
+  addLang: () => { panelView = 'resources'; panel.classList.add('show'); renderPanel() },
   closeOthers: () => { closePanel(); closeExplore(false); closeMap(false) },
 })
 

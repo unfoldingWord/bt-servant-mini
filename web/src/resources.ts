@@ -232,7 +232,7 @@ function haveText(ui: string, p: PartLine, short: boolean): string {
 const text = (s: string, ui: string) => bidiLabel(s, ui)
 const mbOf = (n: number) => sizeText(n)
 /** "3.1 / 9.8 MB": both in one unit (KB under a megabyte), the app's decimal point. */
-function pair(a: number, b: number): string {
+export function pair(a: number, b: number): string {
   if (b >= 1048576) return `${(a / 1048576).toFixed(1)} / ${(b / 1048576).toFixed(1)} MB`
   if (b > 0) return `${Math.round(a / 1024)} / ${Math.max(1, Math.round(b / 1024))} KB`
   return mbOf(a)
@@ -711,30 +711,4 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
   over = true
   paint()
   return m.dispose
-}
-
-/**
- * The Resources screen in a box, with the server screen one tap away and a way back, for main.ts until it draws the screens itself.
- * `after` runs when the phone's languages changed.
- */
-export async function resourcesBox(ui: string, after: () => void): Promise<HTMLElement> {
-  const box = el('div', 'setup')
-  let dispose: (() => void) | null = null
-  let turn = 0
-  let current: HTMLElement | null = null
-  const show = async (server: boolean) => {
-    const mine = ++turn
-    dispose?.()
-    dispose = null
-    if (current) disposeHost(current)
-    const inner = el('div', '')
-    current = inner
-    box.replaceChildren(...(server ? [btn(`‹ ${RT(ui).back}`, () => void show(false), 'small'), inner] : [inner]))
-    const ctx: ResCtx = { ui, refresh: after, openServer: () => void show(true), openLanguage: () => {} }
-    const d = await (server ? renderServer : renderResources)(inner, ctx)
-    if (mine === turn) dispose = d
-    else d()
-  }
-  await show(false)
-  return box
 }
