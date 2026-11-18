@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, colon, kinReady, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { askedName, colon, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -958,6 +958,17 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
     return { sheet, ui: kin.ui, meta: `model ${ms} ms
 ${raw}
 (family: ${kin.kind} of ${kin.ids.join(' | ')}, ${kin.pick}; read by code)`, q, inScope: 'kinship' }
+  }
+  // "Abraham": a name alone with a Translation Words article about a person is that article, whatever the reader made of it (Abel,
+  // Nov 18: a reader read "Abraham" in a 5M session as a passage of Genesis, and the verses that mention him came instead)
+  const named = await nameOnly(q, env.nav).catch(() => null)
+  if (named) {
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, { intent: 'article', term: q.trim(), lang: named.lang } as Slots, prefer)
+    const lang = named.ids.length === 1 ? (await packWithArticle(named.ids[0]!, sheet.lang).catch(() => null)) ?? sheet.lang : sheet.lang
+    const s: Sheet = { ...sheet, intent: named.ids.length === 1 ? 'article' : 'choose', concept: named.ids.length === 1 ? named.ids[0]! : null,
+      candidates: named.ids.length > 1 ? named.ids : null, ref: null, what: [], phrase: null, lang }
+    keepState(c, { intent: 'article', term: q.trim(), lang: named.lang } as Slots, { q })
+    return { sheet: s, ui, meta: `model ${ms} ms\n${raw}\n(a name alone: ${named.ids.join(' | ')}; read by code)`, q, inScope: 'a name' }
   }
   // the 5M study session (5M in the pack): "5M OBS 1" starts it; in a session, "and the notes?" and "next" are about its step
   const five = on5m() ? await session5Asked(q, read.slots, c, prefer).catch(() => null) : null

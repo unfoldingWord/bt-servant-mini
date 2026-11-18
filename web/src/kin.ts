@@ -280,7 +280,9 @@ export async function kinQuestion(q: string, nav: string, last: string | null): 
   let ids: string[] = []
   let kind = s.kind
   let name = s.name
-  for (const l of await packsFor(s.lang, nav)) {
+  // (a name alone is looked for in the pack of its own language only: «ira», «sal», «Mesa» are names in some other language's pack)
+  const own = packOf(s.lang)
+  for (const l of (await packsFor(s.lang, nav)).filter((x) => !s.bare || x === own)) {
     const ix = await peopleIx(l)
     if (!ix) continue
     pack ??= l
@@ -328,9 +330,23 @@ export async function kinQuestion(q: string, nav: string, last: string | null): 
 function bareName(q: string, nav: string): KinShape | null {
   const t = tidy(q)
   if (!t || t.split(/\s+/).length > 4 || !/^[\p{L}\p{M}][\p{L}\p{M}'’\s-]*$/u.test(t) || bookExact(t) || !keywords(t).length) return null
+  // (in Latin script, a name is written with a capital: «Hamul», not «sal» or «mar»; Arabic and Devanagari have no capitals)
+  if (/\p{Script=Latin}/u.test(t) && !/^\p{Lu}/u.test(t)) return null
   const lang: KinLang = /[؀-ۿ]/.test(t) ? 'ar' : /[ऀ-ॿ]/.test(t) ? 'hi' : (['en', 'es', 'fr', 'id'].includes(nav.split('-')[0]!) ? nav.split('-')[0] : 'en') as KinLang
   const { name, alts } = cleanName(t, lang)
   return { kind: 'who', name, alts, lang, bare: true }
+}
+
+/**
+ * A name alone that is a Translation Words article about a person or several ("Abraham", "Judas"): its `tw:names/` ids, and the
+ * language of the reply, whatever a reader made of the question. Only names (`tw:names/`): a key term alone ("gracia") goes on as
+ * before. Null when the question is more than a name.
+ */
+export async function nameOnly(q: string, nav: string): Promise<{ ids: string[]; lang: KinLang } | null> {
+  const s = bareName(q, nav)
+  if (!s) return null
+  const ids = (await articleForQuestion(q).catch(() => null)) ?? []
+  return ids.length && ids.every((id) => id.startsWith('tw:names/')) ? { ids, lang: s.lang } : null
 }
 
 /** Whether code alone answers a family question now (codeReads: no reader runs): its shape, and X a person in an index already built. */
@@ -592,7 +608,8 @@ export const askedName = (written: string | null | undefined, name: string): str
 export const KNOWN_VERSES = 40
 /** How a person is tied to someone known: child of, parent of, spouse of, sibling of, descendant of (an ancestor), of the tribe of. */
 export type TieKind = 'childOf' | 'parentOf' | 'spouseOf' | 'siblingOf' | 'descendantOf' | 'tribe'
-export type Tie = { kind: TieKind; ids: string[] }
+/** `more`: there are more known people of that tie than the two named (the line ends «…»). */
+export type Tie = { kind: TieKind; ids: string[]; more?: true }
 /** At most this many ties in the line. */
 const TIES = 2
 /** How far up the parents to look for a known ancestor. */
@@ -633,8 +650,8 @@ export async function tiesOfPerson(pack: string, id: string): Promise<Tie[]> {
   const out: Tie[] = []
   const kinds: [TieKind, Map<string, string[]>][] = [['childOf', t.parents], ['parentOf', t.children], ['spouseOf', t.partners], ['siblingOf', t.siblings]]
   for (const [kind, m] of kinds) {
-    const ids = byFame((m.get(id) ?? []).filter(known)).slice(0, 2)
-    if (ids.length && out.length < TIES) out.push({ kind, ids })
+    const all = byFame((m.get(id) ?? []).filter(known))
+    if (all.length && out.length < TIES) out.push({ kind, ids: all.slice(0, 2), ...(all.length > 2 ? { more: true as const } : {}) })
   }
   if (out.length) return out
   // the nearest known ancestor, a generation at a time (the first generation was looked at above)
@@ -670,10 +687,10 @@ export const TIE_T: Record<KinLang, Record<TieKind, [string, string]>> = {
   fr: { childOf: ['fils de {x}', 'fille de {x}'], parentOf: ['père de {x}', 'mère de {x}'], spouseOf: ['mari de {x}', 'femme de {x}'], siblingOf: ['frère de {x}', 'sœur de {x}'], descendantOf: ['descendant de {x}', 'descendante de {x}'], tribe: ['de la tribu de {x}', 'de la tribu de {x}'] },
   id: { childOf: ['anak {x}', 'anak perempuan {x}'], parentOf: ['ayah {x}', 'ibu {x}'], spouseOf: ['suami {x}', 'istri {x}'], siblingOf: ['saudara {x}', 'saudara perempuan {x}'], descendantOf: ['keturunan {x}', 'keturunan {x}'], tribe: ['dari suku {x}', 'dari suku {x}'] },
   hi: { childOf: ['{x} का पुत्र', '{x} की पुत्री'], parentOf: ['{x} का पिता', '{x} की माता'], spouseOf: ['{x} का पति', '{x} की पत्नी'], siblingOf: ['{x} का भाई', '{x} की बहन'], descendantOf: ['{x} का वंशज', '{x} की वंशज'], tribe: ['{x} के गोत्र का', '{x} के गोत्र की'] },
-  ar: { childOf: ['ابن {x}', 'ابنة {x}'], parentOf: ['أبو {x}', 'أم {x}'], spouseOf: ['زوج {x}', 'زوجة {x}'], siblingOf: ['أخو {x}', 'أخت {x}'], descendantOf: ['من نسل {x}', 'من نسل {x}'], tribe: ['من سبط {x}', 'من سبط {x}'] },
+  ar: { childOf: ['ابن {x}', 'ابنة {x}'], parentOf: ['والد {x}', 'والدة {x}'], spouseOf: ['زوج {x}', 'زوجة {x}'], siblingOf: ['أخو {x}', 'أخت {x}'], descendantOf: ['من نسل {x}', 'من نسل {x}'], tribe: ['من سبط {x}', 'من سبط {x}'] },
 }
 /** "hijo de Isaí, padre de David" (each tie's names joined; French elision as in the heads). */
 export function tiesLine(ui: string, gender: 1 | 2 | undefined, ties: Tie[], nameOf: (id: string) => string): string {
   const words = TIE_T[ui as KinLang] ?? TIE_T.en
-  return ties.map((t) => withName(ui, words[t.kind][gender === 2 ? 1 : 0], joinNames(ui, t.ids.map(nameOf)))).join(ui === 'ar' ? '، ' : ', ')
+  return ties.map((t) => withName(ui, words[t.kind][gender === 2 ? 1 : 0], t.more ? `${t.ids.map(nameOf).join(ui === 'ar' ? '، ' : ', ')}…` : joinNames(ui, t.ids.map(nameOf)))).join(ui === 'ar' ? '، ' : ', ')
 }

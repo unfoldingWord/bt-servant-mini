@@ -30,7 +30,8 @@ describe('a name with a Translation Words article: the article, as before', () =
     const info = r.reply.info!
     const fam = info.indexOf('Familia de Abraham:')
     expect(fam).toBeGreaterThan(info.indexOf('▸'))
-    expect(fam).toBeLessThan(info.lastIndexOf('◂'))
+    // (inside «Más sobre…», the first fold: before its first end mark, not in a later fold)
+    expect(fam).toBeLessThan(info.indexOf('◂'))
     expect(info).not.toMatch(/\*\*Familia de Abraham/)
     const b = r.reply.follow!.find((f) => f.sheet?.intent === 'kin')!
     expect(b.sheet!.what).toEqual(['family'])
@@ -86,9 +87,26 @@ describe('«hijos de X»: the family answer, the article first among its buttons
 })
 
 describe('ordinary words are not taken for a name', () => {
-  for (const [q, ui] of [['gracia', 'es'], ['amor', 'es'], ['Dios', 'es'], ['Jerusalén', 'es'], ['hello', 'en'], ['Rut', 'es'], ['grace', 'en']] as const) {
+  // (and words that are a minor person's name in some pack: «ira», «sal», «mar», «nun», «hur», written in lower case)
+  for (const [q, ui] of [['gracia', 'es'], ['amor', 'es'], ['Dios', 'es'], ['Jerusalén', 'es'], ['hello', 'en'], ['Rut', 'es'], ['grace', 'en'], ['ira', 'es'], ['sal', 'es'], ['mar', 'es'], ['mesa', 'es'], ['nun', 'en'], ['hur', 'en'], ['bela', 'es']] as const) {
     test(`${q}`, async () => {
       expect((await ask(q, ui)).route).not.toBe('kin')
     })
   }
+})
+
+describe('the reader does not decide a name alone (Abel’s phone, Nov 18)', () => {
+  // a reader read «Abraham», in a 5M session, as a passage of Genesis: the verses that mention him came instead of his article
+  for (const slots of [{ intent: 'passage', book: 'gen', lang: 'en', what: ['text'] }, { intent: 'search', book: 'gen', lang: 'en' }, { intent: 'search', lang: 'es', what: ['notes'] }]) {
+    test(`«Abraham» read as ${JSON.stringify(slots)}: still his article, in the app’s language`, async () => {
+      const r = await turn({ last: null }, { q: 'Abraham', slots: slots as never }, 'es')
+      expect(r.answered).toBe('article')
+      expect(r.concept).toBe('tw:names/abraham')
+      expect(r.reply.meta).toMatch(/a name alone/)
+    })
+  }
+  test('a key term alone is not touched by this (only names of people): «gracia» as the reader reads it', async () => {
+    const r = await turn({ last: null }, { q: 'gracia', slots: { intent: 'article', term: 'gracia', lang: 'es' } as never }, 'es')
+    expect(r.reply.meta ?? '').not.toMatch(/a name alone/)
+  })
 })
