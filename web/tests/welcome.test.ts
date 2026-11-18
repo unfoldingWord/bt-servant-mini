@@ -119,7 +119,8 @@ const did: { start: [string, (c: ConvState) => Promise<any>][]; learn: [any, str
   { start: [], learn: [], browse: 0, five: 0, busy: false, asked: [] }
 let packs: string[] = ['en']
 
-beforeAll(() => {
+beforeAll(async () => {
+  await fiveOn(false) // (another file may have left 5M on)
   ;(globalThis as any).localStorage = goodStorage
   ;(globalThis as any).document = doc
   ;(globalThis as any).HTMLElement = FakeEl
