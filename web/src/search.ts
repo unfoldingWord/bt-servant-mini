@@ -179,6 +179,36 @@ function conceptOf(word: string, m: Map<string, string[]>, strict = false): stri
   return best ? m.get(best)! : null
 }
 
+/** Articles of names by the first word of a name of two or more words ("judas" -> judasiscariot, judassonofjames), built once per names map. */
+const FIRST_NAMES = new WeakMap<Map<string, string[]>, Map<string, string[]>>()
+function firstNames(m: Map<string, string[]>): Map<string, string[]> {
+  let out = FIRST_NAMES.get(m)
+  if (out) return out
+  out = new Map()
+  for (const [k, ids] of m) {
+    const sp = k.indexOf(' ')
+    if (sp < 3) continue
+    const w = k.slice(0, sp)
+    const people = ids.filter((id) => id.startsWith('tw:names/'))
+    if (!people.length) continue
+    const l = out.get(w) ?? []
+    for (const id of people) if (!l.includes(id)) l.push(id)
+    out.set(w, l)
+  }
+  FIRST_NAMES.set(m, out)
+  return out
+}
+
+/**
+ * The articles of two or more people or places whose names start with the word and whose ids do too ("judas" ->
+ * judasiscariot, judassonofjames): one article is not a name shared ("city" -> City of David), and an id that does not start
+ * so is a common word inside a name ("mar" in «mar de Galilea» -> seaofgalilee, "the" in «the Great Sea»).
+ */
+function namesStartingWith(k: string, m: Map<string, string[]>): string[] | null {
+  const ids = firstNames(m).get(k)
+  return ids && ids.length >= 2 && ids.every((id) => id.slice(id.lastIndexOf('/') + 1).startsWith(k)) ? ids : null
+}
+
 /**
  * A question's word in the forms an English heading or story title may have it (storyfind.ts): the word, its English story
  * word ("leones" -> lion, data/story-words.json) and the last part of the Translation Words articles it names ("Salomón" ->
@@ -603,6 +633,8 @@ export async function articleForQuestion(q: string): Promise<string[] | null> {
     const k = fold(hit[1]).replace(/[«»"“”']/g, '').replace(/\s+/g, ' ').trim()
     const ids = m.get(k) ?? m.get(k.replace(/^(el|la|los|las|the|le|les|l)\s+/, '')) ?? m.get(k.replace(/^ال/, ''))
       ?? (k.length === 2 ? m.get(`2:${k}`) : null) // "¿Qué significa fe?"
+      // one name that starts the names of people: "Judas" -> Judas Iscariot, Judas son of James (not Judah, a close spelling)
+      ?? (!k.includes(' ') ? namesStartingWith(k, m) : null)
       ?? (!k.includes(' ') ? conceptOf(k, m) : null) // one name with a close spelling: Moïse ~ Moses
     if (ids?.length) return ids.filter((id) => id.startsWith('tw:'))
   }
