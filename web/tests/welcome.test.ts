@@ -869,6 +869,7 @@ test('the 5M door: only with its dev switch on, before "Just explore"; it closes
   await installPacks(['en'])
   packs = ['en']
   freshPhone()
+  await fiveOn(false) // (another file may have left 5M on)
   openWelcome('en')
   await sleep(300) // the doors that depend on the phone are read a moment after the screen shows
   expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'explore'])
