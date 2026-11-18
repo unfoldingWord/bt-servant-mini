@@ -594,6 +594,8 @@ export async function downloadLang(
   const client = createClient({ store, source: prefetching(http, order, o.ahead ?? 6), trust })
   // a language already whole that gets an update stays usable meanwhile; a new one is marked until its download ends well
   const fresh = !(await addedLangs()).includes(lang)
+  // (known limit: if the first mark could not be written, a retry finds the language stored and unmarked, so it is not marked
+  // either; a phone that cannot write a few bytes of localStorage has bigger problems)
   // the size stays in the mark, so "n / b MB" shows with no internet; a mark that cannot be written does not stop the download
   if (fresh && !markPartial(lang, true, offer.bytes)) console.warn(`the download mark of ${lang} could not be written`)
   try {
@@ -845,6 +847,10 @@ export async function installedUnits(lang: string): Promise<string[]> {
   }
 }
 
+// AbortSignal.throwIfAborted is missing on older Android WebViews (before Chrome 100): the same, by hand
+function stopIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
+}
 /**
  * Units the person asked for (a part from its card; Open Bible Stories under an answer that says they are missing), into a
  * language this phone downloaded: the catalog read again, the units and what they need installed in one go, verified as a
@@ -858,9 +864,9 @@ export async function addUnits(
   try {
     await serial(async () => {
       const client = await addedClient()
-      o.signal?.throwIfAborted()
+      stopIfAborted(o.signal)
       await client.refresh(lang, o.signal ? { signal: o.signal } : {})
-      o.signal?.throwIfAborted()
+      stopIfAborted(o.signal)
       // what is left to fetch, for the progress (the client's own progress has no byte total); 0 when it cannot be planned
       let totalBytes = 0
       if (o.onProgress) {
@@ -872,7 +878,7 @@ export async function addUnits(
             totalBytes = plan.steps.flatMap((st) => st.segments).filter((x) => !have.has(x.id)).reduce((n, x) => n + x.size, 0)
           }
         } catch { /* no total: the screen shows what arrived */ }
-        o.signal?.throwIfAborted() // a cancel during the planning stops before the install
+        stopIfAborted(o.signal) // a cancel during the planning stops before the install
       }
       await client.install(lang, { units: [...units], defaults: false }, {
         concurrency: 1,
