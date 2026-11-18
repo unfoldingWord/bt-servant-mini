@@ -1,6 +1,6 @@
 {
-  "name": "BT Servant Mini",
-  "short_name": "BT Servant",
+  "name": "BTS mini",
+  "short_name": "BTS mini",
   "description": "The unfoldingWord translation helps on your phone, also without internet.",
   "start_url": "./",
   "scope": "./",

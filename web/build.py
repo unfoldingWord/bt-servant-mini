@@ -117,7 +117,7 @@ head = """<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#262624">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="BT Servant">
+<meta name="apple-mobile-web-app-title" content="BTS mini">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
 <script>if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js'))</script>
