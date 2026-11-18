@@ -7,7 +7,7 @@ import { bookExact, buildSheet, type Slots } from './sheet'
 import { appVersion, downloadModel, followUps, isLite, LIMITED, MODEL, modelOff, modelOutdated, modelReady, modelState, PWA, slotsOf } from './model'
 import { aboutLabel, whatYouCanAsk, languagesSection, modelLine, modelNotice, modelNewer, modelSection, modelTitle, PACK_NAMES, packsTitle, showAbout } from './setup'
 import { resetMacula } from './macula'
-import { addUnit, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
+import { addUnits, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
@@ -538,7 +538,7 @@ function followButton(m: Msg, x: Followup): HTMLButtonElement {
       // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
       if (busy || b.disabled) return
       b.disabled = true
-      addUnit(x.add.lang, x.add.unit).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
+      addUnits(x.add.lang, [x.add.unit]).then(() => { if (x.sheet) runSheet(x.label, x.sheet, m.ui ?? nav) }, () => {
         b.disabled = false
         b.textContent = bidiLabel(`${T.failed} ${x.label}`, ui)
       })

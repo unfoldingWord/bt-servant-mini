@@ -14,8 +14,10 @@ export const PARTS: readonly { id: PartId; units: (u: string) => boolean; addabl
   { id: 'obs', units: (u) => u === 'obs', addable: true },
 ]
 
-/** For `orig`, absent also means "listed, none installed": the screen shows it only when have and never prints "not for this language" for it. */
-/** have: all it lists is installed (n: books, manuals…); missing: the catalog lists units the phone lacks; absent: it lists none. */
+/**
+ * have: all it lists is installed (n: books, manuals…); missing: the catalog lists units the phone lacks; absent: it lists none.
+ * For `orig`, absent also means "listed, none installed": the screen shows it only when have and never prints "not for this language" for it.
+ */
 export type PartLine = { id: PartId; state: 'have' | 'missing' | 'absent'; n?: number; missing: string[]; bytes: number }
 type Reader = { listed(u: string): boolean; installed(u: string): boolean; size(u: string): number }
 

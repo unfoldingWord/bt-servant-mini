@@ -6,6 +6,9 @@ import {
   type BlobStore, type PackReader, type PackSource, type VerifiedCatalog,
 } from '@bt-synergy/language-pack-client'
 import { PACKS_SERVERS, SHARED_UNITS, trustedKeys } from './shared'
+import { CANON } from './canon'
+import { partsOfUnits, type PartLine } from './modules'
+export { CANON } from './canon'
 
 const BASE = './packs'
 /** The pack lists change when the app is rebuilt: never take them from the browser cache. */
@@ -25,8 +28,6 @@ export const PACK_NAMES: Record<string, string> = {
  */
 export const IMAGES_CATALOG = 'zxx-obsimg'
 const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx-')
-import { CANON } from './canon'
-export { CANON } from './canon'
 
 // ------------------------------------------------------------------------------------------------------------ servers
 
@@ -327,9 +328,23 @@ export function partialLangs(): string[] {
   } catch {}
   return out
 }
-export function markPartial(lang: string, on: boolean) {
+/** What a cut download asked for: everything its offer brings (`all`), its books, and its total bytes (`b`, for "n / b MB" with no internet). */
+export type PartialMark = { all: boolean; books: string[]; b: number }
+/** The mark of a language whose download did not end; null when there is none, or it is the old '1' (no data in it). */
+export function partialMark(lang: string): PartialMark | null {
   try {
-    if (on) kv()?.setItem(PARTIAL + lang, '1')
+    const raw = kv()?.getItem(PARTIAL + lang)
+    if (!raw || raw === '1') return null // the first versions wrote '1': the language is still partial, but nothing is known of it
+    const j = JSON.parse(raw)
+    if (!j || typeof j !== 'object') return null
+    return { all: j.all === true, books: Array.isArray(j.books) ? j.books.filter((b: unknown): b is string => typeof b === 'string') : [], b: Number(j.b) > 0 ? Number(j.b) : 0 }
+  } catch {
+    return null
+  }
+}
+export function markPartial(lang: string, on: boolean, what?: PartialMark) {
+  try {
+    if (on) kv()?.setItem(PARTIAL + lang, what ? JSON.stringify(what) : '1')
     else kv()?.removeItem(PARTIAL + lang)
   } catch {}
 }
@@ -387,8 +402,16 @@ export type Offer = {
   lang: string; books: string[]; bytes: number; segments: string[]; sizes: Record<string, number>
   /** a download of it started and did not end: what arrived stays, the next one goes on from there */
   partial?: boolean
-  /** whether Open Bible Stories come with it (the catalog lists them, OBS_MAX or less) */
+  /** whether Open Bible Stories come with it (the catalog lists them, of any size) */
   obs?: boolean
+  /** every unit the plan installs (books, maps, articles, obs), without the language prefix: what `all` installs */
+  units: string[]
+  /** the parts it brings, for the screen (modules.ts) */
+  parts: PartLine[]
+  /** `downloadLang` installs all of `units` (no OBS_MAX): a download of the language brings its Stories too (Abel, Nov 18) */
+  all: true
+  /** the Stories' own bytes, to take them out of a download that asks for `all: false` */
+  obsBytes?: number
 }
 /** A signal that aborts after `ms` (AbortSignal.timeout where the WebView has it). */
 function timeout(ms: number): AbortSignal {
@@ -410,18 +433,18 @@ const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '
  */
 export const MAP_UNITS = ['xmap', 'map', 'xtopics', 'topics']
 /**
- * Open Bible Stories (Abel, Nov 15–16): with the language when the unit is OBS_MAX or less (the obs units are 60–288 KB, Nov
- * 2026), never downloaded by itself over mobile data, and in the full APK. A language that does not list it installs as before
- * (the client skips a unit its catalog does not have). A phone that installed a language before gets it from the daily update
- * (`updateLang`, not on a metered connection), or on a tap under an OBS answer (`addUnit`).
+ * Open Bible Stories (Abel, Nov 15–16, changed Nov 18): a download of a language brings them whatever they weigh. OBS_MAX (the
+ * obs units are 60–288 KB, Nov 2026) now only limits the daily update (`updateLang`), which never takes them over mobile data.
+ * A language that does not list it installs as before (the client skips a unit its catalog does not have). A phone that installed a language before gets it from the daily update
+ * (`updateLang`, not on a metered connection), or on a tap under an OBS answer (`addUnits`).
  */
 export const OBS_UNIT = 'obs'
-/** The largest obs unit that comes with its language (Abel: 3 MB); a larger one is left out of the download. */
+/** The largest obs unit the daily update adds to a language on its own (Abel: 3 MB). */
 export const OBS_MAX = 3 * 1024 * 1024
 /**
  * What `offerOf` plans and `downloadLang` installs: the map units, the books, the shared articles, in the order the client's
  * defaults gave them (defaults, then books, then units); Open Bible Stories with the defaults, where the client puts them,
- * unless `obs` is false (its unit is over OBS_MAX).
+ * unless `obs` is false.
  */
 export function installWant(books: readonly string[], obs = true): { defaults: false; units: string[] } {
   return { defaults: false, units: [...MAP_UNITS, ...(obs ? [OBS_UNIT] : []), ...books.map((b) => `book:${b}`), ...SHARED_UNITS] }
@@ -477,23 +500,39 @@ export async function offerOf(lang: string, source: PackSource = serverSource())
     const cat = catalogs[0]!
     const listed = new Set(cat.catalog.units.map((u) => u.id))
     const books = CANON.filter((b) => listed.has(`book:${b}`))
-    // Open Bible Stories with the language only when they are OBS_MAX or less (what the plan says they weigh)
-    let plan = planInstall(catalogs, emptyState(), installWant(books), new Set())
+    // one plan with everything, the Stories too whatever they weigh (OBS_MAX only limits the daily update now)
+    const plan = planInstall(catalogs, emptyState(), installWant(books), new Set())
     const obsStep = plan.steps.find((st) => st.key.endsWith(`/${OBS_UNIT}`))
-    const obs = !!obsStep && obsStep.segments.reduce((n, x) => n + x.size, 0) <= OBS_MAX
-    if (obsStep && !obs) plan = planInstall(catalogs, emptyState(), installWant(books, false), new Set())
+    const obs = !!obsStep
+    const units = [...new Set(plan.steps.map((st) => st.key.slice(st.key.indexOf('/') + 1)))]
     const sizes: Record<string, number> = {}
     for (const st of plan.steps) for (const x of st.segments) sizes[x.id] = x.size
-    return { lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, obs, ...(partialLangs().includes(lang) ? { partial: true } : {}) }
+    return {
+      lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, obs, units, parts: partsOfUnits(units), all: true,
+      ...(obsStep ? { obsBytes: obsStep.segments.reduce((n, x) => n + x.size, 0) } : {}),
+      ...(partialLangs().includes(lang) ? { partial: true } : {}),
+    }
   } catch {
     return null
   }
 }
 
-/** Languages the packs server has and this phone does not, with their download size: one small catalog request each (needs internet). */
-export async function offers(): Promise<Offer[]> {
+/** The languages `offers` asks the server about: the candidates the phone does not have ("n of total" on the server screen). */
+export async function offerCandidates(): Promise<string[]> {
   const have = await installedLangs()
-  const got = await Promise.all(CANDIDATES.filter((l) => !have.includes(l)).map((l) => offerOf(l)))
+  return CANDIDATES.filter((l) => !have.includes(l))
+}
+/**
+ * Languages the packs server has and this phone does not, with their download size: one small catalog request each (needs
+ * internet). `onEach` hears of each language as it answers (the offer, or null: none or no answer), so a screen can fill in
+ * while the rest are still asked; the list of all of them comes at the end.
+ */
+export async function offers(onEach?: (o: Offer | null, lang: string) => void): Promise<Offer[]> {
+  const got = await Promise.all((await offerCandidates()).map(async (l) => {
+    const o = await offerOf(l)
+    try { onEach?.(o, l) } catch { /* a screen that fails to draw must not lose the others */ }
+    return o
+  }))
   return got.filter((o): o is Offer => !!o)
 }
 /** Languages the packs server has and this phone does not (needs internet). */
@@ -533,12 +572,13 @@ export function prefetching(source: PackSource, order: string[], ahead = 6): Pac
 export type Progress = { done: number; total: number; bytes: number; totalBytes: number }
 /**
  * Downloads every book the server lists for `lang`, with the shared articles, into the phone. `offer` (from `offers`) saves
- * reading the catalog again; `signal` cancels (what is complete stays, and a retry goes on from there).
+ * reading the catalog again; `signal` cancels (what is complete stays, and a retry goes on from there). It installs everything the
+ * offer brings, the Stories too; `all: false` leaves them out (the size shown then is the offer's less the Stories').
  */
 export async function downloadLang(
   lang: string,
   onProgress?: (p: Progress) => void,
-  o: { offer?: Offer | null; signal?: AbortSignal; ahead?: number } = {},
+  o: { offer?: Offer | null; signal?: AbortSignal; ahead?: number; all?: boolean } = {},
 ): Promise<{ books: number; bytes: number }> {
   const http = addedSource()
   const offer = o.offer ?? (await offerOf(lang, http))
@@ -552,14 +592,18 @@ export async function downloadLang(
   const client = createClient({ store, source: prefetching(http, order, o.ahead ?? 6), trust })
   // a language already whole that gets an update stays usable meanwhile; a new one is marked until its download ends well
   const fresh = !(await addedLangs()).includes(lang)
-  if (fresh) markPartial(lang, true)
+  const all = o.all !== false
+  const units = all ? offer.units : offer.units.filter((u) => u !== OBS_UNIT)
+  const totalBytes = all ? offer.bytes : offer.bytes - (offer.obsBytes ?? 0)
+  // what was asked for stays in the mark, so "Continue" asks for the same and the size shows with no internet
+  if (fresh) markPartial(lang, true, { all, books: offer.books, b: totalBytes })
   try {
     // one request at a time from the client (it asks 4 at once by default): the prefetch above already keeps `ahead` in flight,
     // and more at once can trip the fallback's timeouts on a slow link
-    const report = await serial(() => client.install(lang, installWant(offer.books, offer.obs !== false), {
+    const report = await serial(() => client.install(lang, { defaults: false, units }, {
       concurrency: 1,
       ...(o.signal ? { signal: o.signal } : {}),
-      onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
+      onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes }),
     }))
     markPartial(lang, false)
     return { books: offer.books.length, bytes: report.bytes ?? 0 }
@@ -787,17 +831,51 @@ export async function exportPack(lang: string): Promise<Uint8Array> {
 }
 
 /**
- * One unit the person asked for with a tap (Open Bible Stories under an answer that says they are missing), into a language
- * this phone downloaded: the catalog read again, the unit and what it needs installed, verified as a download is. A shipped
- * language cannot take it (its store is the app's): it comes with the next app.
+ * The units a language has on the phone, from its state.json (`{lang}/{unit}` keys of `units`), for one that came with the app
+ * (the assets' state) or one downloaded. Empty when it has none or cannot be read.
  */
-export async function addUnit(lang: string, unit: string, signal?: AbortSignal): Promise<void> {
-  if ((await origin(lang)) !== 'added') throw new Error(`${lang} came with the app: ${unit} comes with its next version`)
+export async function installedUnits(lang: string): Promise<string[]> {
+  try {
+    const store = (await origin(lang)) === 'added' ? await added() : assetStore(lang)
+    const st: any = await store.getState()
+    const pre = `${lang}/`
+    return Object.keys(st?.units ?? {}).filter((k) => k.startsWith(pre)).map((k) => k.slice(pre.length))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Units the person asked for (a part from its card; Open Bible Stories under an answer that says they are missing), into a
+ * language this phone downloaded: the catalog read again, the units and what they need installed in one go, verified as a
+ * download is. `signal` cancels (what is complete stays). A shipped language cannot take them (its store is the app's): they
+ * come with the next app.
+ */
+export async function addUnits(
+  lang: string, units: readonly string[], o: { signal?: AbortSignal; onProgress?: (p: Progress) => void } = {},
+): Promise<void> {
+  if ((await origin(lang)) !== 'added') throw new Error(`${lang} came with the app: ${units.join(', ')} come with its next version`)
   try {
     await serial(async () => {
       const client = await addedClient()
-      await client.refresh(lang, signal ? { signal } : {})
-      await client.install(lang, { units: [unit], defaults: false }, { concurrency: 1, ...(signal ? { signal } : {}) })
+      await client.refresh(lang, o.signal ? { signal: o.signal } : {})
+      // what is left to fetch, for the progress (the client's own progress has no byte total); 0 when it cannot be planned
+      let totalBytes = 0
+      if (o.onProgress) {
+        try {
+          const have = new Set(await (await added()).ids().catch(() => [] as string[]))
+          const cats = await serverCatalogs(lang, addedSource())
+          if (cats) {
+            const plan = planInstall(cats, emptyState(), { defaults: false, units: [...units] }, new Set())
+            totalBytes = plan.steps.flatMap((st) => st.segments).filter((x) => !have.has(x.id)).reduce((n, x) => n + x.size, 0)
+          }
+        } catch { /* no total: the screen shows what arrived */ }
+      }
+      await client.install(lang, { units: [...units], defaults: false }, {
+        concurrency: 1,
+        ...(o.signal ? { signal: o.signal } : {}),
+        onProgress: (p) => o.onProgress?.({ done: p.done, total: p.total, bytes: p.bytes, totalBytes: Math.max(totalBytes, p.bytes) }),
+      })
     })
   } finally {
     changed()
