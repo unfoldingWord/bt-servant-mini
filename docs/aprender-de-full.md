@@ -1,6 +1,6 @@
 # Qué puede aprender Mini de BT Servant (Full)
 
-Ideas para Mini sacadas de comparar el código de los dos (18 nov 2026). Mini y BT Servant Full son aplicaciones hermanas:
+Ideas para Mini sacadas de comparar el código de los dos (18 nov 2026). Mini y BT Servant Full son hermanos:
 el mismo objetivo (que el traductor entienda el texto y traduzca mejor con los recursos de unfoldingWord), cada una donde
 sirve mejor. No compiten. Esto es una lista de ideas para elegir, no un plan aprobado: cada una se decide antes de construir.
 
