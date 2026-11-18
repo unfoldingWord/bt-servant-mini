@@ -84,3 +84,14 @@ describe('the graph (review at 375 px, Nov 18)', () => {
     expect(p.reply.drift).toBeFalsy()
   })
 })
+test('shownAs: the tW name first only when it is another name in the same script', async () => {
+  const { shownAs, setKinReader: set } = await import('../src/kin')
+  set(async () => kinFixture())
+  try {
+    expect(await shownAs('es-419', 'per:israel', 'Israel')).toBe('Jacob (Israel)')
+    expect(await shownAs('es-419', 'per:israel', 'إسرائيل')).toBe('إسرائيل')
+    expect(await shownAs('es-419', 'per:israel', 'Jacob')).toBe('Jacob')
+  } finally {
+    set()
+  }
+})

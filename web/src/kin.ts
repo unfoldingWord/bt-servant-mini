@@ -362,7 +362,9 @@ export async function shownAs(pack: string, id: string, name: string): Promise<s
   const twName = tw ? m.map?.core.names[tw]?.[0] : undefined
   // (only two different names: «José (Antiguo Testamento)» already says José, and «levita» is not another name of Leví)
   const [a, b] = [foldName(twName ?? ''), foldName(name)]
-  return twName && !a.includes(b) && !b.includes(a) ? `${twName} (${name})` : name
+  // (and in the same script: the Arabic pack's articles are in English, «Esau (عِيسُو)» would mix them)
+  const latin = (t: string) => /\p{Script=Latin}/u.test(t)
+  return twName && !a.includes(b) && !b.includes(a) && latin(twName) === latin(name) ? `${twName} (${name})` : name
 }
 /** The `per:` ids joined to a Translation Words article (`same-as`, read the other way). */
 export async function peopleOfArticle(pack: string, tw: string): Promise<string[]> {

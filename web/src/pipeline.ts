@@ -2247,7 +2247,7 @@ async function storySteps(base: Sheet, id: string, n = 2): Promise<Follow[]> {
 const personLabel = (p: { name: string; note?: string }) => (p.note ? `${p.name} — ${p.note}` : p.name)
 const halfOf = (ui: string, r: Relative) => (r.half ? ` (${KT(ui).half[r.gender === 2 ? 1 : 0]})` : '')
 /** The credit line under a family answer: TIPNR, and ACAI when the packs have it. */
-const creditLine = (ui: string, sources: string[]) => `*${KT(ui).credit.replace('{src}', sources.map((s) => SOURCE_NAMES[s] ?? s).join(', '))}*`
+const creditLine = (ui: string, sources: string[]) => `*${KT(ui).credit.replace('{src}', sources.map((s) => SOURCE_NAMES[s] ?? s).join(ui === 'ar' ? '، ' : ', '))}*`
 /** The family can be shown without its verses: the parts were not read. In a language the person added, the way to download them. */
 async function partsStep(base: Sheet, ui: string, missing: boolean): Promise<Follow[]> {
   if (!missing || (await origin(base.lang).catch(() => null)) !== 'added') return []
