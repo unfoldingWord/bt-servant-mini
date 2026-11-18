@@ -96,7 +96,15 @@ describe.skipIf(!ON)('family answers on the preview packs', () => {
     expect((await ask('Fares', 'es')).reply.info).toMatch(/^\*\*Fares\*\* — hijo de Judá y Tamar/)
     expect((await ask('Salmón', 'es')).reply.info).toMatch(/^\*\*Salmón\*\* — padre de Booz, esposo de Rahab/)
     expect((await ask('Hamul', 'es')).reply.info).toMatch(/^\*\*Hamul\*\* — descendiente de Judá/)
-    expect((await ask('hijos de Abraham', 'es')).reply.follow![0]!.sheet?.concept).toBe('tw:names/abraham')
+    const sons = await ask('hijos de Abraham', 'es')
+    expect(sons.reply.follow![0]!.sheet?.concept).toBe('tw:names/abraham')
+    // (Abel, Nov 18: «Madián» opened the family, not his article: a person's button opens the article when there is one)
+    const madian = sons.reply.follow!.find((f) => f.label === 'Madián')!
+    expect(madian.sheet).toMatchObject({ intent: 'article', concept: 'tw:names/midian' })
+    // and a son with no article (Zimrán): his family card, the fallback
+    const { articleOf } = await import('../src/kin')
+    const zimran = sons.reply.follow!.find((f) => f.label === 'Zimrán')!
+    expect(zimran.sheet?.intent).toBe((await articleOf('es-419', 'per:zimran')) ? 'article' : 'kin')
   })
   test('verse and frame → people: Genesis 25:26 and an OBS frame that tells it', async () => {
     const v = await turn({ last: null } as ConvState, { q: '', sheet: { id: 's', intent: 'kin', what: ['here'], ref: 'gen 25:26', version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'en' } }, 'en')

@@ -488,8 +488,8 @@ export type { FamilyData }
 type KinText = {
   /** the head of a family answer, per kind ("Hijos de {x}") */
   head: Record<Exclude<KinKind, 'who'>, string>
-  /** a card's lines; `credit`: the answer's source line, the app's own form («Fuente: …»: answer.ts isSourceLine), which goes into
-   *  the «detalles» fold under the answer like every source line (Abel, Nov 18: the line was too big) */
+  /** a card's lines; `credit`: the family data's sources under the answer, drawn small and grey like an article's source label
+   *  (main.ts, isCreditLine; Abel, Nov 18: too big at first, then hidden in «detalles»: he wants to see it, small) */
   parents: string; partners: string; children: string; siblings: string
   half: [man: string, woman: string]
   named: string
@@ -499,6 +499,7 @@ type KinText = {
   choose: string
   other: string
   versesN: string
+  versesN1: string
   credit: string
   family: string
   here: string
@@ -519,7 +520,7 @@ export const KIN_T: Record<KinLang, KinText> = {
       partners: 'Spouses of {x}', wife: 'Wife of {x}', husband: 'Husband of {x}', siblings: 'Brothers and sisters of {x}', brothers: 'Brothers of {x}', sisters: 'Sisters of {x}' },
     parents: 'Parents', partners: 'Spouses', children: 'Children', siblings: 'Brothers and sisters', half: ['half brother', 'half sister'],
     named: 'Named in {n} verses.', named1: 'Named in 1 verse.', none: '{head}: the data I have names no one.', choose: 'Several people are called {x}. Which one?',
-    other: 'Another {x}?', versesN: '{n} verses', credit: 'Source: {src}.', family: 'Family of {x}', here: 'People here: {names}',
+    other: 'Another {x}?', versesN: '{n} verses', versesN1: '1 verse', credit: 'Family data: {src}.', family: 'Family of {x}', here: 'People here: {names}',
     hereHead: 'People named in {ref}:', hereNone: 'The data I have names no one in {ref}.', getPeople: 'Download the verses of people and places', getBook: 'Download {book}', and: 'and', moreFamily: 'More family', whereNamed: 'Where {x} is named', article: 'Article: {x}',
   },
   es: {
@@ -527,7 +528,7 @@ export const KIN_T: Record<KinLang, KinText> = {
       partners: 'Cónyuges de {x}', wife: 'Esposa de {x}', husband: 'Esposo de {x}', siblings: 'Hermanos de {x}', brothers: 'Hermanos de {x}', sisters: 'Hermanas de {x}' },
     parents: 'Padres', partners: 'Cónyuges', children: 'Hijos', siblings: 'Hermanos', half: ['medio hermano', 'media hermana'],
     named: 'Se nombra en {n} versículos.', named1: 'Se nombra en 1 versículo.', none: '{head}: los datos que tengo no nombran a nadie.', choose: 'Hay varias personas llamadas {x}. ¿Cuál?',
-    other: '¿Otro {x}?', versesN: '{n} versículos', credit: 'Fuente: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
+    other: '¿Otro {x}?', versesN: '{n} versículos', versesN1: '1 versículo', credit: 'Datos de familia: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
     hereHead: 'Personas nombradas en {ref}:', hereNone: 'Los datos que tengo no nombran a nadie en {ref}.', getPeople: 'Descargar los versículos de personas y lugares', getBook: 'Descargar {book}', and: 'y', moreFamily: 'Más familia', whereNamed: 'Dónde se nombra a {x}', article: 'Artículo: {x}',
   },
   fr: {
@@ -535,7 +536,7 @@ export const KIN_T: Record<KinLang, KinText> = {
       partners: 'Conjoints de {x}', wife: 'Femme de {x}', husband: 'Mari de {x}', siblings: 'Frères et sœurs de {x}', brothers: 'Frères de {x}', sisters: 'Sœurs de {x}' },
     parents: 'Parents', partners: 'Conjoints', children: 'Enfants', siblings: 'Frères et sœurs', half: ['demi-frère', 'demi-sœur'],
     named: 'Nommé dans {n} versets.', named1: 'Nommé dans 1 verset.', none: '{head} : les données que j’ai ne nomment personne.', choose: 'Plusieurs personnes s’appellent {x}. Laquelle ?',
-    other: 'Un autre {x} ?', versesN: '{n} versets', credit: 'Source : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
+    other: 'Un autre {x} ?', versesN: '{n} versets', versesN1: '1 verset', credit: 'Données familiales : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
     hereHead: 'Personnes nommées dans {ref} :', hereNone: 'Les données que j’ai ne nomment personne dans {ref}.', getPeople: 'Télécharger les versets des personnes et des lieux', getBook: 'Télécharger {book}', and: 'et', moreFamily: 'Plus de famille', whereNamed: 'Où {x} est nommé', article: 'Article : {x}',
   },
   id: {
@@ -543,7 +544,7 @@ export const KIN_T: Record<KinLang, KinText> = {
       partners: 'Pasangan {x}', wife: 'Istri {x}', husband: 'Suami {x}', siblings: 'Saudara-saudara {x}', brothers: 'Saudara laki-laki {x}', sisters: 'Saudara perempuan {x}' },
     parents: 'Orang tua', partners: 'Pasangan', children: 'Anak-anak', siblings: 'Saudara-saudara', half: ['saudara tiri', 'saudara tiri'],
     named: 'Disebut dalam {n} ayat.', named1: 'Disebut dalam 1 ayat.', none: '{head}: data yang saya punya tidak menyebut siapa pun.', choose: 'Ada beberapa orang bernama {x}. Yang mana?',
-    other: '{x} yang lain?', versesN: '{n} ayat', credit: 'Sumber: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
+    other: '{x} yang lain?', versesN: '{n} ayat', versesN1: '1 ayat', credit: 'Data keluarga: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
     hereHead: 'Tokoh yang disebut dalam {ref}:', hereNone: 'Data yang saya punya tidak menyebut siapa pun dalam {ref}.', getPeople: 'Unduh ayat-ayat tokoh dan tempat', getBook: 'Unduh {book}', and: 'dan', moreFamily: 'Keluarga lainnya', whereNamed: 'Di mana {x} disebut', article: 'Artikel: {x}',
   },
   hi: {
@@ -551,7 +552,7 @@ export const KIN_T: Record<KinLang, KinText> = {
       partners: '{x} के जीवनसाथी', wife: '{x} की पत्नी', husband: '{x} के पति', siblings: '{x} के भाई-बहन', brothers: '{x} के भाई', sisters: '{x} की बहनें' },
     parents: 'माता-पिता', partners: 'जीवनसाथी', children: 'संतान', siblings: 'भाई-बहन', half: ['सौतेला भाई', 'सौतेली बहन'],
     named: '{n} पदों में नाम आता है।', named1: '1 पद में नाम आता है।', none: '{head}: मेरे पास के आँकड़ों में किसी का नाम नहीं है।', choose: '{x} नाम के कई लोग हैं। कौन-सा?',
-    other: 'कोई दूसरा {x}?', versesN: '{n} पद', credit: 'स्रोत: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
+    other: 'कोई दूसरा {x}?', versesN: '{n} पद', versesN1: '1 पद', credit: 'परिवार के आँकड़े: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
     hereHead: '{ref} में जिनका नाम है:', hereNone: 'मेरे पास के आँकड़ों में {ref} में किसी का नाम नहीं है।', getPeople: 'लोगों और स्थानों के पद डाउनलोड करें', getBook: '{book} डाउनलोड करें', and: 'और', moreFamily: 'और परिवार', whereNamed: '{x} का नाम कहाँ आता है', article: 'लेख: {x}',
   },
   ar: {
@@ -559,7 +560,7 @@ export const KIN_T: Record<KinLang, KinText> = {
       partners: 'أزواج {x}', wife: 'زوجة {x}', husband: 'زوج {x}', siblings: 'إخوة {x}', brothers: 'إخوة {x}', sisters: 'أخوات {x}' },
     parents: 'الوالدان', partners: 'الأزواج', children: 'الأولاد', siblings: 'الإخوة والأخوات', half: ['أخ غير شقيق', 'أخت غير شقيقة'],
     named: 'يُذكر في {n} آية.', named1: 'يُذكر في آية واحدة.', none: '{head}: البيانات التي لدي لا تذكر أحدًا.', choose: 'هناك عدة أشخاص اسمهم {x}. أيهم تقصد؟',
-    other: '{x} آخر؟', versesN: '{n} آية', credit: 'المصدر: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
+    other: '{x} آخر؟', versesN: '{n} آية', versesN1: 'آية واحدة', credit: 'بيانات العائلة: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
     hereHead: 'الأشخاص المذكورون في {ref}:', hereNone: 'البيانات التي لدي لا تذكر أحدًا في {ref}.', getPeople: 'تنزيل آيات الأشخاص والأماكن', getBook: 'تنزيل {book}', and: 'و', moreFamily: 'المزيد من العائلة', whereNamed: 'أين يُذكر {x}', article: 'مقالة: {x}',
   },
 }
@@ -571,6 +572,13 @@ export const colon = (ui: string, head: string): string => (ui === 'fr' ? `${hea
 /** A text with the person's name in it: French «de» before a vowel or h is «d’» («Enfants d’Isaac»). */
 export const withName = (ui: string, text: string, x: string): string =>
   (ui === 'fr' && /^[aeiouyhâàäéèêëîïôöûüœ]/i.test(x) ? text.replace(/\bde \{x\}/, 'd’{x}') : text).replace('{x}', x)
+/** Whether a line is the credit of a family answer (any language): main.ts draws it small, as a source label. */
+export function isCreditLine(t: string): boolean {
+  const s = t.trim()
+  return Object.values(KIN_T).some((x) => s.startsWith(x.credit.split('{src}')[0]!.trim()))
+}
+/** "12 versículos", "1 versículo" (the choice among people of one name) */
+export const versesCount = (ui: string, n: number): string => (n === 1 ? KT(ui).versesN1 : KT(ui).versesN.replace('{n}', String(n)))
 /** "Esaú y Jacob", "Abraham, Sara y Agar" ("A, B و C": the Arabic «و» joins the next word). */
 export function joinNames(ui: string, names: string[]): string {
   if (names.length < 2) return names[0] ?? ''
@@ -687,6 +695,12 @@ export async function tiesOfPerson(pack: string, id: string): Promise<Tie[]> {
 export async function hasArticle(pack: string, id: string): Promise<boolean> {
   const core = await coreOf(pack)
   return !!core && tiesOf(core).tw.has(id)
+}
+/** The Translation Words article of a person (`same-as`, the first by id), or null: a person's button opens it, the family is the fallback. */
+export async function articleOf(pack: string, id: string): Promise<string | null> {
+  const core = await coreOf(pack)
+  if (!core || !tiesOf(core).tw.has(id)) return null
+  return (core.relations ?? []).filter((r) => r.type === 'same-as' && r.to === id && r.from.startsWith('tw:names/')).map((r) => r.from).sort()[0] ?? null
 }
 
 /** The ties in words: [man, woman] per kind ({x}: the names), and a name with no gender as the man's (the data's usual default). */

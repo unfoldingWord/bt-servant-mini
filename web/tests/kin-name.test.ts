@@ -129,11 +129,14 @@ describe('Abel’s look at 375 px (Nov 18)', () => {
     const sons = (r.reply.info ?? '').match(/^\*\*Hijos de Abraham:\*\* (.*)\.$/m)![1]!.split(/, | y /)
     for (const s of sons) expect(labels(r)).toContain(s)
   })
-  test('the source line is the app’s own («Fuente: …»), so it goes into «detalles» as every source line does', async () => {
+  test('the credit is a line of its own that main.ts draws small (isCreditLine), not a source line hidden in «detalles»', async () => {
     const { isSourceLine } = await import('../src/answer')
+    const { isCreditLine } = await import('../src/kin')
     const r = await ask('hijos de Abraham', 'es')
-    const last = (r.reply.info ?? '').split('\n\n').at(-1)!
-    expect(last).toMatch(/^\*Fuente: TIPNR/)
-    expect(isSourceLine(last.replace(/^\*|\*$/g, ''))).toBe(true)
+    const last = (r.reply.info ?? '').split('\n\n').at(-1)!.replace(/^\*|\*$/g, '')
+    expect(last).toMatch(/^Datos de familia: TIPNR/)
+    expect(isCreditLine(last)).toBe(true)
+    expect(isSourceLine(last)).toBe(false)
   })
+
 })

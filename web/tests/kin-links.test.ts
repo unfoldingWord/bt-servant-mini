@@ -26,8 +26,10 @@ describe('with the packs on disk', () => {
     expect(list.answered).toBe('family')
     expect(list.reply.intro).toMatch(/^People named in Genesis 25:26/)
     expect(labels(list)).toEqual(expect.arrayContaining(['Isaac', 'Esau']))
-    const card = await turn(c, { q: '', sheet: list.reply.follow!.find((f) => f.label === 'Isaac')!.sheet! }, 'en')
-    expect(card.reply.info).toMatch(/^\*\*Isaac\*\*/)
+    // (a person with a Translation Words article: the button opens it; the family is the fallback, Abel, Nov 18)
+    const art = await turn(c, { q: '', sheet: list.reply.follow!.find((f) => f.label === 'Isaac')!.sheet! }, 'en')
+    expect(art.answered).toBe('article')
+    expect(art.concept).toBe('tw:names/isaac')
   })
   test('no "people here" before the index is built (never built during an answer)', async () => {
     const { resetKin } = await import('../src/kin')
