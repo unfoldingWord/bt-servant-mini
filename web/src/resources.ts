@@ -296,7 +296,7 @@ async function gate(ui: string, key: string, shown: number, real: () => Promise<
 const disposers = new WeakMap<HTMLElement, () => void>()
 function mount(host: HTMLElement) {
   disposers.get(host)?.()
-  const st = { dead: false, seen: false, off: null as (() => void) | null }
+  const st = { dead: false, seen: host.isConnected === true, off: null as (() => void) | null }
   const dispose = () => {
     st.dead = true
     st.off?.()
@@ -445,12 +445,17 @@ const fresh = new Map<string, Offer>()
 async function startLang(p: Paint, lang: string, shown: number, first: Offer | null) {
   const ui = p.ctx.ui
   const key: DownloadKey = `lang:${lang}`
+  // a first tap starts from nothing: an offer kept from an earlier tap is never used
+  if (!confirmed.has(key)) fresh.delete(key)
   const real = async () => {
     const o = await deps.offerOf(lang)
     if (o) fresh.set(key, o)
     return o?.bytes ?? null
   }
-  if (!(await gate(ui, key, shown, real, p.repaint))) return void p.repaint()
+  if (!(await gate(ui, key, shown, real, p.repaint))) {
+    if (!confirmed.has(key)) fresh.delete(key) // (offline, or nothing to confirm: nothing is kept)
+    return void p.repaint()
+  }
   const offer = fresh.get(key) ?? null
   fresh.delete(key)
   startDownload(key, async (signal, progress) => {
@@ -622,7 +627,7 @@ function joinScan(on: (o: Offer | null, l: string) => void): { done: Promise<voi
   if (!scan) {
     const sc: Scan = { res: [], subs: new Set(), done: null as unknown as Promise<void> }
     scan = sc
-    sc.done = deps.offers((o, l) => { sc.res.push([o, l]); for (const f of [...sc.subs]) f(o, l) }).then(() => {}).finally(() => { if (scan === sc) scan = null })
+    sc.done = Promise.resolve().then(() => deps.offers((o, l) => { sc.res.push([o, l]); for (const f of [...sc.subs]) f(o, l) })).then(() => {}).finally(() => { if (scan === sc) scan = null })
     sc.done.catch(() => {}) // the screens that wait for it hear of the failure; none left: nobody
   }
   const sc = scan
@@ -643,6 +648,7 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
   let total = (await deps.offerCandidates().catch(() => [] as string[])).length
   let over = false
   let failed = false
+  let have: string[] = await deps.installedLangs().catch(() => [] as string[])
   let images: ImagesState = await deps.imagesInstalled().catch(() => null)
   if (m.gone()) return m.dispose
   const p: Paint = { ctx, host, say: () => {}, repaint: () => paint(), dead: () => m.gone() }
@@ -650,7 +656,8 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
     if (m.gone()) return
     const out: HTMLElement[] = []
     if (!over) out.push(el('p', 'note res-looking', text(t.looking.replace('{n}', String(answered)).replace('{total}', String(total)), ui)))
-    for (const o of found) {
+    const visible = found.filter((o) => !have.includes(o.lang))
+    for (const o of visible) {
       const key: DownloadKey = `lang:${o.lang}`
       const card = el('div', 'res-card')
       card.dataset.lang = o.lang
@@ -666,7 +673,7 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
       })())
       out.push(card)
     }
-    if (over && !found.length) out.push(el('p', 'note res-empty', text(deps.online() && !failed ? t.noneNew : t.offline, ui)))
+    if (over && !visible.length) out.push(el('p', 'note res-empty', text(deps.online() && !failed ? t.noneNew : t.offline, ui)))
     out.push(el('h3', 'res-h', t.all), imagesBlock(p, images, true))
     out.push(el('p', 'note res-fixed', text(t.fixed, ui)))
     host.replaceChildren(...out)
@@ -677,8 +684,8 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
     if (seen === settled) return paint()
     seen = settled
     // a download ended: a language that is on the phone now leaves the list, and the pictures may be there
-    void Promise.all([deps.installedLangs().catch(() => [] as string[]), deps.imagesInstalled().catch(() => null)]).then(([have, i]) => {
-      found = found.filter((o) => !have.includes(o.lang))
+    void Promise.all([deps.installedLangs().catch(() => [] as string[]), deps.imagesInstalled().catch(() => null)]).then(([h, i]) => {
+      have = h
       images = i
       paint()
     })
@@ -698,6 +705,8 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
   }
   join.leave()
   if (m.gone()) return m.dispose
+  // the candidates are languages the server is expected to have: none answering means no answer (offerOf hides the cause)
+  if (total > 0 && !found.length) failed = true
   total = Math.max(total, answered)
   over = true
   paint()

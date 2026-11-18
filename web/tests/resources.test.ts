@@ -614,3 +614,115 @@ describe('correction 2', () => {
     expect(e.textContent).toContain('Palabras clave, Translation Academy, Historias de la Biblia')
   })
 })
+
+describe('correction 3', () => {
+  const warn = console.warn
+  beforeAll(() => { console.warn = () => {} })
+  afterAll(() => { console.warn = warn })
+  const offerBytes = (bytes: number) => ({ lang: 'hi', books: [], bytes, segments: [], sizes: {}, units: [], parts: [] })
+
+  test('an offer kept from an earlier tap is never downloaded: a new first tap starts from nothing', async () => {
+    const used: number[] = []
+    let today = 1_500_000 // the first tap keeps this plan
+    let failNow = false
+    Object.assign(deps, {
+      meteredNow: () => true,
+      offerCandidates: async () => ['hi'],
+      offers: async (on: (o: unknown, l: string) => void) => { on(offerBytes(1_048_576), 'hi'); return [] },
+      offerOf: async () => (failNow ? null : offerBytes(today)),
+      downloadLang: async (_l: string, _p: unknown, o: { offer: { bytes: number } }) => void used.push(o.offer.bytes),
+    })
+    const h = host()
+    await renderServer(h, ctx())
+    h.button(/Descargar/)!.click() // first tap: today's plan (1.4 MB) is kept for the confirming tap
+    await sleep(10)
+    expect(h.button(/por datos móviles/)).toBeDefined()
+    deps.online = () => false
+    h.button(/por datos móviles/)!.click() // offline on the confirming tap: nothing starts
+    await sleep(10)
+    deps.online = () => true
+    // a new first tap, the server now fails to answer: what the earlier tap kept must not be used
+    failNow = true
+    const again = h.buttons().find((b) => /Hace falta internet|Descargar/.test(b.textContent))!
+    again.click()
+    await sleep(10)
+    h.button(/por datos móviles/)?.click()
+    await sleep(20)
+    expect(used).not.toContain(1_500_000) // only the size the list showed, never the plan of the old tap
+    // and with a plan of today, the confirming tap downloads that one
+    failNow = false
+    today = 1_100_000
+    used.length = 0
+    const h2 = host()
+    await renderServer(h2, ctx())
+    h2.button(/Descargar/)!.click()
+    await sleep(10)
+    h2.button(/por datos móviles/)!.click()
+    await sleep(20)
+    expect(used).toEqual([1_100_000])
+  })
+
+  test('a screen that joins the scan does not offer a language that arrived meanwhile', async () => {
+    let answer!: (o: unknown, l: string) => void
+    let end!: () => void
+    let have: string[] = []
+    Object.assign(deps, {
+      offerCandidates: async () => ['hi', 'fr'], installedLangs: async () => have, partialLangs: () => [],
+      offers: (on: typeof answer) => new Promise<[]>((r) => { answer = on; end = () => r([]) }),
+    })
+    const first = host()
+    void renderServer(first, ctx())
+    await sleep(10)
+    answer(offerBytes(2_097_152), 'hi')
+    await sleep(5)
+    have = ['hi'] // downloaded meanwhile
+    const second = host()
+    void renderServer(second, ctx())
+    await sleep(10)
+    answer({ ...offerBytes(1_048_576), lang: 'fr' }, 'fr')
+    await sleep(5)
+    expect(second.cards().map((c) => c.dataset.lang)).toEqual(['fr'])
+    end()
+    await sleep(10)
+  })
+
+  test('a host removed before the first check is disposed (it was on the page at mount)', async () => {
+    withDownloaded()
+    const h = host()
+    ;(h as any).isConnected = true
+    await renderResources(h, ctx())
+    expect(watching()).toBe(1)
+    ;(h as any).isConnected = false
+    startDownload('images', () => new Promise<void>(() => {}))
+    expect(watching()).toBe(0)
+  })
+
+  test('offers that throws at once does not leave the scan stuck: the next screen scans again', async () => {
+    let calls = 0
+    Object.assign(deps, {
+      offerCandidates: async () => ['hi'], installedLangs: async () => [], online: () => true,
+      offers: (() => { calls++; if (calls === 1) throw new Error('sync boom'); return Promise.resolve([]) }) as unknown,
+    })
+    const h = host()
+    await renderServer(h, ctx())
+    expect(h.textContent).toContain('Sin internet, o el servidor no respondió.')
+    const h2 = host()
+    await renderServer(h2, ctx())
+    expect(calls).toBe(2)
+  })
+
+  test('every candidate answered nothing: no-answer message; no candidate left: the server has no other languages', async () => {
+    Object.assign(deps, {
+      offerCandidates: async () => ['hi', 'fr'], installedLangs: async () => [], online: () => true,
+      offers: async (on: (o: unknown, l: string) => void) => { on(null, 'hi'); on(null, 'fr'); return [] },
+    })
+    const h = host()
+    await renderServer(h, ctx())
+    expect(h.textContent).toContain('Sin internet, o el servidor no respondió.')
+    expect(h.textContent).not.toContain('todavía no tiene')
+    Object.assign(deps, { offerCandidates: async () => [], offers: async () => [] })
+    const h2 = host()
+    await renderServer(h2, ctx())
+    expect(h2.textContent).toContain('El servidor todavía no tiene otros idiomas.')
+  })
+})
