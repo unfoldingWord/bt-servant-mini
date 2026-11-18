@@ -2327,7 +2327,8 @@ async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow |
  */
 async function personStep(base: Sheet, id: string, label: string): Promise<Follow> {
   const tw = await articleOf(base.lang, id).catch(() => null)
-  const has = tw ? !!(await (await openLang(base.lang)).article(tw).catch(() => null))?.data : false
+  // (the open too: a pack that does not open gives the card, never no button)
+  const has = tw ? await (async () => !!(await (await openLang(base.lang)).article(tw)).data)().catch(() => false) : false
   return tw && has ? { label, sheet: articleSheet(base, tw, base.lang) } : { label, sheet: kinSheet(base, 'who', { concept: id }) }
 }
 
@@ -2425,7 +2426,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
       line(t.siblings, f.siblings), namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`family ${f.id}`) } }
   }
-  const k = kind as Exclude<KinKind, 'who'>
+  const k = kind as Exclude<KinKind, 'who' | 'family'>
   const list = await Promise.all(relativesOf(k, f).map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
   const head = withName(ui, t.head[headKind(k, list)], shownName)
   if (!list.length) {
@@ -3121,7 +3122,8 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
     if (kind === 'here') return `${refLabelOf(ui, s.ref ?? '')} · ${KT(ui).here.replace(/[:：]?\s*\{names\}/, '')}`
     const p = s.concept ? await personOf(s.lang, s.concept).catch(() => null) : null
     const name = askedName(s.term, p?.name ?? s.term ?? '…')
-    const h = KT(ui).head[kind as Exclude<KinKind, 'who'>]
+    if (kind === 'family') return withName(ui, KT(ui).family, name)
+    const h = KT(ui).head[kind as Exclude<KinKind, 'who' | 'family'>]
     return kind === 'who' || !h ? name : withName(ui, h, name)
   }
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')

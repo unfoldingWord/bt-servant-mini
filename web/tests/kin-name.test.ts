@@ -140,3 +140,20 @@ describe('Abel’s look at 375 px (Nov 18)', () => {
   })
 
 })
+
+describe('«familia de X»: the whole family (Abel, Nov 18)', () => {
+  for (const [q, ui, re] of [['Familia de Abraham', 'es', /\*\*Padres:\*\* /], ['la familia de Isaac', 'es', /\*\*Padres:\*\* /], ['family of Isaac', 'en', /\*\*Parents:\*\* /],
+    ["Isaac's family", 'en', /\*\*Parents:\*\* /], ["la famille d'Isaac", 'fr', /\*\*Parents :?\*\* /], ['keluarga Ishak', 'id', /\*\*Orang tua:\*\* /],
+    ['इसहाक का परिवार', 'hi', /\*\*माता-पिता:\*\* /], ['عائلة إسحاق', 'ar', /\*\*الوالدان:\*\* /]] as const) {
+    test(q, async () => {
+      const r = await ask(q, ui)
+      expect(r.route).toBe('kin')
+      expect(r.reply.info).toMatch(re)
+    })
+  }
+  test('the point of the conversation is named «Familia de Abraham»', async () => {
+    const c: ConvState = { last: null }
+    await ask('Familia de Abraham', 'es', c)
+    expect(c.graph!.nodes.map((n) => n.label)).toContain('Familia de Abraham')
+  })
+})

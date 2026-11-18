@@ -267,6 +267,9 @@
   .share:hover, .share:focus-visible { color: var(--accent); }
   /* saved items and notes (savedview.ts): ☆ Save and ✎ Note next to Share, "Your note" above an answer, the Saved view */
   .keep, .keep-one { display: inline-flex; gap: 2px; align-items: center; flex-wrap: wrap; }
+  /* Share and the ☆ Save / ✎ Note group on one line: by their middle, not their text baseline (Share's icon put its baseline lower and
+     lifted it a few pixels; Abel, Nov 18) */
+  .share, .keep { vertical-align: middle; }
   .keep-btn { display: inline-flex; gap: 4px; align-items: center; margin-top: 4px; border: 0; background: transparent; color: var(--faint); padding: 6px; border-radius: 8px; font: inherit; font-size: 12.5px; cursor: pointer; }
   .keep-btn:hover, .keep-btn:focus-visible, .keep-btn.on { color: var(--accent); }
   .keep-btn:disabled { opacity: .5; }

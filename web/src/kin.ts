@@ -14,6 +14,8 @@ import { bookExact } from './sheet'
 
 export type KinKind = 'children' | 'sons' | 'daughters' | 'father' | 'mother' | 'parents' | 'partners' | 'wife' | 'husband'
   | 'siblings' | 'brothers' | 'sisters' | 'who'
+  /** "familia de Abraham": the whole family (the «Más familia» view) */
+  | 'family'
 export type KinLang = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 /**
  * A question shaped like a family question. `name`: the person as written (without an article); `alts`: other ways to read it
@@ -27,38 +29,38 @@ const W = (kind: KinKind, one?: true): Word => (one ? { kind, one } : { kind })
 /** Each language's family words (lower case, as typed), to the kind they ask. */
 const WORDS: Record<KinLang, Record<string, Word>> = {
   en: {
-    son: W('sons', true), sons: W('sons'), child: W('children', true), children: W('children'), kids: W('children'),
+    family: W('family'), son: W('sons', true), sons: W('sons'), child: W('children', true), children: W('children'), kids: W('children'),
     daughter: W('daughters', true), daughters: W('daughters'), father: W('father'), dad: W('father'), mother: W('mother'), mom: W('mother'),
     parents: W('parents'), wife: W('wife'), wives: W('partners'), husband: W('husband'), spouse: W('partners'), spouses: W('partners'),
     brother: W('brothers', true), brothers: W('brothers'), sister: W('sisters', true), sisters: W('sisters'), siblings: W('siblings'),
   },
   es: {
-    hijo: W('sons', true), hijos: W('children'), hija: W('daughters', true), hijas: W('daughters'), padre: W('father'), papa: W('father'),
+    familia: W('family'), hijo: W('sons', true), hijos: W('children'), hija: W('daughters', true), hijas: W('daughters'), padre: W('father'), papa: W('father'),
     madre: W('mother'), mama: W('mother'), padres: W('parents'), esposa: W('wife'), esposas: W('partners'), mujer: W('wife'), mujeres: W('partners'),
     esposo: W('husband'), marido: W('husband'), hermano: W('brothers', true), hermanos: W('siblings'), hermana: W('sisters', true), hermanas: W('sisters'),
   },
   fr: {
-    fils: W('sons', true), enfant: W('children', true), enfants: W('children'), fille: W('daughters', true), filles: W('daughters'), pere: W('father'),
+    famille: W('family'), fils: W('sons', true), enfant: W('children', true), enfants: W('children'), fille: W('daughters', true), filles: W('daughters'), pere: W('father'),
     mere: W('mother'), parents: W('parents'), femme: W('wife'), femmes: W('partners'), epouse: W('wife'), epouses: W('partners'), mari: W('husband'),
     epoux: W('husband'), frere: W('brothers', true), freres: W('siblings'), soeur: W('sisters', true), soeurs: W('sisters'),
   },
   id: {
     // («anak» is one son or many: «anak Daud» is the title of Jesus, so it counts as singular there)
-    anak: W('children', true), 'anak-anak': W('children'), 'anak laki-laki': W('sons'), 'anak-anak laki-laki': W('sons'), putra: W('sons', true),
+    keluarga: W('family'), anak: W('children', true), 'anak-anak': W('children'), 'anak laki-laki': W('sons'), 'anak-anak laki-laki': W('sons'), putra: W('sons', true),
     'anak perempuan': W('daughters'), 'anak-anak perempuan': W('daughters'), putri: W('daughters'), ayah: W('father'), bapa: W('father'),
     bapak: W('father'), ibu: W('mother'), 'orang tua': W('parents'), 'orangtua': W('parents'), istri: W('wife'), isteri: W('wife'),
     suami: W('husband'), saudara: W('siblings'), 'saudara-saudara': W('siblings'), 'saudara laki-laki': W('brothers'),
     'saudara perempuan': W('sisters'),
   },
   hi: {
-    'पुत्र': W('sons'), 'पुत्रों': W('sons'), 'बेटा': W('sons', true), 'बेटे': W('sons'), 'बेटों': W('sons'), 'बच्चे': W('children'),
+    'परिवार': W('family'), 'पुत्र': W('sons'), 'पुत्रों': W('sons'), 'बेटा': W('sons', true), 'बेटे': W('sons'), 'बेटों': W('sons'), 'बच्चे': W('children'),
     'बच्चों': W('children'), 'संतान': W('children'), 'सन्तान': W('children'), 'पुत्री': W('daughters'), 'पुत्रियाँ': W('daughters'),
     'पुत्रियों': W('daughters'), 'बेटी': W('daughters', true), 'बेटियाँ': W('daughters'), 'बेटियों': W('daughters'), 'पिता': W('father'),
     'माता': W('mother'), 'माँ': W('mother'), 'माता-पिता': W('parents'), 'पत्नी': W('wife'), 'पत्नियाँ': W('partners'), 'पति': W('husband'),
     'भाई': W('brothers'), 'भाइयों': W('brothers'), 'बहन': W('sisters'), 'बहनें': W('sisters'), 'बहनों': W('sisters'),
   },
   ar: {
-    'أبناء': W('sons'), 'ابناء': W('sons'), 'بنو': W('sons'), 'بني': W('sons'), 'ابن': W('sons', true), 'أولاد': W('children'),
+    'عائلة': W('family'), 'عائله': W('family'), 'أسرة': W('family'), 'اسرة': W('family'), 'أبناء': W('sons'), 'ابناء': W('sons'), 'بنو': W('sons'), 'بني': W('sons'), 'ابن': W('sons', true), 'أولاد': W('children'),
     'اولاد': W('children'), 'بنات': W('daughters'), 'ابنة': W('daughters', true), 'بنت': W('daughters', true), 'والد': W('father'),
     'أبو': W('father'), 'ابو': W('father'), 'أب': W('father'), 'اب': W('father'), 'أم': W('mother'), 'ام': W('mother'), 'والدة': W('mother'),
     'والدا': W('parents'), 'والدي': W('parents'), 'أبوا': W('parents'), 'ابوا': W('parents'), 'زوجة': W('wife'), 'زوجات': W('partners'),
@@ -487,7 +489,7 @@ export type { FamilyData }
 // ------------------------------------------------------------------------------------------------------------ the words
 type KinText = {
   /** the head of a family answer, per kind ("Hijos de {x}") */
-  head: Record<Exclude<KinKind, 'who'>, string>
+  head: Record<Exclude<KinKind, 'who' | 'family'>, string>
   /** a card's lines; `credit`: the family data's sources under the answer, drawn small and grey like an article's source label
    *  (main.ts, isCreditLine; Abel, Nov 18: too big at first, then hidden in «detalles»: he wants to see it, small) */
   parents: string; partners: string; children: string; siblings: string
@@ -590,7 +592,7 @@ export function joinNames(ui: string, names: string[]): string {
 export const SOURCE_NAMES: Record<string, string> = { 'STEPBible/STEPBible-Data/TIPNR': 'TIPNR (STEPBible)', 'BibleAquifer/ACAI': 'ACAI (BiblioNexus)', 'robertrouse/theographic-bible-metadata': 'Theographic' }
 
 /** The relatives a kind asks for, by gender when the data has it (a relative with no gender stays in both). */
-export function relativesOf(kind: Exclude<KinKind, 'who'>, f: FamilyData): FamilyData['children'] {
+export function relativesOf(kind: Exclude<KinKind, 'who' | 'family'>, f: FamilyData): FamilyData['children'] {
   const not = (g: 1 | 2) => (r: { gender?: 1 | 2 }) => r.gender !== g
   switch (kind) {
     case 'children': return f.children
@@ -608,7 +610,7 @@ export function relativesOf(kind: Exclude<KinKind, 'who'>, f: FamilyData): Famil
   }
 }
 /** The kind said in the head: a father or mother asked with relatives of no gender is "parents" (§4.6). */
-export function headKind(kind: Exclude<KinKind, 'who'>, shown: { gender?: 1 | 2 }[]): Exclude<KinKind, 'who'> {
+export function headKind(kind: Exclude<KinKind, 'who' | 'family'>, shown: { gender?: 1 | 2 }[]): Exclude<KinKind, 'who' | 'family'> {
   if ((kind === 'father' || kind === 'mother') && shown.some((r) => r.gender === undefined)) return 'parents'
   return kind
 }
