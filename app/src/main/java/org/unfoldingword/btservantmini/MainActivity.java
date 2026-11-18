@@ -447,12 +447,12 @@ public class MainActivity extends Activity {
 
     private boolean isDiscreet() { return getSharedPreferences("btsm", MODE_PRIVATE).getBoolean("discreet", false); }
 
-    /** Discreet mode: no screenshots and a blank thumbnail in recent apps, and the neutral name on the task. */
+    /** Discreet mode: no screenshots and a blank thumbnail in recent apps, and the neutral name on the task (otherwise the home-screen name, BTS mini or BTS mini DEV). */
     private void applyDiscreet() {
         boolean on = isDiscreet();
         if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        setTaskDescription(new ActivityManager.TaskDescription(on ? getString(R.string.discreet_name) : "BT Servant Mini"));
+        setTaskDescription(new ActivityManager.TaskDescription(on ? getString(R.string.discreet_name) : getApplicationInfo().loadLabel(getPackageManager()).toString()));
     }
 
     /** Turns one home-screen entry on and the other off (AndroidManifest: .Launcher and .Discreet). */

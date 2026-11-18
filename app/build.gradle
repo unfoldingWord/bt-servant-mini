@@ -34,13 +34,13 @@ android {
         buildConfigField 'String', 'ONLINE_KEY_X', "\"${onlineKey}\""
         buildConfigField 'String', 'GOOGLE_CLIENT_ID', "\"${googleClientId}\""
         buildConfigField 'String', 'DEV_SWITCH', '""'
-        manifestPlaceholders = [appLabel: 'BT Servant Mini']
+        manifestPlaceholders = [appLabel: 'BTS mini']
     }
     buildFeatures { buildConfig true }
     buildTypes {
         debug { minifyEnabled false }
         // a test build of `develop` (`gradle assembleFullDevtest`, after `build.py --devapk`): an app of its own beside the
-        // real one (its own id, conversations and packs), named "BT Servant DEV". DEV_SWITCH opens the page with ?dev=<it>
+        // real one (its own id, conversations and packs), named "BTS mini DEV". DEV_SWITCH opens the page with ?dev=<it>
         // for work behind a dev switch; empty today (the 5M now comes from the packs). Never released: the release recipe
         // builds debug only.
         devtest {
@@ -48,7 +48,7 @@ android {
             applicationIdSuffix '.dev'
             versionNameSuffix '-dev'
             buildConfigField 'String', 'DEV_SWITCH', '""'
-            manifestPlaceholders = [appLabel: 'BT Servant DEV']
+            manifestPlaceholders = [appLabel: 'BTS mini DEV']
         }
     }
     // full: the model and the base language packs inside (~350 MB); lite: neither (~30 MB), they are downloaded or loaded
