@@ -40,7 +40,8 @@ d('real packs (es-419, ar, en with the obs unit)', () => {
   test('«historia de Isaac» (OBS 5 and 6 by name): choices (a title with Isaac first, then the other)', async () => {
     const r: any = await ask('historia de Isaac', 'es')
     expect(r.answered).toBe('choose')
-    expect(steps(r).map((f: any) => stepTarget(f)).slice(0, 2).sort()).toEqual(['obs 5 text,notes', 'obs 6 text,notes'])
+    // the order, not only the set: the title with Isaac (6), then the common name (5)
+    expect(steps(r).map((f: any) => stepTarget(f)).slice(0, 2)).toEqual(['obs 6 text,notes', 'obs 5 text,notes'])
   })
   test('«Abraham e Isaac»: the stories of both names, as choices', async () => {
     const got = await nums('la historia de Abraham e Isaac', 'es')
@@ -50,12 +51,12 @@ d('real packs (es-419, ar, en with the obs unit)', () => {
     expect(r.answered).toBe('choose')
   })
   test('Moisés in the real Spanish pack: says what it gives', async () => {
-    const got = await nums('la historia de Moisés', 'es')
-    console.log('historia de Moisés (es-419):', JSON.stringify(got))
+    // the Spanish pack itself ('es' alone reads the English one): Moses is in several stories, his call (9) first
+    const got = await nums('la historia de Moisés', 'es-419')
+    expect(got!.length).toBeGreaterThan(1)
+    expect(got![0]).toBe(9)
     const r: any = await ask('la historia de Moisés', 'es')
-    console.log('  answered:', r.answered, r.ref, steps(r).map((f: any) => f.label).slice(0, 5))
-    expect(['passage', 'choose']).toContain(r.answered)
-    expect(got).toContain(9)
+    expect(r.answered).toBe('choose')
   })
   test('a number and a name: the number decides', async () => {
     for (const q of ['OBS 3 Noé', 'historia 3 de Noé']) {
