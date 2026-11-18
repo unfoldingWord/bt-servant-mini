@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { installPacks } from './fs-packs'
 import {
-  cancelDownload, deps, downloads, downloadsSummary, onDownloads, renderResources, renderServer, resetDownloads, resourcesBox, RT, startDownload, watching, type ResCtx,
+  cancelDownload, count, deps, downloads, downloadsSummary, onDownloads, renderResources, renderServer, resetDownloads, resourcesBox, RT, startDownload, watching, type ResCtx,
 } from '../src/resources'
 
 class FakeEl {
@@ -413,6 +413,9 @@ describe('several downloads, a closed screen, disposing', () => {
     await renderResources(h, ctx())
     await renderResources(h, ctx())
     expect(watching()).toBe(1)
+    ;(h as any).isConnected = true // it was on the page, and now leaves
+    startDownload('part:hi:obs', () => new Promise<void>(() => {}))
+    expect(watching()).toBe(1)
     ;(h as any).isConnected = false
     startDownload('images', () => new Promise<void>(() => {}))
     expect(watching()).toBe(0)
@@ -439,7 +442,8 @@ describe('several downloads, a closed screen, disposing', () => {
     console.warn = () => {}
     const h = host()
     await renderServer(h, ctx())
-    expect(h.textContent).toContain('El servidor todavía no tiene otros idiomas.')
+    expect(h.textContent).toContain('Sin internet, o el servidor no respondió.') // online, but the question failed: no answer
+    expect(h.textContent).not.toContain('todavía no tiene')
     let have: string[] = []
     const o = { lang: 'hi', books: [], bytes: 1_048_576, segments: [], sizes: {}, units: [], parts: [] }
     Object.assign(deps, {
@@ -508,5 +512,105 @@ describe('plurals and lists', () => {
     await renderResources(f, ctx('fr'))
     expect(f.textContent).toContain('598 images')
     expect(RT('fr').lack).not.toContain('(s)')
+  })
+})
+
+describe('correction 2', () => {
+  const warn = console.warn
+  beforeAll(() => { console.warn = () => {} })
+  afterAll(() => { console.warn = warn })
+  const offerOfBytes = (bytes: number) => ({ lang: 'hi', books: [], bytes, segments: [], sizes: {}, units: [], parts: [] })
+
+  test('the confirming tap downloads the offer whose size was shown, not the one the list had', async () => {
+    const used: number[] = []
+    Object.assign(deps, {
+      meteredNow: () => true,
+      offerCandidates: async () => ['hi'],
+      offers: async (on: (o: unknown, l: string) => void) => { on(offerOfBytes(1_048_576), 'hi'); return [] },
+      offerOf: async () => offerOfBytes(1_100_000), // the plan of today
+      downloadLang: async (_l: string, _p: unknown, o: { offer: { bytes: number } }) => void used.push(o.offer.bytes),
+    })
+    const h = host()
+    await renderServer(h, ctx())
+    h.button(/Descargar/)!.click()
+    await sleep(10)
+    expect(h.button(/por datos móviles/)!.textContent).toBe('1.0 MB por datos móviles. ¿Seguir?')
+    h.button(/por datos móviles/)!.click()
+    await sleep(20)
+    expect(used).toEqual([1_100_000])
+  })
+
+  test('Back during a scan disposes at once; reopening joins the scan (no doubled requests, no callbacks into the old screen)', async () => {
+    let asked = 0
+    let answer!: (o: unknown, l: string) => void
+    let end!: () => void
+    Object.assign(deps, {
+      offerCandidates: async () => ['hi', 'fr'], installedLangs: async () => [], partialLangs: () => [],
+      offers: (on: typeof answer) => new Promise<[]>((r) => { asked++; answer = on; end = () => r([]) }),
+    })
+    const box = (await resourcesBox('es', () => {})) as unknown as FakeEl
+    box.button(/Buscar más idiomas/)!.click()
+    await sleep(15)
+    expect(asked).toBe(1)
+    const old = box.all().find((e) => e.className === '')!
+    box.button(/Recursos/)!.click() // Back while the scan runs
+    await sleep(15)
+    expect(box.textContent).toContain('Lo que la app puede leer sin internet')
+    box.button(/Buscar más idiomas/)!.click() // reopened
+    await sleep(15)
+    expect(asked).toBe(1) // it joined the running scan
+    answer(offerOfBytes(2_097_152), 'hi')
+    await sleep(5)
+    expect(box.textContent).toContain('Buscando… (1 de 2)')
+    expect(old.textContent).toContain('(0 de 2)') // the old screen was not touched by the answer
+    expect(box.cards().map((c) => c.dataset.lang)).toContain('hi')
+    end()
+    await sleep(10)
+    expect(box.textContent).not.toContain('Buscando')
+  })
+
+  test('failures are told by their type first: a fetch TypeError or a timeout is the connection, an odd message is not', async () => {
+    withDownloaded()
+    startDownload('part:hi:obs', async () => { throw new TypeError('Load failed') })
+    startDownload('images', async () => { throw Object.assign(new Error('x'), { name: 'TimeoutError' }) })
+    startDownload('lang:fr', async () => { throw new Error('the pack says no') })
+    await sleep(10)
+    const h = host()
+    await renderResources(h, ctx())
+    const lines = h.all().filter((e) => e.className.includes('res-dl')).map((e) => e.textContent)
+    expect(lines.filter((l) => l.includes('Hace falta internet')).length).toBe(2)
+    expect(lines.filter((l) => l.includes('No se pudo descargar.')).length).toBe(1)
+  })
+
+  test('counts: Arabic one, two, three to ten, eleven and more, and zero as a plural; Spanish "falta 1" and "faltan 2"', async () => {
+    expect([1, 2, 3, 10, 11, 0].map((n) => count('ar', 'book', n))).toEqual(['سفر واحد', 'سفران', '3 أسفار', '10 أسفار', '11 سفرًا', '0 أسفار'])
+    expect([1, 2, 5, 12].map((n) => count('ar', 'manual', n))).toEqual(['دليل واحد', 'دليلان', '5 أدلة', '12 دليلًا'])
+    expect([1, 2, 4, 20].map((n) => count('ar', 'story', n))).toEqual(['قصة واحدة', 'قصتان', '4 قصص', '20 قصة'])
+    expect([1, 2, 7, 598].map((n) => count('ar', 'picture', n))).toEqual(['صورة واحدة', 'صورتان', '7 صور', '598 صورة'])
+    expect(count('es', 'book', 1)).toBe('1 libro')
+    Object.assign(deps, {
+      installedLangs: async () => ['hi'], origin: async () => 'added' as const, partialLangs: () => [] as string[],
+      openLang: async () => fakeReader(['book:tit', 'book:rut', 'book:jon'], ['book:tit']),
+    })
+    const h = host()
+    await renderResources(h, ctx())
+    expect(h.textContent).toContain('＋ Biblia: faltan 2 libros')
+    Object.assign(deps, { openLang: async () => fakeReader(['book:tit', 'book:rut'], ['book:tit']) })
+    const h2 = host()
+    await renderResources(h2, ctx())
+    expect(h2.textContent).toContain('＋ Biblia: falta 1 libro')
+  })
+
+  test('Arabic lists of names use the Arabic comma', async () => {
+    Object.assign(deps, {
+      installedLangs: async () => ['hi'], origin: async () => 'added' as const, partialLangs: () => [] as string[],
+      openLang: async () => fakeReader(['book:tit'], ['book:tit']), // the other parts are not listed
+    })
+    const h = host()
+    await renderResources(h, ctx('ar'))
+    expect(h.textContent).toContain('الكلمات الرئيسية، ')
+    const e = host()
+    await renderResources(e, ctx('es'))
+    expect(e.textContent).toContain('Palabras clave, Translation Academy, Historias de la Biblia')
   })
 })

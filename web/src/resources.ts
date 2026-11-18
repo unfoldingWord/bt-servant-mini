@@ -21,7 +21,7 @@ import type { CatalogOffer } from './packs'
 export type DownloadKey = `lang:${string}` | `part:${string}:${PartId}` | 'images'
 export type Download = { key: DownloadKey; a: number; b: number; error?: string; done?: boolean }
 type Run = (signal: AbortSignal, progress: (a: number, b: number) => void) => Promise<void>
-type Entry = Download & { ctl: AbortController; run: Run }
+type Entry = Download & { ctl: AbortController; run: Run; net?: boolean }
 
 const dl = new Map<DownloadKey, Entry>()
 const watchers = new Set<() => void>()
@@ -57,7 +57,7 @@ export function startDownload(key: DownloadKey, run: Run): void {
     },
     (err) => {
       settled++
-      if (ctl.signal.aborted) { if (dl.get(key) === e) dl.delete(key) } else { console.warn(`download ${key} failed:`, err); e.error = err instanceof Error ? err.message : String(err) }
+      if (ctl.signal.aborted) { if (dl.get(key) === e) dl.delete(key) } else { console.warn(`download ${key} failed:`, err); e.error = err instanceof Error ? err.message : String(err); e.net = isNetError(err) }
       notify()
     },
   )
@@ -72,6 +72,8 @@ export function resetDownloads(): void {
   for (const e of dl.values()) e.ctl.abort()
   dl.clear()
   watchers.clear()
+  scan = null
+  fresh.clear()
 }
 
 // What the screen reaches (tests put their own here)
@@ -89,7 +91,7 @@ export const deps = {
 
 type T = {
   intro: string; langs: string; shipped: string; added: string; unfinished: string
-  bible: string; bibleS: string; tw: string; ta: string; orig: string; obs: string; five: string; lack: string; incomplete: string
+  bible: string; bibleS: string; tw: string; ta: string; orig: string; obs: string; five: string; lack: string; lack1: string; incomplete: string
   noFor: string; noLangs: string; all: string; more: string; search: string; openFile: string
   failedGen: string; back: string; download: string; resume: string; remove: string; share: string; cancel: string; retry: string; downloading: string; failed: string
   needNet: string; metered: string; differs: string; saved: string; working: string
@@ -101,7 +103,7 @@ const TX: Record<string, T> = {
     intro: 'What the app can read without internet. Each language brings the Bible and its helps; the pictures serve all of them. The language of the answers is chosen in Settings → Language.',
     langs: 'Languages', shipped: 'comes with the app', added: 'you downloaded it', unfinished: 'download not finished',
     bible: 'Bible: {c}, with notes and questions', bibleS: 'Bible: {c}', tw: 'Key Words', ta: 'Translation Academy: {c}',
-    orig: 'Original text (Hebrew and Greek)', obs: 'Bible Stories', five: '5M session: {c}', lack: '{name}: {c} missing', incomplete: '{name} (not whole)',
+    orig: 'Original text (Hebrew and Greek)', obs: 'Bible Stories', five: '5M session: {c}', lack: '{name}: {c} missing', lack1: '{name}: {c} missing', incomplete: '{name} (not whole)',
     noFor: 'Not available for this language: {parts}', noLangs: 'There is no language on this phone yet.',
     all: 'For all languages', more: 'Download more', search: 'Look for more languages on the server', openFile: 'Open a file you received',
     download: 'Download', resume: 'Continue', remove: 'Remove', share: 'Save to share', cancel: 'Cancel', retry: 'Try again',
@@ -116,7 +118,7 @@ const TX: Record<string, T> = {
     intro: 'Lo que la app puede leer sin internet. Cada idioma trae la Biblia y sus ayudas; las imágenes sirven para todos. El idioma de las respuestas se elige en Ajustes → Idioma.',
     langs: 'Idiomas', shipped: 'viene con la app', added: 'lo descargaste', unfinished: 'descarga sin terminar',
     bible: 'Biblia: {c}, con notas y preguntas', bibleS: 'Biblia: {c}', tw: 'Palabras clave', ta: 'Translation Academy: {c}',
-    orig: 'Texto original (hebreo y griego)', obs: 'Historias de la Biblia', five: 'Sesión 5M: {c}', lack: '{name}: faltan {c}', incomplete: '{name} (incompleto)',
+    orig: 'Texto original (hebreo y griego)', obs: 'Historias de la Biblia', five: 'Sesión 5M: {c}', lack: '{name}: faltan {c}', lack1: '{name}: falta {c}', incomplete: '{name} (incompleto)',
     noFor: 'No viene para este idioma: {parts}', noLangs: 'Todavía no hay ningún idioma en este teléfono.',
     all: 'Para todos los idiomas', more: 'Descargar más', search: 'Buscar más idiomas en el servidor', openFile: 'Abrir un archivo recibido',
     download: 'Descargar', resume: 'Seguir', remove: 'Quitar', share: 'Guardar para compartir', cancel: 'Cancelar', retry: 'Reintentar',
@@ -131,7 +133,7 @@ const TX: Record<string, T> = {
     intro: "Ce que l'application peut lire sans internet. Chaque langue apporte la Bible et ses aides ; les images servent à toutes. La langue des réponses se choisit dans Réglages → Langue.",
     langs: 'Langues', shipped: "vient avec l'application", added: 'vous l’avez téléchargée', unfinished: 'téléchargement inachevé',
     bible: 'Bible : {c}, avec notes et questions', bibleS: 'Bible : {c}', tw: 'Mots clés', ta: 'Translation Academy : {c}',
-    orig: 'Texte original (hébreu et grec)', obs: 'Histoires de la Bible', five: 'Séance 5M : {c}', lack: '{name} : il en manque {c}', incomplete: '{name} (incomplet)',
+    orig: 'Texte original (hébreu et grec)', obs: 'Histoires de la Bible', five: 'Séance 5M : {c}', lack: '{name} : il en manque {c}', lack1: '{name} : il en manque {c}', incomplete: '{name} (incomplet)',
     noFor: "Non disponible pour cette langue : {parts}", noLangs: "Il n'y a encore aucune langue sur ce téléphone.",
     all: 'Pour toutes les langues', more: 'Télécharger plus', search: 'Chercher d’autres langues sur le serveur', openFile: 'Ouvrir un fichier reçu',
     download: 'Télécharger', resume: 'Continuer', remove: 'Retirer', share: 'Enregistrer pour partager', cancel: 'Annuler', retry: 'Réessayer',
@@ -146,7 +148,7 @@ const TX: Record<string, T> = {
     intro: 'Apa yang bisa dibaca aplikasi tanpa internet. Setiap bahasa membawa Alkitab dan bantuannya; gambar berlaku untuk semua. Bahasa jawaban dipilih di Pengaturan → Bahasa.',
     langs: 'Bahasa', shipped: 'bawaan aplikasi', added: 'kamu unduh', unfinished: 'unduhan belum selesai',
     bible: 'Alkitab: {c}, dengan catatan dan pertanyaan', bibleS: 'Alkitab: {c}', tw: 'Kata kunci', ta: 'Translation Academy: {c}',
-    orig: 'Teks asli (Ibrani dan Yunani)', obs: 'Kisah-kisah Alkitab', five: 'Sesi 5M: {c}', lack: '{name}: kurang {c}', incomplete: '{name} (belum lengkap)',
+    orig: 'Teks asli (Ibrani dan Yunani)', obs: 'Kisah-kisah Alkitab', five: 'Sesi 5M: {c}', lack: '{name}: kurang {c}', lack1: '{name}: kurang {c}', incomplete: '{name} (belum lengkap)',
     noFor: 'Tidak tersedia untuk bahasa ini: {parts}', noLangs: 'Belum ada bahasa di ponsel ini.',
     all: 'Untuk semua bahasa', more: 'Unduh lebih banyak', search: 'Cari bahasa lain di server', openFile: 'Buka berkas yang diterima',
     download: 'Unduh', resume: 'Lanjutkan', remove: 'Hapus', share: 'Simpan untuk dibagikan', cancel: 'Batal', retry: 'Coba lagi',
@@ -161,7 +163,7 @@ const TX: Record<string, T> = {
     intro: 'ऐप बिना इंटरनेट के क्या पढ़ सकता है। हर भाषा बाइबल और उसकी सहायता लाती है; चित्र सभी भाषाओं के काम आते हैं। उत्तरों की भाषा सेटिंग → भाषा में चुनी जाती है।',
     langs: 'भाषाएँ', shipped: 'ऐप के साथ आती है', added: 'आपने डाउनलोड की', unfinished: 'डाउनलोड अधूरा',
     bible: 'बाइबल: {c}, नोट्स और प्रश्नों के साथ', bibleS: 'बाइबल: {c}', tw: 'मुख्य शब्द', ta: 'Translation Academy: {c}',
-    orig: 'मूल पाठ (इब्रानी और यूनानी)', obs: 'बाइबल की कहानियाँ', five: '5M सत्र: {c}', lack: '{name}: {c} कम', incomplete: '{name} (अधूरा)',
+    orig: 'मूल पाठ (इब्रानी और यूनानी)', obs: 'बाइबल की कहानियाँ', five: '5M सत्र: {c}', lack: '{name}: {c} कम', lack1: '{name}: {c} कम', incomplete: '{name} (अधूरा)',
     noFor: 'इस भाषा के लिए उपलब्ध नहीं: {parts}', noLangs: 'इस फ़ोन पर अभी कोई भाषा नहीं है।',
     all: 'सभी भाषाओं के लिए', more: 'और डाउनलोड करें', search: 'सर्वर पर और भाषाएँ खोजें', openFile: 'मिली हुई फ़ाइल खोलें',
     download: 'डाउनलोड करें', resume: 'जारी रखें', remove: 'हटाएँ', share: 'साझा करने के लिए सहेजें', cancel: 'रद्द करें', retry: 'फिर कोशिश करें',
@@ -176,7 +178,7 @@ const TX: Record<string, T> = {
     intro: 'ما يستطيع التطبيق قراءته دون إنترنت. كل لغة تجلب الكتاب المقدس ومساعداته؛ والصور تفيد كل اللغات. لغة الإجابات تُختار في الإعدادات ← اللغة.',
     langs: 'اللغات', shipped: 'تأتي مع التطبيق', added: 'نزّلتها', unfinished: 'تنزيل لم يكتمل',
     bible: 'الكتاب المقدس: {c}، مع الملاحظات والأسئلة', bibleS: 'الكتاب المقدس: {c}', tw: 'الكلمات الرئيسية', ta: 'Translation Academy: {c}',
-    orig: 'النص الأصلي (العبري واليوناني)', obs: 'قصص الكتاب المقدس', five: 'جلسة 5M: {c}', lack: '{name}: ينقص {c}', incomplete: '{name} (غير كامل)',
+    orig: 'النص الأصلي (العبري واليوناني)', obs: 'قصص الكتاب المقدس', five: 'جلسة 5M: {c}', lack: '{name}: ينقص {c}', lack1: '{name}: ينقص {c}', incomplete: '{name} (غير كامل)',
     noFor: 'لا تأتي لهذه اللغة: {parts}', noLangs: 'لا توجد أي لغة على هذا الهاتف بعد.',
     all: 'لكل اللغات', more: 'تنزيل المزيد', search: 'البحث عن لغات أخرى في الخادم', openFile: 'فتح ملف مستلَم',
     download: 'تنزيل', resume: 'متابعة', remove: 'إزالة', share: 'حفظ للمشاركة', cancel: 'إلغاء', retry: 'إعادة المحاولة',
@@ -204,11 +206,11 @@ const AR: Record<Kind, [string, string, string, string]> = {
   story: ['قصة واحدة', 'قصتان', 'قصص', 'قصة'], picture: ['صورة واحدة', 'صورتان', 'صور', 'صورة'],
 }
 /** "6 books", "2 manuals", "3 stories" in each language (Arabic has its own forms for one, two, three to ten, and more). */
-function count(ui: string, kind: Kind, n: number): string {
+export function count(ui: string, kind: Kind, n: number): string {
   const l = ui.split('-')[0]!
   if (l === 'ar') {
     const f = AR[kind]
-    return n === 1 ? f[0] : n === 2 ? f[1] : n >= 3 && n <= 10 ? `${n} ${f[2]}` : `${n} ${f[3]}`
+    return n === 1 ? f[0] : n === 2 ? f[1] : n <= 10 ? `${n} ${f[2]}` : `${n} ${f[3]}` // zero takes the plural
   }
   const f = (FORMS[l] ?? FORMS.en!)[kind]
   return `${n} ${n === 1 ? f[0] : f[1]}`
@@ -236,10 +238,16 @@ function pair(a: number, b: number): string {
   return mbOf(a)
 }
 const prog = (ui: string, a: number, b: number) => `${RT(ui).downloading} ${pair(a, b)}`
+/** Whether a failure is about the connection: by its type (fetch fails with a TypeError, a timeout is an AbortError or TimeoutError), then by our own words. */
+function isNetError(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name
+  if (err instanceof TypeError || name === 'AbortError' || name === 'TimeoutError' || name === 'NetworkError') return true
+  const m = err instanceof Error ? err.message : String(err)
+  return /^(offline|timeout)$/i.test(m) || /offline|network|timeout|failed to fetch|stalled|unreachable|no answer/i.test(m)
+}
 /** What a failure says on screen: never the raw message (English, and it names packs); that goes to the console only. */
-function failText(ui: string, raw: string | undefined): string {
-  const t = RT(ui)
-  return /offline|network|timeout|fetch|internet|stalled|unreachable|no answer/i.test(raw ?? '') ? t.needNet : t.failedGen
+function failText(ui: string, net: boolean | undefined): string {
+  return net ? RT(ui).needNet : RT(ui).failedGen
 }
 
 // ---------------------------------------------------------------------------------------------------- small DOM helpers
@@ -288,7 +296,7 @@ async function gate(ui: string, key: string, shown: number, real: () => Promise<
 const disposers = new WeakMap<HTMLElement, () => void>()
 function mount(host: HTMLElement) {
   disposers.get(host)?.()
-  const st = { dead: false, off: null as (() => void) | null }
+  const st = { dead: false, seen: false, off: null as (() => void) | null }
   const dispose = () => {
     st.dead = true
     st.off?.()
@@ -296,17 +304,23 @@ function mount(host: HTMLElement) {
     if (disposers.get(host) === dispose) disposers.delete(host)
   }
   disposers.set(host, dispose)
+  // a host that was never on the page (a box still being built) is not "gone": only one that was and left
+  const gone = () => {
+    if (host.isConnected === true) st.seen = true
+    return st.dead || (st.seen && host.isConnected === false)
+  }
   /** Follow the downloads until disposed, or until the host leaves the page. */
   const watch = (f: () => void) => {
     if (st.dead) return
     st.off = onDownloads(() => {
-      if (st.dead) return
-      if (host.isConnected === false) return dispose()
+      if (gone()) return dispose()
       f()
     })
   }
-  return { st, dispose, watch }
+  return { st, dispose, watch, gone }
 }
+/** Stops the screen drawn into `host` right away (its render may still be waiting for the packs or the server). */
+export const disposeHost = (host: HTMLElement): void => disposers.get(host)?.()
 
 // ---------------------------------------------------------------------------------------------------- Resources
 
@@ -334,7 +348,7 @@ function activeLine(ui: string, key: DownloadKey, retry: () => void): HTMLElemen
   if (!d) return null
   const t = RT(ui)
   const row = el('div', 'row res-dl')
-  if (d.error) row.append(el('span', 'grow', text(failText(ui, d.error), ui)), btn(text(hints.get(key) ?? t.retry, ui), retry))
+  if (d.error) row.append(el('span', 'grow', text(failText(ui, d.net), ui)), btn(text(hints.get(key) ?? t.retry, ui), retry))
   else row.append(el('span', 'grow', text(prog(ui, d.a, d.b), ui)), btn(t.cancel, () => cancelDownload(key)))
   return row
 }
@@ -379,8 +393,8 @@ function langCard(p: Paint, c: LangCard): HTMLElement {
     // missing: only a part that can be added
     const key: DownloadKey = `part:${c.lang}:${part.id}`
     const n = part.n ?? 0
-    const label = !n ? name(ui, part.id) : part.id === 'bible' ? t.lack.replace('{name}', name(ui, part.id)).replace('{c}', count(ui, 'book', part.missing.length))
-      : part.id === 'ta' ? t.lack.replace('{name}', name(ui, part.id)).replace('{c}', count(ui, 'manual', part.missing.length))
+    const label = !n ? name(ui, part.id) : part.id === 'bible' ? (part.missing.length === 1 ? t.lack1 : t.lack).replace('{name}', name(ui, part.id)).replace('{c}', count(ui, 'book', part.missing.length))
+      : part.id === 'ta' ? (part.missing.length === 1 ? t.lack1 : t.lack).replace('{name}', name(ui, part.id)).replace('{c}', count(ui, 'manual', part.missing.length))
         : t.incomplete.replace('{name}', name(ui, part.id))
     const line = el('div', 'res-line', text(`＋ ${label}`, ui))
     line.dataset.part = part.id
@@ -418,7 +432,7 @@ async function startPart(p: Paint, lang: string, part: PartLine, key: DownloadKe
   if (!(await gate(ui, key, part.bytes, real, p.repaint))) return void p.repaint()
   startDownload(key, async (signal, progress) => {
     await deps.addUnits(lang, part.missing, { signal, onProgress: (x) => progress(x.bytes, x.totalBytes) })
-    if (p.host.isConnected !== false) p.ctx.refresh()
+    if (!p.dead()) p.ctx.refresh()
   })
 }
 
@@ -426,20 +440,24 @@ async function startPart(p: Paint, lang: string, part: PartLine, key: DownloadKe
  * A whole language (a half download's [Continue], the server's [Download], and their retries): the offer is asked again at each tap, so
  * the size is today's and a retry never reuses an old plan. `shown` is the size the button showed (0: none known).
  */
+// the offer of the first tap, kept for the confirming one: the size the person agreed to is the size that downloads
+const fresh = new Map<string, Offer>()
 async function startLang(p: Paint, lang: string, shown: number, first: Offer | null) {
   const ui = p.ctx.ui
   const key: DownloadKey = `lang:${lang}`
-  let offer: Offer | null = null
   const real = async () => {
-    offer = await deps.offerOf(lang)
-    return offer?.bytes ?? null
+    const o = await deps.offerOf(lang)
+    if (o) fresh.set(key, o)
+    return o?.bytes ?? null
   }
   if (!(await gate(ui, key, shown, real, p.repaint))) return void p.repaint()
+  const offer = fresh.get(key) ?? null
+  fresh.delete(key)
   startDownload(key, async (signal, progress) => {
     const o = offer ?? first ?? (await deps.offerOf(lang))
     if (!o) throw new Error('offline')
     await deps.downloadLang(lang, (x) => progress(x.bytes, x.totalBytes), { offer: o, signal })
-    if (p.host.isConnected !== false) p.ctx.refresh()
+    if (!p.dead()) p.ctx.refresh()
   })
 }
 
@@ -522,7 +540,7 @@ async function startImages(p: Paint) {
     const o = offer ?? (await deps.imagesOffer())
     if (!o) throw new Error('offline')
     await deps.downloadImages((x) => progress(x.bytes, x.totalBytes), signal, o)
-    if (p.host.isConnected !== false) p.ctx.refresh()
+    if (!p.dead()) p.ctx.refresh()
   })
 }
 
@@ -531,18 +549,18 @@ async function startImages(p: Paint) {
  * into the same host does that by itself).
  */
 export async function renderResources(host: HTMLElement, ctx: ResCtx): Promise<() => void> {
-  hints.clear(); confirmed.clear()
+  hints.clear(); confirmed.clear(); fresh.clear()
   const m = mount(host)
   const ui = ctx.ui
   const t = RT(ui)
   host.dir = rtlLang(ui) ? 'rtl' : 'auto'
   let model = await load()
-  if (m.st.dead) return m.dispose
+  if (m.gone()) return m.dispose
   let said = ''
-  const p: Paint = { ctx, host, say: (s) => { said = s; paint() }, repaint: () => paint(), dead: () => m.st.dead }
+  const p: Paint = { ctx, host, say: (s) => { said = s; paint() }, repaint: () => paint(), dead: () => m.gone() }
   const searchBtn = (cls: string) => btn(t.search, () => ctx.openServer(), cls)
   function paint() {
-    if (m.st.dead) return
+    if (m.gone()) return
     const out: HTMLElement[] = [el('p', 'note res-intro', text(t.intro, ui))]
     const langs = [...model.langs.map((c) => langCard(p, c))]
     // a download that is going (or failed) shows even before the language is marked partial
@@ -596,9 +614,26 @@ export async function renderResources(host: HTMLElement, ctx: ResCtx): Promise<(
 
 // ---------------------------------------------------------------------------------------------------- the server
 
+// The server scan is one request per language and cannot be canceled: a screen opened while one runs joins it (it gets what already
+// answered, then the rest) instead of asking everything again.
+type Scan = { res: [Offer | null, string][]; subs: Set<(o: Offer | null, l: string) => void>; done: Promise<void> }
+let scan: Scan | null = null
+function joinScan(on: (o: Offer | null, l: string) => void): { done: Promise<void>; leave: () => void } {
+  if (!scan) {
+    const sc: Scan = { res: [], subs: new Set(), done: null as unknown as Promise<void> }
+    scan = sc
+    sc.done = deps.offers((o, l) => { sc.res.push([o, l]); for (const f of [...sc.subs]) f(o, l) }).then(() => {}).finally(() => { if (scan === sc) scan = null })
+    sc.done.catch(() => {}) // the screens that wait for it hear of the failure; none left: nobody
+  }
+  const sc = scan
+  for (const [o, l] of sc.res) on(o, l)
+  sc.subs.add(on)
+  return { done: sc.done, leave: () => void sc.subs.delete(on) }
+}
+
 /** Draws the server screen into `host`: each language as it answers, with its parts and one [Download]. Returns how to stop it. */
 export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() => void> {
-  hints.clear(); confirmed.clear()
+  hints.clear(); confirmed.clear(); fresh.clear()
   const m = mount(host)
   const ui = ctx.ui
   const t = RT(ui)
@@ -607,11 +642,12 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
   let answered = 0
   let total = (await deps.offerCandidates().catch(() => [] as string[])).length
   let over = false
+  let failed = false
   let images: ImagesState = await deps.imagesInstalled().catch(() => null)
-  if (m.st.dead) return m.dispose
-  const p: Paint = { ctx, host, say: () => {}, repaint: () => paint(), dead: () => m.st.dead }
+  if (m.gone()) return m.dispose
+  const p: Paint = { ctx, host, say: () => {}, repaint: () => paint(), dead: () => m.gone() }
   function paint() {
-    if (m.st.dead) return
+    if (m.gone()) return
     const out: HTMLElement[] = []
     if (!over) out.push(el('p', 'note res-looking', text(t.looking.replace('{n}', String(answered)).replace('{total}', String(total)), ui)))
     for (const o of found) {
@@ -630,7 +666,7 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
       })())
       out.push(card)
     }
-    if (over && !found.length) out.push(el('p', 'note res-empty', text(deps.online() ? t.noneNew : t.offline, ui)))
+    if (over && !found.length) out.push(el('p', 'note res-empty', text(deps.online() && !failed ? t.noneNew : t.offline, ui)))
     out.push(el('h3', 'res-h', t.all), imagesBlock(p, images, true))
     out.push(el('p', 'note res-fixed', text(t.fixed, ui)))
     host.replaceChildren(...out)
@@ -647,17 +683,21 @@ export async function renderServer(host: HTMLElement, ctx: ResCtx): Promise<() =
       paint()
     })
   })
+  const join = joinScan((o) => {
+    if (m.gone()) return
+    answered++
+    if (o) found.push(o)
+    paint()
+  })
   try {
-    await deps.offers((o) => {
-      if (m.st.dead) return
-      answered++
-      if (o) found.push(o)
-      paint()
-    })
+    await join.done
   } catch (e) {
-    // no answer: the same message as no language found
+    // no answer: the same message as no connection
     console.warn('asking the server failed:', e)
+    failed = true
   }
+  join.leave()
+  if (m.gone()) return m.dispose
   total = Math.max(total, answered)
   over = true
   paint()
@@ -672,11 +712,14 @@ export async function resourcesBox(ui: string, after: () => void): Promise<HTMLE
   const box = el('div', 'setup')
   let dispose: (() => void) | null = null
   let turn = 0
+  let current: HTMLElement | null = null
   const show = async (server: boolean) => {
     const mine = ++turn
     dispose?.()
     dispose = null
+    if (current) disposeHost(current)
     const inner = el('div', '')
+    current = inner
     box.replaceChildren(...(server ? [btn(`‹ ${RT(ui).back}`, () => void show(false), 'small'), inner] : [inner]))
     const ctx: ResCtx = { ui, refresh: after, openServer: () => void show(true), openLanguage: () => {} }
     const d = await (server ? renderServer : renderResources)(inner, ctx)
