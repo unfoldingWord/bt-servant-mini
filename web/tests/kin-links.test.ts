@@ -72,3 +72,15 @@ describe('with the hand-made reader (obs-frames, participant, occurs-in)', () =>
     expect(r.reply.follow!.length).toBe(3)
   })
 })
+
+describe('the graph (review at 375 px, Nov 18)', () => {
+  beforeAll(fullPhone)
+  test('a verse a family answer shows goes deeper from it (no new topic, no drift)', async () => {
+    const c: ConvState = { last: null }
+    const r = await turn(c, { q: 'hijos de Isaac', slots: null }, 'es')
+    const v = r.reply.follow!.find((f) => f.sheet?.ref === 'gen 25:26')!
+    const p = await turn(c, { q: '', sheet: v.sheet! }, 'es')
+    expect(c.graph!.nodes.find((n) => n.id === p.node)!.edge).toBe('deeper')
+    expect(p.reply.drift).toBeFalsy()
+  })
+})

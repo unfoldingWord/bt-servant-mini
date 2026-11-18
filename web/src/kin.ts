@@ -351,6 +351,19 @@ async function partsOf(pack: string, books: string[]): Promise<Map<string, Xtopi
   return (await r.xtopicsParts?.(books).catch(() => undefined)) ?? new Map()
 }
 
+/**
+ * How a relative is shown: its name, and first the name of its Translation Words article when that is another one ("Jacob (Israel)":
+ * the patriarch is `per:israel`, named Israel, and his article is «Jacob»; §4.4.4). The article's name in the pack's language.
+ */
+export async function shownAs(pack: string, id: string, name: string): Promise<string> {
+  const r = await readerOf(pack)
+  const m = (await r.mapsOf(['map', 'xtopics'], { coreOnly: true })) as { map?: { core: { names: Record<string, string[]> } }; xtopics?: { core: XtopicsCore } }
+  const tw = (m.xtopics?.core.relations ?? []).find((x) => x.type === 'same-as' && x.to === id && x.from.startsWith('tw:names/'))?.from
+  const twName = tw ? m.map?.core.names[tw]?.[0] : undefined
+  // (only two different names: «José (Antiguo Testamento)» already says José, and «levita» is not another name of Leví)
+  const [a, b] = [foldName(twName ?? ''), foldName(name)]
+  return twName && !a.includes(b) && !b.includes(a) ? `${twName} (${name})` : name
+}
 /** The `per:` ids joined to a Translation Words article (`same-as`, read the other way). */
 export async function peopleOfArticle(pack: string, tw: string): Promise<string[]> {
   const core = await coreOf(pack)

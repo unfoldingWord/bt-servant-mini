@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, colon, kinReady, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { askedName, colon, kinReady, shownAs, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2344,6 +2344,8 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     // a person's card: parents, spouses, children, siblings, each a button; its article, its first verses, its stories
     const line = (head: string, list: Relative[]) => (list.length ? `**${colon(ui, head)}** ${joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))}.` : '')
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
+    const named = (l: Relative[]) => Promise.all(l.map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
+    Object.assign(f, { parents: await named(f.parents), partners: await named(f.partners), children: await named(f.children), siblings: await named(f.siblings) })
     const rel = [...f.parents, ...f.partners, ...f.children, ...f.siblings]
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
     // (MAX_FOLLOW: the other one of that name and the download first, a few relatives, then verses and a story)
@@ -2354,7 +2356,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}`) } }
   }
   const k = kind as Exclude<KinKind, 'who'>
-  const list = relativesOf(k, f)
+  const list = await Promise.all(relativesOf(k, f).map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
   const head = withName(ui, t.head[headKind(k, list)], shownName)
   if (!list.length) {
     // never "X had no children": the data names none; the person's article and first verses
@@ -3085,7 +3087,7 @@ async function graphStep(c: ConvState, made: Made, done: Done, x: Ctx, step: str
     const links = [
       ...(reply.study?.terms.map((t) => t.id) ?? []), ...(reply.study?.notes.map((n) => n.concept ?? '') ?? []),
       ...(reply.sources?.map((s) => s.id) ?? []), ...(reply.ctx ? [reply.ctx] : []),
-      ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' || f.sheet?.intent === 'kin' ? f.sheet.concept ?? '' : kind === 'search' || isObsRef(sheet.ref) ? f.sheet?.ref ?? '' : '')),
+      ...(reply.follow ?? []).map((f) => (f.sheet?.intent === 'article' || f.sheet?.intent === 'kin' ? f.sheet.concept ?? '' : kind === 'search' || kind === 'family' || isObsRef(sheet.ref) ? f.sheet?.ref ?? '' : '')),
       // the story a passage is told in (obs.ts "This part is told in OBS 3"): going there goes deeper (graph.ts classify)
       ...(reply.follow ?? []).map((f) => { const o = parseObsRef(f.sheet?.ref); return o ? `obs:${o.n}` : '' }),
     ].filter(Boolean)
