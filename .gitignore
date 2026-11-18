@@ -6,6 +6,7 @@ app/src/main/assets/model/
 app/src/full/assets/
 app/src/lite/assets/www/packs/
 app/src/main/assets/www/
+app/src/devtest/assets/
 app/src/main/jniLibs/
 web/desktop/
 worker/node_modules/

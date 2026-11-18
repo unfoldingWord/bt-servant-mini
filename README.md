@@ -46,6 +46,8 @@ de los paquetes de idioma formato 3 (tc-language-packs) que lleva dentro, sin in
 python -I -X utf8 web/build.py                # bundle + paquetes en app/src/main/assets/www (necesita bun, ../bts-client2 y ../lp3-ta-packs o ../fase0-mini-servant/packs); corre las pruebas rápidas (--full todas, --no-tests ninguna)
 <gradle 8.14.3> assembleDebug                 # APK en app/build/outputs/apk/debug/app-debug.apk (~315 MB)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+# APK de prueba de develop ("BT Servant DEV", otra app al lado de la real): build.py --devapk, luego
+# <gradle 8.14.3> assembleFullDevtest; adb install -r app/build/outputs/apk/full/devtest/app-full-devtest.apk
 ```
 El cliente de paquetes (`language-pack-client` y `language-pack-v3`) sale de bt-synergy (tc-study) en el commit de
 `bt-synergy.ref`, sacado en `../bts-client2` (como Servos). `web/tsconfig.json` y `packs-server/tsconfig.json` apuntan ahí;

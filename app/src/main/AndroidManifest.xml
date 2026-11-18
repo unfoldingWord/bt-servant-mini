@@ -5,7 +5,7 @@
     <!-- To tell the page when the connection comes and goes (WebView does not update navigator.onLine by itself). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
-        android:label="BT Servant Mini"
+        android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"
         android:extractNativeLibs="true"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -14,7 +14,7 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
         <!-- Two entries on the home screen; the app turns one on (menu > Safety > Discreet mode, MainActivity.setDiscreet). -->
         <activity-alias android:name=".Launcher" android:targetActivity=".MainActivity" android:exported="true"
-            android:enabled="true" android:label="BT Servant Mini" android:icon="@mipmap/ic_launcher">
+            android:enabled="true" android:label="${appLabel}" android:icon="@mipmap/ic_launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
