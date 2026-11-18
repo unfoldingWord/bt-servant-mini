@@ -1,15 +1,14 @@
 // First use: with no language on the phone (light build, iOS app, web app), the chat offers the languages to download right
 // there, each with its size, the phone's language picked; a progress bar, cancel and retry. And the welcome's examples, made
 // from what the installed pack has, so none names a book the pack lacks.
-import { CANDIDATES, CANON, downloadLang, offers, openLang, PACK_NAMES, type Offer, type Progress } from './packs'
+import { CANDIDATES, downloadLang, offers, PACK_NAMES, type Offer, type Progress } from './packs'
 import { bookLabel } from './converse'
 import books from './data/books.json'
-import shapes from './data/shapes.json'
 import { rtlLang } from './bidi'
 
 type F = {
   title: string; lead: string; looking: string; download: string; cancel: string; retry: string; offline: string
-  stopped: string; canceled: string; of: string; file: string; kept: string; notes: string; term: string; ta: string; books: string
+  stopped: string; canceled: string; of: string; file: string; kept: string; books: string
   resume: string; model: string; modelGo: string
 }
 const STR: Record<string, F> = {
@@ -19,7 +18,7 @@ const STR: Record<string, F> = {
     offline: 'No internet, or the server did not answer.',
     stopped: 'The download stopped:', canceled: 'Download canceled. What already arrived stays on the phone.', of: '{a} of {b}',
     file: 'Or load a .tcpack file', kept: 'I kept your question. Choose a language below: I will answer it as soon as the language is on the phone.',
-    notes: 'What do the notes say about {ref}?', term: shapes.meaning.text.en, ta: 'Translation Academy: {topic}', books: '{n} books',
+    books: '{n} books',
     resume: 'Continue', model: 'Also download the reading model ({size}) to ask free questions without internet.', modelGo: 'Download the model',
   },
   es: {
@@ -28,7 +27,7 @@ const STR: Record<string, F> = {
     offline: 'Sin internet, o el servidor no respondió.',
     stopped: 'La descarga se detuvo:', canceled: 'Descarga cancelada. Lo que ya llegó se queda en el teléfono.', of: '{a} de {b}',
     file: 'O carga un archivo .tcpack', kept: 'Guardé tu pregunta. Elige un idioma aquí abajo: la responderé en cuanto el idioma esté en el teléfono.',
-    notes: '¿Qué dicen las notas sobre {ref}?', term: shapes.meaning.text.es, ta: 'Translation Academy: {topic}', books: '{n} libros',
+    books: '{n} libros',
     resume: 'Continuar', model: 'Descarga también el modelo de lectura ({size}) para hacer preguntas libres sin internet.', modelGo: 'Descargar el modelo',
   },
   fr: {
@@ -37,7 +36,7 @@ const STR: Record<string, F> = {
     offline: "Pas d'internet, ou le serveur n'a pas répondu.",
     stopped: "Le téléchargement s'est arrêté :", canceled: 'Téléchargement annulé. Ce qui est déjà arrivé reste sur le téléphone.', of: '{a} sur {b}',
     file: 'Ou chargez un fichier .tcpack', kept: "J'ai gardé votre question. Choisissez une langue ci-dessous : j'y répondrai dès que la langue sera sur le téléphone.",
-    notes: 'Que disent les notes sur {ref} ?', term: shapes.meaning.text.fr, ta: 'Translation Academy : {topic}', books: '{n} livres',
+    books: '{n} livres',
     resume: 'Continuer', model: 'Téléchargez aussi le modèle de lecture ({size}) pour poser des questions libres sans internet.', modelGo: 'Télécharger le modèle',
   },
   id: {
@@ -46,7 +45,7 @@ const STR: Record<string, F> = {
     offline: 'Tidak ada internet, atau server tidak menjawab.',
     stopped: 'Unduhan berhenti:', canceled: 'Unduhan dibatalkan. Yang sudah masuk tetap ada di ponsel.', of: '{a} dari {b}',
     file: 'Atau muat berkas .tcpack', kept: 'Pertanyaan Anda saya simpan. Pilih bahasa di bawah: saya akan menjawabnya begitu bahasa itu ada di ponsel.',
-    notes: 'Apa kata catatan tentang {ref}?', term: shapes.meaning.text.id, ta: 'Translation Academy: {topic}', books: '{n} kitab',
+    books: '{n} kitab',
     resume: 'Lanjutkan', model: 'Unduh juga model pembaca ({size}) untuk mengajukan pertanyaan bebas tanpa internet.', modelGo: 'Unduh model',
   },
   hi: {
@@ -55,7 +54,7 @@ const STR: Record<string, F> = {
     offline: 'इंटरनेट नहीं है, या सर्वर ने उत्तर नहीं दिया।',
     stopped: 'डाउनलोड रुक गया:', canceled: 'डाउनलोड रद्द हुआ। जो आ चुका है वह फ़ोन पर रहेगा।', of: '{b} में से {a}',
     file: 'या .tcpack फ़ाइल लोड करें', kept: 'मैंने आपका प्रश्न रख लिया है। नीचे एक भाषा चुनें: भाषा फ़ोन पर आते ही मैं उत्तर दूँगा।',
-    notes: '{ref} के बारे में नोट्स क्या कहते हैं?', term: shapes.meaning.text.hi, ta: 'Translation Academy: {topic}', books: '{n} पुस्तकें',
+    books: '{n} पुस्तकें',
     resume: 'जारी रखें', model: 'बिना इंटरनेट के खुले प्रश्न पूछने के लिए पढ़ने वाला मॉडल ({size}) भी डाउनलोड करें।', modelGo: 'मॉडल डाउनलोड करें',
   },
   ar: {
@@ -64,11 +63,48 @@ const STR: Record<string, F> = {
     offline: 'لا يوجد إنترنت، أو لم يُجب الخادم.',
     stopped: 'توقف التنزيل:', canceled: 'أُلغي التنزيل. ما وصل يبقى على الهاتف.', of: '{a} من {b}',
     file: 'أو حمّل ملف ‎.tcpack', kept: 'احتفظت بسؤالك. اختر لغة من الأسفل: سأجيب عنه حالما تصبح اللغة على الهاتف.',
-    notes: 'ماذا تقول الملاحظات عن {ref}؟', term: shapes.meaning.text.ar, ta: 'Translation Academy: {topic}', books: 'الأسفار: {n}',
+    books: 'الأسفار: {n}',
     resume: 'متابعة', model: 'نزّل أيضًا نموذج القراءة ({size}) لتطرح أسئلة حرة دون إنترنت.', modelGo: 'تنزيل النموذج',
   },
 }
 export const FU = (ui: string): F => STR[ui] ?? STR.en!
+
+// ------------------------------------------------------------------------------------------------------------- the empty screen
+
+/** The empty conversation's one line, and its quick action for a guided mode (Browse's and How to ask's own names are theirs). */
+const EMPTY: Record<string, { line: string; mode: string }> = {
+  en: { line: 'Ask about a verse, a word or a story. Works without internet.', mode: 'Start a guided mode' },
+  es: { line: 'Pregunta por un versículo, una palabra o una historia. Funciona sin internet.', mode: 'Empezar un modo' },
+  fr: { line: 'Posez une question sur un verset, un mot ou une histoire. Fonctionne sans internet.', mode: 'Lancer un mode guidé' },
+  id: { line: 'Tanyakan tentang sebuah ayat, kata, atau kisah. Bekerja tanpa internet.', mode: 'Mulai mode terpandu' },
+  hi: { line: 'किसी पद, शब्द या कहानी के बारे में पूछें। बिना इंटरनेट के काम करता है।', mode: 'निर्देशित तरीका शुरू करें' },
+  ar: { line: 'اسأل عن آية أو كلمة أو قصة. يعمل دون إنترنت.', mode: 'ابدأ مسارًا موجّهًا' },
+}
+export const emptyLine = (ui: string): string => (EMPTY[ui] ?? EMPTY.en!).line
+export const emptyModeLabel = (ui: string): string => (EMPTY[ui] ?? EMPTY.en!).mode
+/**
+ * The pills of the empty conversation, in order: Resume (a saved 5M session, each, by its index in the list), Browse, Start a mode, How
+ * to ask. `modes`: whether a guided mode is there; null while it is being read: the slot is kept (`hidden`), so How to ask does not
+ * move under a finger when the answer comes, and the row is not drawn again.
+ */
+export type Quick = { kind: 'resume' | 'explore' | 'mode' | 'howto'; label: string; index?: number; hidden?: boolean }
+export function quickSpec(ui: string, o: { modes: boolean | null; resume: string[]; explore: string; howto: string }): Quick[] {
+  return [
+    ...o.resume.map((label, index): Quick => ({ kind: 'resume', label, index })),
+    { kind: 'explore', label: o.explore },
+    ...(o.modes === false ? [] : [{ kind: 'mode' as const, label: emptyModeLabel(ui), ...(o.modes === null ? { hidden: true } : {}) }]),
+    { kind: 'howto', label: o.howto },
+  ]
+}
+/** What a tap on a pill does in the page (main.ts gives the ways); false when it was not taken because an answer is on its way or the lock is on. */
+export type QuickHooks = { explore: () => void; modes: () => void; howto: () => void; resume: (index: number) => boolean }
+export function quickTap(q: Quick, h: QuickHooks): boolean {
+  if (q.kind === 'resume') return h.resume(q.index ?? -1)
+  if (q.kind === 'explore') h.explore()
+  else if (q.kind === 'mode') h.modes()
+  else h.howto()
+  return true
+}
 
 /** "2.6 MB", "0.4 MB". */
 export const size = (n: number) => `${(n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)} MB`
@@ -240,13 +276,7 @@ export function languagePicker(ui: string, prefer: string[], h: typeof hooks): H
 /** Whether a download started from the picker is running. */
 export const downloading = () => st.phase === 'downloading'
 
-// ------------------------------------------------------------------------------------------------------------- examples
-
-export type Example = { label: string; lang: string; intent: 'passage' | 'article'; ref?: string; what?: string[]; concept?: string }
-/** Verses that make good first questions, in the order they are tried; a pack without any of them gets its first book's 1:1. */
-const VERSES = ['rut 1:16', 'jon 1:3', 'tit 1:1', 'act 1:8', 'jhn 3:16', 'mrk 1:1', 'gen 1:1', 'mat 5:3', 'rom 1:1', 'eph 2:8', '3jn 1:4', 'psa 23:1']
-const TERMS = ['tw:kt/grace', 'tw:kt/faith', 'tw:kt/love', 'tw:kt/covenant']
-const TOPICS = ['ta:translate/figs-metaphor', 'ta:translate/figs-idiom', 'ta:translate/translate-unknown']
+// ------------------------------------------------------------------------------------------------------------- book names
 
 const FR_ACCENTS: Record<string, string> = { gen: 'Genèse', eph: 'Éphésiens', act: 'Actes', deu: 'Deutéronome', lev: 'Lévitique', ecc: 'Ecclésiaste', hab: 'Habacuc' }
 /** A book's name in the app's language: the names the app writes (en, es, ar), else the first name the app reads for it (fr, id, hi). */
@@ -256,54 +286,4 @@ export function bookShown(ui: string, code: string): string {
   const name = Object.entries((books as Record<string, Record<string, string>>)[ui] ?? {}).find(([, c]) => c === code)?.[0]
   if (!name) return bookLabel('en', code)
   return ui === 'hi' ? name : name.replace(/(^|\s)(\p{L})/gu, (_, sp, ch) => sp + ch.toUpperCase())
-}
-
-/**
- * The welcome's examples for the pack `lang`, in the app's language: a verse and the notes of a verse from books the pack has, a
- * key term and an Academy topic it has. Each one is a ready question (a sheet), so it is answered as shown.
- */
-export async function examplesFor(ui: string, lang: string): Promise<Example[]> {
-  const r = await openLang(lang)
-  const books = CANON.filter((b) => r.installed(`book:${b}`))
-  if (!books.length) return []
-  const refs = VERSES.filter((v) => books.includes(v.split(' ')[0]!))
-  if (refs.length < 2) for (const b of books) if (refs.length < 2 && !refs.some((x) => x.startsWith(`${b} `))) refs.push(`${b} 1:1`)
-  const label = (ref: string) => {
-    const [b, cv] = ref.split(' ')
-    return `${bookShown(ui, b!)} ${cv}`
-  }
-  const s = FU(ui)
-  const out: Example[] = [{ label: label(refs[0]!), lang, intent: 'passage', ref: refs[0]!, what: ['text', 'notes'] }]
-  // the notes of a verse whose book has notes in this pack (the Hindi one has them for Acts only, not for Jonah or Ruth)
-  const hasNotes = async (ref: string) => {
-    try {
-      const rows = (((await r.book(ref.split(' ')[0]!)) as any)?.notes?.rows ?? []) as any[]
-      return rows.some((x) => !(x?.cols?.isIntro === true || x?.cols?.isIntro === 'true'))
-    } catch {
-      return false
-    }
-  }
-  let second = refs[1] ?? refs[0]!
-  for (const ref of [...refs.slice(1), refs[0]!]) {
-    if (await hasNotes(ref)) {
-      second = ref
-      break
-    }
-  }
-  out.push({ label: s.notes.replace('{ref}', label(second)), lang, intent: 'passage', ref: second, what: ['notes'] })
-  const titled = async (ids: string[]) => {
-    for (const id of ids) {
-      try {
-        const t = (await r.article(id)).data?.title
-        // "grace, gracious": the first name reads as a question
-        if (t) return { id, title: String(t).split(',')[0]!.trim() }
-      } catch { /* the next one */ }
-    }
-    return null
-  }
-  const term = await titled(TERMS)
-  if (term) out.push({ label: s.term.replace('{term}', term.title), lang, intent: 'article', concept: term.id })
-  const topic = await titled(TOPICS)
-  if (topic) out.push({ label: s.ta.replace('{topic}', topic.title), lang, intent: 'article', concept: topic.id })
-  return out
 }

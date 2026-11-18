@@ -1,10 +1,10 @@
 // How to ask (howto.ts): every card's example, in every app language, is read by the router to what its card says (a passage
 // read by code alone, a verse's notes, a chapter's questions, a word's article, a translation topic, a follow-up of the
-// passage) and gets a non-empty answer with the packs there are; the invitation shows on at most 3 occasions and ends when tapped or dismissed; no online AI card where it is not.
+// passage) and gets a non-empty answer with the packs there are; the menu card has the online AI settings only where it is.
 import { test, expect, beforeAll, afterAll } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { turn } from './harness'
-import { cardsFor, endInvite, examplesOf, type Examples, forgetHowto, HT, INVITE_MAX, inviteDue, inviteShown } from '../src/howto'
+import { cardsFor, examplesOf, type Examples, HT } from '../src/howto'
 import { type ConvState, directSheet } from '../src/pipeline'
 import { bookCode } from '../src/sheet'
 
@@ -88,7 +88,7 @@ for (const [ui, pack] of PHONES) {
     const fr = await ask([ex.free], ui)
     expect(fr.found, ex.free).toBeGreaterThan(0)
     // and every "Try it" of every card, as the guide sends it
-    for (const c of cardsFor(ui, ex, true)) {
+    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true })) {
       if (!c.ask.length) continue
       const r = await ask(c.ask, ui)
       expect(r.found, `${ui} ${c.id}: ${c.ask.join(' → ')}`).toBeGreaterThan(0)
@@ -110,7 +110,7 @@ test('another app language than the pack: the examples are still answered', asyn
     await installPacks([pack])
     const ex = (await examplesOf(ui, [pack], null))!
     for (const q of [ex.passage, ex.notes, ex.questions].filter((x): x is string => !!x)) expect((await ask([q], ui)).found, `${ui}/${pack}: ${q}`).toBeGreaterThan(0)
-    for (const c of cardsFor(ui, ex, true)) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
+    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true })) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
   }
 }, 120000)
 
@@ -124,59 +124,6 @@ test('the examples parse in every app language, with or without a pack for it', 
     expect(s.terms.length).toBeGreaterThan(0)
     expect(s.topics.length).toBeGreaterThan(0)
   }
-})
-
-test('the invitation shows on at most 3 occasions, and ends at once when tapped or dismissed', () => {
-  store.clear()
-  forgetHowto()
-  expect(INVITE_MAX).toBe(3)
-  expect(inviteDue('c1')).toBe(true)
-  inviteShown('c1')
-  inviteShown('c1') // the same conversation drawn again: the same occasion
-  expect(store.get('btsm.howto')).toBe('1')
-  inviteShown('c2')
-  inviteShown('c3')
-  expect(inviteDue('c3')).toBe(true) // the third stays while it is on screen
-  expect(inviteDue('c4')).toBe(false) // a fourth occasion: gone by itself
-  expect(inviteDue('c4')).toBe(false)
-  // tapped or dismissed: at once, even on its first occasion
-  forgetHowto() // erase everything: shown again
-  expect(inviteDue('c1')).toBe(true)
-  inviteShown('c1')
-  endInvite()
-  expect(inviteDue('c1')).toBe(false)
-  expect(store.get('btsm.howto')).toBe('done')
-  // a storage that cannot be written: dismissed stays dismissed in this run
-  forgetHowto()
-  const ls = (globalThis as any).localStorage
-  const set = ls.setItem
-  ls.setItem = () => { throw new Error('full') }
-  try {
-    expect(inviteDue('c1')).toBe(true)
-    endInvite()
-    expect(inviteDue('c1')).toBe(false)
-  } finally {
-    ls.setItem = set
-  }
-  // a storage that reads but does not write: the occasions of this run still stop it after 3
-  forgetHowto()
-  ls.setItem = () => { throw new Error('full') }
-  try {
-    for (const o of ['r1', 'r2', 'r3']) {
-      expect(inviteDue(o)).toBe(true)
-      inviteShown(o)
-    }
-    expect(inviteDue('r3')).toBe(true)
-    expect(inviteDue('r4')).toBe(false)
-  } finally {
-    ls.setItem = set
-  }
-  // no storage at all: never shown (better than every time)
-  ;(globalThis as any).localStorage = { getItem: () => { throw new Error('denied') } }
-  forgetHowto()
-  expect(inviteDue('c1')).toBe(false)
-  ;(globalThis as any).localStorage = ls
-  endInvite()
 })
 
 test('the examples are read once per app language, packs and helps language', async () => {
@@ -203,20 +150,21 @@ test('typing suggestions off: the card says how to turn them on, and Try it open
   }
 })
 
-test('the online AI card only where online AI is available', () => {
+test('the menu card has the online AI settings only where online AI is available', () => {
+  // (the card itself is always there: Safety and the pictures are in the menu; howto-cards.test.ts has the rest)
   for (const ui of UIS) {
-    expect(cardsFor(ui, null, false).map((c) => c.id)).toEqual(['passage', 'word', 'follow', 'browse'])
-    expect(cardsFor(ui, null, true).map((c) => c.id)).toEqual(['passage', 'word', 'follow', 'browse', 'online'])
+    expect(cardsFor(ui, null, false).find((c) => c.id === 'menu')!.extra).toBe('menu')
+    expect(cardsFor(ui, null, true).find((c) => c.id === 'menu')!.extra).toBe('online')
   }
   // the iOS app: not there; the Android app and the web: there (online.ts onlineAvailable)
   ;(globalThis as any).window = { Android: { platform: () => 'ios' } }
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(false)
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('menu')
   ;(globalThis as any).window = { Android: { platform: () => 'android' } }
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(true)
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('online')
   ;(globalThis as any).window = {}
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(true)
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('online')
   delete (globalThis as any).window
-  expect(cardsFor('en', null).some((c) => c.id === 'online')).toBe(false) // cannot tell: not offered
+  expect(cardsFor('en', null).find((c) => c.id === 'menu')!.extra).toBe('menu') // cannot tell: not offered
 })
 
 test('every card says that writing in your own words works too, in every language', () => {

@@ -15,7 +15,7 @@ import { rankVerses, resetIndexes, searchIndex, searchIntros, type RankedVerse, 
 /** Common story words of a question in English ("mar" -> "sea"), to match the English text when the language's pack lacks the book. */
 const LEX: Record<string, Record<string, string>> = Object.fromEntries(Object.entries(storyWords as unknown as Record<string, Record<string, string>>)
   .map(([l, t]) => [l, l === '_' ? t : { ...((storyWordsMore as unknown as Record<string, Record<string, string>>)[l] ?? {}), ...t }]))
-const toEnglish = (ws: string[], l: string): string[] => {
+export const toEnglish = (ws: string[], l: string): string[] => {
   // the question's language first; a French question answered from the English pack still has French words
   const tables = [LEX[l.split('-')[0]!], ...Object.entries(LEX).filter(([k]) => k !== '_' && k !== l.split('-')[0]).map(([, t]) => t)]
   return ws.map((w) => tables.map((t) => t?.[fold(w)]).find((x) => typeof x === 'string')).filter((x): x is string => !!x)

@@ -10,10 +10,10 @@ import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang, uiLangs } from './packs'
 import { type ObsStudy, obsStudyOf } from './obswords'
-import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyName, storyStep } from './obs'
+import { fiveAsk, frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyName, storyStep } from './obs'
 import { findSections, findStories, resetSections, type Section, type SectionHit, sectionRef } from './storyfind'
 import type { Fixture } from './dev'
-import { fixtureNow5, fixtureOf5, on5m } from './five'
+import { covered5, fixtureNow5, fixtureOf5, on5m } from './five'
 import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
 import { W5 } from './obs5mwords'
 import { savedSessions } from './obs5mstore'
@@ -1629,7 +1629,7 @@ const NONE_T: Record<string, { none: string; see: string; what: Record<HelpKind,
   ar: { none: 'المساعدات باللغة {lang} على هذا الهاتف ليس فيها {what} لسفر {book}.', see: 'عرض {what} باللغة {other}', what: { notes: 'ملاحظات', questions: 'أسئلة', terms: 'كلمات رئيسية' },
     whatSee: { notes: 'الملاحظات', questions: 'الأسئلة', terms: 'الكلمات الرئيسية' } },
 }
-const langName = (ui: string, l: string) => (LANG_NAMES[ui] ?? LANG_NAMES.en!)[baseOf(l)] ?? env.packName(l)
+export const langName = (ui: string, l: string) => (LANG_NAMES[ui] ?? LANG_NAMES.en!)[baseOf(l)] ?? env.packName(l)
 /** "Las ayudas en hindi de este teléfono no tienen notas para Rut." and its button "Ver las notas en inglés". */
 export function noneInWords(ui: string, sheetLang: string, other: string, kind: HelpKind, book: string): { none: string; see: string } {
   const t = NONE_T[ui] ?? NONE_T.en!
@@ -1840,11 +1840,11 @@ async function noIntro(sheet: Sheet, ui: string, before: Sheet | null): Promise<
   return { said, follow }
 }
 /** Each button once (the same sheet or the same Browse), at most MAX_FOLLOW; Browse at a book opens the pack that has it. */
-async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
+export async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
   const seen = new Set<string>()
   const out: Follow[] = []
   for (const f of follow) {
-    const key = (f.add ? `add ${f.add.lang} ${f.add.unit} ` : '') + (f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''} ${f.browse.obs ? 'obs' : ''}` : `again ${f.again?.q ?? f.again?.label ?? ""}`)
+    const key = (f.add ? `add ${f.add.lang} ${f.add.unit} ` : '') + (f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''} ${f.browse.obs ? 'obs' : ''}${f.browse.mode ?? ''}` : f.typed ? `typed ${f.typed}` : `again ${f.again?.q ?? f.again?.label ?? ""}`)
     if (seen.has(key)) continue
     seen.add(key)
     if (f.browse?.book) {
@@ -2181,7 +2181,7 @@ export const ROUTES: Route[] = [
     },
   },
   {
-    // a step of the 5M study session (obs5m.ts; dev switch `obs5m`): its card from the story's tables, the next step first, then
+    // a step of the 5M study session (obs5m.ts; 5M from the packs): its card from the story's tables, the next step first, then
     // the frame's helps (its OBS answers), its Bible passage and the Academy articles its notes cite; a story with no session says so
     name: 'obs5m',
     when: (x) => x.sheet.intent === 'obs5m' && on5m(),
@@ -2587,6 +2587,11 @@ ${x.meta}` },
         const h = await frameHelps(sheet.ref!, sheet.lang, ui).catch(() => null)
         const ta = (await Promise.all((h?.academy ?? []).slice(0, 2).map((id) => taStep(sheet, id, ui).catch(() => null)))).filter((t): t is Follow => !!t)
         follow.splice(Math.min(2 + terms.length, follow.length), 0, ...ta)
+      }
+      // the story's own 5M session, when it has one (5M in the pack; not in a session already: that one would start over)
+      if (on5m() && !x.c.graph?.session && f.state === 'ok') {
+        const st = await sessionButton(parseObsRef(sheet.ref)?.n ?? 0, ui).catch(() => null)
+        if (st) follow.splice(Math.min(2 + terms.length, follow.length), 0, st)
       }
       if (!follow.length) follow.push(browseStep(ui))
       const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
@@ -3012,8 +3017,8 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
 }
 
 // ------------------------------------------------------------------------------------------------- the 5M study session
-// A study session through one Open Bible Story in the manual's five movements (obs5m.ts, the design of Nov 16), behind the dev
-// switch `obs5m`: every step is a turn (a sheet with intent 'obs5m', route `obs5m`), kept in the graph as `g.session` beside the
+// A study session through one Open Bible Story in the manual's five movements (obs5m.ts, the design of Nov 16), from the packs
+// (five.ts): every step is a turn (a sheet with intent 'obs5m', route `obs5m`), kept in the graph as `g.session` beside the
 // light path (paused meanwhile, never replaced). Its frame's helps are 2c's OBS answers; any other answer offers the way back.
 
 /** A story's tables from the installed packs (five.ts), read once; null when no pack has the story (no session) */
@@ -3044,7 +3049,7 @@ function atSession(g: Graph): boolean {
 /**
  * In a 5M session, a short question about its step with no reference of its own: "and the notes?", "the key terms?", "the
  * questions?" (what to show of its frame), "next", "¿y el siguiente?" (its next step). Null otherwise (a typed reference, other
- * words: answered as usual), and always with the dev switch off or no session.
+ * words: answered as usual), and always with 5M off or no session.
  */
 export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { frame: number } | null {
   if (!c.graph?.session || !on5m() || !atSession(c.graph)) return null
@@ -3072,11 +3077,11 @@ export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { fram
  */
 export type Chip5 = { kind: 'next' | 'place' | 'ok'; label: string; sheet?: Sheet; send?: true; resume?: number }
 /**
- * The composer's empty row (state A) with the dev switch on: in a session, at its step, [Next: … ▸] then the step's frame
+ * The composer's empty row (state A) with 5M on: in a session, at its step, [Next: … ▸] then the step's frame
  * [OBS 1:5 ▸]; away from it (a help, a branch), the way back to it first (`rest` 'place': the passage the conversation is on
  * follows, never the paused light path); with no session here, [Resume OBS 1 · …] for the session used last, if one is saved
  * (`rest` 'all': the usual first button follows).
- * Null with the switch off, or before the story's tables are read.
+ * Null without 5M (no pack has the tables), or before the story's tables are read.
  */
 export function sessionChips(c: ConvState, ui: string): { items: Chip5[]; rest: 'all' | 'place' | null } | null {
   if (!on5m()) return null
@@ -3115,7 +3120,7 @@ const rtlArrow = (ui: string) => (ui === 'ar' ? '◂' : '▸')
 /**
  * What a question typed in a 5M session reads as, for the composer's "✓" (state D): "notes" → "✓ OBS 1:5 · notes", "next" →
  * "✓ Next: …", a frame's number in a part that goes frame by frame → "✓ frame 7". Its tap sends the box's text, which
- * readQuestion reads the same way (sessionAsks). Null when it is none of these, or with the switch off.
+ * readQuestion reads the same way (sessionAsks). Null when it is none of these, or without 5M.
  */
 export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | null {
   const asked = sessionAsks(q, c)
@@ -3150,6 +3155,16 @@ function frameStep(s: Session, n: number): Session | null {
   const f = `${s.story}:${n}`
   const st = all.find((x) => x.frame === f && x.kind === kind) ?? all.find((x) => x.frame === f)
   return st ? { ...s, at: st.at } : null
+}
+
+/** [5M session for this story], under an Open Bible Story that has a session: a button that sends "5M OBS n" as typed. Null when it has none. */
+async function sessionButton(n: number, ui: string): Promise<Follow | null> {
+  // (the tables are read once, then this is a lookup)
+  if (!on5m() || !covered5().includes(n)) return null
+  const fx = await fixture5(n)
+  if (!fx || n !== fx.story || !ORDER5.some((x) => stepsOf5(fx, x).length)) return null
+  // the question typed: session5Asked builds the session at tap time with its language rule, keeps the state and counts 5m.start
+  return { label: W5(ui).startStory, typed: fiveAsk(n) }
 }
 
 /** "5M OBS 1" (the session's words and a story), or a question about the session's step: its sheet, read by code. */
@@ -3209,6 +3224,8 @@ async function step5(x: Ctx): Promise<Done | null> {
   if (!s || !fx) {
     const n = parseObsRef(sheet.ref)?.n ?? 0
     const follow: Follow[] = n >= 1 && n <= 50 ? [{ label: obsLabel(n), sheet: passageSheet(sheet, obsRef(n), ['text', 'notes']) }] : []
+    // the way to the stories that do have one (Browse's 5M view)
+    follow.push({ label: W5(ui).seeStories, browse: { mode: 'obs5m' } })
     return { answered: 'nosession', ref: null, concept: null, found: 0,
       reply: { info: W5(ui).noSession.replace('{lang}', langName(ui, sheet.lang)), follow, ui, meta: `${meta}\n5m: no session for this story` } }
   }

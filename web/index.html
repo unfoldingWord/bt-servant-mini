@@ -48,6 +48,14 @@
   .me { align-self: flex-end; max-width: 85%; background: var(--me); border-radius: 14px; padding: 9px 14px; white-space: pre-wrap; }
   .bot { align-self: stretch; font-family: Georgia, "Noto Serif", "Noto Serif Devanagari", serif; font-size: 16.5px; line-height: 1.6; }
   .pending { color: var(--faint); font-style: italic; }
+  /* the waiting line: a small orb that breathes and a text that shimmers, never fully opaque, and legible at its dimmest (waiting.ts) */
+  .wait { display: flex; align-items: center; font: 14px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; font-style: normal; color: var(--muted); }
+  .wait .orb { flex: none; width: 12px; height: 12px; border-radius: 50%; margin-inline-end: 8px; background: var(--accent); background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--accent) 55%, #fff), var(--accent) 70%);
+    animation: orb-breathe 2.4s ease-in-out infinite; }
+  .wait .wt { animation: wait-shimmer 2s ease-in-out infinite; }
+  @keyframes orb-breathe { 0%, 100% { transform: scale(.72); opacity: .6; } 50% { transform: scale(1); opacity: 1; } }
+  @keyframes wait-shimmer { 0%, 100% { opacity: .6; } 50% { opacity: .9; } }
+  @media (prefers-reduced-motion: reduce) { .wait .orb { animation: none; transform: none; opacity: .85; } .wait .wt { animation: none; opacity: .8; } }
   .intro { margin: 0 0 10px; }
   .info { font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--card);
     border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
@@ -70,9 +78,9 @@
   .info em { color: var(--muted); }
   .info > :last-child { margin-bottom: 0; }
   .follow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .follow button, .examples button { font: 14px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
+  .follow button { font: 14px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line);
     border-radius: 10px; padding: 7px 11px; text-align: start; }
-  .follow button:active, .examples button:active { background: var(--line); }
+  .follow button:active { background: var(--line); }
   details { margin-top: 8px; font: 12px system-ui, sans-serif; color: var(--faint); }
   details pre { white-space: pre-wrap; font-size: 11px; max-height: 240px; overflow: auto; }
   details > p.src-line { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: 6px 0; overflow-wrap: anywhere; } /* the answer's source, from under the answer (main.ts) */
@@ -80,7 +88,6 @@
   .welcome svg { width: 34px; height: 39px; }
   .welcome h2 { font: 400 26px/1.25 Georgia, "Noto Serif", "Noto Serif Devanagari", serif; margin: 14px 0 8px; }
   .welcome p { color: var(--muted); margin: 0 auto 18px; max-width: 34ch; font-size: 15px; }
-  .examples { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
   /* first use: the language picker (firstuse.ts), in the welcome or under a question that waits for a language */
   .fu { text-align: start; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 4px 0 8px;
     font: 15px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
@@ -110,6 +117,18 @@
   #send { width: 38px; height: 38px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
   #send:active { background: var(--accent-hover); }
   #send:disabled { opacity: .45; }
+  /* the arrow back to the latest message (tobottom.ts): 32 px round, slightly translucent (white on the accent stays above 3:1), centred just above the card (so above the suggestion row, which is inside it) */
+  #tobottom { position: fixed; z-index: 4; left: 50%; bottom: var(--tb-bottom, 90px); transform: translateX(-50%); width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
+    background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer; opacity: .75; transition: opacity .2s; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+  #tobottom::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; } /* a 44 px target */
+  #tobottom:hover, #tobottom:focus-visible, #tobottom:active { opacity: 1; }
+  #tobottom:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #tobottom[hidden] { display: none; }
+  #tobottom .tb-dot { position: absolute; top: -2px; inset-inline-end: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 2px var(--bg); }
+  #tobottom .tb-dot[hidden] { display: none; }
+  /* not over the full-screen cards (the translucent ones let it show through) nor the PIN lock */
+  body[data-tb-off] #tobottom { display: none; } /* (tobottom.ts sets it while one is open) */
+  @media (prefers-reduced-motion: reduce) { #tobottom { transition: none; } }
   /* typing suggestions (composer.ts): one row above the box, inside the card; it scrolls sideways, never wraps to a second row */
   #ask { flex-wrap: wrap; }
   .cmp { flex: 0 0 100%; min-width: 0; display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 4px;
@@ -124,6 +143,8 @@
   .cmp-nums { display: flex; gap: 4px; flex: none; }
   .cmp-pick { display: flex; gap: 8px; flex: none; }
   .cmp-next { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .cmp-story { border-color: var(--accent); }
+  .cmp-stories { color: var(--accent); }
   .cmp-n { flex: none; width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: 15px/1 system-ui, sans-serif; }
   .cmp-note { flex: none; color: var(--muted); font: 13.5px/1.5 system-ui, sans-serif; white-space: nowrap; }
   .cmp button:active { background: var(--line); }
@@ -152,7 +173,7 @@
   #panel button.small { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; }
   #panel button.small.del { color: #b4432f; }
   #panel .about-link { margin-top: 14px; width: 100%; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 14.5px; text-align: start; padding: 8px 0; }
-  #about, #safety, #report { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #about, #safety, #report { position: fixed; inset: 0; z-index: 10; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #about .card, #safety .card, #report .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; max-width: 520px; max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
   #about h2, #safety h2, #report h2 { font: 600 22px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 12px; }
   #about p, #safety p, #report p { margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
@@ -165,7 +186,7 @@
   #safety { z-index: 11; }
   #report { z-index: 12; }
   /* How to ask (howto.ts): one card at a time over the chat, like About; under the PIN lock (20) */
-  #howto { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #howto { position: fixed; inset: 0; z-index: 10; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #howto .card { background: var(--card); border-radius: 18px; padding: 16px 20px 18px; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 12px 40px rgba(0,0,0,.18); outline: none; }
   .howto-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
   .howto-step { font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px; color: var(--faint); }
@@ -181,9 +202,8 @@
   #howto .howto-free { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
   .howto-nav { display: flex; gap: 8px; }
   .howto-x { border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; min-width: 44px; min-height: 44px; cursor: pointer; }
-  .howto-invite { display: flex; align-items: center; justify-content: center; gap: 2px; margin: -8px auto 14px; max-width: 34ch; }
   /* The welcome (welcome.ts): one screen over the chat, like How to ask; under the PIN lock (20) */
-  #welcome { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #welcome { position: fixed; inset: 0; z-index: 10; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #welcome .card { background: var(--card); border-radius: 18px; padding: 12px 18px 16px; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; box-sizing: border-box; box-shadow: 0 12px 40px rgba(0,0,0,.18); outline: none; }
   .wl-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
   .wl-step { font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px; color: var(--faint); }
@@ -196,6 +216,10 @@
   .wl-door { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: start; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 14px; padding: 12px 14px; min-height: 56px; font: inherit; cursor: pointer; }
   .wl-door-t { font-weight: 600; font-size: 16px; line-height: 1.3; }
   .wl-door-s { color: var(--muted); font-size: 13.5px; line-height: 1.35; }
+  /* a line that may change after the first paint keeps the room of the longer one: the sizer is the same cell, unseen */
+  .wl-door-s[data-sizer] { display: grid; }
+  .wl-door-s[data-sizer] > .wl-door-st { grid-area: 1 / 1; }
+  .wl-door-s[data-sizer]::after { content: attr(data-sizer); grid-area: 1 / 1; visibility: hidden; }
   .wl-opt { border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 12px 14px; min-height: 48px; font: inherit; font-weight: 600; text-align: start; cursor: pointer; }
   .wl-door:hover, .wl-opt:hover, .wl-book:hover { border-color: var(--accent); }
   .wl-books { margin: 0 0 12px; }
@@ -211,7 +235,6 @@
   #welcome button.secondary { border: 1px solid var(--line); background: transparent; color: var(--fg); }
   .wl-nav { display: flex; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
   .wl-nav button { flex: 1 1 0; }
-  .howto-go { border: 0; background: transparent; color: var(--accent); font: 14.5px/1.4 system-ui, sans-serif; font-weight: 600; padding: 8px 4px; min-height: 44px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   #report .card { display: grid; gap: 10px; width: 100%; box-sizing: border-box; }
   #report .langs button { font-size: 13.5px; padding: 6px 11px; }
   #report h2 { margin: 0; }
@@ -297,7 +320,7 @@
   #safety button.primary:disabled { opacity: .45; }
   #safety button.secondary { width: 100%; border: 0; background: transparent; color: var(--muted); padding: 12px; font: inherit; margin-top: 2px; }
   .ai { margin: 0 0 10px; }
-  .ai.pending { color: var(--faint); font-style: italic; }
+  .ai.pending { color: var(--faint); font-style: normal; }
   .msg > .ai, .msg > .ai.pending { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); } /* last, under the phone's answer */
   .ai-badge { display: inline-block; font: 600 11px/1 system-ui, sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 8px 3px; margin-bottom: 8px; }
   details.ai > summary .ai-badge { margin: 0; } /* the fold's title: the online answer is behind it */
@@ -434,9 +457,11 @@
   #ask { padding-inline-start: 6px; }
   #browse { width: 38px; height: 38px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); display: grid; place-items: center; flex: none; padding: 0; cursor: pointer; }
   #browse:active { background: var(--line); }
-  .welcome .browse-go { margin-top: 12px; width: 100%; min-height: 48px; font: 600 15px/1.3 system-ui, sans-serif; color: var(--accent); background: var(--accent-soft);
-    border: 1px solid transparent; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
-  .welcome .browse-go:active { border-color: var(--accent); }
+  .welcome .quick { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 16px auto 0; max-width: 34ch; }
+  .welcome .quick button { min-height: 44px; padding: 8px 16px; border-radius: 22px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); font: 600 15px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; cursor: pointer; }
+  .welcome .quick button:active { background: var(--line); }
+  .welcome .quick-note { margin: 8px auto 0; font-size: 13px; }
+  .welcome .quick .quick-resume { color: var(--fg); font-weight: 500; text-align: start; }
   #explore { position: fixed; inset: 0; z-index: 15; /* above the chat and the menu, under the PIN lock (60) */ background: var(--bg); display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   #explore.open { display: flex; }
   #explore:focus { outline: none; }
@@ -477,6 +502,12 @@
   .ex-sec > summary > span:first-child { flex: 1; }
   .ex-count { font: 500 13px/1 system-ui, sans-serif; color: var(--muted); background: var(--line); border-radius: 999px; padding: 4px 8px; }
   .ex-sec .ex-rows { margin: 0 0 10px; padding-inline-start: 12px; }
+  /* guided modes (modes.ts, explore.ts): a section of rows over the tabs; the mark before a mode's name is a drawing the page turns in RTL */
+  .ex-modes { margin-bottom: 10px; }
+  .ex-mode-m { display: inline-block; margin-inline-end: 8px; color: var(--accent); vertical-align: -1px; }
+  [dir="rtl"] .ex-mode-m svg, .ex-modes[dir="rtl"] .ex-mode-m svg { transform: scaleX(-1); }
+  .ex-five-intro { margin: 4px 0 8px; }
+  .ex-five { margin-bottom: 6px; }
   .ex-busy { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--fg); }
   /* The conversation's graph (main.ts, graph.ts): "← Back to …" under an answer, the divider where the person went back, the Map */
   .follow.back-row { margin-bottom: -4px; }
@@ -527,8 +558,6 @@
   .gm-path .ex-row-t { color: var(--accent); font-weight: 600; }
   [dir="rtl"] .gm-path svg { transform: scaleX(-1); }
   /* The 5M study session (obs5mview.ts; dev switch obs5m): the bar under the header, the step cards, the review and checking cards, the outline */
-  .s5-resume { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 0 auto 18px; max-width: 34ch; }
-  .s5-resume-btn { min-height: 44px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--fg); font: 15px/1.35 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; text-align: start; cursor: pointer; }
   .s5-bar { display: flex; align-items: center; gap: 2px; margin: 0 10px 6px; padding: 2px 4px; border-radius: 12px; background: var(--accent-soft); color: var(--fg); }
   .s5-bar.dimmed { opacity: .6; }
   .s5-bar button { min-height: 44px; min-width: 44px; border: 0; background: transparent; color: inherit; border-radius: 10px; cursor: pointer; font: inherit; }

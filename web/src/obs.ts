@@ -141,6 +141,8 @@ export const isObsRef = (ref: string | null | undefined): boolean => /^obs(\s|$)
 export const obsRef = (n: number, f?: number | null): string => (f ? `obs ${n}:${f}` : `obs ${n}`)
 /** "OBS 3:5", the same in every language (the product's name, as the app says "Translation Academy"). */
 export const obsLabel = (n: number, f?: number | null): string => (f ? `OBS ${n}:${f}` : `OBS ${n}`)
+/** What a tap on a story's 5M sends, as if typed ("5M OBS 1"): the one place it is spelled (modes.ts, pipeline.ts). */
+export const fiveAsk = (n: number): string => `5M ${obsLabel(n)}`
 /** "3. The Flood" -> "The Flood" (the packs keep the number in the title; Arabic's "٢. …" too). */
 export const cleanTitle = (t: string | undefined): string => String(t ?? '').replace(/^\s*\p{Nd}{1,2}\s*[.:)\-–]\s*/u, '').trim()
 
@@ -181,7 +183,7 @@ export function rangeOfRef(ref: string | null | undefined): [number, number] | n
   }
 }
 /** A story's range text ("gen 6:1-8:22", "deu 18:15") as verse ids. */
-function rangeOfStoryRef(r: string): [number, number] | null {
+export function rangeOfStoryRef(r: string): [number, number] | null {
   const m = /^([1-3]?[a-z]{2,3})\s+(.+)$/.exec(r.trim())
   if (!m) return null
   try {
@@ -191,7 +193,7 @@ function rangeOfStoryRef(r: string): [number, number] | null {
   }
 }
 /** How many verses a range holds (by the versification), for where a verse sits in a story. */
-function versesIn(from: number, to: number): number {
+export function versesIn(from: number, to: number): number {
   const book = BOOKS[Math.floor(from / 1_000_000) - 1]
   const ch = (id: number) => Math.floor(id / 1000) % 1000
   const v = (id: number) => id % 1000
@@ -649,6 +651,21 @@ export async function frameHelps(ref: string, lang: string, ui: string): Promise
   return { facts, academy, twl, notes: fr.notes.filter((x) => tidyNote(x.cols.note)).length, questions: fr.questions.length, tq }
 }
 
+/**
+ * The first frame, counting from OBS 1:1, that has notes in the phone's Open Bible Stories: the welcome's example (firstuse.ts). Reads
+ * the first few stories only (a pack with notes for just some of them, like the Hindi one, is still found), never all fifty.
+ */
+export async function firstNotedFrame(lang: string, stories = 6): Promise<{ n: number; f: number; lang: string } | null> {
+  const at = await obsPack(lang)
+  if (!at) return null
+  for (let n = 1; n <= stories; n++) {
+    const frames = (await at.r.story(n).catch(() => null))?.data?.frames ?? []
+    const f = frames.filter((x) => x.notes.some((y) => tidyNote(y.cols.note))).map((x) => +x.ref.split(':')[1]!).filter((x) => x > 0).sort((a, b) => a - b)[0]
+    if (f) return { n, f, lang: at.lang }
+  }
+  return null
+}
+
 /** The sentence before an answer: "Here is OBS 3:5 of Open Bible Stories (The Flood)." (runs of the other direction isolated). */
 export const introLine = (f: ObsFacts, ui: string): string | null =>
   f.state !== 'ok' ? null : bidiLabel(f.f ? fill(OW(ui).found, { ref: obsLabel(f.n, f.f), title: f.title || obsLabel(f.n) }) : fill(OW(ui).foundStory, { ref: obsLabel(f.n), title: f.title || obsLabel(f.n) }), ui)
@@ -817,6 +834,20 @@ export function storyByName(words: string[]): number | null {
   if (stories.size !== 1) return null
   const covered = (x: string) => named.some(([, ws]) => ws.some((w) => is(x, w)))
   return toks.every(covered) ? [...stories][0]! : null
+}
+/**
+ * Every story that names (STORY_NAMES) all the words given, a name in several stories giving each ("Isaac": 5 and 6), for the
+ * typing suggestions (obsindex.ts): unlike storyByName it does not need one story. `partial`: the last word may be the start of
+ * a name ("noe" for Noé being typed).
+ */
+export function storiesNamed(words: string[], partial = false): number[] {
+  const toks = words.map(fold).filter(Boolean)
+  if (!toks.length) return []
+  const last = toks.length - 1
+  const is = (x: string, w: string, i: number) => arForms(x).some((f) => f === w || f === w.replace(/^ال/, '') || (w.length >= 4 && f.startsWith(w) && f.length <= w.length + 2) || (partial && i === last && f.length >= 3 && w.startsWith(f)))
+  const named = NAME_INDEX.filter(([, ws]) => ws.every((w) => toks.some((x, i) => is(x, w, i))))
+  const covered = (x: string, i: number) => named.some(([, ws]) => ws.some((w) => is(x, w, i)))
+  return toks.every(covered) ? [...new Set(named.map(([n]) => n))].sort((a, b) => a - b) : []
 }
 /**
  * A story named by what it is about ("the story of Noah", "la historia de José"), when Open Bible Stories are on the phone and

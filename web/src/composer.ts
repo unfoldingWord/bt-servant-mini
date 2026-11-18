@@ -27,6 +27,7 @@
 // Questions sent another way (How to ask's "Try it", a saved item, "Try again") count none of these.
 import { booksOf, type Ctx, loadHelps, resetSuggest, type Row, shapesFor, ST, startRow, type Strip, suggest, type Suggestion } from './suggest'
 import { scheduleTermIndex } from './termindex'
+import { scheduleObsIndex } from './obsindex'
 import { freeHintSeen, freeLine, type Shape } from './teach'
 import { count } from './usage'
 import { buildSheet } from './sheet'
@@ -65,8 +66,10 @@ export type Hooks = {
   browse: () => void
   /** a model or the online reader would read a free question (then no grey line); none given: as if one would */
   reader?: () => boolean
-  /** [Resume] a saved 5M session of this story (dev switch `obs5m`; main.ts) */
+  /** [Resume] a saved 5M session of this story (5M in the pack; main.ts) */
   resume?: (story: number) => void
+  /** "All (n)": Browse's list of Bible stories filtered to these (their numbers), under this title (main.ts openExploreAt) */
+  stories?: (lang: string, ids: number[], title: string) => void
 }
 /** The box as the composer sees it: the textarea, or a plain object in the tests. */
 export type Box = { value: string; focus(): void; setSelectionRange?(a: number, b: number): void }
@@ -81,6 +84,8 @@ export class Composer {
   composing = false
   /** a text a tap wrote while the keyboard was composing: written when it ends */
   pending: string | null = null
+  /** a story's button tapped while the keyboard was composing: asked when it ends, if the box and the row still say the same */
+  waiting: { label: string; text: string } | null = null
   /** the "✓" tapped while the keyboard was composing: sent when it ends */
   sendLabel: string | null = null
   /** the box's text when that "✓" was tapped: typed on since, the send is dropped */
@@ -153,6 +158,8 @@ export class Composer {
   }
   compositionEnd() {
     this.composing = false
+    const waiting = this.waiting
+    this.waiting = null
     // a "✓" tapped while the keyboard composed: sent now, if it still says the same for what the box now holds
     if (this.sendLabel !== null) {
       const label = this.sendLabel
@@ -169,7 +176,18 @@ export class Composer {
       const t = this.pending
       this.pending = null
       this.write(t)
-    } else this.onInput()
+    } else if (waiting) void this.retap(waiting)
+    else this.onInput()
+  }
+  /**
+   * A story's button tapped while the keyboard composed: tapped again now if the box holds what it held, after the row is made
+   * again for it and still offers that very button (else nothing: the row is new, as for the "✓").
+   */
+  private async retap(w: { label: string; text: string }) {
+    if (this.box.value !== w.text) return this.onInput()
+    this.refresh()
+    const again = this.row.items.find((x) => (x.kind === 'story' || x.kind === 'stories') && x.label === w.label)
+    if (again) await this.tap(again)
   }
   /** Makes the row for the box's text now. */
   refresh() {
@@ -254,6 +272,15 @@ export class Composer {
       if (!this.current) return this.refresh()
       return this.sendIf(s.label)
     }
+    // a story's button: the sheet, or Browse's list, waits for the keyboard's composition like the "✓" (a word kept open is not yet typed)
+    if ((s.kind === 'story' || s.kind === 'stories') && this.composing) {
+      this.waiting = { label: s.label, text: this.box.value }
+      return
+    }
+    if (s.list) {
+      this.hooks.stories?.(s.list.lang, s.list.ids, s.list.title)
+      return
+    }
     if (s.kind === 'missing') {
       if (!s.lacks) count('cmp.missing')
       this.missing = s.book ?? ''
@@ -337,6 +364,7 @@ export class Composer {
   }
   /** After a question is sent: an empty row (state A, if the box keeps the focus). */
   clear() {
+    this.waiting = null
     if (!this.composing) this.box.value = ''
     this.filled = null
     this.pending = null
@@ -350,7 +378,9 @@ export class Composer {
    */
   answered() {
     // (once built, the row for what is being typed is made again: the words show without another key)
-    scheduleTermIndex(() => this.hooks.packs(), () => { if (unmarked(this.box.value).trim() && !this.composing) this.refresh() })
+    const again = () => { if (unmarked(this.box.value).trim() && !this.composing) this.refresh() }
+    scheduleTermIndex(() => this.hooks.packs(), again)
+    scheduleObsIndex(() => this.hooks.packs(), again)
     if (!unmarked(this.box.value).trim()) this.refresh()
   }
   /** The box has the focus, or lost it: state A shows only with the focus. */
@@ -422,6 +452,8 @@ export function mountComposer(form: HTMLElement, box: HTMLTextAreaElement, hooks
     } else {
       for (const it of row.items) {
         const b = chip(`cmp-chip cmp-${it.kind}`, it.label, () => void c.tap(it), ui)
+        if (it.aria) b.setAttribute('aria-label', bidiLabel(it.aria, ui))
+        if (it.alang) b.lang = it.alang
         if (it.kind === 'missing') b.setAttribute('aria-disabled', 'true')
         wrap.appendChild(b)
       }

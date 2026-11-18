@@ -337,6 +337,16 @@ describe('usage counts: sent.typed, sent.chip, sent.code, sent.free, cmp.fill, c
     })
     expect(c).toEqual({ 'sent.chip': 2, 'sent.code': 2 })
   }, 60_000)
+  test("a story button (cases A/B and the told-in row of case C): one sent.chip and one sent.code each, the invariant holds", async () => {
+    const sheet = { id: 'x', intent: 'passage', ref: 'obs 3', what: ['text'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'en' } as any
+    const c = await counted(true, async (k, _box, log) => {
+      await k.tap({ kind: 'story', label: 'El diluvio ▸', sheet, ask: 'OBS 3: El diluvio' } as Suggestion)
+      await k.tap({ kind: 'story', label: 'Se cuenta en OBS 3 ▸', sheet, ask: 'OBS 3' } as Suggestion)
+      expect(log.length).toBe(2)
+    })
+    expect(c).toEqual({ 'sent.chip': 2, 'sent.code': 2 })
+    expect((c['sent.typed'] ?? 0) + (c['sent.chip'] ?? 0)).toBe((c['sent.code'] ?? 0) + (c['sent.free'] ?? 0))
+  }, 60_000)
   test('a button that writes in the box: cmp.fill; deleting into it right after: cmp.undo; going on: none', async () => {
     const c = await counted(true, async (k, box) => {
       await typeIn(k, box, 'ro')

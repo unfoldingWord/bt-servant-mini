@@ -43,7 +43,7 @@ export type Graph = { nodes: GNode[]; cur: string | null; path?: Path; pathBefor
   /** the learning path through Translation Academy the person started from the welcome (learn.ts), and where it is */
   learn?: Learn
   /**
-   * the 5M study session in progress (obs5m.ts; dev switch `obs5m`) and its current step: its steps are points of kind `obs5m`,
+   * the 5M study session in progress (obs5m.ts; 5M from the packs) and its current step: its steps are points of kind `obs5m`,
    * its frame's helps go deeper from them; `pathPaused`: a light path was on when it started, kept and not offered meanwhile
    */
   session?: Session; pathPaused?: boolean }

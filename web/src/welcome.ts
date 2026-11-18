@@ -1,6 +1,5 @@
 // The welcome "What would you like to do today?" (Fase 2e, Abel, Nov 16: "Sí, agrégala"). One screen once a language is on the
-// phone, in the slot where How to ask offered its invitation (howto.ts offerAfterFirstUse): this screen takes that slot, so
-// someone new never gets two welcomes in a row. Four doors: translating a book (its light path, graph.ts), learning to translate
+// phone, in the slot where How to ask once offered its invitation (a phone that had it never gets this screen). Four doors: translating a book (its light path, graph.ts), learning to translate
 // (learn.ts: Translation Academy in the manuals' order), looking up a passage or a word (the chat, with How to ask), or just
 // exploring (Browse). It never blocks: Skip is always there, and the menu's "Start over" brings it back.
 //
@@ -11,7 +10,10 @@ import { CANON, openLang } from './packs'
 import { booksOf, fillName } from './suggest'
 import { bookShown } from './firstuse'
 import { XT } from './explore'
-import { inviteUsed, offerAfterFirstUse, openHowTo } from './howto'
+import { on5m } from './five'
+import { modeTitle } from './modes'
+import { obsPack } from './obs'
+import { inviteUsed, openHowTo } from './howto'
 import { type Answer, type Learn, type LearnKind, levelOf, partName, START, startOf } from './learn'
 import type { Sheet } from './answer'
 import { type ConvState, type Made, pathStart, readQuestion } from './pipeline'
@@ -19,11 +21,13 @@ import type { Slots } from './sheet'
 
 const KEY = 'btsm.welcome.v1'
 
-export type Door = 'book' | 'learn' | 'look' | 'explore'
+export type Door = 'book' | 'learn' | 'look' | 'five' | 'explore'
 type W = {
-  title: string; sub: string; doors: Record<Door, [string, string]>; skip: string; back: string; close: string
+  title: string; sub: string; doors: Record<Exclude<Door, 'five'>, [string, string]>; skip: string; back: string; close: string
   whichBook: string; bookNote: string
   q1: string; a1: [string, string, string]; q2: string; a2: [string, string, string]; qStep: string
+  /** the 5M's door (offered when a 5M session is, modes.ts): its title, and its line ({name}: the mode's name); Just explore's line with the Bible Stories named */
+  five: [string, string]; exploreObs: string
   suggestT: string; kinds: Record<LearnKind, string>; firstIs: string; start: string; other: string; withBook: string
   menu: string; none: string; change: string
   /** what door 1 sends, as if typed: a task announced on a book, which starts its light path (pipeline.ts pathStart) */
@@ -42,6 +46,7 @@ const STR: Record<string, W> = {
     skip: 'Skip', back: 'Back', close: 'Close',
     whichBook: 'Which book are you translating?', bookNote: 'I will start with its introduction, then go section by section. You can ask anything along the way.',
     q1: 'Have you translated before?', a1: ['Never', 'A little', 'Yes'], q2: 'Have you studied translation?', a2: ['No', 'A little', 'Yes'], qStep: 'Question {n} of 2',
+    five: ['I want to study a story with my team', '{name}, in five movements'], exploreObs: 'The Bible, the Bible Stories and Translation Academy',
     suggestT: 'A place to start',
     kinds: {
       intro: 'The Introduction manual of Translation Academy, in order: what it is, why we translate, and how to find answers.',
@@ -64,6 +69,7 @@ const STR: Record<string, W> = {
     skip: 'Saltar', back: 'Atrás', close: 'Cerrar',
     whichBook: '¿Qué libro estás traduciendo?', bookNote: 'Empiezo por su introducción y luego sigo sección por sección. Puedes preguntar cualquier cosa en el camino.',
     q1: '¿Has traducido antes?', a1: ['Nunca', 'Un poco', 'Sí'], q2: '¿Has estudiado traducción?', a2: ['No', 'Un poco', 'Sí'], qStep: 'Pregunta {n} de 2',
+    five: ['Quiero estudiar una historia con mi equipo', '{name}, en cinco movimientos'], exploreObs: 'La Biblia, las Historias de la Biblia y Translation Academy',
     suggestT: 'Un punto de partida',
     kinds: {
       intro: 'El manual de Introducción de Translation Academy, en orden: qué es, por qué traducimos y cómo encontrar respuestas.',
@@ -86,6 +92,7 @@ const STR: Record<string, W> = {
     skip: 'Passer', back: 'Retour', close: 'Fermer',
     whichBook: 'Quel livre traduisez-vous ?', bookNote: 'Je commence par son introduction, puis section par section. Posez toute question en chemin.',
     q1: 'Avez-vous déjà traduit ?', a1: ['Jamais', 'Un peu', 'Oui'], q2: 'Avez-vous étudié la traduction ?', a2: ['Non', 'Un peu', 'Oui'], qStep: 'Question {n} sur 2',
+    five: ['Je veux étudier une histoire avec mon équipe', '{name}, en cinq mouvements'], exploreObs: 'La Bible, les Histoires de la Bible et Translation Academy',
     suggestT: 'Un point de départ',
     kinds: {
       intro: 'Le manuel d’introduction de Translation Academy, dans l’ordre : ce que c’est, pourquoi nous traduisons, et comment trouver des réponses.',
@@ -109,6 +116,7 @@ const STR: Record<string, W> = {
     whichBook: 'Kitab apa yang sedang Anda terjemahkan?', bookNote: 'Saya mulai dari pengantarnya, lalu bagian demi bagian. Tanyakan apa saja di sepanjang jalan.',
     q1: 'Pernahkah Anda menerjemahkan sebelumnya?', a1: ['Belum pernah', 'Sedikit', 'Ya'], q2: 'Pernahkah Anda belajar penerjemahan?', a2: ['Belum', 'Sedikit', 'Ya'],
     qStep: 'Pertanyaan {n} dari 2',
+    five: ['Saya ingin mempelajari sebuah kisah bersama tim saya', '{name}, dalam lima gerakan'], exploreObs: 'Alkitab, Kisah-kisah Alkitab, dan Translation Academy',
     suggestT: 'Titik awal',
     kinds: {
       intro: 'Buku panduan Pengantar Translation Academy, berurutan: apa itu, mengapa kita menerjemahkan, dan cara menemukan jawaban.',
@@ -131,6 +139,7 @@ const STR: Record<string, W> = {
     skip: 'छोड़ें', back: 'पीछे', close: 'बंद करें',
     whichBook: 'आप किस पुस्तक का अनुवाद कर रहे हैं?', bookNote: 'मैं उसके परिचय से शुरू करूँगा, फिर खंड-दर-खंड आगे बढ़ूँगा। रास्ते में कुछ भी पूछें।',
     q1: 'क्या आपने पहले अनुवाद किया है?', a1: ['कभी नहीं', 'थोड़ा', 'हाँ'], q2: 'क्या आपने अनुवाद की पढ़ाई की है?', a2: ['नहीं', 'थोड़ी', 'हाँ'], qStep: 'प्रश्न {n}/2',
+    five: ['मैं अपनी टीम के साथ एक कहानी का अध्ययन करना चाहता हूँ', '{name}, पाँच चरणों में'], exploreObs: 'बाइबल, बाइबल की कहानियाँ और Translation Academy',
     suggestT: 'शुरुआत का एक बिंदु',
     kinds: {
       intro: 'Translation Academy की परिचय पुस्तिका, क्रम से: यह क्या है, हम अनुवाद क्यों करते हैं, और उत्तर कैसे ढूँढें।',
@@ -153,6 +162,7 @@ const STR: Record<string, W> = {
     skip: 'تخطَّ', back: 'السابق', close: 'إغلاق',
     whichBook: 'أيّ سفر تترجم؟', bookNote: 'أبدأ بمقدمته، ثم مقطعًا بعد مقطع. اسأل عن أي شيء في الطريق.',
     q1: 'هل ترجمت من قبل؟', a1: ['أبدًا', 'قليلًا', 'نعم'], q2: 'هل درست الترجمة؟', a2: ['لا', 'قليلًا', 'نعم'], qStep: 'السؤال {n} من 2',
+    five: ['أريد أن أدرس قصة مع فريقي', '{name}، في خمس حركات'], exploreObs: 'الكتاب المقدس وقصص الكتاب المقدس وTranslation Academy',
     suggestT: 'نقطة للبدء',
     kinds: {
       intro: 'دليل المقدمة في Translation Academy بالترتيب: ما هو، ولماذا نترجم، وكيف تجد الإجابات.',
@@ -244,6 +254,8 @@ export type WelcomeHooks = {
   /** a learning path starts in the conversation, at its first article (`label`: what the chat shows as asked) */
   learn: (l: Learn, label: string, sheet: Sheet) => void
   browse: () => void
+  /** the 5M's door: Browse opens on the 5M view (with Browse's home behind it) */
+  openFive: () => void
   /** an answer is being written: a door that asks waits */
   busy: () => boolean
 }
@@ -267,6 +279,10 @@ function button(text: string, on: () => void, cls = ''): HTMLButtonElement {
 }
 
 let opener: HTMLElement | null = null
+/** Looks again at the 5M door of the welcome on screen (null when none) */
+let syncFive: (() => void) | null = null
+/** 5M came or went (a pack was added or removed): the welcome on screen adds or removes its 5M door. */
+export const refreshWelcome5 = (): void => syncFive?.()
 let quiet: HTMLElement[] = []
 // a door (or Skip) was chosen on the welcome on screen: closing it then records nothing more
 let chosen = true
@@ -283,6 +299,7 @@ export function closeWelcome(): boolean {
   if (!g) return false
   if (!chosen) remember({ door: 'skip' })
   chosen = true
+  syncFive = null
   g.remove()
   for (const q of quiet) q.inert = false
   quiet = []
@@ -299,14 +316,22 @@ async function whenIdle(go: () => void) {
 
 type View = { k: 'home' } | { k: 'book' } | { k: 'q1' } | { k: 'q2'; before: Answer } | { k: 'suggest'; before: Answer; studied: Answer }
 
-/** The welcome over the chat (the first time, and from the menu's "Start over"). Needs setWelcomeHooks first. */
-export function openWelcome(ui: string) {
+/**
+ * The welcome over the chat (the first time, and from the menu's "Start over"). Needs setWelcomeHooks first.
+ * `at`: opened by a guided mode in Browse (modes.ts) on its own screen, the books or the two questions. That is not the welcome
+ * showing: it saves nothing (not that it showed, not a door, not the answers to the two questions, not a skip), so someone who
+ * has not seen the welcome still sees it, and what was chosen on it stays. Back from the first screen closes it.
+ */
+export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}): boolean {
   const h = hooks
-  if (!h || document.querySelector('#lock')) return
-  remember()
+  if (!h || document.querySelector('#lock')) return false
+  const entry = !!opts.at
+  if (!entry) remember()
   closeWelcome()
-  chosen = false
-  opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
+  chosen = entry
+  // (opened from Browse, whose row is out of sight once Browse closes: the focus goes back to the Browse button of the page)
+  const was = document.activeElement
+  opener = was instanceof HTMLElement && was !== document.body && !(entry && document.querySelector('#explore')?.contains(was)) ? was : entry ? (document.querySelector('#browse') as HTMLElement | null) : null
   const s = WT(ui)
   const dir = rtlLang(ui) ? 'rtl' : 'ltr'
   const wrap = el('div')
@@ -323,14 +348,18 @@ export function openWelcome(ui: string) {
   for (const q of quiet) q.inert = true
   document.body.appendChild(wrap)
   document.addEventListener('keydown', onKey)
-  const stack: View[] = [{ k: 'home' }]
+  const stack: View[] = [opts.at === 'book' ? { k: 'book' } : opts.at === 'learn' ? { k: 'q1' } : { k: 'home' }]
   const done = (door: Door | 'skip', patch: Saved = {}) => {
-    remember({ door, ...patch })
+    if (!entry) remember({ door, ...patch })
     chosen = true
     closeWelcome()
   }
   const go = (v: View) => { stack.push(v); draw() }
-  const back = () => { if (stack.length > 1) stack.pop(); draw() }
+  const back = () => {
+    if (stack.length > 1) stack.pop()
+    else if (entry) return void closeWelcome()
+    draw()
+  }
 
   const draw = () => {
     const v = stack[stack.length - 1]!
@@ -359,18 +388,48 @@ export function openWelcome(ui: string) {
       t = title(s.title)
       box.appendChild(el('p', 'wl-sub', s.sub))
       const list = el('div', 'wl-doors')
-      const door = (d: Door, on: () => void) => {
+      const door = (d: Exclude<Door, 'five'>, on: () => void) => {
         const b = button('', on, 'wl-door')
         b.dataset.door = d
-        b.append(el('span', 'wl-door-t', s.doors[d][0]), el('span', 'wl-door-s', s.doors[d][1]))
+        const sub = el('span', 'wl-door-s')
+        sub.appendChild(el('span', 'wl-door-st', s.doors[d][1]))
+        // "Just explore" may name the Bible Stories a moment later: its room is kept (the longer line is the hidden sizer), so nothing jumps
+        if (d === 'explore') sub.dataset.sizer = s.exploreObs
+        b.append(el('span', 'wl-door-t', s.doors[d][0]), sub)
         list.appendChild(b)
+      }
+      // the 5M door: on5m() is known now (the packs were read at the app's start), so its place is decided before the first paint
+      const fiveDoor = () => {
+        const b = button('', () => { done('five'); h.openFive() }, 'wl-door')
+        b.dataset.door = 'five'
+        b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m')), ui)))
+        return b
       }
       door('book', () => go({ k: 'book' }))
       door('learn', () => go({ k: 'q1' }))
       door('look', () => { done('look'); openHowTo(ui) })
+      if (on5m()) list.appendChild(fiveDoor())
       door('explore', () => { done('explore'); h.browse() })
       box.appendChild(list)
       nav(false)
+      // what the phone has decides "Just explore" naming the Bible Stories (read, so a moment after the screen shows)
+      const naming = () => {
+        void (h.packs()[0] ? obsPack(h.packs()[0]!).catch(() => null) : Promise.resolve(null)).then((obs) => {
+          if (!list.isConnected) return
+          const st = list.querySelector('.wl-door[data-door="explore"] .wl-door-st')
+          if (st) st.textContent = obs ? s.exploreObs : s.doors.explore[1]
+        }).catch(() => {})
+      }
+      // 5M came or went while the welcome is open: the door comes or goes (the same place, before "Just explore")
+      const sync = () => {
+        if (!list.isConnected) return
+        const has = list.querySelector('.wl-door[data-door="five"]')
+        if (!on5m()) has?.remove()
+        else if (!has) list.insertBefore(fiveDoor(), list.querySelector('.wl-door[data-door="explore"]'))
+        naming()
+      }
+      syncFive = sync
+      naming()
     } else if (v.k === 'book') {
       t = title(s.whichBook)
       box.appendChild(el('p', 'wl-sub', s.bookNote))
@@ -422,6 +481,7 @@ export function openWelcome(ui: string) {
     t.focus({ preventScroll: true })
   }
   draw()
+  return true
 }
 
 /**
@@ -476,27 +536,20 @@ let pending = false
 /** The other screens the welcome waits for: the PIN, the first questions, About, a report, How to ask, Browse, the Map, Saved, the menu. */
 const BUSY = '#lock, #safety, #about, #report, #howto, #welcome, #explore.open, #gmap.open, #saved.open, #panel.show'
 /**
- * What the welcome offers once a language is on the phone, in the one slot main.ts renderConv has for it (`occasion`: the empty
- * conversation it shows in; `fresh`: nothing asked yet on this phone): the first time, this screen, opened over the empty
- * conversation as soon as nothing else is on screen; after it showed, nothing (it replaced How to ask's invitation, still in the
- * menu); on a phone that had the invitation before this screen existed, the invitation as before.
+ * The welcome, when it is due: once on a phone with a language and no question asked yet (`fresh`), opened over the empty conversation
+ * as soon as nothing else is on screen. Draws nothing and records nothing when it is not due, so drawing empty conversations over
+ * and over never uses it up (howto.ts: only the old invitation's mark keeps it away).
  */
-export function offerFirst(ui: string, occasion: string, fresh: boolean): HTMLElement | null {
-  if (welcomeDue(fresh) && hooks) {
-    if (!pending) {
-      pending = true
-      // (the first screens, the PIN, may be on top: it opens when they are gone, if the conversation is still empty)
-      const tick = (n: number) => {
-        if (!pending) return
-        if (!document.querySelector('#log .welcome')) { pending = false; return }
-        if (document.querySelector(BUSY) || hooks?.busy()) { if (n < 2000) setTimeout(() => tick(n + 1), 300); else pending = false; return }
-        pending = false
-        openWelcome(ui)
-      }
-      setTimeout(() => tick(0), 0)
-    }
-    return null
+export function offerFirst(ui: string, fresh: boolean): void {
+  if (!welcomeDue(fresh) || !hooks || pending) return
+  pending = true
+  // (the first screens, the PIN, may be on top: it opens when they are gone, if the conversation is still empty)
+  const tick = (n: number) => {
+    if (!pending) return
+    if (!document.querySelector('#log .welcome')) { pending = false; return }
+    if (document.querySelector(BUSY) || hooks?.busy()) { if (n < 2000) setTimeout(() => tick(n + 1), 300); else pending = false; return }
+    pending = false
+    openWelcome(ui)
   }
-  if (welcomeShown() || pending) return null
-  return offerAfterFirstUse(ui, occasion)
+  setTimeout(() => tick(0), 0)
 }

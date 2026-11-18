@@ -140,7 +140,9 @@ export function intro(sheet: Sheet, facts: Record<string, any>, ui: string): str
  */
 export type Browse = { book?: string; manual?: string; lang?: string
   /** the list of Open Bible Stories (obs.ts) */
-  obs?: boolean }
+  obs?: boolean
+  /** a guided mode's own view (modes.ts): the stories that have a 5M session */
+  mode?: 'obs5m' }
 /** What "Try again" asks again: the question as the person typed it, or the button's sheet (with its label) */
 export type Again = { q?: string; sheet?: Sheet; label?: string }
 /**
@@ -156,6 +158,10 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   toSession?: boolean
   /** "Next: Movement 1 · observation · frame 6/16", a 5M session's next step (first under a step's card, marked) */
   sessionNext?: boolean
+  /** "How to ask": opens the guide (howto.ts howtoStep) */
+  howto?: true
+  /** a question sent as if typed ("5M OBS 1"): read, kept and counted like the typed words, and "Try again" asks it again as typed */
+  typed?: string
   /** a unit to add to a language on a tap ("Add Open Bible Stories (218 KB)"), then `sheet` is asked again (main.ts) */
   add?: { lang: string; unit: string }
   /** one of the steps that stay in sight when the others go behind "More ▸" (the verse or chapter before and after, the next

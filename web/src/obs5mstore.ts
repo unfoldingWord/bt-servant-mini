@@ -1,4 +1,4 @@
-// Where each 5M session is, kept on the phone so it can be resumed from another conversation (`btsm.5m.v1`, dev switch
+// Where each 5M session is, kept on the phone so it can be resumed from another conversation (`btsm.5m.v1`, 5M from the packs
 // `obs5m`). One entry per story: the conversation it lives in, the session's place (part, step, parts done, languages, start)
 // and the team's checking marks, the time it was last used, and whether the team ended it. Never an answer of the manual,
 // never a note (notes are saved.ts', tied to the step id). Like the conversations it is kept only while menu > Safety keeps

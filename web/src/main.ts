@@ -26,14 +26,18 @@ import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, gue
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
-import { examplesFor, FU, languagePicker, packFor } from './firstuse'
-import { backExplore, closeExplore, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
+import { FU, languagePicker, packFor, emptyLine, quickSpec, quickTap } from './firstuse'
+import { backExplore, closeExplore, modesOn, openExplore, openExploreAt, redrawExplore, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
-import { closeHowto, forgetHowto, howtoLabel, openHowTo, setHowtoHooks } from './howto'
-import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
+import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHooks } from './howto'
+import { helpLines } from './helplines'
+import { closeWelcome, forgetWelcome, offerFirst, openWelcome, refreshWelcome5, setWelcomeHooks, welcomeLabel } from './welcome'
 import type { Fixture } from './dev'
 import { covered5, fixtureNow5, on5m, onFive, refresh5 } from './five'
+import { fiveText, sendTyped } from './modes'
+import { initToBottom } from './tobottom'
+import { waiting } from './waiting'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
@@ -46,15 +50,13 @@ import { eraseSaved, queryOfAnswer, type Query, savedSummary, ST as SVT } from '
 import { backSaved, closeSaved, keepButtons, openSaved, setSavedHooks, yourNotes } from './savedview'
 
 type UiText = {
-  ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string; hello: string; ex: string[]
+  ph: string; send: string; loading: string; ready: string; thinking: string; failed: string; details: string
   chats: string; newChat: string; max: string; del: string; confirmDel: string; untitled: string; appLang: string; packs: string; welcome: string; helps: string; auto: string
 }
 const UI: Record<string, UiText> = {
   en: {
     ph: 'Ask about a verse or a word…', send: 'Send', loading: 'Starting the offline model…', ready: 'Works without internet',
     thinking: 'Looking in the translation helps…', failed: 'Something went wrong:', details: 'details',
-    hello: "Hello! I find what you need in the translation helps on this phone (Bible texts, notes, key terms, questions, Translation Academy), without internet. Ask in your own words, tap Browse, or start typing and pick a suggestion. Ask follow-ups to go on, and go back to any point with the Map. On Android and the web, with online AI (optional) and internet, a larger model also explains what I find.",
-    ex: ['What does Jonah 3:9 say in the UST?', 'What does grace mean?', 'Where was Jonah swallowed by the fish?', 'What do the notes say about Ruth 1:16?'],
     chats: 'Conversations', newChat: 'New conversation', max: 'You can keep up to 3 conversations. Delete one to start another.',
     del: 'Delete', confirmDel: 'Delete this conversation?', untitled: 'New conversation',
     appLang: 'App language', packs: 'Installed language packs', welcome: 'How can I help with your translation?', helps: 'Language of the helps', auto: 'Same as my question',
@@ -62,8 +64,6 @@ const UI: Record<string, UiText> = {
   es: {
     ph: 'Pregunta por un versículo o palabra…', send: 'Enviar', loading: 'Iniciando el modelo sin conexión…',
     ready: 'Funciona sin internet', thinking: 'Buscando en las ayudas de traducción…', failed: 'Algo salió mal:', details: 'detalles',
-    hello: "¡Hola! Encuentro lo que necesitas en las ayudas de traducción de este teléfono (textos bíblicos, notas, palabras clave, preguntas, Translation Academy), sin internet. Pregunta con tus palabras, toca Explorar, o empieza a escribir y elige una sugerencia. Sigue la conversación con más preguntas y vuelve a cualquier punto con el Mapa. En Android y en la web, con la IA en línea (opcional) e internet, un modelo más grande además explica lo que encuentro.",
-    ex: ['¿Qué notas hay para Tito 1:1?', '¿Qué significa gracia?', '¿Dónde fue tragado Jonás por un pez?', '¿Qué dice Jonás 3:9?'],
     chats: 'Conversaciones', newChat: 'Nueva conversación', max: 'Puedes tener hasta 3 conversaciones. Borra una para empezar otra.',
     del: 'Borrar', confirmDel: '¿Borrar esta conversación?', untitled: 'Conversación nueva',
     appLang: 'Idioma de la app', packs: 'Paquetes de idioma instalados', welcome: '¿En qué te ayudo con tu traducción?', helps: 'Idioma de las ayudas', auto: 'El de mi pregunta',
@@ -71,8 +71,6 @@ const UI: Record<string, UiText> = {
   fr: {
     ph: 'Un verset, un mot…', send: 'Envoyer', loading: 'Démarrage du modèle hors ligne…', ready: 'Fonctionne sans internet',
     thinking: 'Je cherche dans les aides à la traduction…', failed: 'Une erreur est survenue :', details: 'détails',
-    hello: "Bonjour ! Je trouve ce dont vous avez besoin dans les aides à la traduction de ce téléphone (textes bibliques, notes, termes clés, questions, Translation Academy), sans internet. Demandez avec vos mots, touchez Parcourir, ou commencez à écrire et choisissez une suggestion. Poursuivez la conversation par d'autres questions et revenez à n'importe quel point avec la Carte. Sur Android et sur le web, avec l'IA en ligne (facultative) et internet, un modèle plus grand explique aussi ce que je trouve.",
-    ex: ['Que dit Jonas 1:3 ?', 'Que signifie le mot grâce ?', 'Où Jonas a-t-il été avalé par le poisson ?'],
     chats: 'Conversations', newChat: 'Nouvelle conversation', max: "Vous pouvez garder 3 conversations. Supprimez-en une pour en commencer une autre.",
     del: 'Supprimer', confirmDel: 'Supprimer cette conversation ?', untitled: 'Nouvelle conversation',
     appLang: "Langue de l'application", packs: 'Paquets de langue installés', welcome: 'Comment puis-je aider votre traduction ?', helps: 'Langue des aides', auto: 'Celle de ma question',
@@ -80,8 +78,6 @@ const UI: Record<string, UiText> = {
   id: {
     ph: 'Tanya tentang ayat atau kata…', send: 'Kirim', loading: 'Memulai model offline…', ready: 'Bisa tanpa internet',
     thinking: 'Mencari di bahan bantu penerjemahan…', failed: 'Terjadi kesalahan:', details: 'detail',
-    hello: "Halo! Saya menemukan yang Anda perlukan di bahan bantu penerjemahan di ponsel ini (teks Alkitab, catatan, istilah kunci, pertanyaan, Translation Academy), tanpa internet. Bertanyalah dengan kata-kata Anda sendiri, ketuk Jelajahi, atau mulai mengetik dan pilih saran. Lanjutkan percakapan dengan pertanyaan berikutnya, dan kembali ke titik mana pun lewat Peta. Di Android dan web, dengan AI daring (pilihan) dan internet, model yang lebih besar juga menjelaskan apa yang saya temukan.",
-    ex: ['Apa kata Yunus 3:9 dalam UST?', 'Apa arti kata kasih karunia?', 'Di mana Yunus ditelan ikan?'],
     chats: 'Percakapan', newChat: 'Percakapan baru', max: 'Anda bisa menyimpan 3 percakapan. Hapus satu untuk memulai yang lain.',
     del: 'Hapus', confirmDel: 'Hapus percakapan ini?', untitled: 'Percakapan baru',
     appLang: 'Bahasa aplikasi', packs: 'Paket bahasa terpasang', welcome: 'Apa yang bisa saya bantu untuk terjemahan Anda?', helps: 'Bahasa bahan bantu', auto: 'Sesuai pertanyaan saya',
@@ -89,8 +85,6 @@ const UI: Record<string, UiText> = {
   hi: {
     ph: 'किसी पद या शब्द के बारे में पूछें…', send: 'भेजें', loading: 'ऑफ़लाइन मॉडल शुरू हो रहा है…', ready: 'बिना इंटरनेट चलता है',
     thinking: 'अनुवाद सहायता में खोज रहा हूँ…', failed: 'कुछ गलत हो गया:', details: 'विवरण',
-    hello: "नमस्ते! मैं इस फ़ोन की अनुवाद सहायताओं (बाइबल पाठ, नोट्स, मुख्य शब्द, प्रश्न, Translation Academy) में आपकी ज़रूरत की जानकारी ढूँढता हूँ, बिना इंटरनेट के। अपने शब्दों में पूछें, «ब्राउज़ करें» पर टैप करें, या लिखना शुरू करें और कोई सुझाव चुनें। आगे के प्रश्नों से बातचीत जारी रखें, और नक्शे से किसी भी पिछले बिंदु पर लौटें। Android और वेब पर, ऑनलाइन AI (वैकल्पिक) और इंटरनेट हो, तो एक बड़ा मॉडल मेरी ढूँढी जानकारी समझाता भी है।",
-    ex: ['योना 3:9 क्या कहता है?', 'अनुग्रह का क्या अर्थ है?', 'योना को मछली ने कहाँ निगल लिया?'],
     chats: 'बातचीत', newChat: 'नई बातचीत', max: 'आप 3 बातचीत रख सकते हैं। नई शुरू करने के लिए एक हटाएँ।',
     del: 'हटाएँ', confirmDel: 'यह बातचीत हटाएँ?', untitled: 'नई बातचीत',
     appLang: 'ऐप की भाषा', packs: 'स्थापित भाषा पैकेज', welcome: 'आपके अनुवाद में मैं कैसे मदद करूँ?', helps: 'सहायता की भाषा', auto: 'मेरे प्रश्न वाली',
@@ -98,8 +92,6 @@ const UI: Record<string, UiText> = {
   ar: {
     ph: 'اسأل عن آية أو كلمة…', send: 'إرسال', loading: 'جارٍ تشغيل النموذج دون اتصال…', ready: 'يعمل دون إنترنت',
     thinking: 'أبحث في مساعدات الترجمة…', failed: 'حدث خطأ:', details: 'التفاصيل',
-    hello: "مرحبًا! أجد ما تحتاج إليه في مساعدات الترجمة على هذا الهاتف (نصوص الكتاب المقدس، الملاحظات، الكلمات الرئيسية، الأسئلة، Translation Academy)، دون إنترنت. اسأل بكلماتك، أو المس «تصفّح»، أو ابدأ الكتابة واختر اقتراحًا. تابع المحادثة بأسئلة أخرى، وعُد إلى أي نقطة سابقة من الخريطة. وعلى أندرويد والويب، مع الذكاء الاصطناعي عبر الإنترنت (اختياري) وتوفر الاتصال، يشرح نموذج أكبر أيضًا ما أجده.",
-    ex: ['ماذا يقول يونان ١:٣؟', 'ما معنى كلمة نعمة؟', 'أين ابتلع الحوت يونان؟', 'ساعدني في ترجمة يونان ١'],
     chats: 'المحادثات', newChat: 'محادثة جديدة', max: 'يمكنك الاحتفاظ بثلاث محادثات. احذف واحدة لتبدأ أخرى.',
     del: 'حذف', confirmDel: 'حذف هذه المحادثة؟', untitled: 'محادثة جديدة',
     appLang: 'لغة التطبيق', packs: 'حزم اللغات المثبتة', welcome: 'كيف أساعدك في ترجمتك؟', helps: 'لغة المساعدات', auto: 'لغة سؤالي',
@@ -207,6 +199,7 @@ const $ = <E extends HTMLElement>(s: string) => document.querySelector(s) as E
 const log = $('#log'), form = $<HTMLFormElement>('#ask'), input = $<HTMLTextAreaElement>('#q'), btn = $<HTMLButtonElement>('#send')
 const status = $('#status'), notice = $<HTMLButtonElement>('#notice'), panel = $('#panel'), menu = $<HTMLButtonElement>('#menu')
 const browse = $<HTMLButtonElement>('#browse')
+const toBottom = initToBottom(log, form) // the arrow back to the latest message (tobottom.ts)
 function applyUi() {
   document.documentElement.lang = nav
   document.documentElement.dir = nav === 'ar' ? 'rtl' : 'ltr'
@@ -215,6 +208,7 @@ function applyUi() {
   menu.setAttribute('aria-label', T.chats)
   browse.setAttribute('aria-label', XT(nav).browseLong)
   browse.title = XT(nav).browse
+  toBottom.setLang(nav)
   applyBrand(nav)
 }
 function setUi(l: string) {
@@ -389,10 +383,10 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
       fold.appendChild(box)
       d.appendChild(fold)
     }
-    d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
+    d.appendChild(m.ai ? aiBlock(m.ai) : waiting(OT().writing, 'p', 'ai'))
   }
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
-  // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
+  // (with the 5M off, a saved step reads as before: its plain text, no way back to a session)
   const s5 = on5m()
   // (a card always draws hidden: what was revealed on it before is forgotten)
   if (m.card && s5 && cv && m.node) forgetCard(cv.id, m.node)
@@ -533,6 +527,13 @@ function followButton(m: Msg, x: Followup): HTMLButtonElement {
         input.value = x.again.q
         form.requestSubmit()
       }
+    } else if (x.howto) {
+      closePanel()
+      openHowTo(m.ui ?? nav)
+    } else if (x.typed) {
+      // sent as if typed (the 5M button under a story)
+      if (busy) return
+      sendTyped(input, form, x.typed)
     } else if (x.add) {
       // a unit added on a tap (Open Bible Stories), then the same question again; a failure says so on the button
       if (busy || b.disabled) return
@@ -686,18 +687,53 @@ function placeModelOffer() {
   const line = modelOffer()
   if (line) log.appendChild(line)
 }
-function fillExamples(ex: HTMLElement) {
-  const lang = examplesLang()
-  if (!lang) return
-  examplesFor(nav, lang).then((list) => {
-    if (!ex.isConnected) return
-    for (const e of list) {
-      const b = el('button', '', bidiLabel(e.label, nav)) as HTMLButtonElement
-      b.type = 'button'
-      b.onclick = () => runSheet(e.label, { ...bare(e.lang), intent: e.intent, ref: e.ref ?? null, what: e.what ?? [], concept: e.concept ?? null }, nav)
-      ex.appendChild(b)
+/**
+ * The empty conversation's quick actions, one row of pills (RTL mirrors by the row's dir): a saved 5M session to continue, Browse,
+ * a guided mode (only when the phone has one), and How to ask. The row is drawn once: the mode's slot is kept while it is read (the
+ * last answer is remembered, so a later screen is exact at once), then shown or taken away in place, so the other pills stay put
+ * and the focus is not lost.
+ */
+let quickModes: boolean | null = null
+let quickKey = '' // what quickModes was read for: the packs and the 5M (a change reads it again)
+function quickRow(): HTMLElement {
+  const row = el('div', 'quick')
+  row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+  const key = `${INSTALLED.join()}|${on5m()}`
+  if (quickKey !== key) { quickKey = key; quickModes = null }
+  const saved = resumeEntries()
+  const note = el('p', 'quick-note')
+  note.setAttribute('role', 'status')
+  const hooks = {
+    explore: () => openExplore('welcome'),
+    modes: () => openExploreAt({ mode: 'list', from: 'welcome' }),
+    howto: () => openHowTo(nav),
+    resume: (i: number) => (busy || locked() ? false : saved[i]?.go() ?? false),
+  }
+  const modeBtn: { b?: HTMLButtonElement } = {}
+  for (const q of quickSpec(nav, { modes: quickModes, resume: saved.map((r) => r.label), explore: XT(nav).browse, howto: howtoLabel(nav) })) {
+    const b = el('button', q.kind === 'resume' ? 'quick-resume' : '', bidiLabel(q.label, nav)) as HTMLButtonElement
+    b.type = 'button'
+    b.dataset.quick = q.kind
+    if (q.hidden) { b.style.visibility = 'hidden'; b.disabled = true; b.setAttribute('aria-hidden', 'true') }
+    if (q.kind === 'mode') modeBtn.b = b
+    b.onclick = () => {
+      note.textContent = ''
+      // the same note Browse gives for a mode or a story asked while an answer is on its way
+      if (!quickTap(q, hooks)) note.textContent = XT(nav).busy
     }
-  }).catch(() => {})
+    row.appendChild(b)
+  }
+  if (quickModes === null) {
+    modesOn(INSTALLED).then((m) => {
+      if (quickKey === key) quickModes = m.length > 0 // (not kept if the packs changed while it was read)
+      const b = modeBtn.b
+      if (!b?.isConnected) return
+      if (m.length) { b.style.visibility = ''; b.disabled = false; b.removeAttribute('aria-hidden') } else b.remove()
+    }).catch(() => modeBtn.b?.remove()) // a failed read: no gap, and it is read again next time
+  }
+  const box = el('div', 'quick-box')
+  box.append(row, note)
+  return box
 }
 function renderConv() {
   log.innerHTML = ''
@@ -711,22 +747,11 @@ function renderConv() {
     // no language yet: the first screen is the choice of one (the rest of the welcome comes with it)
     if (noPacks) w.appendChild(pickerFor([]))
     else {
-      w.appendChild(el('p', '', T.hello))
-      // someone new: the welcome "What would you like to do today?" once (welcome.ts), else How to ask's line (howto.ts), on a
-      // few empty conversations; only once the languages are known
-      const inv = INSTALLED.length ? offerFirst(nav, c.id, !convs.some((x) => x.msgs.length)) : null
-      if (inv) w.appendChild(inv)
-      // a 5M session saved (5M in the pack): [Resume …], the ones used last
-      const r5 = resumeRow()
-      if (r5) w.appendChild(r5)
-      const ex = el('div', 'examples')
-      w.appendChild(ex)
-      fillExamples(ex)
-      // without typing: the Bible book by book, and the Academy manual by manual (explore.ts)
-      const go = el('button', 'browse-go', `${XT(nav).browseLong} ›`) as HTMLButtonElement
-      go.type = 'button'
-      go.onclick = () => openExplore('welcome')
-      w.appendChild(go)
+      w.appendChild(el('p', '', emptyLine(nav)))
+      // someone new: the welcome "What would you like to do today?" once (welcome.ts); only once the languages are known (its
+      // How to ask line is not drawn here: [How to ask] is always among the quick actions)
+      if (INSTALLED.length) offerFirst(nav, !convs.some((x) => x.msgs.length))
+      w.appendChild(quickRow())
     }
     log.appendChild(w)
     placeModelOffer()
@@ -1190,8 +1215,10 @@ async function helpAnswer(q: string, ui: string): Promise<Msg> {
     go(`${B} 1 ${t.terms}`, `${code} 1`, ['terms'])
     go(`${B} 1 ${t.questions}`, `${code} 1`, ['questions'])
   }
-  follow.push(browseStep(ui))
-  return { who: 'bot', intro: t.intro, info: whatYouCanAsk(ui), ui, follow, limits: true, meta: `${T.details}
+  follow.push(browseStep(ui), howtoStep(ui))
+  // what the phone has, named after About's text (helplines.ts)
+  const lines = await helpLines(ui, INSTALLED).catch(() => '')
+  return { who: 'bot', intro: t.intro, info: whatYouCanAsk(ui) + lines, ui, follow, limits: true, meta: `${T.details}
 (help: what you can ask)` }
 }
 
@@ -1206,7 +1233,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   if (!c.title) c.title = label.slice(0, 48)
   log.querySelector('.welcome')?.remove()
   log.appendChild(renderMsg(mine))
-  const wait = el('div', 'msg bot pending', T.thinking)
+  const wait = waiting(T.thinking, 'div', 'msg bot')
   log.appendChild(wait)
   wait.scrollIntoView({ block: 'end', behavior: 'smooth' })
   const t0 = performance.now()
@@ -1351,6 +1378,27 @@ setExploreHooks({
     renderPanel()
   },
   saved: () => { closeExplore(false); openSaved() },
+  // the guided modes (modes.ts): none opens while an answer is on its way or the app is locked; Browse then says so
+  mode: (id) => {
+    if (busy || locked()) return false
+    // (the welcome opens first, and Browse closes once it has: if it does not open, Browse stays exactly as it was)
+    if (!openWelcome(nav, { at: id })) return false
+    closeExplore(false)
+    return true
+  },
+  // a story's session starts as if "5M OBS n" were typed, the way How to ask's [Try it] sends: read by code, kept, counted
+  ask5: (story) => {
+    if (busy || locked()) return false
+    return sendTyped(input, form, fiveText(story))
+  },
+  saved5: () => savedSessions(),
+  resume5: (e) => {
+    if (busy || locked()) return false
+    // (a story no pack covers, or whose tables did not come, is not waited for)
+    if (!on5m() || !covered5().includes(e.story) || failed5.has(e.story)) return 'failed'
+    if (!fixture5(e.story)) return failed5.has(e.story) ? 'failed' : 'loading'
+    return resume5(e) ? true : 'failed'
+  },
 })
 // Saved items and notes (savedview.ts): what opening one asks the chat
 setSavedHooks({
@@ -1369,6 +1417,7 @@ const cmp = mountComposer(form, input, {
   // (a free question is read by the phone's model or online; with neither, the row's grey line says it is searched)
   reader: () => (modelReady() && !modelOff()) || (onlineOn() && onlineAvailable() && isOnline() && (!signInAvailable() || !!onlineSession())),
   resume: (story) => { const e = savedSessions().find((x) => x.story === story); if (e) resume5(e) },
+  stories: (lang, ids, title) => openExploreAt({ obs: true, lang, only: ids, title }),
 })
 
 function runSheet(label: string, sheet: Sheet, ui: string) {
@@ -1378,13 +1427,10 @@ function runSheet(label: string, sheet: Sheet, ui: string) {
 
 // How to ask (howto.ts): its "Try it" sends through the form, as if typed; its example for the composer is typed in the box
 setHowtoHooks({
-  ask: (q) => {
-    const typed = input.value
-    input.value = q
-    form.requestSubmit()
-    input.value = typed // what the person was writing stays in the box (as reaskWaiting)
-  },
+  ask: (q) => !busy && !locked() && sendTyped(input, form, q), // (what the person was writing stays in the box)
   busy: () => busy,
+  locked: () => locked(),
+  conv: () => conv().id,
   type: (text) => {
     input.value = text
     input.focus()
@@ -1395,6 +1441,17 @@ setHowtoHooks({
     panelView = 'online'
     panel.classList.add('show')
     renderPanel()
+  },
+  saved: () => { openSaved() },
+  menu: () => {
+    panelView = 'main'
+    panel.classList.add('show')
+    renderPanel()
+  },
+  askSheet: (label, s) => {
+    if (busy || locked()) return false
+    runSheet(label, { ...bare(s.lang), intent: 'passage', ref: s.ref, what: s.what }, nav)
+    return true
   },
   packs: () => INSTALLED,
   helpsLang: () => helpsLang,
@@ -1420,6 +1477,7 @@ setWelcomeHooks({
     runSheet(label, sheet, nav)
   },
   browse: () => openExplore('welcome'),
+  openFive: () => openExploreAt({ mode: 'obs5m', from: 'welcome' }),
   busy: () => busy,
 })
 
@@ -1453,9 +1511,9 @@ function goTo(id: string, from: 'back' | 'map') {
 }
 
 // ------------------------------------------------------------------------------------------------------------ the 5M session
-// (dev switch `obs5m`; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
+// (5M from the packs; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
 // has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
-// [≡] opens the outline, full screen like the Map (under the PIN lock like it). With the switch off none of this exists.
+// [≡] opens the outline, full screen like the Map (under the PIN lock like it). With no pack that has the 5M tables none of this exists.
 const loading5 = new Set<number>()
 const failed5 = new Set<number>() // covered stories whose tables did not come: not asked again until the packs change
 /** A story's tables (read once from the packs): null until they arrive; then the bar and the cards are drawn again */
@@ -1599,30 +1657,21 @@ function end5() {
   cmp.answered()
 }
 /** The resume buttons of the welcome: the sessions used last (up to 3) */
-function resumeRow(): HTMLElement | null {
-  if (!on5m()) return null
-  const list = savedSessions().filter((e) => covered5().includes(e.story)).slice(0, 3).filter((e) => fixture5(e.story))
-  if (!list.length) return null
-  const row = el('div', 's5-resume')
-  row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
-  for (const e of list) {
-    const b = el('button', 's5-resume-btn', bidiLabel(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fixtureNow5(e.story)!, e.s, nav)), nav)) as HTMLButtonElement
-    b.type = 'button'
-    b.onclick = () => resume5(e)
-    row.appendChild(b)
-  }
-  return row
+function resumeEntries(): { label: string; go: () => boolean }[] {
+  if (!on5m()) return []
+  return savedSessions().filter((e) => covered5().includes(e.story)).slice(0, 3).filter((e) => fixture5(e.story))
+    .map((e) => ({ label: W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fixtureNow5(e.story)!, e.s, nav)), go: () => resume5(e) }))
 }
 /**
  * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this
  * one, where the saved place is put back and its step asked again. Its earlier consultations may be gone; its place is not.
  */
-function resume5(e: Saved5) {
+function resume5(e: Saved5): boolean {
   const fx = fixture5(e.story)
-  if (busy || locked() || !fx) return
+  if (busy || locked() || !fx) return false
   const t = resumeTarget(e.conv, convs.map((c) => ({ id: c.id, empty: !c.msgs.length })), current, MAX)
   if (t.k === 'open' || t.k === 'empty') current = t.id
-  else if (t.k === 'new' && !newConv()) return
+  else if (t.k === 'new' && !newConv()) return false
   const c = conv()
   closePanel()
   // its conversation, still at the session: shown as it was
@@ -1631,12 +1680,13 @@ function resume5(e: Saved5) {
   if (t.k === 'open' && s && s.story === e.s.story) {
     save()
     renderConv()
-    return
+    return true
   }
   resumeIn(c, e.s)
   save()
   renderConv()
   runStep(W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), e.s)
+  return true
 }
 function openOutline() {
   if (locked() || document.querySelector('#lock')) return
@@ -1947,7 +1997,7 @@ try {
 } catch {}
 // 5M: the installed packs asked at the start (and after each change) for the tables; the saved sessions' stories read early so
 // their cards and bar are drawn whole
-const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story); fiveReady() }
+const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story); fiveReady(); redrawExplore(); refreshWelcome5() }
 onFive(looked5)
 void refresh5().then(looked5)
 firstSafety()

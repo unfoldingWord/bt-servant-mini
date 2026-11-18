@@ -236,7 +236,7 @@ export type Input = {
   read?: ReadArticle
   max?: number
   /**
-   * A 5M session (dev switch `obs5m`; main.ts gives these only with it on): the story's tables and the question ids whose answers
+   * A 5M session (5M in the pack; main.ts gives these only with 5M on): the story's tables and the question ids whose answers
    * were revealed on the current card. With `graph.session` the context starts with the step. Never read from a message's card.
    */
   fx?: Fixture; ui?: string; revealed?: Set<string>

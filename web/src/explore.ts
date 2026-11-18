@@ -9,7 +9,12 @@ import { count } from './usage'
 import taSections from './data/ta-sections.json'
 import { addSaved, findSaved, MAX_ITEMS, personal, removeSaved, savedSummary, ST as SVT } from './saved'
 import { bibleLabel, obsLabel, obsPack, OW, type StoryEntry, storyList } from './obs'
-import { rtlLang } from './bidi'
+import { bidiLabel, rtlLang } from './bidi'
+import { type Five, fiveOffered, fiveStories, fiveViewTitle, type ModeId, modeCount, modesFor, modeSub, modeTitle, MT, dataOf, noFive } from './modes'
+import { langName, loadFixture5 } from './pipeline'
+import { type Saved5 } from './obs5mstore'
+import { stepPlace } from './obs5m'
+import { W5 } from './obs5mwords'
 
 // ------------------------------------------------------------------------------------------------------------------ data
 
@@ -131,6 +136,7 @@ export function resetExplore() {
   plans.clear()
   planned.clear()
   stack.length = 0
+  target = false
 }
 
 // ---------------------------------------------------------------------------------------------------------------- strings
@@ -245,6 +251,15 @@ export type ExploreHooks = {
   addLang: () => void
   /** the Saved view (savedview.ts), over Browse */
   saved?: () => void
+  /** a guided mode that is a screen of the welcome (the books, the two questions; welcome.ts `at`); false when it cannot now (an answer is on its way, the app is locked), true once it has closed Browse and opened it */
+  mode: (id: 'book' | 'learn') => boolean
+  /** the 5M session of a story starts as if "5M OBS n" were typed (`fiveText`); false when it cannot now. It does not close Browse */
+  ask5: (story: number) => boolean
+  /** the 5M sessions saved (the ones used last), and [Resume] one (the same as the welcome's); false when it cannot now */
+  saved5: () => Saved5[]
+  /** 'loading': the story's tables are not read yet (Browse says "Opening…" and tries again); false: it cannot now (an answer is on its way, the app is locked) */
+  /** 'failed': it did not start for another reason (no room for a new conversation); nothing is said then */
+  resume5: (e: Saved5) => boolean | 'loading' | 'failed'
 }
 let hooks: ExploreHooks | null = null
 export function setExploreHooks(h: ExploreHooks) {
@@ -256,9 +271,13 @@ type View =
   | { k: 'book'; code: string; lang: string }
   | { k: 'chapter'; code: string; lang: string; ch: number }
   | { k: 'manual'; m: Manual; lang: string }
-  | { k: 'obs'; lang: string }
+  /** `only`: just these stories (the typing row's "All (n)"), under `title` */
+  | { k: 'obs'; lang: string; only?: number[]; title?: string }
+  | { k: 'obs5m' }
+  | { k: 'modes' }
 // kept while the app is open: Browse opens again where the person left it (the next verse is one tap away)
 const stack: View[] = []
+let target = false // the views on the stack were set by openExploreAt for the modes list or the 5M view: closing from them forgets them
 let box: { root: HTMLElement; title: HTMLElement; body: HTMLElement; back: HTMLButtonElement; close: HTMLButtonElement } | null = null
 let reached = false // whether this opening of the app has reached a help through Browse (counted once)
 let opener: HTMLElement | null = null // where the focus goes back to
@@ -282,6 +301,14 @@ function chevron(cls: string, back = false): HTMLElement {
   const s = el('span', cls)
   s.setAttribute('aria-hidden', 'true')
   s.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="${back ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'}"/></svg>`
+  return s
+}
+
+/** The mark before a mode's name, drawn (not "▶": a character does not turn in right-to-left text, the drawing is turned by the CSS). */
+function playMark(): HTMLElement {
+  const s = el('span', 'ex-mode-m')
+  s.setAttribute('aria-hidden', 'true')
+  s.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>'
   return s
 }
 
@@ -320,8 +347,8 @@ function ensure() {
 }
 
 /** Opens Browse (where it was left, else its first view). `from`: the entry point, for the usage counts. */
-export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
-  if (!hooks || document.querySelector('#lock')) return
+export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer'): boolean {
+  if (!hooks || document.querySelector('#lock')) return false
   count('explore.open')
   count(`explore.from.${from}`)
   const b = ensure()
@@ -330,26 +357,53 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer') {
   b.root.classList.add('open')
   b.root.focus({ preventScroll: true })
   draw()
+  return true
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
-export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean }) {
-  if (at.lang && at.obs) {
+export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; only?: number[]; title?: string; mode?: ModeId | 'list'; from?: 'welcome' }) {
+  target = at.mode === 'list' || at.mode === 'obs5m'
+  if (at.mode === 'list') {
+    // the guided modes alone (the empty conversation's [Start a mode]), Browse's home behind it
+    const home = stack.find((x): x is Extract<View, { k: 'home' }> => x.k === 'home')
     stack.length = 0
-    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang })
+    stack.push({ k: 'home', tab: home?.tab ?? 'bible' }, { k: 'modes' })
+  } else if (at.mode === 'obs5m') {
+    // a guided mode's own view, Browse's home behind it (Back goes there)
+    stack.length = 0
+    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs5m' })
+  } else if (at.lang && at.obs) {
+    stack.length = 0
+    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang, ...(at.only?.length ? { only: at.only, title: at.title } : {}) })
   } else if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
     stack.length = 0
     stack.push({ k: 'home', tab: at.book ? 'bible' : 'academy' })
     stack.push(at.book ? { k: 'book', code: at.book, lang: at.lang } : { k: 'manual', m: at.manual as Manual, lang: at.lang })
   }
-  openExplore('answer')
+  // the mode is counted once, when Browse really opened (not under the PIN lock)
+  const opened = openExplore(at.from ?? 'answer')
+  if (opened && at.mode === 'obs5m') count(modeCount('obs5m'))
+  // refused (the PIN lock): a modes or 5M target is not left on the stack for the next plain opening
+  if (!opened && target) {
+    stack.length = 0
+    target = false
+  }
 }
 /** Closes Browse; the focus goes back to what opened it (not under the lock: `refocus` false). */
 export function closeExplore(refocus = true) {
   if (!box?.root.classList.contains('open')) return
+  // opened as a target (the modes list, the 5M view) and closed from it: the next plain opening is Browse's home, not that view
+  const top = stack[stack.length - 1]
+  if (target && (top?.k === 'modes' || top?.k === 'obs5m')) stack.length = 0
+  target = false
   box.root.classList.remove('open')
   const to = opener
   opener = null
   if (refocus && to?.isConnected) to.focus({ preventScroll: true })
+}
+/** 5M came or went: Browse's home, its list of modes and the 5M view on screen are drawn again (the 5M view pops itself when the stories are gone). */
+export function redrawExplore(): void {
+  const v = stack[stack.length - 1]
+  if (exploreOpen() && v && (v.k === 'home' || v.k === 'modes' || v.k === 'obs5m')) void draw()
 }
 export const exploreOpen = () => !!box?.root.classList.contains('open')
 /** Android's back: one step back in Browse, or closes it. False when it is not open. */
@@ -362,23 +416,91 @@ export function backExplore(): boolean {
   return true
 }
 
-function ask(label: string, q: Ask) {
-  if (!hooks?.ask(label, q)) {
-    // an answer is still coming: say so where the person is looking, instead of a tap that does nothing
-    const b = ensure()
-    b.body.querySelector('.ex-busy')?.remove()
-    const note = el('p', 'ex-note ex-busy', XT(hooks?.ui() ?? 'en').busy)
-    note.setAttribute('role', 'status')
-    b.body.prepend(note)
-    b.body.scrollTop = 0
-    return
-  }
+/** An answer is still coming: said where the person is looking, instead of a tap that does nothing. */
+function busyNote() {
+  const b = ensure()
+  b.body.querySelector('.ex-busy')?.remove()
+  const note = el('p', 'ex-note ex-busy', XT(hooks?.ui() ?? 'en').busy)
+  note.setAttribute('role', 'status')
+  b.body.prepend(note)
+  b.body.scrollTop = 0
+}
+/** A help reached through Browse (counted once per opening of the app as a session). */
+function reachedHelp() {
   count('explore.answer')
   if (!reached) {
     reached = true
     count('explore.session')
   }
+}
+function ask(label: string, q: Ask) {
+  if (!hooks?.ask(label, q)) return busyNote()
+  reachedHelp()
   closeExplore()
+}
+/** A guided mode that is a screen of the welcome: the hook closes Browse and opens it; refused, the busy note and nothing else. */
+/** The guided modes as rows (Browse's home, and the modes view); a tap opens the mode. */
+function modeRows(ui: string, modes: ModeId[], five: Five): HTMLElement {
+  const rows = el('div', 'ex-rows ex-modes')
+  rows.dir = rtlLang(ui) ? 'rtl' : 'ltr'
+  for (const id of modes) {
+    const row = button('ex-row', '', () => {
+      if (id !== 'obs5m') return openMode(id)
+      stack.push({ k: 'obs5m' })
+      count(modeCount('obs5m'))
+      draw()
+    })
+    row.dataset.mode = id
+    const t = el('span', 'ex-row-t')
+    t.append(playMark(), document.createTextNode(bidiLabel(modeTitle(ui, id), ui)))
+    row.append(t, el('span', 'ex-row-s', bidiLabel(modeSub(ui, id), ui)), chevron('ex-row-c'))
+    rows.appendChild(row)
+  }
+  return rows
+}
+/** The guided modes this phone can run (modes.ts), read the way Browse's home reads them; [] with no pack. */
+export async function modesOn(packs: string[]): Promise<ModeId[]> {
+  if (!packs.length) return []
+  const [books, manuals, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), fiveStories(packs).catch(noFive)])
+  return modesFor(dataOf(books.length, manuals.length, five))
+}
+
+function openMode(id: 'book' | 'learn') {
+  if (!hooks?.mode(id)) return busyNote()
+  count(modeCount(id))
+  closeExplore(false)
+}
+/** A story's 5M session: asked as if typed. */
+function openFive(story: number) {
+  // (not counted again: the mode was counted when its view opened; and not a help reached, it is a session)
+  if (!hooks?.ask5(story)) return busyNote()
+  closeExplore(false)
+}
+/** [Resume] a saved session; its tables not read yet: "Opening…", then again. */
+let resuming = false
+async function resumeFive(e: Saved5) {
+  if (resuming) return // one try at a time (a second tap while "Opening…")
+  resuming = true
+  try {
+    await resumeFiveNow(e)
+  } finally {
+    resuming = false
+  }
+}
+async function resumeFiveNow(e: Saved5) {
+  let r: boolean | 'loading' | 'failed' | undefined = hooks?.resume5(e)
+  for (let i = 0; r === 'loading' && i < 20; i++) {
+    const b = ensure()
+    if (!b.body.querySelector('.ex-opening')) b.body.prepend(el('p', 'ex-note ex-opening', XT(hooks?.ui() ?? 'en').loading))
+    await loadFixture5(e.story).catch(() => null)
+    await new Promise((res) => setTimeout(res, 50))
+    if (!exploreOpen()) return
+    r = hooks?.resume5(e)
+  }
+  ensure().body.querySelector('.ex-opening')?.remove()
+  // (still 'loading' after the tries counts as failed: no more waiting, nothing said)
+  if (r === true) closeExplore(false)
+  else if (r === false || r === undefined) busyNote()
 }
 
 let drawing = 0
@@ -422,8 +544,14 @@ async function draw() {
       b.body.appendChild(button('ex-pill', s.addLang, () => { closeExplore(); hooks?.addLang() }))
       return
     }
-    const [books, manuals, stories] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null)])
+    const [books, manuals, stories, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null), fiveStories(packs).catch(noFive)])
     if (!done()) return
+    // the guided modes the phone can run, before the tabs so they show with either tab (modes.ts: a mode that lacks what it needs is not there)
+    const modes = modesFor(dataOf(books.length, manuals.length, five))
+    if (modes.length) {
+      b.body.appendChild(el('h4', 'ex-sub', MT(ui).section))
+      b.body.appendChild(modeRows(ui, modes, five))
+    }
     // the two halves as tabs; one alone needs none
     if (books.length && manuals.length) {
       const tabs = el('div', 'ex-tabs')
@@ -476,12 +604,74 @@ async function draw() {
     return
   }
 
+  if (v.k === 'modes') {
+    b.title.textContent = MT(ui).section
+    const [five, modes] = await Promise.all([fiveStories(packs).catch(noFive), modesOn(packs)])
+    if (!done()) return
+    b.body.appendChild(modes.length ? modeRows(ui, modes, five) : el('p', 'ex-note', MT(ui).noModes))
+    return
+  }
+
+  if (v.k === 'obs5m') {
+    b.title.textContent = fiveViewTitle(ui)
+    const t = MT(ui)
+    const w = W5(ui)
+    const dir = rtlLang(ui) ? 'rtl' : 'ltr'
+    const five = await fiveStories(packs).catch(noFive)
+    if (!done()) return
+    // 5M went away with this view still in the stack (the pack was removed): back to what is behind it
+    if (!five.stories.length) {
+      if (stack.length > 1) stack.pop()
+      else stack[0] = { k: 'home', tab: 'bible' }
+      return draw()
+    }
+    b.body.appendChild(el('p', 'ex-note ex-five-intro', t.intro))
+    // [Resume]: the sessions used last (up to 3), as the welcome has them; the same call
+    const rows = el('div', 'ex-rows ex-five')
+    rows.dir = dir
+    const have = new Set(five.stories.map((x) => x.story))
+    const saved = hooks.saved5().filter((x) => have.has(x.story)).slice(0, 3)
+    // (the tables of the saved ones only; the rest of the stories are read when one is opened)
+    const fxs = await Promise.all(saved.map((e) => loadFixture5(e.story).catch(() => null)))
+    if (!done()) return
+    for (const [i, e] of saved.entries()) {
+      const fx = fxs[i]
+      if (!fx) continue
+      const row = button('ex-row', '', () => void resumeFive(e))
+      row.dataset.resume = String(e.story)
+      row.append(el('span', 'ex-row-t', `↻ ${bidiLabel(w.resume.replace('{story}', `OBS ${e.story}`).replace('{place}', stepPlace(fx, e.s, ui)), ui)}`), chevron('ex-row-c'))
+      rows.appendChild(row)
+    }
+    if (rows.childElementCount) b.body.appendChild(rows)
+    b.body.appendChild(el('h4', 'ex-sub', t.stories))
+    const list = el('div', 'ex-rows ex-five')
+    list.dir = dir
+    for (const st of five.stories) {
+      const row = button('ex-row', '', () => openFive(st.story))
+      row.dataset.story = String(st.story)
+      // (in the app's direction; a title in another script is isolated, so "OBS 1:" stays beside it)
+      row.appendChild(el('span', 'ex-row-t', bidiLabel(st.title ? `OBS ${st.story}: ${st.title}` : `OBS ${st.story}`, ui)))
+      // the line under it, when the story's tables were read already: the Bible passage it is told from, and the language of the
+      // session when it is not the app's
+      const lang = st.tfLang && st.tfLang.split('-')[0] !== ui ? fill(w.inLang, { lang: langName(ui, st.tfLang) }) : ''
+      const sub = [(st.reference ?? '').replace(/^[^:]*:\s*/, ''), lang].filter(Boolean).join(' · ')
+      if (sub) row.appendChild(el('span', 'ex-row-s', bidiLabel(sub, ui)))
+      row.appendChild(chevron('ex-row-c'))
+      list.appendChild(row)
+    }
+    b.body.appendChild(list)
+    // what is missing, said in a line: without Bible Stories on the phone, no helps beside the cards
+    if (!five.obs) b.body.appendChild(el('p', 'ex-note', t.noObs))
+    return
+  }
+
   if (v.k === 'obs') {
     // the stories in order: the title in the pack's language (its own direction), the Bible passages it is told from
-    b.title.textContent = OW(ui).browse
+    b.title.textContent = v.only?.length && v.title ? v.title : OW(ui).browse
     let list: StoryEntry[] = []
     try {
       list = await storyList(await openLang(v.lang))
+      if (v.only?.length) list = list.filter((e) => v.only!.includes(e.n))
     } catch { /* drawn as not readable below */ }
     if (!done()) return
     if (!list.length) {

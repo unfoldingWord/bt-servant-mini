@@ -2,37 +2,10 @@
 // question's / app's / phone's language, and the download fetches a few segments at a time without changing what the client sees.
 import { test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
-import { examplesFor, packFor, preferred } from '../src/firstuse'
+import { emptyLine, packFor, preferred, quickSpec, quickTap } from '../src/firstuse'
 import { exportPack, installedLangs, markPartial, missingUnits, openLang, partialLangs, prefetching, updateLang } from '../src/packs'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
-
-for (const pack of ALL_PACKS) {
-  test(`examples from ${pack} name only what it has`, async () => {
-    await installPacks([pack])
-    const r = await openLang(pack)
-    for (const ui of UIS) {
-      const ex = await examplesFor(ui, pack)
-      expect(ex.length).toBeGreaterThanOrEqual(2)
-      for (const e of ex) {
-        expect(e.lang).toBe(pack)
-        if (e.ref) expect(r.installed(`book:${e.ref.split(' ')[0]}`)).toBe(true)
-        if (e.concept) expect((await r.article(e.concept)).data).toBeTruthy()
-      }
-      // a verse, then the notes of one
-      expect(ex[0]!.intent).toBe('passage')
-      expect(ex[1]!.what).toEqual(['notes'])
-    }
-  })
-}
-
-test('Indonesian has no Ruth: its examples do not offer it', async () => {
-  if (!ALL_PACKS.includes('id')) return
-  await installPacks(['id'])
-  const ex = await examplesFor('id', 'id')
-  expect(ex.some((e) => e.ref?.startsWith('rut '))).toBe(false)
-  expect(ex.map((e) => e.label).join(' ')).not.toMatch(/\bRut\b/)
-})
 
 test('the pack of a language code', () => {
   expect(packFor('es')).toBe('es-419')
@@ -155,4 +128,49 @@ test('a .tcpack of a shipped language exports what it has', async () => {
   await installPacks([lang])
   const bytes = await exportPack(lang)
   expect(bytes.length).toBeGreaterThan(100_000)
+})
+
+test('the empty conversation: one short line in every language, no example questions', () => {
+  expect(emptyLine('es')).toBe('Pregunta por un versículo, una palabra o una historia. Funciona sin internet.')
+  expect(emptyLine('ar')).toBe('اسأل عن آية أو كلمة أو قصة. يعمل دون إنترنت.')
+  expect(emptyLine('en')).toBe('Ask about a verse, a word or a story. Works without internet.')
+  for (const ui of UIS) {
+    expect(emptyLine(ui).length, ui).toBeLessThan(90)
+    expect(emptyLine(ui), ui).not.toMatch(/\?|؟/) // a statement, no example question
+  }
+  expect(emptyLine('xx')).toBe(emptyLine('en'))
+})
+
+test('the quick actions: Explore, Start a mode (only with a mode), How to ask; a saved 5M session first', () => {
+  const o = { modes: true, resume: [] as string[], explore: 'Explorar', howto: 'Cómo preguntar' }
+  expect(quickSpec('es', o).map((q) => [q.kind, q.label])).toEqual([['explore', 'Explorar'], ['mode', 'Empezar un modo'], ['howto', 'Cómo preguntar']])
+  expect(quickSpec('es', { ...o, modes: false }).map((q) => q.kind)).toEqual(['explore', 'howto'])
+  expect(quickSpec('es', { ...o, resume: ['Continuar OBS 1', 'Continuar OBS 2'] }).map((q) => q.kind)).toEqual(['resume', 'resume', 'explore', 'mode', 'howto'])
+  expect(quickSpec('ar', { ...o, explore: 'تصفّح', howto: 'كيف تسأل' }).map((q) => q.label)).toEqual(['تصفّح', 'ابدأ مسارًا موجّهًا', 'كيف تسأل'])
+})
+
+test('the quick actions keep their order and their slots: the mode slot is held while it is read, and only filled or taken away', () => {
+  const o = { resume: ['Continuar A'], explore: 'Explorar', howto: 'Cómo preguntar' }
+  const unknown = quickSpec('es', { ...o, modes: null })
+  const yes = quickSpec('es', { ...o, modes: true })
+  // the same pills in the same places while the mode is being read and after it is there: How to ask does not move
+  expect(unknown.map((q) => q.kind)).toEqual(yes.map((q) => q.kind))
+  expect(unknown.find((q) => q.kind === 'mode')!.hidden).toBe(true)
+  expect(yes.find((q) => q.kind === 'mode')!.hidden).toBeUndefined()
+  // no mode: the slot is not there
+  expect(quickSpec('es', { ...o, modes: false }).map((q) => q.kind)).toEqual(['resume', 'explore', 'howto'])
+})
+
+test('a tap on a pill: resume goes by its index (two sessions with the same words are two pills), the others call their way, a refusal is false', () => {
+  const calls: string[] = []
+  const h = {
+    explore: () => calls.push('explore'), modes: () => calls.push('modes'), howto: () => calls.push('howto'),
+    resume: (i: number) => { calls.push(`resume ${i}`); return i !== 1 },
+  }
+  const q = quickSpec('es', { modes: true, resume: ['Continuar OBS 1', 'Continuar OBS 1'], explore: 'E', howto: 'H' })
+  expect(q.filter((x) => x.kind === 'resume').map((x) => x.index)).toEqual([0, 1])
+  expect(quickTap(q[0]!, h)).toBe(true)
+  expect(quickTap(q[1]!, h)).toBe(false) // refused (an answer on its way, or the lock): the page says so
+  for (const x of q.slice(2)) expect(quickTap(x, h)).toBe(true)
+  expect(calls).toEqual(['resume 0', 'resume 1', 'explore', 'modes', 'howto'])
 })

@@ -2,14 +2,15 @@
 // with the packs there are (a book's light path; Translation Academy in the manuals' order, with a verse to try; the chat with How
 // to ask; Browse), no suggested article is missing from the pack, Skip and "Start over" work, it shows once and never next to
 // How to ask's invitation, and a storage that throws is handled. The screen runs on a small stand-in for the page (bun has none).
+import { fiveOn } from './five-on'
 import { test, expect, beforeAll, afterAll } from 'bun:test'
 import { ALL_PACKS, installPacks, OLD_PACKS_DIR, usePacksDir } from './fs-packs'
 import { turn } from './harness'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Answer, LT, learnSeq, learnStep, levelOf, ORDER, resetLearn, START, startOf, TRIPS, tryVerse } from '../src/learn'
-import { bookStart, closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, translatingText, welcomeDue, welcomeSaved, WT } from '../src/welcome'
-import { closeHowto, endInvite, forgetHowto, setHowtoHooks } from '../src/howto'
+import { bookStart, closeWelcome, forgetWelcome, offerFirst, openWelcome, refreshWelcome5, setWelcomeHooks, translatingText, welcomeDue, welcomeSaved, WT } from '../src/welcome'
+import { closeHowto, forgetHowto, setHowtoHooks } from '../src/howto'
 import { manualArticles } from '../src/explore'
 import { openLang, CANON } from '../src/packs'
 import { booksOf } from '../src/suggest'
@@ -53,6 +54,7 @@ class FakeEl {
   set innerHTML(_v: string) { this.replaceChildren() }
   appendChild(c: FakeEl) { c.remove(); c.parentElement = this; this.children.push(c); return c }
   append(...cs: FakeEl[]) { for (const c of cs) this.appendChild(c) }
+  insertBefore(c: FakeEl, ref: FakeEl | null) { c.remove(); c.parentElement = this; const i = ref ? this.children.indexOf(ref) : -1; this.children.splice(i < 0 ? this.children.length : i, 0, c); return c }
   replaceChildren(...cs: FakeEl[]) { for (const c of this.children) c.parentElement = null; this.children = []; this.text = ''; this.append(...cs) }
   remove() { const p = this.parentElement; if (p) { p.children = p.children.filter((x) => x !== this); this.parentElement = null } }
   get isConnected(): boolean { let x: FakeEl | null = this; while (x) { if (x === doc.body) return true; x = x.parentElement } return false }
@@ -113,11 +115,12 @@ const goodStorage = {
 const saved = { localStorage: (globalThis as any).localStorage, document: (globalThis as any).document, HTMLElement: (globalThis as any).HTMLElement }
 let log: FakeEl, lock: FakeEl | null = null
 /** What the hooks were asked to do. */
-const did: { start: [string, (c: ConvState) => Promise<any>][]; learn: [any, string, Sheet][]; browse: number; busy: boolean; asked: string[] } =
-  { start: [], learn: [], browse: 0, busy: false, asked: [] }
+const did: { start: [string, (c: ConvState) => Promise<any>][]; learn: [any, string, Sheet][]; browse: number; five: number; busy: boolean; asked: string[] } =
+  { start: [], learn: [], browse: 0, five: 0, busy: false, asked: [] }
 let packs: string[] = ['en']
 
-beforeAll(() => {
+beforeAll(async () => {
+  await fiveOn(false) // (another file may have left 5M on)
   ;(globalThis as any).localStorage = goodStorage
   ;(globalThis as any).document = doc
   ;(globalThis as any).HTMLElement = FakeEl
@@ -129,6 +132,7 @@ beforeAll(() => {
     start: (label, make) => void did.start.push([label, make]),
     learn: (l, label, sheet) => void did.learn.push([l, label, sheet]),
     browse: () => void did.browse++,
+    openFive: () => void did.five++,
     busy: () => did.busy,
   })
   setHowtoHooks({ ask: (q) => void did.asked.push(q), busy: () => false, type: () => {}, browse: () => {}, onlineSettings: () => {}, packs: () => packs, helpsLang: () => null })
@@ -150,13 +154,11 @@ function freshPhone() {
   forgetWelcome()
   forgetHowto()
   log.replaceChildren(Object.assign(new FakeEl('div'), { className: 'welcome' }))
-  did.start = []; did.learn = []; did.browse = 0; did.busy = false; did.asked = []
+  did.start = []; did.learn = []; did.browse = 0; did.five = 0; did.busy = false; did.asked = []
 }
-/** What main.ts renderConv does in the welcome's slot: the welcome, else How to ask's line (appended to the empty conversation). */
-function slot(ui: string, occasion: string, fresh: boolean) {
-  const line = offerFirst(ui, occasion, fresh)
-  if (line) log.querySelector('div.welcome')!.appendChild(line as unknown as FakeEl)
-  return line
+/** What main.ts renderConv does in the welcome's slot: the welcome, when due (nothing is drawn, nothing recorded otherwise). */
+function slot(ui: string, _occasion: string, fresh: boolean) {
+  return offerFirst(ui, fresh)
 }
 
 // ------------------------------------------------------------------------------------------------------- the screen
@@ -167,7 +169,7 @@ test('the first time a language is on the phone: the welcome, once, as a dialog 
   packs = ['en']
   freshPhone()
   expect(welcomeDue(true)).toBe(true)
-  expect(slot('en', 'c1', true)).toBeNull() // no invitation line next to it
+  slot('en', 'c1', true)
   const box = await until('#welcome .card')
   expect(box.getAttribute('role')).toBe('dialog')
   expect(box.getAttribute('aria-modal')).toBe('true')
@@ -179,42 +181,47 @@ test('the first time a language is on the phone: the welcome, once, as a dialog 
   expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'explore'])
   expect(store.has('btsm.welcome.v1')).toBe(true)
   // drawn again (the same conversation, another one): never a second time, and never How to ask's line instead
-  expect(slot('en', 'c1', true)).toBeNull()
+  slot('en', 'c1', true)
   expect($$('#welcome').length).toBe(1)
   key('Escape')
   expect($('#welcome')).toBeNull()
   expect(log.inert).toBe(false)
   expect(welcomeSaved()?.door).toBe('skip') // closed with no door chosen: skipped
-  expect(slot('en', 'c2', true)).toBeNull()
-  expect(slot('en', 'c3', false)).toBeNull()
+  slot('en', 'c2', true)
+  slot('en', 'c3', false)
   await sleep(50)
   expect($('#welcome')).toBeNull()
-  expect($('.howto-invite')).toBeNull()
   // "Erase everything": a phone handed to someone new shows it again
   forgetWelcome()
   forgetHowto()
   expect(welcomeDue(true)).toBe(true)
 })
 
-test('never two welcomes: a phone that had How to ask’s line keeps it, and a phone already used gets the line', async () => {
+test('a phone that had the old How to ask line, or already asked questions, never gets the welcome', async () => {
   freshPhone()
-  store.set('btsm.howto', '1') // the invitation showed before this version
+  store.set('btsm.howto', '1') // the old invitation showed before this version
   expect(welcomeDue(true)).toBe(false)
-  expect(slot('en', 'c1', true)).not.toBeNull()
+  slot('en', 'c1', true)
   await sleep(30)
   expect($('#welcome')).toBeNull()
-  expect($$('.howto-invite').length).toBe(1)
-  // questions already asked on this phone (an update): the line, not the screen
+  // questions already asked on this phone (an update): not the screen either
   freshPhone()
-  expect(slot('en', 'c1', false)).not.toBeNull()
+  slot('en', 'c1', false)
   await sleep(30)
   expect($('#welcome')).toBeNull()
-  // the line was tapped or dismissed: nothing
+})
+
+test('empty conversations drawn again and again never use up a due welcome', async () => {
+  if (!ALL_PACKS.includes('en')) return
+  await installPacks(['en'])
+  packs = ['en']
   freshPhone()
-  endInvite()
-  expect(slot('en', 'c1', true)).toBeNull()
-  await sleep(30)
-  expect($('#welcome')).toBeNull()
+  // (conversations that are not the first, drawn empty: not due; then the first one: due)
+  for (let i = 0; i < 5; i++) slot('en', 'c' + i, false)
+  expect(store.has('btsm.howto')).toBe(false) // nothing recorded on the old invitation mark
+  expect(welcomeDue(true)).toBe(true)
+  slot('en', 'c9', true)
+  await until('#welcome .card')
 })
 
 test('it waits for the first questions and the PIN, and never covers the lock', async () => {
@@ -293,7 +300,7 @@ test('a storage that throws: never shown (better than every time); one that cann
   ;(globalThis as any).localStorage = { getItem: () => { throw new Error('denied') }, setItem: () => { throw new Error('denied') }, removeItem: () => { throw new Error('denied') } }
   forgetWelcome()
   expect(welcomeDue(true)).toBe(false)
-  expect(slot('en', 'c1', true)).toBeNull()
+  slot('en', 'c1', true)
   await sleep(30)
   expect($('#welcome')).toBeNull()
   expect(welcomeSaved()).toBeNull()
@@ -306,7 +313,7 @@ test('a storage that throws: never shown (better than every time); one that cann
   $('.wl-door[data-door="explore"]')!.click()
   expect(did.browse).toBe(1)
   expect(welcomeDue(true)).toBe(false)
-  expect(slot('en', 'c2', true)).toBeNull()
+  slot('en', 'c2', true)
   await sleep(30)
   expect($('#welcome')).toBeNull()
   ;(globalThis as any).localStorage = goodStorage
@@ -855,4 +862,159 @@ test('a failed read of a book is not kept as "this pack lacks it"', async () => 
   }
   expect(first).toBeNull()
   expect(await helpsPack('rut', 'questions', 'hi', 'hi')).toBe('en')
+})
+
+// ------------------------------------------------------------------------------------------- the 5M door and guided modes
+
+test('the 5M door: only with its dev switch on, before "Just explore"; it closes the welcome and opens the 5M view', async () => {
+  await installPacks(['en'])
+  packs = ['en']
+  freshPhone()
+  await fiveOn(false) // (another file may have left 5M on)
+  openWelcome('en')
+  await sleep(300) // the doors that depend on the phone are read a moment after the screen shows
+  expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'explore'])
+  closeWelcome()
+  await fiveOn()
+  openWelcome('en')
+  await until('.wl-door[data-door="five"]')
+  expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'five', 'explore'])
+  const d = $('.wl-door[data-door="five"]')!
+  expect(d.textContent).toContain(WT('en').five[0])
+  expect(d.textContent).toContain('OBS 5M session')
+  d.click()
+  expect(did.five).toBe(1)
+  expect($('#welcome')).toBeNull()
+  expect(welcomeSaved()?.door).toBe('five')
+  // every app language has it
+  for (const ui of UIS) {
+    expect(WT(ui).five[0].length).toBeGreaterThan(5)
+    expect(WT(ui).five[1]).toContain('{name}')
+    expect(WT(ui).exploreObs.length).toBeGreaterThan(5)
+  }
+  expect(WT('ar').five[0]).toBe('أريد أن أدرس قصة مع فريقي')
+  await fiveOn(false)
+})
+
+test('the 5M door follows the packs while the welcome is open: gone when 5M goes, back when it returns', async () => {
+  await installPacks(['en'])
+  packs = ['en']
+  freshPhone()
+  await fiveOn(false)
+  openWelcome('en')
+  await sleep(300)
+  expect($('.wl-door[data-door="five"]')).toBeNull()
+  closeWelcome()
+  await fiveOn()
+  openWelcome('en')
+  expect($('.wl-door[data-door="five"]')).not.toBeNull() // (decided at the first paint: nothing shifts)
+  await fiveOn(false)
+  refreshWelcome5()
+  expect($('.wl-door[data-door="five"]')).toBeNull()
+  await fiveOn()
+  refreshWelcome5()
+  await until('.wl-door[data-door="five"]')
+  expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'five', 'explore'])
+  await fiveOn(false)
+  refreshWelcome5()
+  await sleep(300)
+  expect($('.wl-door[data-door="five"]')).toBeNull()
+  closeWelcome()
+  refreshWelcome5() // (no welcome: nothing happens)
+})
+
+test('"Just explore" names the Bible Stories when the phone has them, and keeps today’s line when it has none', async () => {
+  const { withObs } = await import('./obs-fixture')
+  await installPacks(['en'])
+  packs = ['en']
+  freshPhone()
+  await withObs('en', 'none')
+  openWelcome('en')
+  await sleep(300)
+  expect($('.wl-door[data-door="explore"]')!.textContent).toContain(WT('en').doors.explore[1])
+  closeWelcome()
+  await withObs('en', 'installed')
+  openWelcome('en')
+  await sleep(300)
+  expect($('.wl-door[data-door="explore"]')!.textContent).toContain(WT('en').exploreObs)
+  closeWelcome()
+  await withObs('en', 'none')
+})
+
+test('opened by a guided mode (at): it saves nothing, not that it showed, not a door, not the answers, not a skip; Back from the first screen closes it', async () => {
+  await installPacks(['en'])
+  packs = ['en']
+  freshPhone()
+  // never shown: still due afterwards
+  openWelcome('en', { at: 'book' })
+  await until('.wl-books')
+  expect($('#welcome-t')!.textContent).toBe(WT('en').whichBook)
+  expect(store.has('btsm.welcome.v1')).toBe(false)
+  expect(welcomeDue(true)).toBe(true)
+  // Back with one step closes it, the conversation as it was
+  const back = $$('.wl-nav button').find((b) => b.textContent === WT('en').back)!
+  back.click()
+  expect($('#welcome')).toBeNull()
+  expect(log.inert).toBe(false)
+  expect(store.has('btsm.welcome.v1')).toBe(false)
+  expect(did.start.length).toBe(0)
+  // Escape: no skip recorded either
+  openWelcome('en', { at: 'learn' })
+  expect($('#welcome-t')!.textContent).toBe(WT('en').q1)
+  key('Escape')
+  expect($('#welcome')).toBeNull()
+  expect(store.has('btsm.welcome.v1')).toBe(false)
+  // a book chosen there still starts its path, with no door saved
+  openWelcome('en', { at: 'book' })
+  const book = await until('.wl-book')
+  book.click()
+  expect($('#welcome')).toBeNull()
+  await sleep(50)
+  expect(did.start.length).toBe(1)
+  expect(store.has('btsm.welcome.v1')).toBe(false)
+})
+
+test('opened by a mode on a phone that already saw the welcome: the saved door and answers stay as they were', async () => {
+  await installPacks(['en'])
+  packs = ['en']
+  freshPhone()
+  openWelcome('en')
+  $('.wl-door[data-door="look"]')!.click()
+  closeHowto()
+  const kept = store.get('btsm.welcome.v1')
+  expect(welcomeSaved()?.door).toBe('look')
+  openWelcome('en', { at: 'learn' })
+  $('.wl-opt[data-a="2"]')!.click() // q1: yes
+  $('.wl-opt[data-a="2"]')!.click() // q2: yes
+  const start = await until('.wl-pick .primary')
+  start.click()
+  await sleep(50)
+  expect(did.learn.length).toBe(1)
+  expect(store.get('btsm.welcome.v1')).toBe(kept)
+})
+
+test('learn entry: Back steps through the two questions and then closes', async () => {
+  freshPhone()
+  openWelcome('en', { at: 'learn' })
+  $('.wl-opt[data-a="0"]')!.click()
+  expect($('#welcome-t')!.textContent).toBe(WT('en').q2)
+  $$('.wl-nav button').find((b) => b.textContent === WT('en').back)!.click()
+  expect($('#welcome-t')!.textContent).toBe(WT('en').q1)
+  $$('.wl-nav button').find((b) => b.textContent === WT('en').back)!.click()
+  expect($('#welcome')).toBeNull()
+})
+
+test('opened from Browse by a mode: when it closes, the focus goes to the page’s Browse button, not the hidden Browse row', async () => {
+  freshPhone()
+  const explore = new FakeEl('div'); explore.id = 'explore'
+  const row = new FakeEl('button'); explore.appendChild(row)
+  const browseBtn = new FakeEl('button'); browseBtn.id = 'browse'
+  doc.body.append(explore, browseBtn)
+  row.focus()
+  expect(openWelcome('en', { at: 'book' })).toBe(true)
+  $$('.wl-nav button').find((b) => b.textContent === WT('en').back)!.click()
+  expect($('#welcome')).toBeNull()
+  expect(doc.activeElement).toBe(browseBtn)
+  explore.remove()
+  browseBtn.remove()
 })
