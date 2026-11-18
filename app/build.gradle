@@ -39,14 +39,15 @@ android {
     buildFeatures { buildConfig true }
     buildTypes {
         debug { minifyEnabled false }
-        // a test build of work behind a dev switch (`gradle assembleFullDevtest`, after `build.py --devapk`): an app of its own
-        // beside the real one (its own id, conversations and packs), named "BT Servant DEV", opening the page with ?dev=obs5m.
-        // Never released: the release recipe builds debug only.
+        // a test build of `develop` (`gradle assembleFullDevtest`, after `build.py --devapk`): an app of its own beside the
+        // real one (its own id, conversations and packs), named "BT Servant DEV". DEV_SWITCH opens the page with ?dev=<it>
+        // for work behind a dev switch; empty today (the 5M now comes from the packs). Never released: the release recipe
+        // builds debug only.
         devtest {
             initWith debug
             applicationIdSuffix '.dev'
             versionNameSuffix '-dev'
-            buildConfigField 'String', 'DEV_SWITCH', '"obs5m"'
+            buildConfigField 'String', 'DEV_SWITCH', '""'
             manifestPlaceholders = [appLabel: 'BT Servant DEV']
         }
     }

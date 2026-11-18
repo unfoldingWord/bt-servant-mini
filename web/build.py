@@ -84,7 +84,7 @@ shutil.copytree(FULL, DESK / 'packs')
 if '--dev' in sys.argv:
     shutil.copytree(ROOT / 'web' / 'src' / 'data' / 'dev', DESK / 'dev')
 # the dev APK (--devapk): the dev fixtures go into app/src/devtest, the assets of the `devtest` build type only (app id
-# ….btservantmini.dev, named "BT Servant DEV", opens the page with ?dev=obs5m); the debug APK never has them
+# ….btservantmini.dev, named "BT Servant DEV", opens the page with ?dev=<DEV_SWITCH> when set); the debug APK never has them
 DEVAPK = ROOT / 'app' / 'src' / 'devtest' / 'assets' / 'www' / 'dev'
 shutil.rmtree(DEVAPK, ignore_errors=True)
 if '--devapk' in sys.argv:
