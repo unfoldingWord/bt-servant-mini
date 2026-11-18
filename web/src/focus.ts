@@ -70,6 +70,15 @@ export const stem = (w: string): string => {
 }
 
 /** The stems of the words a question is about, with how it asks and the passage it names left out. */
+// "The whole chapter": how much to show, not what it is about (Abel, Nov 17: «Capítulo completo (Éxodo 22)» showed the notes
+// about «completo» first). Only a qualifier when the question does not ask about the word itself («¿qué significa completo?»,
+// «la palabra completo en Mateo 5:48», or quoted: then it is the word looked for).
+const WHOLE = new Set(words('whole entire complete full completo completa entero entera complet complète entier entière ' +
+  'seluruh lengkap utuh पूरा पूरी संपूर्ण كامل كاملا كله بأكمله'))
+// what "whole" qualifies (a chapter, a book, a passage, a story): between the cue and the word, it is not the word asked about
+const CHAPTER = new Set(words('chapter book passage verse verses story text capitulo capítulo libro pasaje versiculo versículo historia texto ' +
+  'chapitre livre passage verset histoire texte pasal kitab ayat bagian cerita अध्याय पुस्तक पद कहानी أصحاح الأصحاح اصحاح سفر السفر آية قصة'))
+const ASKS_WORD = new Set(words('word mean means meaning palabra significa significado mot signifie veut dire kata arti maksud शब्द मतलब अर्थ كلمة معنى يعني'))
 export function focusWords(question: string | null | undefined, exact: (string | null | undefined)[] = []): string[] {
   const out: string[] = []
   const add = (w: string) => {
@@ -79,8 +88,13 @@ export function focusWords(question: string | null | undefined, exact: (string |
   // what names the word exactly is never left out as a way of asking: the sheet's term and phrase, and what the question
   // quotes ("What does «see» mean in John 1:39?")
   for (const t of [...exact, ...quoted(question ?? '')]) for (const w of words(t ?? '')) if (!/^\d+$/.test(w) && w.length >= 2) add(w)
-  for (const w of words((question ?? '').replace(PHRASES, ' '))) {
-    if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w)) continue
+  const ws = words((question ?? '').replace(PHRASES, ' '))
+  // asked about only when the cue is next to it, the small words between not counted («significa (el) completo», «veut dire
+  // complet», "the meaning of whole"); a chapter in between, or none: how much to show («significa el capítulo completo»)
+  const near = ws.filter((w) => !STOP.has(w) || ASKS_WORD.has(w) || CHAPTER.has(w) || WHOLE.has(w))
+  const asked = (w: string) => near.some((x, j) => x === w && (ASKS_WORD.has(near[j - 1] ?? '') || ASKS_WORD.has(near[j + 1] ?? '')))
+  for (const w of ws) {
+    if (/\d/.test(w) || STOP.has(w) || BOOKS.has(w) || (WHOLE.has(w) && !asked(w))) continue
     if (w.length < 3) continue
     add(w)
   }

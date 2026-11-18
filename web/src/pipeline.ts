@@ -2532,7 +2532,8 @@ ${x.meta}` },
       // the article the words name exactly, when one does ("Jonah fish": Jonah)
       for (const id of [...(await articlesNamed(res.keywords).catch(() => new Set<string>()))].filter((i) => i.startsWith('tw:')).slice(0, 2)) {
         const f = await twStep(x.sheet, id).catch(() => null)
-        if (f) follow.push(f)
+        // a person the question names ("¿Quiénes fueron los hijos de Isaac?": Isaac's article says who they were), in sight
+        if (f) follow.push(id.startsWith('tw:names/') ? { ...f, key: true } : f)
       }
       if (stories[0]) follow.push({ label: stories[0].label, sheet: passageSheet(x.sheet, stories[0].ref, ['text', 'notes', 'questions', 'terms'], stories[0].lang) })
       // nothing to tap yet (the language asked in is not on the phone): the ways forward

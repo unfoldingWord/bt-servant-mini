@@ -152,6 +152,8 @@ type Msg = Reply & {
   waiting?: boolean
   /** an answer: its point in the conversation's graph (graph.ts); the person's: `mark`, where they went back to a point */
   node?: string; mark?: boolean
+  /** the person's: a button's label (runSheet), not typed: its words do not choose the notes shown first */
+  button?: boolean
   /** an answer: what ☆ Save keeps and where ✎ Note is tied (saved.ts: its passage, article or question) */
   saveQ?: Query
   /** an answer that found nothing for a typed question: the ways of asking code reads (teach.ts), each writing in the box */
@@ -264,6 +266,12 @@ function askedFor(m: Msg): string | undefined {
   const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
   return prev?.who === 'me' && !prev.mark ? prev.text : undefined
 }
+/** The question whose words choose the notes shown first: what the person typed, not a button's label. */
+function typedFor(m: Msg): string | undefined {
+  const cv = convs.find((x) => x.msgs.includes(m))
+  const prev = cv?.msgs[cv.msgs.indexOf(m) - 1]
+  return prev?.who === 'me' && !prev.mark && !prev.button ? prev.text : undefined
+}
 /**
  * The online answer arrived for a message drawn while it was written: its text in place of "Writing…", the cards untouched,
  * and the share button made again, so it sends the online answer (it was made before it existed, or not at all); ☆ Save too,
@@ -335,7 +343,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   let sourceLine = ''
   if (m.intro) host.appendChild(el('p', 'intro', m.intro))
   if (m.study) {
-    const sb = host.appendChild(renderStudy(m.study, asked))
+    const sb = host.appendChild(renderStudy(m.study, typedFor(m)))
     // a long answer in parts (pager.ts): only how it is drawn, the message keeps all of it
     pageAnswer(sb, m.ui ?? nav)
   }
@@ -365,7 +373,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   if (showsCards(m, pending)) {
     const ui = m.ui ?? nav
     const plan = chooseCards({
-      study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: asked,
+      study: m.study, info: m.info, intro: m.intro, ctx: m.ctx, lang: m.lang, helps: m.helps, question: typedFor(m),
       sources: m.ai?.sources?.length ? m.ai.sources : m.sources, cited: m.ai?.sources?.map((s) => s.id),
     })
     // the cards of the text and of the phone's answer would repeat what is open above: the notes and articles only
@@ -1190,7 +1198,9 @@ async function helpAnswer(q: string, ui: string): Promise<Msg> {
 async function respond(c: Conv, label: string, make: () => Promise<Made>, again?: Again, mark = false) {
   busy = true
   btn.disabled = true
-  const mine: Msg = { who: 'me', text: label, ...(mark ? { mark } : {}) }
+  // a button's label is not a question: its words never choose the notes shown first (Abel, Nov 17: "Capítulo completo
+  // (Éxodo 22)" showed the notes about «completo» first)
+  const mine: Msg = { who: 'me', text: label, ...(mark ? { mark } : {}), ...(again?.sheet ? { button: true } : {}) }
   c.msgs.push(mine)
   if (!c.title) c.title = label.slice(0, 48)
   log.querySelector('.welcome')?.remove()
