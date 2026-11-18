@@ -2,7 +2,6 @@
 // (handoff/mini-servant/diseno-menu-recursos.md §2–§3). The downloads live here, outside the screens, in memory only: they
 // survive leaving the screen, and nothing about them is stored (what is on the phone is read from the packs when a screen opens).
 // The words on screen are never "module", "package", "unit" or "catalog": each part is called by its name.
-import { saveToDownloads } from './model'
 import { bidiLabel, rtlLang } from './bidi'
 import { fiveLine, partsOfReader, partsOfUnits, type PartId, type PartLine } from './modules'
 import { covered5, on5m } from './five'
@@ -83,7 +82,10 @@ export function resetDownloads(): void {
 // What the screen reaches (tests put their own here)
 export const deps = {
   installedLangs, origin, openLang, installedUnits, partialLangs, partialMark, offers, offerCandidates, offerOf, downloadLang, addUnits,
-  removeLang, exportPack, importPack, saveToDownloads, imagesInstalled, imagesOffer, downloadImages, exportImages, removeImages, imagesCredit,
+  removeLang, exportPack, importPack,
+  // model.ts sets handlers on `window` when loaded: only the share button needs it
+  saveToDownloads: async (...a: Parameters<typeof import('./model').saveToDownloads>) => (await import('./model')).saveToDownloads(...a),
+  imagesInstalled, imagesOffer, downloadImages, exportImages, removeImages, imagesCredit,
   meteredNow, serverUnitSize, serverSource,
   online: (): boolean => (globalThis as any).navigator?.onLine !== false,
 }
