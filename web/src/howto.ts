@@ -55,7 +55,7 @@ const STR: Record<string, H> = {
     cards: {
       passage: ['A passage', 'Write the book, the chapter and the verse. Add a word like “notes” or “questions” to see only that.'],
       word: ['A word or a topic', 'Ask what a word means, or how to translate something. The answer comes from Translation Words and Translation Academy.'],
-      obs: ['Bible Stories', 'Write OBS and the number of the story, or of the story and the frame. Each frame comes with its picture and its notes. Tap an underlined word to see its note or its key term, and open the Bible passage the story tells.'],
+      obs: ['Bible Stories', 'Write OBS and the number of the story, or of the story and the frame. Each frame comes with its picture and its notes. Tap an underlined word to see its note or its key term, and open the Bible passage the story tells. You can also write "story of" and a name: I suggest the stories.'],
       who: ['Who is who', 'Ask who “he” or “she” is in a verse, or ask for the sentence structure. The answer comes from the original text (Hebrew or Greek) and shows you the words that translate it.'],
       save: ['Save and annotate', 'Tap ☆ to save a verse, an article or an answer, and ✎ to write your note. Everything stays on this phone, in Browse → ☆ {saved}. To send an answer by WhatsApp, use its share button.'],
       follow: ['Follow the conversation', 'After an answer, go on in a few words: I remember the passage. The buttons under every answer take you further, and the {map} or “{back}” takes you back to any earlier point. A long answer comes in parts: move through them with ◀ ▶.'],
@@ -79,7 +79,7 @@ const STR: Record<string, H> = {
     cards: {
       passage: ['Un pasaje', 'Escribe el libro, el capítulo y el versículo. Añade una palabra como «notas» o «preguntas» para ver solo eso.'],
       word: ['Una palabra o un tema', 'Pregunta qué significa una palabra o cómo traducir algo. La respuesta viene de Translation Words y Translation Academy.'],
-      obs: ['Historias de la Biblia', 'Escribe OBS y el número de la historia, o de la historia y el cuadro. Cada cuadro trae su imagen y sus notas. Toca una palabra subrayada para ver su nota o su palabra clave, y abre el pasaje de la Biblia que cuenta la historia.'],
+      obs: ['Historias de la Biblia', 'Escribe OBS y el número de la historia, o de la historia y el cuadro. Cada cuadro trae su imagen y sus notas. Toca una palabra subrayada para ver su nota o su palabra clave, y abre el pasaje de la Biblia que cuenta la historia. También puedes escribir "historia de" y un nombre: te sugiero las historias.'],
       who: ['Quién es quién', 'Pregunta quién es «él» o «ella» en un versículo, o pide la estructura de la oración. La respuesta sale del texto original (hebreo o griego) y te muestra las palabras que lo traducen.'],
       save: ['Guarda y anota', 'Toca ☆ para guardar un versículo, un artículo o una respuesta, y ✎ para escribir tu nota. Todo queda en este teléfono, en Explorar → ☆ {saved}. Para mandar una respuesta por WhatsApp, usa su botón de compartir.'],
       follow: ['Sigue la conversación', 'Después de una respuesta, sigue con pocas palabras: recuerdo el pasaje. Los botones bajo cada respuesta te llevan más lejos, y el {map} o «{back}» te devuelve a cualquier punto anterior. Una respuesta larga viene en partes: pasa con ◀ ▶.'],
@@ -103,7 +103,7 @@ const STR: Record<string, H> = {
     cards: {
       passage: ['Un passage', 'Écrivez le livre, le chapitre et le verset. Ajoutez un mot comme « notes » ou « questions » pour ne voir que cela.'],
       word: ['Un mot ou un sujet', 'Demandez ce que signifie un mot, ou comment traduire quelque chose. La réponse vient de Translation Words et de Translation Academy.'],
-      obs: ['Histoires de la Bible', "Écrivez OBS et le numéro de l'histoire, ou de l'histoire et de l'image. Chaque image vient avec son illustration et ses notes. Touchez un mot souligné pour voir sa note ou son mot clé, et ouvrez le passage de la Bible que raconte l'histoire."],
+      obs: ['Histoires de la Bible', "Écrivez OBS et le numéro de l'histoire, ou de l'histoire et de l'image. Chaque image vient avec son illustration et ses notes. Touchez un mot souligné pour voir sa note ou son mot clé, et ouvrez le passage de la Bible que raconte l'histoire. Vous pouvez aussi écrire « histoire de » et un nom : je vous suggère les histoires."],
       who: ['Qui est qui', 'Demandez qui est « il » ou « elle » dans un verset, ou la structure de la phrase. La réponse vient du texte original (hébreu ou grec) et vous montre les mots qui le traduisent.'],
       save: ['Enregistrer et annoter', 'Touchez ☆ pour enregistrer un verset, un article ou une réponse, et ✎ pour écrire votre note. Tout reste sur ce téléphone, dans Parcourir → ☆ {saved}. Pour envoyer une réponse par WhatsApp, utilisez son bouton de partage.'],
       follow: ['Suivre la conversation', 'Après une réponse, continuez en quelques mots : je me souviens du passage. Les boutons sous chaque réponse vous mènent plus loin, et la {map} ou « {back} » vous ramène à un point précédent. Une longue réponse vient en parties : passez de l’une à l’autre avec ◀ ▶.'],
@@ -127,7 +127,7 @@ const STR: Record<string, H> = {
     cards: {
       passage: ['Sebuah perikop', 'Tulis kitab, pasal, dan ayatnya. Tambahkan kata seperti «catatan» atau «pertanyaan» untuk melihat itu saja.'],
       word: ['Kata atau topik', 'Tanyakan arti sebuah kata, atau cara menerjemahkan sesuatu. Jawabannya dari Translation Words dan Translation Academy.'],
-      obs: ['Kisah-kisah Alkitab', 'Tulis OBS dan nomor kisahnya, atau nomor kisah dan bingkainya. Setiap bingkai disertai gambar dan catatannya. Ketuk kata bergaris bawah untuk melihat catatan atau istilah kuncinya, dan buka perikop Alkitab yang dikisahkan kisah itu.'],
+      obs: ['Kisah-kisah Alkitab', 'Tulis OBS dan nomor kisahnya, atau nomor kisah dan bingkainya. Setiap bingkai disertai gambar dan catatannya. Ketuk kata bergaris bawah untuk melihat catatan atau istilah kuncinya, dan buka perikop Alkitab yang dikisahkan kisah itu. Kamu juga bisa menulis "cerita tentang" dan sebuah nama: aku menyarankan kisah-kisahnya.'],
       who: ['Siapa adalah siapa', 'Tanyakan siapa «dia» dalam sebuah ayat, atau minta struktur kalimatnya. Jawabannya berasal dari teks asli (Ibrani atau Yunani) dan menunjukkan kata-kata yang menerjemahkannya.'],
       save: ['Simpan dan beri catatan', 'Ketuk ☆ untuk menyimpan ayat, artikel, atau jawaban, dan ✎ untuk menulis catatan Anda. Semuanya tetap di ponsel ini, di Jelajahi → ☆ {saved}. Untuk mengirim jawaban lewat WhatsApp, pakai tombol bagikannya.'],
       follow: ['Ikuti percakapan', 'Setelah jawaban, lanjutkan dengan beberapa kata: saya ingat perikopnya. Tombol di bawah setiap jawaban membawa Anda lebih jauh, dan {map} atau «{back}» membawa Anda kembali ke titik mana pun sebelumnya. Jawaban yang panjang datang dalam beberapa bagian: berpindahlah dengan ◀ ▶.'],
@@ -151,7 +151,7 @@ const STR: Record<string, H> = {
     cards: {
       passage: ['कोई अंश', 'पुस्तक, अध्याय और पद लिखें। केवल वही देखने के लिए «नोट्स» या «प्रश्न» जैसा शब्द जोड़ें।'],
       word: ['कोई शब्द या विषय', 'पूछें कि किसी शब्द का क्या अर्थ है, या किसी बात का अनुवाद कैसे करें। उत्तर Translation Words और Translation Academy से आता है।'],
-      obs: ['बाइबल की कहानियाँ', 'OBS और कहानी का नंबर लिखें, या कहानी और फ़्रेम का नंबर। हर फ़्रेम के साथ उसका चित्र और उसके नोट्स आते हैं। रेखांकित शब्द पर टैप करके उसका नोट या मुख्य शब्द देखें, और वह बाइबल अंश खोलें जिसे कहानी सुनाती है।'],
+      obs: ['बाइबल की कहानियाँ', 'OBS और कहानी का नंबर लिखें, या कहानी और फ़्रेम का नंबर। हर फ़्रेम के साथ उसका चित्र और उसके नोट्स आते हैं। रेखांकित शब्द पर टैप करके उसका नोट या मुख्य शब्द देखें, और वह बाइबल अंश खोलें जिसे कहानी सुनाती है। आप "[नाम] की कहानी" भी लिख सकते हैं: मैं कहानियाँ सुझाऊँगा।'],
       who: ['कौन किसको दर्शाता है', 'पूछें कि किसी पद में «वह» कौन है, या वाक्य की संरचना माँगें। उत्तर मूल पाठ (इब्रानी या यूनानी) से आता है और उसका अनुवाद करने वाले शब्द दिखाता है।'],
       save: ['सहेजें और नोट लिखें', 'किसी पद, लेख या उत्तर को सहेजने के लिए ☆ टैप करें, और अपना नोट लिखने के लिए ✎। सब कुछ इसी फ़ोन पर रहता है, «{browse}» → ☆ {saved} में। उत्तर को WhatsApp से भेजने के लिए उसका शेयर बटन इस्तेमाल करें।'],
       follow: ['बातचीत जारी रखें', 'उत्तर के बाद कुछ शब्दों में आगे बढ़ें: मुझे अंश याद रहता है। हर उत्तर के नीचे के बटन आपको आगे ले जाते हैं, और {map} या «{back}» आपको किसी भी पिछले बिंदु पर लौटा देता है। लंबा उत्तर भागों में आता है: ◀ ▶ से आगे-पीछे जाएँ।'],
@@ -175,7 +175,7 @@ const STR: Record<string, H> = {
     cards: {
       passage: ['مقطع', 'اكتب السفر والأصحاح والآية. أضف كلمة مثل «ملاحظات» أو «أسئلة» لترى ذلك وحده.'],
       word: ['كلمة أو موضوع', 'اسأل عن معنى كلمة، أو كيف تترجم شيئًا. تأتي الإجابة من Translation Words وTranslation Academy.'],
-      obs: ['قصص الكتاب المقدس', 'اكتب OBS ورقم القصة، أو رقم القصة والإطار. لكل إطار صورته وملاحظاته. المس كلمة تحتها خط لترى ملاحظتها أو كلمتها الرئيسية، وافتح مقطع الكتاب المقدس الذي ترويه القصة.'],
+      obs: ['قصص الكتاب المقدس', 'اكتب OBS ورقم القصة، أو رقم القصة والإطار. لكل إطار صورته وملاحظاته. المس كلمة تحتها خط لترى ملاحظتها أو كلمتها الرئيسية، وافتح مقطع الكتاب المقدس الذي ترويه القصة. يمكنك أيضًا أن تكتب "قصة" واسمًا: أقترح عليك القصص.'],
       who: ['من هو مَن', 'اسأل من هو «هو» أو «هي» في آية، أو اطلب بنية الجملة. تأتي الإجابة من النص الأصلي (العبري أو اليوناني) وتُظهر لك الكلمات التي تترجمه.'],
       save: ['احفظ ودوّن', 'المس ☆ لتحفظ آية أو مقالة أو إجابة، و✎ لتكتب ملاحظتك. يبقى كل شيء على هذا الهاتف، في تصفّح ← ☆ {saved}. لإرسال إجابة عبر واتساب، استخدم زر المشاركة.'],
       follow: ['تابع المحادثة', 'بعد الإجابة، تابع ببضع كلمات: أتذكّر المقطع. الأزرار تحت كل إجابة تأخذك أبعد، و{map} أو «{back}» تعيدك إلى أي نقطة سابقة. تأتي الإجابة الطويلة على أجزاء: تنقّل بينها بـ ◀ ▶.'],
