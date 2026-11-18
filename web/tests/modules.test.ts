@@ -31,8 +31,7 @@ describe('the table', () => {
 
 for (const lang of ['es-419', 'hi', 'ar']) {
   describe(`${lang} from the packs on disk`, () => {
-    test('downloaded language read through the reader: have with counts, no obs, no plus', async () => {
-      if (!ALL_PACKS.includes(lang)) return
+    test.skipIf(!ALL_PACKS.includes(lang))('downloaded language read through the reader: have with counts, no obs, no plus', async () => {
       await installPacks([lang])
       const units = unitsOnDisk(lang)
       const l = by(partsOfReader(await openLang(lang)))
@@ -45,8 +44,7 @@ for (const lang of ['es-419', 'hi', 'ar']) {
       expect(l.obs.state).toBe('absent')
       expect(Object.values(l).every((x) => x.state !== 'missing')).toBe(true)
     })
-    test('the same language as a list of units (it comes with the app): only have', () => {
-      if (!ALL_PACKS.includes(lang)) return
+    test.skipIf(!ALL_PACKS.includes(lang))('the same language as a list of units (it comes with the app): only have', () => {
       const units = unitsOnDisk(lang)
       const l = partsOfUnits(units)
       expect(l.map((x) => x.id)).toEqual(['bible', 'tw', 'ta', 'orig']) // no obs in these packs; map and topics belong to no part
@@ -97,6 +95,10 @@ describe('an offer', () => {
   test('with Open Bible Stories', () => {
     const l = partsOfUnits(['book:rut', 'book:tit', 'art:tw:kt', 'art:ta:intro', 'art:ta:translate', 'orig:rut', 'obs', 'map', 'xmap'])
     expect(l.map((x) => [x.id, x.n])).toEqual([['bible', 2], ['tw', 1], ['ta', 2], ['orig', 1], ['obs', 1]])
+  })
+  test('unknown books and manuals are in no part', () => {
+    const l = partsOfUnits(['book:rut', 'book:xyz', 'orig:xyz', 'art:ta:foo'])
+    expect(l.map((x) => [x.id, x.n])).toEqual([['bible', 1]])
   })
   test('without them', () => {
     expect(partsOfUnits(['book:rut', 'art:tw:kt']).map((x) => x.id)).toEqual(['bible', 'tw'])

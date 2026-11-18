@@ -1,7 +1,7 @@
 // The parts of a language (Bible, Key Words, Translation Academy, original text, Bible Stories), told from its units.
 // No DOM and no fetch: the screens (resources.ts) and the offers (packs.ts) read what a language has through these functions.
 // The user never sees the word "unit"; the parts are what the screen names.
-import { CANON } from './packs'
+import { CANON } from './canon'
 
 export type PartId = 'bible' | 'tw' | 'ta' | 'orig' | 'obs'
 
@@ -14,6 +14,7 @@ export const PARTS: readonly { id: PartId; units: (u: string) => boolean; addabl
   { id: 'obs', units: (u) => u === 'obs', addable: true },
 ]
 
+/** For `orig`, absent also means "listed, none installed": the screen shows it only when have and never prints "not for this language" for it. */
 /** have: all it lists is installed (n: books, manuals…); missing: the catalog lists units the phone lacks; absent: it lists none. */
 export type PartLine = { id: PartId; state: 'have' | 'missing' | 'absent'; n?: number; missing: string[]; bytes: number }
 type Reader = { listed(u: string): boolean; installed(u: string): boolean; size(u: string): number }
@@ -44,7 +45,9 @@ export function partsOfReader(r: Reader): PartLine[] {
 export function partsOfUnits(units: readonly string[]): PartLine[] {
   const out: PartLine[] = []
   for (const p of PARTS) {
-    const n = units.filter((u) => p.units(u)).length
+    // same count as partsOfReader: only the units it would ask about (book:xyz and art:ta:foo are no part's)
+    const known = new Set(FIXED[p.id]())
+    const n = units.filter((u) => known.has(u)).length
     if (n) out.push({ id: p.id, state: 'have', n, missing: [], bytes: 0 })
   }
   return out

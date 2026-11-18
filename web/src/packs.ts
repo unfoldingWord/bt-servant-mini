@@ -25,7 +25,8 @@ export const PACK_NAMES: Record<string, string> = {
  */
 export const IMAGES_CATALOG = 'zxx-obsimg'
 const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx-')
-export const CANON = 'gen exo lev num deu jos jdg rut 1sa 2sa 1ki 2ki 1ch 2ch ezr neh est job psa pro ecc sng isa jer lam ezk dan hos jol amo oba jon mic nam hab zep hag zec mal mat mrk luk jhn act rom 1co 2co gal eph php col 1th 2th 1ti 2ti tit phm heb jas 1pe 2pe 1jn 2jn 3jn jud rev'.split(' ')
+import { CANON } from './canon'
+export { CANON } from './canon'
 
 // ------------------------------------------------------------------------------------------------------------ servers
 
