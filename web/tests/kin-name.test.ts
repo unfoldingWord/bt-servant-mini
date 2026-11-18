@@ -111,6 +111,10 @@ describe('the reader does not decide a name alone (Abel’s phone, Nov 18)', () 
     const r = await turn({ last: null }, { q: 'abraham', slots: { intent: 'passage', book: 'gen', lang: 'en', what: ['text'] } as never }, 'es')
     expect(r.concept).toBe('tw:names/abraham')
   })
+  test('only a name alone: «qué es mar», «who is dan» are not read as a name by code', async () => {
+    for (const [q, ui] of [['qué es mar', 'es'], ['que es ira', 'es'], ['who is dan', 'en']] as const)
+      expect((await turn({ last: null }, { q, slots: null }, ui)).reply.meta ?? '').not.toMatch(/a name alone/)
+  })
   test('a key term alone is not touched by this (only names of people): «gracia» as the reader reads it', async () => {
     const r = await turn({ last: null }, { q: 'gracia', slots: { intent: 'article', term: 'gracia', lang: 'es' } as never }, 'es')
     expect(r.reply.meta ?? '').not.toMatch(/a name alone/)

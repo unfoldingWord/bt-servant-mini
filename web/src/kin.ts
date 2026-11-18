@@ -9,7 +9,7 @@
 import { BOOKS, type XtopicsCore, type XtopicsPart } from '@bt-synergy/language-pack-v3'
 import type { FamilyData, PackReader, PersonEntry } from '@bt-synergy/language-pack-client'
 import { installedLangs, onPacksChanged, openLang } from './packs'
-import { articleForQuestion, keywords } from './search'
+import { articleForQuestion, asksAbout, keywords } from './search'
 import { bookExact } from './sheet'
 
 export type KinKind = 'children' | 'sons' | 'daughters' | 'father' | 'mother' | 'parents' | 'partners' | 'wife' | 'husband'
@@ -345,7 +345,8 @@ function bareName(q: string, nav: string, capital = true): KinShape | null {
  */
 export async function nameOnly(q: string, nav: string): Promise<{ ids: string[]; lang: KinLang } | null> {
   const s = bareName(q, nav, false)
-  if (!s) return null
+  // (only the name itself: "qué es mar" goes on as before, where articleForQuestion also tries close spellings and name starts)
+  if (!s || asksAbout(q)) return null
   const ids = (await articleForQuestion(q).catch(() => null)) ?? []
   return ids.length && ids.every((id) => id.startsWith('tw:names/')) ? { ids, lang: s.lang } : null
 }
