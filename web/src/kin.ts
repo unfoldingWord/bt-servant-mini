@@ -6,6 +6,11 @@
 //   - kinQuestion: who X is (the people index, homonyms: the passage in the conversation, then the ten-times rule, else a choice).
 //   - the links of a person (its OBS stories) and of a verse or frame (who is in it), for pipeline.ts.
 
+import { BOOKS, type XtopicsCore, type XtopicsPart } from '@bt-synergy/language-pack-v3'
+import type { FamilyData, PackReader, PersonEntry } from '@bt-synergy/language-pack-client'
+import { installedLangs, onPacksChanged, openLang } from './packs'
+import { articleForQuestion } from './search'
+
 export type KinKind = 'children' | 'sons' | 'daughters' | 'father' | 'mother' | 'parents' | 'partners' | 'wife' | 'husband'
   | 'siblings' | 'brothers' | 'sisters' | 'who'
 export type KinLang = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
@@ -176,3 +181,241 @@ export function kinShape(q: string): KinShape | null {
   if (!nameLike(name) || PRONOUNS.has(foldName(name))) return null
   return { kind: 'who', name, alts, lang: wrapped }
 }
+
+// ------------------------------------------------------------------------------------------------------------ who X is
+/** What kin.ts reads of a language (a pack reader; the tests give a hand-made one: setKinReader). */
+export type KinReader = Pick<PackReader, 'family' | 'people' | 'xtopicsParts' | 'mapsOf' | 'installed'>
+let readerOf: (lang: string) => Promise<KinReader> = openLang
+/** Tests: read family data from this reader instead of the packs (no argument: the packs again). */
+export function setKinReader(f?: (lang: string) => Promise<KinReader>) {
+  readerOf = f ?? openLang
+  resetKin()
+}
+
+type PeopleIx = { byName: Map<string, string[]>; byId: Map<string, PersonEntry> }
+const ixs = new Map<string, Promise<PeopleIx | null>>()
+/** The indexes already built, for the synchronous kinKnown. */
+const ready = new Map<string, PeopleIx | null>()
+export function resetKin() {
+  ixs.clear()
+  ready.clear()
+  parted = new WeakMap()
+}
+onPacksChanged(resetKin)
+
+/** Every person of a language by each name it is found by (`reader.people`, folded here: the pack does not fold); null without xtopics. */
+function peopleIx(lang: string): Promise<PeopleIx | null> {
+  let p = ixs.get(lang)
+  if (!p) {
+    const made: Promise<PeopleIx | null> = (async () => {
+      const list = (await (await readerOf(lang)).people()).data
+      if (!list) return null
+      const byName = new Map<string, string[]>()
+      const byId = new Map<string, PersonEntry>()
+      for (const e of list) {
+        byId.set(e.id, e)
+        for (const n of e.names) {
+          const k = foldName(n)
+          if (!k) continue
+          const ids = byName.get(k)
+          if (!ids) byName.set(k, [e.id])
+          else if (!ids.includes(e.id)) ids.push(e.id)
+        }
+      }
+      return { byName, byId }
+    })().catch(() => null)
+    ixs.set(lang, made)
+    void made.then((ix) => { if (ixs.get(lang) === made) ready.set(lang, ix) })
+    p = made
+  }
+  return p
+}
+
+/** The pack of a language code the app uses ("es" → "es-419"). */
+const packOf = (l: string) => (l.startsWith('es') ? 'es-419' : l)
+/** The packs to read a person in, in order: the question's language, the app's, English, the others on the phone. */
+async function packsFor(lang: string, nav: string): Promise<string[]> {
+  const have = await installedLangs().catch(() => [] as string[])
+  return [...new Set([packOf(lang), packOf(nav), 'en', ...have])].filter((l) => have.includes(l))
+}
+const lookup = (ix: PeopleIx, names: string[]): string[] => {
+  for (const k of new Set(names.map(foldName))) {
+    const ids = k ? ix.byName.get(k) : undefined
+    if (ids?.length) return ids
+  }
+  return []
+}
+
+/** How the person was chosen among those of that name: the only one, the one of the passage read, the one far more named, or ask. */
+export type KinPick = 'one' | 'context' | 'dominant' | 'choose'
+/** A family question resolved to people: the kind, the name as written, the reply's language, the pack, the person(s), best first. */
+export type KinAsk = { kind: KinKind; name: string; ui: KinLang; pack: string; ids: string[]; pick: KinPick }
+
+const bookOfVerse = (v: number): string => BOOKS[Math.floor(v / 1_000_000) - 1] ?? ''
+const chapterOfVerse = (v: number): number => Math.floor(v / 1000) % 1000
+
+/**
+ * A family question, resolved (§4.4): null when it has not the shape, or X is no person (the question goes on as today), or it is
+ * "who was X?" and X has a Translation Words article (the article answers, as today; pipeline.ts adds the family under it). `last`:
+ * the passage the conversation is on ("gen 25:26"), for a name several people have.
+ */
+export async function kinQuestion(q: string, nav: string, last: string | null): Promise<KinAsk | null> {
+  const s = kinShape(q)
+  if (!s) return null
+  let pack: string | null = null
+  let ids: string[] = []
+  let kind = s.kind
+  let name = s.name
+  for (const l of await packsFor(s.lang, nav)) {
+    const ix = await peopleIx(l)
+    if (!ix) continue
+    pack ??= l
+    // «أبو شالوم» is a name: then "who is" that person, not the father of «شالوم»
+    if (s.abu) {
+      const whole = lookup(ix, [`أبو ${s.name}`, `ابو ${s.name}`])
+      if (whole.length) {
+        ids = whole
+        kind = 'who'
+        name = `أبو ${s.name}`
+        break
+      }
+    }
+    ids = lookup(ix, [s.name, ...s.alts])
+    if (ids.length) break
+  }
+  if (!pack || !ids.length) return null
+  if (kind === 'who' && (await articleForQuestion(q).catch(() => null))?.length) return null
+  const ix = (await peopleIx(pack))!
+  const count = (id: string) => ix.byId.get(id)?.verses ?? 0
+  const sorted = [...ids].sort((a, b) => count(b) - count(a) || (a < b ? -1 : 1))
+  const out = (pick: KinPick, list: string[]): KinAsk => ({ kind, name, ui: s.lang, pack: pack!, ids: list, pick })
+  if (sorted.length === 1) return out('one', sorted)
+  // the passage read: exactly one of them is in that chapter (§4.4.5), before the ten-times rule
+  const m = /^([0-9a-z]{3}) (\d+)/.exec(last ?? '')
+  if (m && m[1] !== 'obs') {
+    const part = (await partsOf(pack, [m[1]!])).get(m[1]!)
+    if (part) {
+      const here = sorted.filter((id) => (part.occurrences.get(id) ?? []).some((v) => chapterOfVerse(v) === +m[2]!))
+      if (here.length === 1) return out('context', [here[0]!, ...sorted.filter((id) => id !== here[0])])
+    }
+  }
+  const [a, b] = [count(sorted[0]!), count(sorted[1]!)]
+  if (a > 0 && a >= 10 * b) return out('dominant', sorted)
+  return out('choose', sorted)
+}
+
+/** Whether code alone answers a family question now (codeReads: no reader runs): its shape, and X a person in an index already built. */
+export function kinKnown(q: string, nav: string): boolean {
+  const s = kinShape(q)
+  if (!s || s.kind === 'who') return false
+  const order = [packOf(s.lang), packOf(nav), 'en', ...ready.keys()]
+  return order.some((l) => { const ix = ready.get(l); return !!ix && lookup(ix, [s.name, ...s.alts]).length > 0 })
+}
+
+/** Builds the people index of these packs at idle (the app's start, after a change of packs): a family question then skips the readers. */
+export function warmKin(langs: string[]) {
+  const ric = (globalThis as any).requestIdleCallback as ((f: () => void, o?: { timeout: number }) => void) | undefined
+  const run = () => { void (async () => { for (const l of langs) await peopleIx(l) })() }
+  if (ric) ric(run, { timeout: 5000 })
+  else setTimeout(run, 1500)
+}
+
+// ---------------------------------------------------------------------------------------------------- the data of an answer
+/** The family of a person, from this pack (`reader.family`). */
+export async function familyOf(pack: string, id: string) {
+  return (await readerOf(pack)).family(id)
+}
+/** A person of the people index (names, note, how many verses). */
+export async function personOf(pack: string, id: string): Promise<PersonEntry | null> {
+  return (await peopleIx(pack))?.byId.get(id) ?? null
+}
+async function coreOf(pack: string): Promise<XtopicsCore | null> {
+  const m = (await (await readerOf(pack)).mapsOf(['xtopics'], { coreOnly: true })) as { xtopics?: { core: XtopicsCore } }
+  return m.xtopics?.core ?? null
+}
+/** The parts of `xtopics` of these books (only those: `xtopicsParts`); a book whose part is not there is missing from the map. */
+async function partsOf(pack: string, books: string[]): Promise<Map<string, XtopicsPart>> {
+  const r = await readerOf(pack)
+  return (await r.xtopicsParts?.(books).catch(() => undefined)) ?? new Map()
+}
+
+/** The `per:` ids joined to a Translation Words article (`same-as`, read the other way). */
+export async function peopleOfArticle(pack: string, tw: string): Promise<string[]> {
+  const core = await coreOf(pack)
+  return [...new Set((core?.relations ?? []).filter((r) => r.type === 'same-as' && r.from === tw && r.to.startsWith('per:')).map((r) => r.to))]
+}
+
+/** The first verses a person is named in (canonical order), from the parts of the first books it is in; `missing`: a part not there. */
+export async function firstVerses(pack: string, id: string, n = 3): Promise<{ verses: number[]; missing: string[] }> {
+  const core = await coreOf(pack)
+  const books = [...(core?.occurrences.get(id)?.keys() ?? [])].sort((a, b) => BOOKS.indexOf(a) - BOOKS.indexOf(b))
+  const verses: number[] = []
+  const missing: string[] = []
+  for (const b of books) {
+    if (verses.length >= n) break
+    const part = (await partsOf(pack, [b])).get(b)
+    if (!part) {
+      missing.push(b)
+      continue
+    }
+    verses.push(...[...(part.occurrences.get(id) ?? [])].sort((x, y) => x - y).slice(0, n - verses.length))
+  }
+  return { verses, missing }
+}
+
+/** The stories of Open Bible Stories a person is in: an event the person takes part in (`participant`) that a story tells (`occurs-in`). */
+export async function storiesOf(pack: string, id: string): Promise<number[]> {
+  const rel = (await coreOf(pack))?.relations ?? []
+  const events = new Set(rel.filter((r) => r.type === 'participant' && r.to === id).map((r) => r.from))
+  const out = new Set<number>()
+  for (const r of rel) {
+    const m = /^obs:(\d+)$/.exec(r.from)
+    if (r.type === 'occurs-in' && m && events.has(r.to)) out.add(+m[1]!)
+  }
+  return [...out].sort((a, b) => a - b)
+}
+
+// verse → people of a part, built once per part read
+let parted = new WeakMap<XtopicsPart, Map<number, string[]>>()
+function byVerse(part: XtopicsPart): Map<number, string[]> {
+  let m = parted.get(part)
+  if (!m) {
+    m = new Map()
+    for (const [id, list] of part.occurrences) {
+      if (!id.startsWith('per:')) continue
+      for (const v of list) {
+        const at = m.get(v)
+        if (!at) m.set(v, [id])
+        else if (!at.includes(id)) at.push(id)
+      }
+    }
+    parted.set(part, m)
+  }
+  return m
+}
+/**
+ * The people named in a passage: a verse or verses of one chapter ("gen 25:26", "gen 25:24-26"), or a frame of Open Bible Stories
+ * ("obs 3:4": the verses it tells, `obsFrames`). Most named first (in these verses), then by id. [] when a part is not there.
+ */
+export async function peopleAt(pack: string, ref: string): Promise<string[]> {
+  let ranges: [number, number][] = []
+  const o = /^obs (\d+):(\d+)$/.exec(ref)
+  if (o) ranges = (await coreOf(pack))?.obsFrames?.[`${+o[1]!}:${+o[2]!}`] ?? []
+  else {
+    const m = /^([0-9a-z]{3}) (\d+):(\d+)(?:-(\d+))?$/.exec(ref)
+    const at = m ? BOOKS.indexOf(m[1]!) : -1
+    if (!m || at < 0) return []
+    const base = (at + 1) * 1_000_000 + +m[2]! * 1000
+    ranges = [[base + +m[3]!, base + +(m[4] ?? m[3])!]]
+  }
+  const count = new Map<string, number>()
+  const parts = await partsOf(pack, [...new Set(ranges.map(([a]) => bookOfVerse(a)))].filter(Boolean))
+  for (const [a, z] of ranges) {
+    const part = parts.get(bookOfVerse(a))
+    if (!part) continue
+    const ix = byVerse(part)
+    for (let v = a; v <= z; v++) for (const id of ix.get(v) ?? []) count.set(id, (count.get(id) ?? 0) + 1)
+  }
+  return [...count.entries()].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).map(([id]) => id)
+}
+export type { FamilyData }
