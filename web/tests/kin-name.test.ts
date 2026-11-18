@@ -88,7 +88,9 @@ describe('«hijos de X»: the family answer, the article first among its buttons
 
 describe('ordinary words are not taken for a name', () => {
   // (and words that are a minor person's name in some pack: «ira», «sal», «mar», «nun», «hur», written in lower case)
-  for (const [q, ui] of [['gracia', 'es'], ['amor', 'es'], ['Dios', 'es'], ['Jerusalén', 'es'], ['hello', 'en'], ['Rut', 'es'], ['grace', 'en'], ['ira', 'es'], ['sal', 'es'], ['mar', 'es'], ['mesa', 'es'], ['nun', 'en'], ['hur', 'en'], ['bela', 'es']] as const) {
+  for (const [q, ui] of [['gracia', 'es'], ['amor', 'es'], ['Dios', 'es'], ['Jerusalén', 'es'], ['hello', 'en'], ['Rut', 'es'], ['grace', 'en'], ['ira', 'es'], ['sal', 'es'], ['mar', 'es'], ['mesa', 'es'], ['nun', 'en'], ['hur', 'en'], ['bela', 'es'],
+    // (and capitalized, as a phone keyboard writes them: a word with an article is that article, never a person's card)
+    ['Ira', 'es'], ['Sal', 'es'], ['Mar', 'es'], ['Gracia', 'es'], ['Amor', 'es']] as const) {
     test(`${q}`, async () => {
       expect((await ask(q, ui)).route).not.toBe('kin')
     })
@@ -105,6 +107,10 @@ describe('the reader does not decide a name alone (Abel’s phone, Nov 18)', () 
       expect(r.reply.meta).toMatch(/a name alone/)
     })
   }
+  test('«abraham» in lower case: his article too (no capital needed when there is an article)', async () => {
+    const r = await turn({ last: null }, { q: 'abraham', slots: { intent: 'passage', book: 'gen', lang: 'en', what: ['text'] } as never }, 'es')
+    expect(r.concept).toBe('tw:names/abraham')
+  })
   test('a key term alone is not touched by this (only names of people): «gracia» as the reader reads it', async () => {
     const r = await turn({ last: null }, { q: 'gracia', slots: { intent: 'article', term: 'gracia', lang: 'es' } as never }, 'es')
     expect(r.reply.meta ?? '').not.toMatch(/a name alone/)

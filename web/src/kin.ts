@@ -327,23 +327,24 @@ export async function kinQuestion(q: string, nav: string, last: string | null): 
  * with words to look for (not only small words). The language: the script's, else the app's. kinQuestion takes it only when it is a
  * person with no Translation Words article.
  */
-function bareName(q: string, nav: string): KinShape | null {
+function bareName(q: string, nav: string, capital = true): KinShape | null {
   const t = tidy(q)
   if (!t || t.split(/\s+/).length > 4 || !/^[\p{L}\p{M}][\p{L}\p{M}'’\s-]*$/u.test(t) || bookExact(t) || !keywords(t).length) return null
-  // (in Latin script, a name is written with a capital: «Hamul», not «sal» or «mar»; Arabic and Devanagari have no capitals)
-  if (/\p{Script=Latin}/u.test(t) && !/^\p{Lu}/u.test(t)) return null
+  // (for a person with no article, in Latin script, a name is written with a capital: «Hamul», not «sal» or «mar»; Arabic and
+  // Devanagari have no capitals. A name with an article, nameOnly, needs none: «abraham» is his article too)
+  if (capital && /\p{Script=Latin}/u.test(t) && !/^\p{Lu}/u.test(t)) return null
   const lang: KinLang = /[؀-ۿ]/.test(t) ? 'ar' : /[ऀ-ॿ]/.test(t) ? 'hi' : (['en', 'es', 'fr', 'id'].includes(nav.split('-')[0]!) ? nav.split('-')[0] : 'en') as KinLang
   const { name, alts } = cleanName(t, lang)
   return { kind: 'who', name, alts, lang, bare: true }
 }
 
 /**
- * A name alone that is a Translation Words article about a person or several ("Abraham", "Judas"): its `tw:names/` ids, and the
- * language of the reply, whatever a reader made of the question. Only names (`tw:names/`): a key term alone ("gracia") goes on as
- * before. Null when the question is more than a name.
+ * A name alone that is a Translation Words article about a person or a place, or several ("Abraham", "Jerusalén", "Juan"): its
+ * `tw:names/` ids, and the language of the reply, whatever a reader made of the question. Only names (`tw:names/`): a key term alone
+ * ("gracia") goes on as before. Null when the question is more than a name, or a book's name ("Rut" is the book, as before).
  */
 export async function nameOnly(q: string, nav: string): Promise<{ ids: string[]; lang: KinLang } | null> {
-  const s = bareName(q, nav)
+  const s = bareName(q, nav, false)
   if (!s) return null
   const ids = (await articleForQuestion(q).catch(() => null)) ?? []
   return ids.length && ids.every((id) => id.startsWith('tw:names/')) ? { ids, lang: s.lang } : null
