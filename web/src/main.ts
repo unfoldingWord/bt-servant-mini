@@ -1318,11 +1318,10 @@ setExploreHooks({
   // the guided modes (modes.ts): none opens while an answer is on its way or the app is locked; Browse then says so
   mode: (id) => {
     if (busy || locked()) return false
-    // (Browse closes first: the welcome puts the rest of the page out of reach, and Browse is part of it)
+    // (the welcome opens first, and Browse closes once it has: if it does not open, Browse stays exactly as it was)
+    if (!openWelcome(nav, { at: id })) return false
     closeExplore(false)
-    if (openWelcome(nav, { at: id })) return true
-    openExplore('menu') // it did not open: Browse stays as it was
-    return false
+    return true
   },
   // a story's session starts as if "5M OBS n" were typed, the way How to ask's [Try it] sends: read by code, kept, counted
   ask5: (story) => {
@@ -1333,7 +1332,7 @@ setExploreHooks({
   resume5: (e) => {
     if (busy || locked()) return false
     if (!fixture5()) return 'loading'
-    return resume5(e)
+    return resume5(e) ? true : 'failed'
   },
 })
 // Saved items and notes (savedview.ts): what opening one asks the chat

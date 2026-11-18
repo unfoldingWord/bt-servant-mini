@@ -5,7 +5,7 @@
 // switch `obs5m`; when a pack carries the 5M tables only `fiveStories` changes (handoff/obs-5m-packs/plan.md).
 import { devOn } from './dev'
 import { loadFixture5 } from './pipeline'
-import { obsLabel, obsPack, storyList } from './obs'
+import { fiveAsk, obsPack, storyList } from './obs'
 
 export type ModeId = 'book' | 'learn' | 'obs5m'
 /** A story with a 5M session; `title` is in `titleLang`, `tfLang` is the language of the session's tables, `reference` the test file's own line */
@@ -65,7 +65,7 @@ export function sendTyped(input: { value: string }, form: { requestSubmit(): voi
 }
 
 /** The text "5M OBS 1": what a tap on a story sends, as if typed (it is read like the typed words, in every app language). */
-export const fiveText = (story: number): string => `5M ${obsLabel(story)}`
+export const fiveText = fiveAsk
 
 type L = {
   section: string; book: string; learn: string; five: string; fiveTest: string; fiveSub: string

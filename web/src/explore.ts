@@ -257,7 +257,8 @@ export type ExploreHooks = {
   /** the 5M sessions saved (the ones used last), and [Resume] one (the same as the welcome's); false when it cannot now */
   saved5: () => Saved5[]
   /** 'loading': the test file is not read yet (Browse says "Opening…" and tries again); false: it cannot now (an answer is on its way, the app is locked) */
-  resume5: (e: Saved5) => boolean | 'loading'
+  /** 'failed': it did not start for another reason (no room for a new conversation); nothing is said then */
+  resume5: (e: Saved5) => boolean | 'loading' | 'failed'
 }
 let hooks: ExploreHooks | null = null
 export function setExploreHooks(h: ExploreHooks) {
@@ -457,7 +458,17 @@ function openFive(story: number) {
   closeExplore(false)
 }
 /** [Resume] a saved session; the test file not read yet: "Opening…", then again. */
+let resuming = false
 async function resumeFive(e: Saved5) {
+  if (resuming) return // one try at a time (a second tap while "Opening…")
+  resuming = true
+  try {
+    await resumeFiveNow(e)
+  } finally {
+    resuming = false
+  }
+}
+async function resumeFiveNow(e: Saved5) {
   let r = hooks?.resume5(e)
   for (let i = 0; r === 'loading' && i < 20; i++) {
     const b = ensure()
@@ -469,7 +480,7 @@ async function resumeFive(e: Saved5) {
   }
   ensure().body.querySelector('.ex-opening')?.remove()
   if (r === true) closeExplore(false)
-  else busyNote()
+  else if (r !== 'failed' && r !== 'loading') busyNote()
 }
 
 let drawing = 0

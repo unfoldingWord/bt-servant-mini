@@ -3,7 +3,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { withObs } from './obs-fixture'
-import { type ConvState } from '../src/pipeline'
+import { type ConvState, tidy } from '../src/pipeline'
+import { fiveAsk } from '../src/obs'
+import { fiveText } from '../src/modes'
 import { W5 } from '../src/obs5mwords'
 
 const store = new Map<string, string>()
@@ -62,6 +64,20 @@ describe('under an Open Bible Story', () => {
     const r: any = await turn(c, { q: 'OBS 1' }, 'en')
     expect(r.reply.follow.some((f: any) => f.label === W5('en').startStory)).toBe(false)
     off()
+  })
+})
+
+describe('the next steps keep every typed button', () => {
+  test('typed follows are told apart by their text; the same text twice is one; others are not taken for them', async () => {
+    const out = await tidy([
+      { label: 'a', typed: '5M OBS 1' }, { label: 'b', typed: '5M OBS 2' }, { label: 'c', typed: '5M OBS 1' },
+      { label: 'd', again: { q: 'x' } }, { label: 'e', browse: { mode: 'obs5m' } }, { label: 'f', browse: {} },
+    ], 'en')
+    expect(out.map((f) => f.label)).toEqual(['a', 'b', 'd', 'e', 'f'])
+  })
+  test('the button’s text and the tap’s text are spelled in one place', () => {
+    expect(fiveAsk(1)).toBe('5M OBS 1')
+    expect(fiveText(7)).toBe(fiveAsk(7))
   })
 })
 

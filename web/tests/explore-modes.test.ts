@@ -100,6 +100,7 @@ let packs: string[] = ['en']
 let ui = 'en'
 let allow = true
 let loading = 0
+let failing = false
 let did: { mode: string[]; ask5: number[]; resume: number[]; ask: string[] } = { mode: [], ask5: [], resume: [], ask: [] }
 const hooks: ExploreHooks = {
   ui: () => ui, packs: () => packs, packName: (l) => l, addLang: () => {},
@@ -107,7 +108,7 @@ const hooks: ExploreHooks = {
   mode: (id) => { did.mode.push(id); if (allow) closeExplore(false); return allow },
   ask5: (n) => { did.ask5.push(n); return allow },
   saved5: () => savedSessions(),
-  resume5: (e) => { did.resume.push(e.story); return loading > 0 ? (loading--, 'loading') : allow },
+  resume5: (e) => { did.resume.push(e.story); return loading > 0 ? (loading--, 'loading') : failing ? 'failed' : allow },
 }
 const on = () => store.set('btsm.dev.obs5m', '1')
 const off = () => store.delete('btsm.dev.obs5m')
@@ -139,7 +140,7 @@ beforeEach(() => {
   resetFixture5()
   store.clear()
   store.set('btsm.usage', '1')
-  packs = ['en']; ui = 'en'; allow = true; loading = 0
+  packs = ['en']; ui = 'en'; allow = true; loading = 0; failing = false
   did = { mode: [], ask5: [], resume: [], ask: [] }
 })
 const modeIds = () => $$('.ex-modes .ex-row').map((r) => r.dataset.mode)
@@ -235,6 +236,30 @@ describe('review fixes', () => {
     for (let t = 0; t < 2000 && exploreOpen(); t += 20) await sleep(20)
     expect(exploreOpen()).toBe(false)
     expect(did.resume).toEqual([1, 1])
+    forgetSessions()
+  })
+  test('a second tap while "Opening…" does not start a second try; a resume that failed for another reason says nothing', async () => {
+    on()
+    const fx = await loadFixture()
+    forgetSessions()
+    saveSession('c1', sheetOfSession(fx))
+    openExploreAt({ mode: 'obs5m' })
+    await until('.ex-row[data-resume="1"]')
+    loading = 3
+    $('.ex-row[data-resume="1"]')!.click()
+    $('.ex-row[data-resume="1"]')!.click()
+    for (let t = 0; t < 2000 && exploreOpen(); t += 20) await sleep(20)
+    expect(did.resume.length).toBe(4) // the first call and three retries: the second tap added none
+    expect(exploreOpen()).toBe(false)
+    // another reason (no room for a conversation): Browse stays, no "answer on its way"
+    openExploreAt({ mode: 'obs5m' })
+    await until('.ex-row[data-resume="1"]')
+    failing = true
+    $('.ex-row[data-resume="1"]')!.click()
+    await sleep(100)
+    expect(exploreOpen()).toBe(true)
+    expect($('.ex-busy')).toBeNull()
+    expect($('.ex-opening')).toBeNull()
     forgetSessions()
   })
   test('a hook that refuses leaves Browse open (the welcome that did not open, the submit that did nothing)', async () => {

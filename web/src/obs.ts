@@ -140,6 +140,8 @@ export function parseObsRef(ref: string | null | undefined): ObsRef | null {
 export const isObsRef = (ref: string | null | undefined): boolean => /^obs(\s|$)/.test(ref ?? '')
 export const obsRef = (n: number, f?: number | null): string => (f ? `obs ${n}:${f}` : `obs ${n}`)
 /** "OBS 3:5", the same in every language (the product's name, as the app says "Translation Academy"). */
+/** What a tap on a story's 5M sends, as if typed ("5M OBS 1"): the one place it is spelled (modes.ts, pipeline.ts). */
+export const fiveAsk = (n: number): string => `5M ${obsLabel(n)}`
 export const obsLabel = (n: number, f?: number | null): string => (f ? `OBS ${n}:${f}` : `OBS ${n}`)
 /** "3. The Flood" -> "The Flood" (the packs keep the number in the title). */
 export const cleanTitle = (t: string | undefined): string => String(t ?? '').replace(/^\s*\d{1,2}\s*[.:)\-–]\s*/, '').trim()

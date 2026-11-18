@@ -10,7 +10,7 @@ import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang } from './packs'
 import { type ObsStudy, obsStudyOf } from './obswords'
-import { frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
+import { fiveAsk, frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyStep } from './obs'
 import { devOn, type Fixture, loadFixture } from './dev'
 import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
 import { W5 } from './obs5mwords'
@@ -1797,11 +1797,11 @@ async function noIntro(sheet: Sheet, ui: string, before: Sheet | null): Promise<
   return { said, follow }
 }
 /** Each button once (the same sheet or the same Browse), at most MAX_FOLLOW; Browse at a book opens the pack that has it. */
-async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
+export async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
   const seen = new Set<string>()
   const out: Follow[] = []
   for (const f of follow) {
-    const key = (f.add ? `add ${f.add.lang} ${f.add.unit} ` : '') + (f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''} ${f.browse.obs ? 'obs' : ''}` : `again ${f.again?.q ?? f.again?.label ?? ""}`)
+    const key = (f.add ? `add ${f.add.lang} ${f.add.unit} ` : '') + (f.sheet ? `${f.sheet.intent} ${f.sheet.ref ?? ''} ${f.sheet.concept ?? ''} ${f.sheet.what.join(',')}` : f.browse ? `browse ${f.browse.book ?? ''} ${f.browse.manual ?? ''} ${f.browse.obs ? 'obs' : ''}${f.browse.mode ?? ''}` : f.typed ? `typed ${f.typed}` : `again ${f.again?.q ?? f.again?.label ?? ""}`)
     if (seen.has(key)) continue
     seen.add(key)
     if (f.browse?.book) {
@@ -3047,7 +3047,7 @@ async function sessionButton(n: number, ui: string): Promise<Follow | null> {
   const fx = fx5v ?? (await fixture5())
   if (n !== fx.story || !ORDER5.some((x) => stepsOf5(fx, x).length)) return null
   // the question typed: session5Asked builds the session at tap time with its language rule, keeps the state and counts 5m.start
-  return { label: W5(ui).startStory, typed: `5M ${obsLabel(n)}` }
+  return { label: W5(ui).startStory, typed: fiveAsk(n) }
 }
 
 /** "5M OBS 1" (the session's words and a story), or a question about the session's step: its sheet, read by code. */
