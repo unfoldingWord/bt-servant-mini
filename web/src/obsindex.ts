@@ -278,8 +278,9 @@ function find(words: string[], o: FindOpts): { hits: StoryHit[]; lang: string } 
   // a title that names them (the most words first), then a common name, then the frames that link the article; each group in the
   // stories' order (the design's order: OBS 23, 24, 25 for Jesus, not the story whose frames name him most)
   const group = (x: { title: number; named: boolean }) => (x.title ? 0 : x.named ? 1 : 2)
-  // the story the send names (obs.ts namedStory) is always among the offered ones, but not moved up: the order is the design's
-  // (Abel, Nov 17: «historia de Jesús» starts with OBS 23, the birth)
+  // The order: the titles that name the topic, then a common name, then the frame counts, the story's number within each group, so
+  // «historia de Jesús» starts with OBS 23, the birth (decided by the coordinator on Nov 18 and confirmed by Abel that day). The send uses
+  // the same order when several stories may be meant (storychoice.ts); the story it would have answered is always among the offered.
   const sent = o.namesOnly || o.partial ? null : sentStory(ws, ix, named)
   if (sent && !out.some((x) => x.s.n === sent)) out.push({ s: ix.stories.find((x) => x.n === sent)!, title: 0, named: false, frames: 0 })
   out.sort((a, b) => group(a) - group(b) || b.title - a.title || (group(a) === 2 ? b.frames - a.frames : 0) || a.s.n - b.s.n)

@@ -10,7 +10,8 @@ import { learnStep } from './learn'
 import { addNode, backLabel, backTarget, drifts, GD, type GNode, type Graph, lastOfSection, newGraph, nextStep, type NodeSheet, nodeOf, passageAt, type Path, pathStartLine, pathWords, place, type Sec, sessionNode, stepOf, stepTarget } from './graph'
 import { CANON, hasLang, installedLangs, openLang, uiLangs } from './packs'
 import { type ObsStudy, obsStudyOf } from './obswords'
-import { fiveAsk, frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyName, storyStep } from './obs'
+import { fiveAsk, frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyName, storyStep } from './obs'
+import { choiceReply, namedStories } from './storychoice'
 import { findSections, findStories, resetSections, type Section, type SectionHit, sectionRef } from './storyfind'
 import type { Fixture } from './dev'
 import { covered5, fixtureNow5, fixtureOf5, on5m } from './five'
@@ -2195,7 +2196,23 @@ export const ROUTES: Route[] = [
     when: (x) => x.q !== undefined && !x.at && !x.keep?.hits.length && x.sheet.intent !== 'obs5m',
     run: async (x) => {
       const q = x.q!
-      const o = obsAsked(q) ?? (x.sheet.ref && !isObsRef(x.sheet.ref) ? null : await namedStory(q, x.sheet.lang).catch(() => null))
+      let o = obsAsked(q)
+      if (!o && !(x.sheet.ref && !isObsRef(x.sheet.ref))) {
+        const named = await namedStories(q, x.sheet.lang).catch(() => null)
+        // one story is clearly it: that story. More than one may be: they are offered, in the typing row's order (storychoice.ts)
+        if (named && 'many' in named) {
+          const { intro, follow } = choiceReply(named, x.ui)
+          x.searched += `
+obs: ${named.many.map((e) => e.n).join(', ')}`
+          return {
+            answered: 'choose', ref: null, concept: null, found: named.many.length,
+            reply: { ui: x.ui, intro, follow, meta: `${env.details} · ${secs(x)} s
+${x.meta}
+stories: ${named.many.map((e) => e.n).join(', ')}` },
+          }
+        }
+        o = named?.one ?? null
+      }
       if (!o) return null
       x.sheet = { ...x.sheet, intent: 'passage', ref: o.ref, what: o.what, concept: null, term: null, phrase: null, candidates: null, version: null }
       x.note = undefined
