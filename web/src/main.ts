@@ -35,6 +35,7 @@ import { helpLines } from './helplines'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
 import { devOn, type Fixture, initDev } from './dev'
 import { fiveText, sendTyped } from './modes'
+import { waiting } from './waiting'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
 import { W5 } from './obs5mwords'
@@ -378,7 +379,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
       fold.appendChild(box)
       d.appendChild(fold)
     }
-    d.appendChild(m.ai ? aiBlock(m.ai) : el('p', 'ai pending', OT().writing))
+    d.appendChild(m.ai ? aiBlock(m.ai) : waiting(OT().writing, 'p', 'ai'))
   }
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
   // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
@@ -1228,7 +1229,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   if (!c.title) c.title = label.slice(0, 48)
   log.querySelector('.welcome')?.remove()
   log.appendChild(renderMsg(mine))
-  const wait = el('div', 'msg bot pending', T.thinking)
+  const wait = waiting(T.thinking, 'div', 'msg bot')
   log.appendChild(wait)
   wait.scrollIntoView({ block: 'end', behavior: 'smooth' })
   const t0 = performance.now()
