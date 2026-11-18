@@ -71,8 +71,8 @@ test('a download that did not end is marked per language, and the mark goes when
   try {
     mem.set('btsm.ui', 'es') // other keys are not languages
     expect(partialLangs()).toEqual([])
-    markPartial('es-419', true)
-    markPartial('hi', true)
+    markPartial('es-419', true, 100)
+    markPartial('hi', true, 100)
     expect(partialLangs().sort()).toEqual(['es-419', 'hi'])
     markPartial('es-419', false)
     expect(partialLangs()).toEqual(['hi'])
@@ -85,7 +85,7 @@ test('a download that did not end is marked per language, and the mark goes when
   // no storage at all (a private window, a WebView without it): nothing is marked, nothing breaks
   ;(globalThis as any).localStorage = undefined
   try {
-    markPartial('id', true)
+    markPartial('id', true, 100)
     expect(partialLangs()).toEqual([])
   } finally {
     ;(globalThis as any).localStorage = before

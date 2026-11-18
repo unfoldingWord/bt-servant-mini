@@ -328,25 +328,32 @@ export function partialLangs(): string[] {
   } catch {}
   return out
 }
-/** What a cut download asked for: everything its offer brings (`all`), its books, and its total bytes (`b`, for "n / b MB" with no internet). */
-export type PartialMark = { all: boolean; books: string[]; b: number }
+/** What a cut download leaves in its mark: the bytes of the whole download (`b`), to show "a / b MB" with no internet. A language always downloads whole. */
+export type PartialMark = { b: number }
 /** The mark of a language whose download did not end; null when there is none, or it is the old '1' (no data in it). */
 export function partialMark(lang: string): PartialMark | null {
   try {
     const raw = kv()?.getItem(PARTIAL + lang)
-    if (!raw || raw === '1') return null // the first versions wrote '1': the language is still partial, but nothing is known of it
-    const j = JSON.parse(raw)
-    if (!j || typeof j !== 'object') return null
-    return { all: j.all === true, books: Array.isArray(j.books) ? j.books.filter((b: unknown): b is string => typeof b === 'string') : [], b: Number(j.b) > 0 ? Number(j.b) : 0 }
+    if (!raw || raw === '1') return null // the first versions wrote '1': the language is still partial (partialLangs), nothing more is known
+    const b = Number(JSON.parse(raw)?.b)
+    return b > 0 ? { b } : null
   } catch {
     return null
   }
 }
-export function markPartial(lang: string, on: boolean, what?: PartialMark) {
+/** Marks the start of a download (with its total bytes) or its end; whether the write worked (no storage, or it is full: false). */
+export function markPartial(lang: string, on: true, b: number): boolean
+export function markPartial(lang: string, on: false): boolean
+export function markPartial(lang: string, on: boolean, b?: number): boolean {
   try {
-    if (on) kv()?.setItem(PARTIAL + lang, what ? JSON.stringify(what) : '1')
-    else kv()?.removeItem(PARTIAL + lang)
-  } catch {}
+    const s = kv()
+    if (!s) return false
+    if (on) s.setItem(PARTIAL + lang, JSON.stringify({ b }))
+    else s.removeItem(PARTIAL + lang)
+    return true
+  } catch {
+    return false
+  }
 }
 
 // ------------------------------------------------------------------------------------------------------------ reading
@@ -404,14 +411,10 @@ export type Offer = {
   partial?: boolean
   /** whether Open Bible Stories come with it (the catalog lists them, of any size) */
   obs?: boolean
-  /** every unit the plan installs (books, maps, articles, obs), without the language prefix: what `all` installs */
+  /** every unit the plan installs (books, maps, articles, obs), without the language prefix: what `downloadLang` installs */
   units: string[]
   /** the parts it brings, for the screen (modules.ts) */
   parts: PartLine[]
-  /** `downloadLang` installs all of `units` (no OBS_MAX): a download of the language brings its Stories too (Abel, Nov 18) */
-  all: true
-  /** the Stories' own bytes, to take them out of a download that asks for `all: false` */
-  obsBytes?: number
 }
 /** A signal that aborts after `ms` (AbortSignal.timeout where the WebView has it). */
 function timeout(ms: number): AbortSignal {
@@ -508,8 +511,7 @@ export async function offerOf(lang: string, source: PackSource = serverSource())
     const sizes: Record<string, number> = {}
     for (const st of plan.steps) for (const x of st.segments) sizes[x.id] = x.size
     return {
-      lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, obs, units, parts: partsOfUnits(units), all: true,
-      ...(obsStep ? { obsBytes: obsStep.segments.reduce((n, x) => n + x.size, 0) } : {}),
+      lang, books, bytes: plan.bytes, segments: Object.keys(sizes), sizes, obs, units, parts: partsOfUnits(units),
       ...(partialLangs().includes(lang) ? { partial: true } : {}),
     }
   } catch {
@@ -572,13 +574,13 @@ export function prefetching(source: PackSource, order: string[], ahead = 6): Pac
 export type Progress = { done: number; total: number; bytes: number; totalBytes: number }
 /**
  * Downloads every book the server lists for `lang`, with the shared articles, into the phone. `offer` (from `offers`) saves
- * reading the catalog again; `signal` cancels (what is complete stays, and a retry goes on from there). It installs everything the
- * offer brings, the Stories too; `all: false` leaves them out (the size shown then is the offer's less the Stories').
+ * reading the catalog again; `signal` cancels (what is complete stays, and a retry goes on from there). A language always
+ * downloads whole: everything the offer brings, the Stories too (`offer.units`).
  */
 export async function downloadLang(
   lang: string,
   onProgress?: (p: Progress) => void,
-  o: { offer?: Offer | null; signal?: AbortSignal; ahead?: number; all?: boolean } = {},
+  o: { offer?: Offer | null; signal?: AbortSignal; ahead?: number } = {},
 ): Promise<{ books: number; bytes: number }> {
   const http = addedSource()
   const offer = o.offer ?? (await offerOf(lang, http))
@@ -592,18 +594,15 @@ export async function downloadLang(
   const client = createClient({ store, source: prefetching(http, order, o.ahead ?? 6), trust })
   // a language already whole that gets an update stays usable meanwhile; a new one is marked until its download ends well
   const fresh = !(await addedLangs()).includes(lang)
-  const all = o.all !== false
-  const units = all ? offer.units : offer.units.filter((u) => u !== OBS_UNIT)
-  const totalBytes = all ? offer.bytes : offer.bytes - (offer.obsBytes ?? 0)
-  // what was asked for stays in the mark, so "Continue" asks for the same and the size shows with no internet
-  if (fresh) markPartial(lang, true, { all, books: offer.books, b: totalBytes })
+  // the size stays in the mark, so "n / b MB" shows with no internet; a mark that cannot be written does not stop the download
+  if (fresh && !markPartial(lang, true, offer.bytes)) console.warn(`the download mark of ${lang} could not be written`)
   try {
     // one request at a time from the client (it asks 4 at once by default): the prefetch above already keeps `ahead` in flight,
     // and more at once can trip the fallback's timeouts on a slow link
-    const report = await serial(() => client.install(lang, { defaults: false, units }, {
+    const report = await serial(() => client.install(lang, { defaults: false, units: offer.units }, {
       concurrency: 1,
       ...(o.signal ? { signal: o.signal } : {}),
-      onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes }),
+      onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
     }))
     markPartial(lang, false)
     return { books: offer.books.length, bytes: report.bytes ?? 0 }
@@ -832,7 +831,8 @@ export async function exportPack(lang: string): Promise<Uint8Array> {
 
 /**
  * The units a language has on the phone, from its state.json (`{lang}/{unit}` keys of `units`), for one that came with the app
- * (the assets' state) or one downloaded. Empty when it has none or cannot be read.
+ * (the assets' state) or one downloaded. Only the language's own units, not the shared `common/*` ones. Empty when it has none or
+ * cannot be read.
  */
 export async function installedUnits(lang: string): Promise<string[]> {
   try {
@@ -858,7 +858,9 @@ export async function addUnits(
   try {
     await serial(async () => {
       const client = await addedClient()
+      o.signal?.throwIfAborted()
       await client.refresh(lang, o.signal ? { signal: o.signal } : {})
+      o.signal?.throwIfAborted()
       // what is left to fetch, for the progress (the client's own progress has no byte total); 0 when it cannot be planned
       let totalBytes = 0
       if (o.onProgress) {
@@ -870,6 +872,7 @@ export async function addUnits(
             totalBytes = plan.steps.flatMap((st) => st.segments).filter((x) => !have.has(x.id)).reduce((n, x) => n + x.size, 0)
           }
         } catch { /* no total: the screen shows what arrived */ }
+        o.signal?.throwIfAborted() // a cancel during the planning stops before the install
       }
       await client.install(lang, { units: [...units], defaults: false }, {
         concurrency: 1,
