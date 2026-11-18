@@ -2,7 +2,7 @@
 // modes), each only when the phone has it, so the answer never names what is not there.
 import { bookLabel } from './converse'
 import { academyManuals, bibleBooks, XT } from './explore'
-import { dataOf, type Five, fiveStories, modesFor } from './modes'
+import { dataOf, fiveStories, modesFor, noFive } from './modes'
 import { phoneHas } from './howto'
 
 // {ref}: a verse, {browse}: Browse's name, {list}: the guided modes this phone has
@@ -18,7 +18,7 @@ const HELP_LINES: Record<string, { obs: string; who: string; modes: string; list
 /** The lines to add after About's text, as a Markdown list ('' when the phone has none of what they name). `packs`: the installed packs. */
 export async function helpLines(ui: string, packs: string[]): Promise<string> {
   const t = HELP_LINES[ui] ?? HELP_LINES.en!
-  const [has, books, manuals, five] = await Promise.all([phoneHas(packs), bibleBooks(packs), academyManuals(packs), fiveStories(packs).catch((): Five => 'unreadable')])
+  const [has, books, manuals, five] = await Promise.all([phoneHas(packs), bibleBooks(packs), academyManuals(packs), fiveStories(packs).catch(noFive)])
   const lines: string[] = []
   if (has.obs) lines.push(t.obs)
   if (has.books) lines.push(t.who.replace('{ref}', `${bookLabel(ui, 'rut')} 2:4`))

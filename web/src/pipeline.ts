@@ -2181,7 +2181,7 @@ export const ROUTES: Route[] = [
     },
   },
   {
-    // a step of the 5M study session (obs5m.ts; dev switch `obs5m`): its card from the story's tables, the next step first, then
+    // a step of the 5M study session (obs5m.ts; 5M from the packs): its card from the story's tables, the next step first, then
     // the frame's helps (its OBS answers), its Bible passage and the Academy articles its notes cite; a story with no session says so
     name: 'obs5m',
     when: (x) => x.sheet.intent === 'obs5m' && on5m(),
@@ -3049,7 +3049,7 @@ function atSession(g: Graph): boolean {
 /**
  * In a 5M session, a short question about its step with no reference of its own: "and the notes?", "the key terms?", "the
  * questions?" (what to show of its frame), "next", "¿y el siguiente?" (its next step). Null otherwise (a typed reference, other
- * words: answered as usual), and always with the dev switch off or no session.
+ * words: answered as usual), and always with 5M off or no session.
  */
 export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { frame: number } | null {
   if (!c.graph?.session || !on5m() || !atSession(c.graph)) return null
@@ -3077,7 +3077,7 @@ export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { fram
  */
 export type Chip5 = { kind: 'next' | 'place' | 'ok'; label: string; sheet?: Sheet; send?: true; resume?: number }
 /**
- * The composer's empty row (state A) with the dev switch on: in a session, at its step, [Next: … ▸] then the step's frame
+ * The composer's empty row (state A) with 5M on: in a session, at its step, [Next: … ▸] then the step's frame
  * [OBS 1:5 ▸]; away from it (a help, a branch), the way back to it first (`rest` 'place': the passage the conversation is on
  * follows, never the paused light path); with no session here, [Resume OBS 1 · …] for the session used last, if one is saved
  * (`rest` 'all': the usual first button follows).

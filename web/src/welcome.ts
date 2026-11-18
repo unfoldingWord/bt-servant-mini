@@ -403,7 +403,7 @@ export function openWelcome(ui: string, opts: { at?: 'book' | 'learn' } = {}): b
         if (!fiveOffered(five) || list.querySelector('.wl-door[data-door="five"]')) return
         const b = button('', () => { done('five'); h.openFive() }, 'wl-door')
         b.dataset.door = 'five'
-        b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m', five)), ui)))
+        b.append(el('span', 'wl-door-t', s.five[0]), el('span', 'wl-door-s', bidiLabel(s.five[1].replace('{name}', modeTitle(ui, 'obs5m')), ui)))
         list.insertBefore(b, ex)
       }).catch(() => {})
     } else if (v.k === 'book') {

@@ -1,5 +1,6 @@
 // The two new buttons that lead to the 5M (pipeline.ts): [5M session for this story] under an Open Bible Story that has a session
 // (dev switch `obs5m`), and [See the stories with a session] under "this story has no 5M session". With the switch off, neither.
+import { fiveOn } from './five-on'
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { withObs } from './obs-fixture'
@@ -22,12 +23,12 @@ afterAll(async () => {
   ;(globalThis as any).localStorage = before
   await withObs('en', 'installed')
 })
-const on = () => store.set('btsm.dev.obs5m', '1')
-const off = () => store.delete('btsm.dev.obs5m')
+const on = () => fiveOn()
+const off = () => fiveOn(false)
 
 describe('under an Open Bible Story', () => {
   test('story 1 with the switch on: a button to its session, which starts it', async () => {
-    on()
+    await on()
     const c: ConvState = { last: null }
     const r: any = await turn(c, { q: 'OBS 1' }, 'en')
     const b = r.reply.follow.find((f: any) => f.label === W5('en').startStory)
@@ -38,32 +39,32 @@ describe('under an Open Bible Story', () => {
     const s: any = await turn(c, { q: b.typed }, 'en')
     expect(s.answered).toBe('obs5m')
     expect(c.graph!.session).toMatchObject({ story: 1 })
-    off()
+    await off()
   })
   test('in every app language, in a frame’s answer too', async () => {
-    on()
+    await on()
     for (const ui of ['en', 'es', 'fr', 'id', 'hi', 'ar']) {
       const r: any = await turn({ last: null }, { q: 'OBS 1:3' }, ui)
       expect(r.reply.follow.some((f: any) => f.label === W5(ui).startStory)).toBe(true)
     }
-    off()
+    await off()
   })
   test('a story with no session, and the switch off: no such button', async () => {
-    on()
+    await on()
     const r3: any = await turn({ last: null }, { q: 'OBS 3' }, 'en')
     expect(r3.reply.follow.some((f: any) => f.label === W5('en').startStory)).toBe(false)
-    off()
+    await off()
     const r1: any = await turn({ last: null }, { q: 'OBS 1' }, 'en')
     for (const ui of ['en', 'es', 'fr', 'id', 'hi', 'ar'])
       expect(r1.reply.follow.some((f: any) => f.label === W5(ui).startStory)).toBe(false)
   })
   test('not while a session is on already (it would start over)', async () => {
-    on()
+    await on()
     const c: ConvState = { last: null }
     await turn(c, { q: '5M OBS 1' }, 'en')
     const r: any = await turn(c, { q: 'OBS 1' }, 'en')
     expect(r.reply.follow.some((f: any) => f.label === W5('en').startStory)).toBe(false)
-    off()
+    await off()
   })
 })
 
@@ -83,7 +84,7 @@ describe('the next steps keep every typed button', () => {
 
 describe('a story with no session', () => {
   test('says so and offers the stories that have one (Browse’s 5M view), in every app language', async () => {
-    on()
+    await on()
     for (const ui of ['en', 'es', 'fr', 'id', 'hi', 'ar']) {
       const r: any = await turn({ last: null }, { q: '5M OBS 3' }, ui)
       const b = r.reply.follow.find((f: any) => f.label === W5(ui).seeStories)
@@ -92,6 +93,6 @@ describe('a story with no session', () => {
       expect(b.sheet).toBeUndefined()
     }
     expect(W5('ar').seeStories).toBe('عرض القصص التي لها جلسة')
-    off()
+    await off()
   })
 })

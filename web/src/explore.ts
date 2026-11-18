@@ -10,7 +10,7 @@ import taSections from './data/ta-sections.json'
 import { addSaved, findSaved, MAX_ITEMS, personal, removeSaved, savedSummary, ST as SVT } from './saved'
 import { bibleLabel, obsLabel, obsPack, OW, type StoryEntry, storyList } from './obs'
 import { bidiLabel, rtlLang } from './bidi'
-import { type Five, fiveOffered, fiveStories, fiveViewTitle, type ModeId, modeCount, modesFor, modeSub, modeTitle, MT, dataOf } from './modes'
+import { type Five, fiveOffered, fiveStories, fiveViewTitle, type ModeId, modeCount, modesFor, modeSub, modeTitle, MT, dataOf, noFive } from './modes'
 import { langName, loadFixture5 } from './pipeline'
 import { type Saved5 } from './obs5mstore'
 import { stepPlace } from './obs5m'
@@ -256,7 +256,7 @@ export type ExploreHooks = {
   ask5: (story: number) => boolean
   /** the 5M sessions saved (the ones used last), and [Resume] one (the same as the welcome's); false when it cannot now */
   saved5: () => Saved5[]
-  /** 'loading': the test file is not read yet (Browse says "Opening…" and tries again); false: it cannot now (an answer is on its way, the app is locked) */
+  /** 'loading': the story's tables are not read yet (Browse says "Opening…" and tries again); false: it cannot now (an answer is on its way, the app is locked) */
   /** 'failed': it did not start for another reason (no room for a new conversation); nothing is said then */
   resume5: (e: Saved5) => boolean | 'loading' | 'failed'
 }
@@ -434,7 +434,7 @@ function modeRows(ui: string, modes: ModeId[], five: Five): HTMLElement {
     })
     row.dataset.mode = id
     const t = el('span', 'ex-row-t')
-    t.append(playMark(), document.createTextNode(bidiLabel(modeTitle(ui, id, five), ui)))
+    t.append(playMark(), document.createTextNode(bidiLabel(modeTitle(ui, id), ui)))
     row.append(t, el('span', 'ex-row-s', bidiLabel(modeSub(ui, id), ui)), chevron('ex-row-c'))
     rows.appendChild(row)
   }
@@ -443,7 +443,7 @@ function modeRows(ui: string, modes: ModeId[], five: Five): HTMLElement {
 /** The guided modes this phone can run (modes.ts), read the way Browse's home reads them; [] with no pack. */
 export async function modesOn(packs: string[]): Promise<ModeId[]> {
   if (!packs.length) return []
-  const [books, manuals, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), fiveStories(packs).catch((): Five => 'unreadable')])
+  const [books, manuals, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), fiveStories(packs).catch(noFive)])
   return modesFor(dataOf(books.length, manuals.length, five))
 }
 
@@ -458,7 +458,7 @@ function openFive(story: number) {
   if (!hooks?.ask5(story)) return busyNote()
   closeExplore(false)
 }
-/** [Resume] a saved session; the test file not read yet: "Opening…", then again. */
+/** [Resume] a saved session; its tables not read yet: "Opening…", then again. */
 let resuming = false
 async function resumeFive(e: Saved5) {
   if (resuming) return // one try at a time (a second tap while "Opening…")
@@ -474,7 +474,7 @@ async function resumeFiveNow(e: Saved5) {
   for (let i = 0; r === 'loading' && i < 20; i++) {
     const b = ensure()
     if (!b.body.querySelector('.ex-opening')) b.body.prepend(el('p', 'ex-note ex-opening', XT(hooks?.ui() ?? 'en').loading))
-    await loadFixture5().catch(() => null)
+    await loadFixture5(e.story).catch(() => null)
     await new Promise((res) => setTimeout(res, 50))
     if (!exploreOpen()) return
     r = hooks?.resume5(e)
@@ -525,7 +525,7 @@ async function draw() {
       b.body.appendChild(button('ex-pill', s.addLang, () => { closeExplore(); hooks?.addLang() }))
       return
     }
-    const [books, manuals, stories, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null), fiveStories(packs).catch((): Five => 'unreadable')])
+    const [books, manuals, stories, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null), fiveStories(packs).catch(noFive)])
     if (!done()) return
     // the guided modes the phone can run, before the tabs so they show with either tab (modes.ts: a mode that lacks what it needs is not there)
     const modes = modesFor(dataOf(books.length, manuals.length, five))
@@ -587,7 +587,7 @@ async function draw() {
 
   if (v.k === 'modes') {
     b.title.textContent = MT(ui).section
-    const [five, modes] = await Promise.all([fiveStories(packs).catch((): Five => 'unreadable'), modesOn(packs)])
+    const [five, modes] = await Promise.all([fiveStories(packs).catch(noFive), modesOn(packs)])
     if (!done()) return
     b.body.appendChild(modes.length ? modeRows(ui, modes, five) : el('p', 'ex-note', MT(ui).noModes))
     return
@@ -598,24 +598,26 @@ async function draw() {
     const t = MT(ui)
     const w = W5(ui)
     const dir = rtlLang(ui) ? 'rtl' : 'ltr'
-    const [five, fx] = await Promise.all([fiveStories(packs).catch((): Five => 'unreadable'), loadFixture5().catch(() => null)])
+    const five = await fiveStories(packs).catch(noFive)
     if (!done()) return
-    // the dev switch went off with this view still in the stack: back to what is behind it
-    if (five !== 'unreadable' && !five.stories.length) {
+    // 5M went away with this view still in the stack (the pack was removed): back to what is behind it
+    if (!five.stories.length) {
       if (stack.length > 1) stack.pop()
       else stack[0] = { k: 'home', tab: 'bible' }
       return draw()
-    }
-    // no test file in this build (a normal build does not carry it): said, never an empty screen
-    if (five === 'unreadable' || !fx) {
-      b.body.appendChild(el('p', 'ex-note', t.unreadable))
-      return
     }
     b.body.appendChild(el('p', 'ex-note ex-five-intro', t.intro))
     // [Resume]: the sessions used last (up to 3), as the welcome has them; the same call
     const rows = el('div', 'ex-rows ex-five')
     rows.dir = dir
-    for (const e of hooks.saved5().filter((x) => x.story === fx.story).slice(0, 3)) {
+    const have = new Set(five.stories.map((x) => x.story))
+    const saved = hooks.saved5().filter((x) => have.has(x.story)).slice(0, 3)
+    // (the tables of the saved ones only; the rest of the stories are read when one is opened)
+    const fxs = await Promise.all(saved.map((e) => loadFixture5(e.story).catch(() => null)))
+    if (!done()) return
+    for (const [i, e] of saved.entries()) {
+      const fx = fxs[i]
+      if (!fx) continue
       const row = button('ex-row', '', () => void resumeFive(e))
       row.dataset.resume = String(e.story)
       row.append(el('span', 'ex-row-t', `↻ ${bidiLabel(w.resume.replace('{story}', `OBS ${e.story}`).replace('{place}', stepPlace(fx, e.s, ui)), ui)}`), chevron('ex-row-c'))
@@ -629,16 +631,17 @@ async function draw() {
       const row = button('ex-row', '', () => openFive(st.story))
       row.dataset.story = String(st.story)
       // (in the app's direction; a title in another script is isolated, so "OBS 1:" stays beside it)
-      row.appendChild(el('span', 'ex-row-t', bidiLabel(`OBS ${st.story}: ${st.title}`, ui)))
-      // the line under it: the Bible passage the story is told from, and the language of the session when it is not the app's
-      const lang = st.tfLang.split('-')[0] !== ui ? fill(w.inLang, { lang: langName(ui, st.tfLang) }) : ''
-      const sub = [st.reference.replace(/^[^:]*:\s*/, ''), lang].filter(Boolean).join(' \u00b7 ')
-      row.append(el('span', 'ex-row-s', bidiLabel(sub, ui)), chevron('ex-row-c'))
+      row.appendChild(el('span', 'ex-row-t', bidiLabel(st.title ? `OBS ${st.story}: ${st.title}` : `OBS ${st.story}`, ui)))
+      // the line under it, when the story's tables were read already: the Bible passage it is told from, and the language of the
+      // session when it is not the app's
+      const lang = st.tfLang && st.tfLang.split('-')[0] !== ui ? fill(w.inLang, { lang: langName(ui, st.tfLang) }) : ''
+      const sub = [(st.reference ?? '').replace(/^[^:]*:\s*/, ''), lang].filter(Boolean).join(' · ')
+      if (sub) row.appendChild(el('span', 'ex-row-s', bidiLabel(sub, ui)))
+      row.appendChild(chevron('ex-row-c'))
       list.appendChild(row)
     }
     b.body.appendChild(list)
-    // what is missing, said in a line: the test version has one story; without Bible Stories on the phone, no helps beside the cards
-    if (five.source === 'test') b.body.appendChild(el('p', 'ex-note', t.onlyOne))
+    // what is missing, said in a line: without Bible Stories on the phone, no helps beside the cards
     if (!five.obs) b.body.appendChild(el('p', 'ex-note', t.noObs))
     return
   }

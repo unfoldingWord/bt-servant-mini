@@ -2,6 +2,7 @@
 // with the packs there are (a book's light path; Translation Academy in the manuals' order, with a verse to try; the chat with How
 // to ask; Browse), no suggested article is missing from the pack, Skip and "Start over" work, it shows once and never next to
 // How to ask's invitation, and a storage that throws is handled. The screen runs on a small stand-in for the page (bun has none).
+import { fiveOn } from './five-on'
 import { test, expect, beforeAll, afterAll } from 'bun:test'
 import { ALL_PACKS, installPacks, OLD_PACKS_DIR, usePacksDir } from './fs-packs'
 import { turn } from './harness'
@@ -872,13 +873,13 @@ test('the 5M door: only with its dev switch on, before "Just explore"; it closes
   await sleep(300) // the doors that depend on the phone are read a moment after the screen shows
   expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'explore'])
   closeWelcome()
-  store.set('btsm.dev.obs5m', '1')
+  await fiveOn()
   openWelcome('en')
   await until('.wl-door[data-door="five"]')
   expect($$('.wl-door').map((d) => d.dataset.door)).toEqual(['book', 'learn', 'look', 'five', 'explore'])
   const d = $('.wl-door[data-door="five"]')!
   expect(d.textContent).toContain(WT('en').five[0])
-  expect(d.textContent).toContain('OBS 5M session (test)')
+  expect(d.textContent).toContain('OBS 5M session')
   d.click()
   expect(did.five).toBe(1)
   expect($('#welcome')).toBeNull()
@@ -890,7 +891,7 @@ test('the 5M door: only with its dev switch on, before "Just explore"; it closes
     expect(WT(ui).exploreObs.length).toBeGreaterThan(5)
   }
   expect(WT('ar').five[0]).toBe('أريد أن أدرس قصة مع فريقي')
-  store.delete('btsm.dev.obs5m')
+  await fiveOn(false)
 })
 
 test('"Just explore" names the Bible Stories when the phone has them, and keeps today’s line when it has none', async () => {

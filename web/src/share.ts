@@ -106,7 +106,7 @@ const ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke
 const DEV_SOURCES = 'Source (dev fixture, not published): unfoldingWord/en/obs v9 · unfoldingWord/en/obs-tf v4 (CC-BY-SA-4.0, unfoldingWord and Formation Stories)'
 
 /**
- * What a 5M session shares (dev switch `obs5m`): the story's title and reference, the sources, then the parts done and the one
+ * What a 5M session shares (5M from the packs): the story's title and reference, the sources, then the parts done and the one
  * in progress with their questions. The manual's answers are never in it, except those revealed on a card (`revealed`: question
  * ids; kept in memory only). It reads the tables, never a card kept in a conversation's history.
  */

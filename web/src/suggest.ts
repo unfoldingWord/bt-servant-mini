@@ -338,7 +338,7 @@ export function suggest(text: string, ctx: Ctx): Row {
   const t = unmarked(text).replace(/^\s+/, '') // no bidi marks (text copied from the app or pasted from WhatsApp)
   // (the empty box: the composer shows startRow while the box has the focus)
   if (!t.trim()) return { items: [] }
-  // in a 5M session (dev switch): "notes", "next", a frame's number, read as its step's ("✓ OBS 1:5 · notes")
+  // in a 5M session (5M on): "notes", "next", a frame's number, read as its step's ("✓ OBS 1:5 · notes")
   const five = sessionUnderstood(t, ctx.conv, ctx.ui)
   if (five) return { items: [five] }
   if (t.length > 120 || !ctx.books || replyLang(t) || has('help', t)) return { items: [] }
@@ -426,7 +426,7 @@ export function startRow(ctx: Ctx): Row {
   if (ctx.choosing) return ctx.books ? { items: [], pick: bookList('', ctx) } : { items: [] }
   const ui = ctx.ui
   const items: Suggestion[] = []
-  // a 5M session (dev switch): its next step and frame, the way back to it, or [Resume] for one saved
+  // a 5M session (5M on): its next step and frame, the way back to it, or [Resume] for one saved
   const five = sessionChips(ctx.conv, ui)
   if (five) items.push(...five.items)
   const first = !five || five.rest === 'all' ? pathOf(ctx) ?? placeOf(ctx) : five.rest === 'place' ? placeOf(ctx) : null

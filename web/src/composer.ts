@@ -66,7 +66,7 @@ export type Hooks = {
   browse: () => void
   /** a model or the online reader would read a free question (then no grey line); none given: as if one would */
   reader?: () => boolean
-  /** [Resume] a saved 5M session of this story (dev switch `obs5m`; main.ts) */
+  /** [Resume] a saved 5M session of this story (5M in the pack; main.ts) */
   resume?: (story: number) => void
   /** "All (n)": Browse's list of Bible stories filtered to these (their numbers), under this title (main.ts openExploreAt) */
   stories?: (lang: string, ids: number[], title: string) => void

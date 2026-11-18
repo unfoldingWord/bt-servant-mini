@@ -1,7 +1,8 @@
-// The "Guided modes" section of Browse (explore.ts, modes.ts) and the 5M view: which modes show with the dev switch, Open Bible
+// The "Guided modes" section of Browse (explore.ts, modes.ts) and the 5M view: which modes show with 5M on, Open Bible
 // Stories, Translation Academy, books and no packs; a tap on a story asks for "5M OBS 1"; a mode tapped while an answer is on its
 // way says so and does nothing else; Arabic rows run right to left; the usage counts are numbers only. Runs on a small stand-in
 // for the page (bun has none).
+import { fiveOn } from './five-on'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { withObs } from './obs-fixture'
@@ -10,7 +11,6 @@ import { fiveText, MT, modeTitle } from '../src/modes'
 import { forgetSessions, saveSession, savedSessions } from '../src/obs5mstore'
 import { loadFixture } from '../src/dev'
 import { W5 } from '../src/obs5mwords'
-import { resetFixture5 } from '../src/pipeline'
 
 // ---------------------------------------------------------------------------------------------------- a stand-in page
 
@@ -110,8 +110,8 @@ const hooks: ExploreHooks = {
   saved5: () => savedSessions(),
   resume5: (e) => { did.resume.push(e.story); return loading > 0 ? (loading--, 'loading') : failing ? 'failed' : allow },
 }
-const on = () => store.set('btsm.dev.obs5m', '1')
-const off = () => store.delete('btsm.dev.obs5m')
+const on = () => fiveOn()
+const off = () => fiveOn(false)
 const counts = (): Record<string, number> => {
   const days = JSON.parse(store.get('btsm.usage.days') ?? '{}') as Record<string, Record<string, number>>
   return Object.values(days)[0] ?? {}
@@ -134,10 +134,10 @@ afterAll(() => {
   ;(globalThis as any).MutationObserver = saved.MutationObserver
   ;(globalThis as any).HTMLElement = saved.HTMLElement
 })
-beforeEach(() => {
+beforeEach(async () => {
   closeExplore(false)
   resetExplore()
-  resetFixture5()
+  await fiveOn(false)
   store.clear()
   store.set('btsm.usage', '1')
   packs = ['en']; ui = 'en'; allow = true; loading = 0; failing = false
@@ -159,12 +159,12 @@ describe('the section on Browse’s home', () => {
     expect($$('.ex-modes .ex-mode-m').length).toBe(2) // the drawn mark of each row
   })
   test('the switch on: the 5M row as the third, named as a test', async () => {
-    on()
+    await on()
     openExplore('bar')
     await until('.ex-modes .ex-row')
     expect(modeIds()).toEqual(['book', 'learn', 'obs5m'])
-    expect($('.ex-row[data-mode="obs5m"]')!.textContent).toContain(modeTitle('en', 'obs5m', { source: 'test', obs: true, stories: [{ story: 1 } as any] }))
-    expect($('.ex-row[data-mode="obs5m"]')!.textContent).toContain('(test)')
+    expect($('.ex-row[data-mode="obs5m"]')!.textContent).toContain(modeTitle('en', 'obs5m'))
+    expect($('.ex-row[data-mode="obs5m"]')!.textContent).not.toContain('(test)')
   })
   test('Open Bible Stories are not a mode: their row is the Bible tab’s, with or without them the modes are the same', async () => {
     await withObs('en', 'none')
@@ -199,7 +199,7 @@ describe('the section on Browse’s home', () => {
   test('Arabic: the rows run right to left, and the marks are drawings (not the characters ▶ ›)', async () => {
     ui = 'ar'
     packs = ['ar']
-    on()
+    await on()
     openExplore('bar')
     await until('.ex-modes .ex-row')
     expect($('.ex-modes')!.dir).toBe('rtl')
@@ -223,7 +223,7 @@ describe('the section on Browse’s home', () => {
 
 describe('review fixes', () => {
   test('a resume while the test file is not loaded: "Opening…", then it goes (never "an answer is on its way")', async () => {
-    on()
+    await on()
     const fx = await loadFixture()
     forgetSessions()
     saveSession('c1', sheetOfSession(fx))
@@ -239,7 +239,7 @@ describe('review fixes', () => {
     forgetSessions()
   })
   test('a second tap while "Opening…" does not start a second try; a resume that failed for another reason says nothing', async () => {
-    on()
+    await on()
     const fx = await loadFixture()
     forgetSessions()
     saveSession('c1', sheetOfSession(fx))
@@ -270,10 +270,10 @@ describe('review fixes', () => {
     expect(exploreOpen()).toBe(true)
   })
   test('the dev switch off with the 5M view still in the stack: back to what is behind it', async () => {
-    on()
+    await on()
     openExploreAt({ mode: 'obs5m' })
     await until('.ex-row[data-story="1"]')
-    off()
+    await off()
     // drawn again (Browse opened again, the stack kept)
     closeExplore(false)
     openExplore('bar')
@@ -284,7 +284,7 @@ describe('review fixes', () => {
   test('not counted under the PIN lock', async () => {
     const lock = Object.assign(new FakeEl('div'), { id: 'lock' })
     doc.body.appendChild(lock)
-    on()
+    await on()
     openExploreAt({ mode: 'obs5m', from: 'welcome' })
     lock.remove()
     expect(exploreOpen()).toBe(false)
@@ -294,7 +294,7 @@ describe('review fixes', () => {
   test('Arabic: "OBS 1:" is isolated, so it stays beside a Latin title', async () => {
     ui = 'ar'
     packs = ['ar']
-    on()
+    await on()
     openExploreAt({ mode: 'obs5m' })
     await until('.ex-row[data-story="1"]')
     const t = $('.ex-row[data-story="1"] .ex-row-t')!.textContent
@@ -343,8 +343,8 @@ describe('a mode’s tap', () => {
 })
 
 describe('the 5M view', () => {
-  test('the row opens it: the explanation, the story, the note that only story 1 is there, and Back to Browse’s home', async () => {
-    on()
+  test('the row opens it: the explanation, the story, and Back to Browse’s home', async () => {
+    await on()
     openExplore('bar')
     await until('.ex-modes .ex-row')
     $('.ex-row[data-mode="obs5m"]')!.click()
@@ -353,7 +353,6 @@ describe('the 5M view', () => {
     const body = $('.ex-body')!.textContent
     expect(body).toContain(MT('en').intro)
     expect(body).toContain(MT('en').stories)
-    expect(body).toContain(MT('en').onlyOne)
     expect($$('.ex-five .ex-row').length).toBe(1)
     expect($('.ex-row[data-story="1"] .ex-row-t')!.textContent.startsWith('OBS 1:')).toBe(true)
     expect(counts()['explore.mode.obs5m']).toBe(1)
@@ -362,7 +361,7 @@ describe('the 5M view', () => {
     expect(exploreOpen()).toBe(true)
   })
   test('a tap on the story asks for exactly the text "5M OBS 1", closes Browse, and counts', async () => {
-    on()
+    await on()
     openExploreAt({ mode: 'obs5m' })
     await until('.ex-row[data-story="1"]')
     $('.ex-row[data-story="1"]')!.click()
@@ -375,7 +374,7 @@ describe('the 5M view', () => {
     expect(did.ask).toEqual([]) // not asked as a ready sheet: it goes the way typing goes
   })
   test('a story tapped with an answer on its way: the busy note, still open, no count of a session', async () => {
-    on()
+    await on()
     openExploreAt({ mode: 'obs5m' })
     await until('.ex-row[data-story="1"]')
     allow = false
@@ -386,7 +385,7 @@ describe('the 5M view', () => {
     expect(counts()['explore.mode.obs5m']).toBe(1)
   })
   test('without Open Bible Stories on the phone it says what is missing; with them it does not', async () => {
-    on()
+    await on()
     await withObs('en', 'none')
     openExploreAt({ mode: 'obs5m' })
     await until('.ex-row[data-story="1"]')
@@ -398,7 +397,7 @@ describe('the 5M view', () => {
     expect($('.ex-body')!.textContent).not.toContain(MT('en').noObs)
   })
   test('a saved session: [Resume] on top, the same call as the welcome’s, at most 3', async () => {
-    on()
+    await on()
     const fx = await loadFixture()
     forgetSessions()
     saveSession('c1', { ...sheetOfSession(fx) })
@@ -411,7 +410,7 @@ describe('the 5M view', () => {
     forgetSessions()
   })
   test('a resume refused (an answer on its way): the busy note', async () => {
-    on()
+    await on()
     const fx = await loadFixture()
     forgetSessions()
     saveSession('c1', { ...sheetOfSession(fx) })
@@ -426,15 +425,14 @@ describe('the 5M view', () => {
   test('Arabic: the view is right to left, "OBS 1" aside the Arabic words', async () => {
     ui = 'ar'
     packs = ['ar']
-    on()
+    await on()
     openExploreAt({ mode: 'obs5m' })
     await until('.ex-row[data-story="1"]')
     expect($$('.ex-five').every((r) => r.dir === 'rtl')).toBe(true)
     expect($('.ex-body')!.textContent).toContain(MT('ar').intro)
-    expect($('.ex-body')!.textContent).toContain(MT('ar').onlyOne)
   })
   test('from the welcome: Browse opens on the 5M view, counted as coming from the welcome', async () => {
-    on()
+    await on()
     openExploreAt({ mode: 'obs5m', from: 'welcome' })
     await until('.ex-row[data-story="1"]')
     expect(counts()['explore.from.welcome']).toBe(1)
@@ -443,7 +441,7 @@ describe('the 5M view', () => {
 })
 describe('the modes list (the empty conversation, Start a mode)', () => {
   test('Browse opens on the modes alone, the same rows as the section, and Back goes to the home', async () => {
-    on()
+    await on()
     openExploreAt({ mode: 'list', from: 'welcome' })
     await until('.ex-modes .ex-row')
     expect(modeIds()).toEqual(['book', 'learn', 'obs5m'])
