@@ -183,7 +183,7 @@ export function rangeOfRef(ref: string | null | undefined): [number, number] | n
   }
 }
 /** A story's range text ("gen 6:1-8:22", "deu 18:15") as verse ids. */
-function rangeOfStoryRef(r: string): [number, number] | null {
+export function rangeOfStoryRef(r: string): [number, number] | null {
   const m = /^([1-3]?[a-z]{2,3})\s+(.+)$/.exec(r.trim())
   if (!m) return null
   try {
@@ -193,7 +193,7 @@ function rangeOfStoryRef(r: string): [number, number] | null {
   }
 }
 /** How many verses a range holds (by the versification), for where a verse sits in a story. */
-function versesIn(from: number, to: number): number {
+export function versesIn(from: number, to: number): number {
   const book = BOOKS[Math.floor(from / 1_000_000) - 1]
   const ch = (id: number) => Math.floor(id / 1000) % 1000
   const v = (id: number) => id % 1000
@@ -834,6 +834,20 @@ export function storyByName(words: string[]): number | null {
   if (stories.size !== 1) return null
   const covered = (x: string) => named.some(([, ws]) => ws.some((w) => is(x, w)))
   return toks.every(covered) ? [...stories][0]! : null
+}
+/**
+ * Every story that names (STORY_NAMES) all the words given, a name in several stories giving each ("Isaac": 5 and 6), for the
+ * typing suggestions (obsindex.ts): unlike storyByName it does not need one story. `partial`: the last word may be the start of
+ * a name ("noe" for Noé being typed).
+ */
+export function storiesNamed(words: string[], partial = false): number[] {
+  const toks = words.map(fold).filter(Boolean)
+  if (!toks.length) return []
+  const last = toks.length - 1
+  const is = (x: string, w: string, i: number) => arForms(x).some((f) => f === w || f === w.replace(/^ال/, '') || (w.length >= 4 && f.startsWith(w) && f.length <= w.length + 2) || (partial && i === last && f.length >= 3 && w.startsWith(f)))
+  const named = NAME_INDEX.filter(([, ws]) => ws.every((w) => toks.some((x, i) => is(x, w, i))))
+  const covered = (x: string, i: number) => named.some(([, ws]) => ws.some((w) => is(x, w, i)))
+  return toks.every(covered) ? [...new Set(named.map(([n]) => n))].sort((a, b) => a - b) : []
 }
 /**
  * A story named by what it is about ("the story of Noah", "la historia de José"), when Open Bible Stories are on the phone and

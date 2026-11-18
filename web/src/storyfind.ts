@@ -13,9 +13,9 @@ import { fold } from './sheet'
 export type Section = { book: string; ch: number; v: number; end: number; title: string; lang: string }
 export type SectionHit = Section & { matched: string[]; extra: number }
 
-const tokens = (t: string): string[] => fold(t).split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length >= 2)
+export const tokens = (t: string): string[] => fold(t).split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length >= 2)
 /** Words of a heading that say nothing of its story. */
-const SMALL = new Set('the of in to an and for from at on by with into against before after over his her their its is are be who as about'.split(' '))
+export const SMALL = new Set('the of in to an and for from at on by with into against before after over his her their its is are be who as about'.split(' '))
 
 const cache = new Map<string, Promise<Section[]>>()
 /** After the packs change. */
