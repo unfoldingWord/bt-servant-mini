@@ -13,11 +13,27 @@ export const atBottom = (m: Metrics): boolean => distance(m) <= AT_BOTTOM_PX
 /** Shown only when the reader is more than one screen above the end. A hidden log has no height: never shown then. */
 export const shouldShow = (m: Metrics): boolean => m.clientHeight > 0 && distance(m) > m.clientHeight
 
-/** A node added to the log counts as a new answer unless it is the person's own message, the waiting line or the welcome card. */
+/** A node added to the log counts as a new answer only if it is a real bot message: not the person's own, the waiting line, a mark, quick rows, notes or the welcome card. */
 export function isAnswerNode(className: string): boolean {
   const c = ` ${className} `
-  return !c.includes(' me ') && !c.includes(' pending ') && !c.includes(' welcome ')
+  return c.includes(' msg ') && c.includes(' bot ') && !c.includes(' pending ')
 }
+
+/** What covers the whole screen (cards, the PIN lock): the arrow is not shown over them. */
+export const OVERLAYS = '#about, #safety, #report, #howto, #welcome, #lock, #explore.open, #gmap.open, #saved.open, #s5out.open'
+/** Sets `data-tb-off` on `body` while an overlay is open (CSS hides the arrow by it; no :has() needed). True when one is open. */
+export function syncOverlay(body: { querySelector(q: string): unknown; hasAttribute(n: string): boolean; setAttribute(n: string, v: string): void; removeAttribute(n: string): void }): boolean {
+  const open = !!body.querySelector(OVERLAYS)
+  if (open !== body.hasAttribute('data-tb-off')) {
+    if (open) body.setAttribute('data-tb-off', '')
+    else body.removeAttribute('data-tb-off')
+  }
+  return open
+}
+
+/** The arrow's `bottom` in px: just above the box, but never lower than the visible area (a keyboard over the page shrinks it). */
+export const arrowBottom = (inner: number, formTop: number, vvEdge?: number): number =>
+  Math.max(0, Math.round(inner - Math.min(formTop, vvEdge ?? inner) + 10))
 
 /**
  * The dot on the arrow: lit when an answer arrives while the reader is up in the conversation, put out at the bottom. A batch that
@@ -53,35 +69,41 @@ export function initToBottom(log: HTMLElement, form: HTMLElement): { setLang(l: 
   let dot = false
   let away = false // the state before the latest change, so an answer that just made the log taller still counts as arriving at the bottom
   const metrics = (): Metrics => ({ scrollTop: log.scrollTop, clientHeight: log.clientHeight, scrollHeight: log.scrollHeight })
-  const place = () => b.style.setProperty('--tb-bottom', `${Math.max(0, Math.round(window.innerHeight - form.getBoundingClientRect().top + 10))}px`)
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  const place = () => b.style.setProperty('--tb-bottom', `${arrowBottom(window.innerHeight, form.getBoundingClientRect().top, vv ? vv.offsetTop + vv.height : undefined)}px`)
+  // what changed in the log since the last draw: only noted by the observer, read in the frame (no layout read per mutation batch)
+  let answers = 0
+  let redraw = false
+  let direct = false
   const draw = () => {
+    const hidden = syncOverlay(document.body)
     const m = metrics()
+    if (direct) dot = nextDot(dot, { away, answers, redraw, bottom: false })
+    answers = 0; redraw = false; direct = false
     if (atBottom(m)) dot = false
-    b.hidden = !shouldShow(m)
+    away = !atBottom(m)
+    b.hidden = hidden || !shouldShow(m)
     dotEl.hidden = !dot
     if (!b.hidden) place()
   }
   let queued = 0
   const soon = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; draw() }) }
-  const sense = () => { away = !atBottom(metrics()); soon() }
-  log.addEventListener('scroll', sense, { passive: true })
-  window.addEventListener('resize', sense)
+  log.addEventListener('scroll', soon, { passive: true })
+  window.addEventListener('resize', soon)
+  vv?.addEventListener('resize', soon)
+  vv?.addEventListener('scroll', soon)
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(soon).observe(form)
   new MutationObserver((list) => {
-    let answers = 0
-    let redraw = false
-    let direct = false
     for (const r of list) {
-      if (r.target === log) {
-        direct = true
-        r.addedNodes.forEach((n) => { if (n instanceof HTMLElement && isAnswerNode(n.className)) answers++ })
-        r.removedNodes.forEach((n) => { if (n instanceof HTMLElement && !n.classList.contains('pending')) redraw = true })
-      }
+      if (r.target !== log) continue
+      direct = true
+      r.addedNodes.forEach((n) => { if (n instanceof HTMLElement && isAnswerNode(n.className)) answers++ })
+      r.removedNodes.forEach((n) => { if (n instanceof HTMLElement && !n.classList.contains('pending')) redraw = true })
     }
-    if (direct) dot = nextDot(dot, { away, answers, redraw, bottom: false })
-    else away = !atBottom(metrics()) // a part turned in an answer (◀ ▶) or a fold opened: the height changed in place
     soon()
   }).observe(log, { childList: true, subtree: true })
+  // overlays opening or closing (a card added to the body, or its `open` class): the attribute on body follows
+  new MutationObserver(soon).observe(document.body, { childList: true, attributes: true, attributeFilter: ['class'], subtree: true })
   b.addEventListener('click', () => {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
     log.scrollTo({ top: log.scrollHeight, behavior: scrollBehavior(reduce) })

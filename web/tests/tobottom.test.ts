@@ -1,6 +1,6 @@
 // The arrow back to the latest message (tobottom.ts): when it shows, when the dot lights, the labels.
 import { describe, expect, test } from 'bun:test'
-import { AT_BOTTOM_PX, atBottom, distance, isAnswerNode, nextDot, scrollBehavior, shouldShow, toBottomLabel } from '../src/tobottom'
+import { arrowBottom, AT_BOTTOM_PX, atBottom, distance, isAnswerNode, nextDot, scrollBehavior, shouldShow, syncOverlay, toBottomLabel } from '../src/tobottom'
 
 const m = (scrollTop: number, clientHeight = 600, scrollHeight = 3000) => ({ scrollTop, clientHeight, scrollHeight })
 
@@ -27,6 +27,8 @@ describe('tobottom', () => {
     expect(isAnswerNode('msg me')).toBe(false)
     expect(isAnswerNode('wait pending msg bot')).toBe(false)
     expect(isAnswerNode('welcome')).toBe(false)
+    // only real bot messages: not quick rows, notes, drift offers, pickers or marks
+    for (const c of ['quick', 'quick-note', 'drift', 'picker', 'msg mark', 'examples', '', 'msg']) expect(isAnswerNode(c)).toBe(false)
   })
 
   test('the dot lights for an answer while up, stays, clears at the bottom', () => {
@@ -51,5 +53,25 @@ describe('tobottom', () => {
     for (const l of ['fr', 'id', 'hi']) expect(toBottomLabel(l).length).toBeGreaterThan(3)
     expect(new Set(['en', 'es', 'fr', 'id', 'hi', 'ar'].map(toBottomLabel)).size).toBe(6)
     expect(toBottomLabel('xx')).toBe('Scroll to the latest')
+  })
+
+  test('the overlay attribute on body follows the overlays', () => {
+    const attrs = new Set<string>()
+    let open = false
+    const body = { querySelector: () => (open ? {} : null), hasAttribute: (n: string) => attrs.has(n), setAttribute: (n: string) => void attrs.add(n), removeAttribute: (n: string) => void attrs.delete(n) }
+    expect(syncOverlay(body)).toBe(false)
+    expect(attrs.has('data-tb-off')).toBe(false)
+    open = true
+    expect(syncOverlay(body)).toBe(true)
+    expect(attrs.has('data-tb-off')).toBe(true)
+    open = false
+    syncOverlay(body)
+    expect(attrs.has('data-tb-off')).toBe(false)
+  })
+
+  test('placed above the box, within the visible area when a keyboard shrinks it', () => {
+    expect(arrowBottom(800, 700)).toBe(110)
+    expect(arrowBottom(800, 700, 500)).toBe(310) // the visible area ends above the box
+    expect(arrowBottom(800, 790, 800)).toBe(20)
   })
 })

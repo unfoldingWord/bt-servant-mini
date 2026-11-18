@@ -117,17 +117,17 @@
   #send { width: 38px; height: 38px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
   #send:active { background: var(--accent-hover); }
   #send:disabled { opacity: .45; }
-  /* the arrow back to the latest message (tobottom.ts): 32 px round, half opaque like BT Servant full, centred just above the card (so above the suggestion row, which is inside it) */
+  /* the arrow back to the latest message (tobottom.ts): 32 px round, slightly translucent (white on the accent stays above 3:1), centred just above the card (so above the suggestion row, which is inside it) */
   #tobottom { position: fixed; z-index: 4; left: 50%; bottom: var(--tb-bottom, 90px); transform: translateX(-50%); width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
-    background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer; opacity: .5; transition: opacity .2s; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+    background: var(--accent); color: #fff; display: grid; place-items: center; cursor: pointer; opacity: .75; transition: opacity .2s; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
   #tobottom::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; } /* a 44 px target */
-  #tobottom:hover, #tobottom:focus-visible, #tobottom:active { opacity: .65; }
+  #tobottom:hover, #tobottom:focus-visible, #tobottom:active { opacity: 1; }
   #tobottom:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #tobottom[hidden] { display: none; }
   #tobottom .tb-dot { position: absolute; top: -2px; inset-inline-end: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 2px var(--bg); }
   #tobottom .tb-dot[hidden] { display: none; }
   /* not over the full-screen cards (the translucent ones let it show through) nor the PIN lock */
-  body:has(#about, #safety, #report, #howto, #welcome, #lock, #explore.open, #gmap.open, #saved.open, #s5out.open) #tobottom { display: none; }
+  body[data-tb-off] #tobottom { display: none; } /* (tobottom.ts sets it while one is open) */
   @media (prefers-reduced-motion: reduce) { #tobottom { transition: none; } }
   /* typing suggestions (composer.ts): one row above the box, inside the card; it scrolls sideways, never wraps to a second row */
   #ask { flex-wrap: wrap; }
