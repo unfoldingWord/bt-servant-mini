@@ -20,18 +20,21 @@
 import { bookCandidates, bookCode, bookNamesExact, fold, type Slots } from './sheet'
 import { rtlLang, strip as unmarked } from './bidi'
 import { type ConvState, directSheet, env, followUpPreview, pathLabel, pathSheet, previewable, sessionChips, sessionUnderstood } from './pipeline'
-import { has, replyLang } from './commands'
+import { has, pattern, replyLang } from './commands'
 import { bookShown } from './firstuse'
 import { academyLabel, introLabel, whatWord } from './converse'
 import { CANON, onPacksChanged, openLang } from './packs'
 import { nodeOf, passageAt, place, stepTarget } from './graph'
 import type { Sheet } from './answer'
 import { glossaryLookup, lookup, resetTermIndex, type TermHit, type TermKind } from './termindex'
+import { findStoriesIx, hasStories, resetObsIndex, storyTelling } from './obsindex'
+import { obsLabel, rangeOfRef } from './obs'
+import { keywords } from './search'
 import books from './data/books.json'
 import shapes from './data/shapes.json'
 import versification from './data/versification.json'
 
-export type Kind = 'ok' | 'book' | 'help' | 'intro' | 'missing' | 'shape' | 'place' | 'next' | 'term'
+export type Kind = 'ok' | 'book' | 'help' | 'intro' | 'missing' | 'shape' | 'place' | 'next' | 'term' | 'story' | 'stories'
 /**
  * One button of the row. `send`: it sends the box's text as it is (the "✓"). `fill`: it writes this text in the box. `slots`: it
  * asks this ready question (a book's introduction). `sheet`: it asks this ready sheet (an article, the path's next step), as a
@@ -42,7 +45,11 @@ export type Suggestion = { kind: Kind; label: string; fill?: string; send?: true
   /** a `missing` button for a help the book lacks here (its notes, its introduction), not for a book that is not here */
   lacks?: true
   /** a saved 5M session of this story: [Resume] (main.ts opens its conversation, or a new one, at its place) */
-  resume?: number }
+  resume?: number
+  /** the label a screen reader says when it is not the button's text (a story's title behind "Told in OBS 3") */
+  aria?: string
+  /** a `stories` button: Browse's list of Bible stories, filtered to these (their numbers), in the OBS pack of this language, under this title */
+  list?: { lang: string; ids: number[]; title: string } }
 /** The chapter or verse strip: numbers 1…max; a tap writes `base + sep + n` in the box. */
 export type Strip = { unit: 'chapter' | 'verse'; max: number; base: string; sep: string; at?: number }
 /** `needs`: books to read before the row can say what they have (loadHelps); the composer reads them and makes the row again. */
@@ -76,26 +83,34 @@ const TABLES = books as Record<string, Record<string, string>>
 const MAX = 6
 
 type W = { none: string; inLang: string; notHere: string; browse: string; row: string; chapter: string; verse: string; toggle: string; books: string
-  kinds: Record<TermKind, string>; langs: Record<string, string> }
+  kinds: Record<TermKind, string>; langs: Record<string, string>
+  /** story buttons: "Told in OBS 3" (a passage), "All (28)" (the list), the list's title */
+  told: string; all: string; withTopic: string }
 const STR: Record<string, W> = {
   en: { none: 'no {what} on this phone', inLang: 'in {lang}', notHere: 'not on this phone', browse: 'See the books there are', row: 'Suggestions', chapter: 'Chapter', verse: 'Verse', toggle: 'Typing suggestions', books: 'Books',
     kinds: { kt: 'key term', names: 'name', other: 'word', ta: 'Academy' },
-    langs: { en: 'English', 'es-419': 'Spanish', fr: 'French', id: 'Indonesian', hi: 'Hindi', ar: 'Arabic' } },
+    langs: { en: 'English', 'es-419': 'Spanish', fr: 'French', id: 'Indonesian', hi: 'Hindi', ar: 'Arabic' },
+    told: 'Told in OBS {n}', all: 'All ({n})', withTopic: 'Stories with {topic}' },
   es: { none: 'sin {what} en este teléfono', inLang: 'en {lang}', notHere: 'no está en este teléfono', browse: 'Ver los libros que sí hay', row: 'Sugerencias', chapter: 'Capítulo', verse: 'Versículo', toggle: 'Sugerencias al escribir', books: 'Libros',
     kinds: { kt: 'palabra clave', names: 'nombre', other: 'palabra', ta: 'Academia' },
-    langs: { en: 'inglés', 'es-419': 'español', fr: 'francés', id: 'indonesio', hi: 'hindi', ar: 'árabe' } },
+    langs: { en: 'inglés', 'es-419': 'español', fr: 'francés', id: 'indonesio', hi: 'hindi', ar: 'árabe' },
+    told: 'Se cuenta en OBS {n}', all: 'Todas ({n})', withTopic: 'Historias con {topic}' },
   fr: { none: 'pas de {what} sur ce téléphone', inLang: 'en {lang}', notHere: "n'est pas sur ce téléphone", browse: 'Voir les livres disponibles', row: 'Suggestions', chapter: 'Chapitre', verse: 'Verset', toggle: 'Suggestions pendant la saisie', books: 'Livres',
     kinds: { kt: 'mot clé', names: 'nom', other: 'mot', ta: 'Académie' },
-    langs: { en: 'anglais', 'es-419': 'espagnol', fr: 'français', id: 'indonésien', hi: 'hindi', ar: 'arabe' } },
+    langs: { en: 'anglais', 'es-419': 'espagnol', fr: 'français', id: 'indonésien', hi: 'hindi', ar: 'arabe' },
+    told: 'Raconté dans OBS {n}', all: 'Toutes ({n})', withTopic: 'Histoires avec {topic}' },
   id: { none: 'tidak ada {what} di ponsel ini', inLang: 'dalam {lang}', notHere: 'tidak ada di ponsel ini', browse: 'Lihat kitab yang ada', row: 'Saran', chapter: 'Pasal', verse: 'Ayat', toggle: 'Saran saat mengetik', books: 'Kitab',
     kinds: { kt: 'istilah kunci', names: 'nama', other: 'kata', ta: 'Akademi' },
-    langs: { en: 'bahasa Inggris', 'es-419': 'bahasa Spanyol', fr: 'bahasa Prancis', id: 'bahasa Indonesia', hi: 'bahasa Hindi', ar: 'bahasa Arab' } },
+    langs: { en: 'bahasa Inggris', 'es-419': 'bahasa Spanyol', fr: 'bahasa Prancis', id: 'bahasa Indonesia', hi: 'bahasa Hindi', ar: 'bahasa Arab' },
+    told: 'Diceritakan di OBS {n}', all: 'Semua ({n})', withTopic: 'Cerita tentang {topic}' },
   hi: { none: 'इस फ़ोन पर {what} नहीं', inLang: '{lang} में', notHere: 'इस फ़ोन पर नहीं है', browse: 'जो पुस्तकें हैं वे देखें', row: 'सुझाव', chapter: 'अध्याय', verse: 'पद', toggle: 'लिखते समय सुझाव', books: 'पुस्तकें',
     kinds: { kt: 'मुख्य शब्द', names: 'नाम', other: 'शब्द', ta: 'अकादमी' },
-    langs: { en: 'अंग्रेज़ी', 'es-419': 'स्पेनिश', fr: 'फ़्रेंच', id: 'इंडोनेशियाई', hi: 'हिंदी', ar: 'अरबी' } },
+    langs: { en: 'अंग्रेज़ी', 'es-419': 'स्पेनिश', fr: 'फ़्रेंच', id: 'इंडोनेशियाई', hi: 'हिंदी', ar: 'अरबी' },
+    told: 'OBS {n} में बताया गया', all: 'सभी ({n})', withTopic: '{topic} वाली कहानियाँ' },
   ar: { none: 'لا {what} على هذا الهاتف', inLang: 'بـ{lang}', notHere: 'ليس على هذا الهاتف', browse: 'عرض الأسفار الموجودة', row: 'اقتراحات', chapter: 'الأصحاح', verse: 'الآية', toggle: 'اقتراحات أثناء الكتابة', books: 'الأسفار',
     kinds: { kt: 'كلمة رئيسية', names: 'اسم', other: 'كلمة', ta: 'الأكاديمية' },
-    langs: { en: 'الإنجليزية', 'es-419': 'الإسبانية', fr: 'الفرنسية', id: 'الإندونيسية', hi: 'الهندية', ar: 'العربية' } },
+    langs: { en: 'الإنجليزية', 'es-419': 'الإسبانية', fr: 'الفرنسية', id: 'الإندونيسية', hi: 'الهندية', ar: 'العربية' },
+    told: 'تُروى في OBS {n}', all: 'الكل ({n})', withTopic: 'قصص عن {topic}' },
 }
 export const ST = (ui: string): W => STR[ui] ?? STR.en!
 const fillT = (t: string, v: Record<string, string>) => t.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? '')
@@ -164,6 +179,7 @@ export function resetHelps() {
 export function resetSuggest() {
   resetHelps()
   resetTermIndex()
+  resetObsIndex()
 }
 onPacksChanged(resetSuggest)
 
@@ -330,13 +346,22 @@ export function suggest(text: string, ctx: Ctx): Row {
   const start = /\s$/.test(t) && shapeStart(t, ctx.ui)
   if (ok) {
     const row = rowOf(t, ok, ctx)
-    return row.needs ? { items: [], needs: row.needs } : { ...row, understood: ok, ...(start ? { pick: bookList(t, ctx) } : {}) }
+    if (row.needs) return { items: [], needs: row.needs }
+    return { ...row, items: told(ok, row.items, ctx), understood: ok, ...(start ? { pick: bookList(t, ctx) } : {}) }
   }
   if (start) return { items: [], pick: bookList(t, ctx) }
   const b = bookRow(t, ctx)
   if (b.strip || b.items.some((x) => x.kind === 'missing')) return b
+  // a story word and a topic ("historia de Jesús"): the stories first, then the topic's article (case A)
+  const story = storyWords(t)
+  if (story) {
+    const stories = storyRow(t, ctx, story)
+    if (stories.length) return { items: [...stories, ...termRow(t, ctx, MAX - stories.length)].slice(0, MAX) }
+  }
   const terms = termRow(t, ctx, MAX - b.items.length)
-  return terms.length ? { items: [...b.items, ...terms] } : b
+  // a name alone ("Moisés"): after its article, at most two stories (case B)
+  const after = story ? [] : storyRow(t, ctx, null, Math.min(2, MAX - b.items.length - terms.length))
+  return terms.length || after.length ? { items: [...b.items, ...terms, ...after] } : b
 }
 
 // ------------------------------------------------------------------------------------------------- A: the box is empty
@@ -520,6 +545,82 @@ const LEADS: string[] = (() => {
   ]
   return [...new Set([...own, ...more].map((h) => fold(h).replace(/[¿¡]/g, '').trim()).filter(Boolean))].sort((a, b) => b.length - a.length)
 })()
+
+// ------------------------------------------------------------------------------------------------- Bible stories (obsindex.ts)
+
+/**
+ * A story word in the text ("historia", "story", "कहानी", "قصة", "OBS": data/commands.json `story`, in any place: Hindi puts it
+ * last) and what is left, the topic: the words keywords() keeps ("historia de Jes" → "Jes"). `partial`: the last word of the
+ * box may be started only (not when the box ends in a space, nor when the story word is the last).
+ */
+type Topic = { words: string[]; partial: boolean }
+function storyWords(t: string): Topic | null {
+  const plain = t.replace(/[¿?!¡.,;:«»"“”؟،()]/g, ' ')
+  if (!has('story', plain)) return null
+  const re = new RegExp(pattern('story').source, 'giu')
+  const words = keywords(plain.replace(re, ' '))
+  const last = plain.trim().split(/\s+/).pop() ?? ''
+  const partial = !/\s$/.test(plain) && !has('story', last) && words.length > 0 && fold(words[words.length - 1]!) === fold(last)
+  return { words, partial }
+}
+/** What stories can be offered: the index is built and the conversation is not a 5M session (its own rule goes first). */
+const storiesOn = (ctx: Ctx): boolean => !ctx.conv.graph?.session && hasStories(storyOrder(ctx))
+/** The OBS packs in the order the send looks in them: the sheet's pack, English, the others. */
+const storyOrder = (ctx: Ctx): string[] => [...new Set([firstPack({ lang: ctx.ui }, ctx), 'en', ...ctx.packs])]
+const shownTitle = (e: { n: number; title: string }): string => {
+  const t = e.title.length > 34 ? `${e.title.slice(0, 33).trimEnd()}…` : e.title
+  return t ? `${obsLabel(e.n)} · ${t}` : obsLabel(e.n)
+}
+const upFirst = (w: string) => w.charAt(0).toLocaleUpperCase() + w.slice(1)
+/**
+ * The story buttons for the text: with a story word (`topic`: case A, up to four stories and "All (n)" when there are more)
+ * or a name alone (case B, `room` at most). Each tap sends its story: `{ passage obs N, text and notes }`, as Browse's row does.
+ */
+function storyRow(t: string, ctx: Ctx, topic: Topic | null, room = MAX): Suggestion[] {
+  if (room <= 0 || !storiesOn(ctx)) return []
+  const ui = ctx.ui
+  let words: string[], partial: boolean
+  if (topic) ({ words, partial } = topic)
+  else {
+    // a name alone: the words after "what does …" are not a name; one or two words, no number
+    const f = fold(t).replace(/^[\s¿¡]+/, '')
+    if (/\d/.test(f) || LEADS.some((h) => f.startsWith(h + ' '))) return []
+    words = keywords(t)
+    if (!words.length || words.length > 2) return []
+    partial = false
+  }
+  if (!words.length) return []
+  // (the last word counts when it has three letters: "Jes", not "Je")
+  if (partial && fold(words[words.length - 1]!).length < 3) words = words.slice(0, -1)
+  if (!words.length) return []
+  const order = storyOrder(ctx)
+  const book = topic ? bookNamed(words.join(' '), ui) : null
+  const found = findStoriesIx(words, { ui, order, termPacks: [UI_PACK[ui] ?? 'en', ...ctx.packs.filter((p) => p !== (UI_PACK[ui] ?? 'en'))].filter((p) => ctx.packs.includes(p)), partial, book, namesOnly: !topic })
+  if (!found?.hits.length) return []
+  const s = ST(ui)
+  const arrow = rtlLang(ui) ? '◂' : '▸'
+  const max = topic ? 4 : room
+  const items = found.hits.slice(0, max).map((e): Suggestion => {
+    const sheet: Sheet = { id: `c${Date.now()}`, intent: 'passage', ref: `obs ${e.n}`, what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: found.lang }
+    return { kind: 'story', label: `${shownTitle(e)} ${arrow}`, aria: `${obsLabel(e.n)}: ${e.title}`, sheet, ask: e.title ? `${obsLabel(e.n)}: ${e.title}` : obsLabel(e.n) }
+  })
+  if (topic && found.hits.length > max)
+    items.push({ kind: 'stories', label: `${fillT(s.all, { n: String(found.hits.length) })} ${arrow}`, list: { lang: found.lang, ids: found.hits.map((e) => e.n), title: fillT(s.withTopic, { topic: upFirst(words.join(' ')) }) } })
+  return items
+}
+/** C: under a passage's "✓", the story that tells it ("Told in OBS 3 ▸"): one button at the end, when the row has room. */
+function told(u: Understood, items: Suggestion[], ctx: Ctx): Suggestion[] {
+  if (!u.has || items[0]?.kind !== 'ok' || u.fu || items.length >= MAX || !u.slots.chapter || !storiesOn(ctx)) return items
+  const sl = u.slots
+  const ref = `${u.code} ${sl.chapter}${sl.verse_start ? `:${sl.verse_start}${sl.verse_end && sl.verse_end > sl.verse_start ? `-${sl.verse_end}` : ''}` : ''}`
+  const range = rangeOfRef(ref)
+  const hit = range ? storyTelling(range, storyOrder(ctx)) : null
+  if (!hit) return items
+  const s = ST(ctx.ui)
+  const sheet: Sheet = { id: `c${Date.now()}`, intent: 'passage', ref: `obs ${hit.n}`, what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: hit.lang }
+  return [...items, { kind: 'story', label: `${fillT(s.told, { n: String(hit.n) })} ${rtlLang(ctx.ui) ? '◂' : '▸'}`, aria: `${obsLabel(hit.n)}: ${hit.title}`, sheet, ask: hit.title ? `${obsLabel(hit.n)}: ${hit.title}` : obsLabel(hit.n) }]
+}
+
 /** How many syllables a Devanagari text has: its letters, a consonant joined by a virama to the one before not counted. */
 const syllables = (s: string) => [...s.matchAll(/(?<!\u094D)\p{L}/gu)].length
 /** C: the articles a word being typed names (alone, or after the words of a meaning question), from the pack in its language. */
@@ -528,7 +629,9 @@ function termRow(t: string, ctx: Ctx, room: number): Suggestion[] {
   const ui = ctx.ui
   const f = fold(t).replace(/^[\s¿¡]+/, '')
   const lead = LEADS.find((h) => f.startsWith(h + ' '))
-  const rest = (lead ? f.slice(lead.length) : f).replace(/[¿?¡!؟.,;:«»"“”]/g, ' ').replace(/\s+/g, ' ').trim()
+  // (a story word and the small words around it go: "historia de Jesús" still offers "Jesús · palabra clave")
+  const sw = storyWords(t)
+  const rest = sw ? fold(sw.words.join(' ')) : (lead ? f.slice(lead.length) : f).replace(/[¿?¡!؟.,;:«»"“”]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!rest || /\d/.test(rest) || rest.split(' ').length > 4) return []
   const enough = /[ऀ-ॿ]/.test(rest) ? syllables(rest) >= 2 : /[؀-ۿ]/.test(rest) ? rest.replace(/\s/g, '').length >= 2 : rest.replace(/\s/g, '').length >= (lead ? 2 : 3)
   if (!enough) return []

@@ -270,7 +270,8 @@ type View =
   | { k: 'book'; code: string; lang: string }
   | { k: 'chapter'; code: string; lang: string; ch: number }
   | { k: 'manual'; m: Manual; lang: string }
-  | { k: 'obs'; lang: string }
+  /** `only`: just these stories (the typing row's "All (n)"), under `title` */
+  | { k: 'obs'; lang: string; only?: number[]; title?: string }
   | { k: 'obs5m' }
   | { k: 'modes' }
 // kept while the app is open: Browse opens again where the person left it (the next verse is one tap away)
@@ -357,7 +358,7 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer'): boolea
   return true
 }
 /** Opens Browse at a book or a Translation Academy manual (a next step under an answer), its first view behind it. */
-export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; mode?: ModeId | 'list'; from?: 'welcome' }) {
+export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; only?: number[]; title?: string; mode?: ModeId | 'list'; from?: 'welcome' }) {
   if (at.mode === 'list') {
     // the guided modes alone (the empty conversation's [Start a mode]), Browse's home behind it
     const home = stack.find((x): x is Extract<View, { k: 'home' }> => x.k === 'home')
@@ -369,7 +370,7 @@ export function openExploreAt(at: { book?: string; manual?: string; lang?: strin
     stack.push({ k: 'home', tab: 'bible' }, { k: 'obs5m' })
   } else if (at.lang && at.obs) {
     stack.length = 0
-    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang })
+    stack.push({ k: 'home', tab: 'bible' }, { k: 'obs', lang: at.lang, ...(at.only?.length ? { only: at.only, title: at.title } : {}) })
   } else if (at.lang && (at.book || (MANUALS as readonly string[]).includes(at.manual ?? ''))) {
     stack.length = 0
     stack.push({ k: 'home', tab: at.book ? 'bible' : 'academy' })
@@ -644,10 +645,11 @@ async function draw() {
 
   if (v.k === 'obs') {
     // the stories in order: the title in the pack's language (its own direction), the Bible passages it is told from
-    b.title.textContent = OW(ui).browse
+    b.title.textContent = v.only?.length && v.title ? v.title : OW(ui).browse
     let list: StoryEntry[] = []
     try {
       list = await storyList(await openLang(v.lang))
+      if (v.only?.length) list = list.filter((e) => v.only!.includes(e.n))
     } catch { /* drawn as not readable below */ }
     if (!done()) return
     if (!list.length) {

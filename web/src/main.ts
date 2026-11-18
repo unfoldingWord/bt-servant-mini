@@ -1410,6 +1410,7 @@ const cmp = mountComposer(form, input, {
   // (a free question is read by the phone's model or online; with neither, the row's grey line says it is searched)
   reader: () => (modelReady() && !modelOff()) || (onlineOn() && onlineAvailable() && isOnline() && (!signInAvailable() || !!onlineSession())),
   resume: (story) => { const e = savedSessions().find((x) => x.story === story); if (e) resume5(e) },
+  stories: (lang, ids, title) => openExploreAt({ obs: true, lang, only: ids, title }),
 })
 
 function runSheet(label: string, sheet: Sheet, ui: string) {

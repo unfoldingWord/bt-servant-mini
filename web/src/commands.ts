@@ -11,6 +11,8 @@ export type Command = 'intro' | 'overview' | 'about' | 'tell' | 'chapter' | 'not
   | 'there' | 'range' | 'bookWord'
   // the 5M study session asked for by its words ("5M OBS 1"): the words alone; the caller checks for OBS/story and the number
   | 'obs5m'
+  // a story word ("historia de Jesús", "story of Noah", "OBS"): the typing row offers Bible stories (suggest.ts)
+  | 'story'
 
 const VOCAB = data as unknown as Record<Command, Record<string, string[]>>
 const cache = new Map<Command, RegExp>()
