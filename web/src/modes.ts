@@ -71,6 +71,8 @@ type L = {
   section: string; book: string; learn: string; five: string; fiveTest: string; fiveSub: string
   /** the 5M view */
   intro: string; stories: string; onlyOne: string; noObs: string; unreadable: string
+  /** the modes list when no mode is there */
+  noModes: string
   /** the first two modes' lines are the welcome's doors' (welcome.ts) */
   bookSub: string; learnSub: string
 }
@@ -82,6 +84,7 @@ const STR: Record<string, L> = {
     stories: 'Stories with a session', onlyOne: 'For now only story 1, in English (test version). The others come with the packs.',
     noObs: 'To see the helps for each frame, add Bible Stories: Menu → Languages',
     unreadable: 'The test session is not in this version of the app. It is in the BT Servant DEV app.',
+    noModes: 'There are no guided modes with what is on this phone.',
     bookSub: 'Its introduction, then section by section with its helps', learnSub: 'Short Translation Academy lessons, one at a time',
   },
   es: {
@@ -91,6 +94,7 @@ const STR: Record<string, L> = {
     stories: 'Historias con sesión', onlyOne: 'Por ahora solo la historia 1, en inglés (versión de prueba). Las demás llegan con los paquetes.',
     noObs: 'Para ver las ayudas de cada cuadro, agrega Historias de la Biblia: Menú → Idiomas',
     unreadable: 'La sesión de prueba no está en esta versión de la app. Está en la app BT Servant DEV.',
+    noModes: 'No hay modos guiados con lo que tiene este teléfono.',
     bookSub: 'Su introducción y luego sección por sección, con sus ayudas', learnSub: 'Lecciones cortas de Translation Academy, una a la vez',
   },
   fr: {
@@ -100,6 +104,7 @@ const STR: Record<string, L> = {
     stories: 'Histoires avec séance', onlyOne: 'Pour l’instant, seulement l’histoire 1, en anglais (version d’essai). Les autres arrivent avec les paquets.',
     noObs: 'Pour voir les aides de chaque image, ajoutez les Histoires de la Bible : Menu → Langues',
     unreadable: 'La séance d’essai n’est pas dans cette version de l’application. Elle est dans l’application BT Servant DEV.',
+    noModes: 'Il n’y a aucun mode guidé avec ce qu’il y a sur ce téléphone.',
     bookSub: 'Son introduction, puis section par section avec ses aides', learnSub: 'De courtes leçons de Translation Academy, une à la fois',
   },
   id: {
@@ -109,6 +114,7 @@ const STR: Record<string, L> = {
     stories: 'Kisah yang punya sesi', onlyOne: 'Untuk sekarang hanya kisah 1, dalam bahasa Inggris (versi uji coba). Yang lain datang bersama paket.',
     noObs: 'Untuk melihat bahan bantu tiap bingkai, tambahkan Kisah-kisah Alkitab: Menu → Bahasa',
     unreadable: 'Sesi uji coba tidak ada di versi aplikasi ini. Sesi itu ada di aplikasi BT Servant DEV.',
+    noModes: 'Tidak ada mode terpandu dengan isi ponsel ini.',
     bookSub: 'Pengantarnya, lalu bagian demi bagian dengan bahan bantunya', learnSub: 'Pelajaran singkat Translation Academy, satu per satu',
   },
   hi: {
@@ -118,6 +124,7 @@ const STR: Record<string, L> = {
     stories: 'सत्र वाली कहानियाँ', onlyOne: 'अभी केवल कहानी 1, अंग्रेज़ी में (परीक्षण संस्करण)। बाकी पैकेजों के साथ आएँगी।',
     noObs: 'हर चित्र की सहायता देखने के लिए बाइबल की कहानियाँ जोड़ें: मेनू → भाषाएँ',
     unreadable: 'परीक्षण सत्र ऐप के इस संस्करण में नहीं है। यह BT Servant DEV ऐप में है।',
+    noModes: 'इस फ़ोन पर जो है उसके साथ कोई निर्देशित तरीका उपलब्ध नहीं है।',
     bookSub: 'उसका परिचय, फिर खंड-दर-खंड उसकी सहायताओं के साथ', learnSub: 'Translation Academy के छोटे पाठ, एक बार में एक',
   },
   ar: {
@@ -127,6 +134,7 @@ const STR: Record<string, L> = {
     stories: 'قصص لها جلسة', onlyOne: 'حاليًا القصة 1 فقط، بالإنجليزية (نسخة تجريبية). تصل القصص الأخرى مع الحزم.',
     noObs: 'لرؤية مساعدات كل إطار، أضف قصص الكتاب المقدس: القائمة ← اللغات',
     unreadable: 'جلسة الاختبار غير موجودة في هذه النسخة من التطبيق. وهي في تطبيق BT Servant DEV.',
+    noModes: 'لا توجد مسارات موجّهة بما هو متوفر على هذا الهاتف.',
     bookSub: 'مقدمته، ثم مقطعًا بعد مقطع مع مساعداته', learnSub: 'دروس قصيرة من Translation Academy، درسًا بعد درس',
   },
 }

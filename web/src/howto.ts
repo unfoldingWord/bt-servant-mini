@@ -322,7 +322,8 @@ async function findExamples(ui: string, packs: string[], helpsLang: string | nul
   // that each topic routes to its article)
   const topic = await first(s.topics)
   // an Open Bible Stories frame that has notes, asked as "OBS 1:2" (the app reads it in every language)
-  const fr = await firstNotedFrame(pack).catch(() => null)
+  // (the same pack phoneHas asks: the first one on the phone, then English, then the others, so the card and its example agree)
+  const fr = await firstNotedFrame(packs[0]!).catch(() => null)
   return {
     ref, chapter, passage: named(ref), notes: fill(s.notes, named(ref)), questions: chapter ? fill(s.questions, named(chapter)) : null,
     follow: s.follow, free: fill(s.freeQ, named(ref)), term, topic, obs: fr ? obsLabel(fr.n, fr.f) : null, book: fillName(ui, ref.split(' ')[0]!),
@@ -374,7 +375,8 @@ async function findWho(ui: string, packs: string[]): Promise<WhoExample | null> 
 
 /** What the phone has that decides the cards: some Open Bible Stories, some book of the Bible (every book brings its MACULA data). */
 export type PhoneHas = { obs: boolean; books: boolean }
-let lastHas: PhoneHas = { obs: false, books: true }
+// (until it is read: the conservative set, so a card is added when it arrives and never taken away)
+let lastHas: PhoneHas = { obs: false, books: false }
 export async function phoneHas(packs: string[]): Promise<PhoneHas> {
   const books = (await Promise.all(packs.map(async (l) => {
     try {
@@ -457,10 +459,14 @@ export function cardsFor(ui: string, ex: Examples | null, online = onlineHere(),
 // ------------------------------------------------------------------------------------------------------------ the page
 
 export type HowtoHooks = {
-  /** the box's text sent as if typed (main.ts: the form's submit) */
-  ask: (q: string) => void
+  /** the box's text sent as if typed (main.ts: the form's submit); false when it was not taken (an answer on its way, the PIN lock) */
+  ask: (q: string) => boolean
   /** an answer is being written: the next question waits */
   busy: () => boolean
+  /** the PIN lock is on: nothing is asked */
+  locked: () => boolean
+  /** the open conversation's id: a second question is not asked in another conversation */
+  conv: () => string
   /** writes in the box, without sending (the typing suggestions follow it) */
   type: (text: string) => void
   browse: () => void
@@ -469,11 +475,12 @@ export type HowtoHooks = {
   saved: () => void
   menu: () => void
   /** a ready sheet asked (who is who): `s.lang` is the pack that has the book */
-  askSheet: (label: string, s: { ref: string; what: string[]; lang: string }) => void
+  askSheet: (label: string, s: { ref: string; what: string[]; lang: string }) => boolean
   packs: () => string[]
   helpsLang: () => string | null
 }
-let at = 0 // the card shown: the guide opens again where it was left (until the app is closed)
+let atId: CardId | null = null // the card shown: the guide opens again where it was left (until the app is closed)
+let poll: ReturnType<typeof setInterval> | null = null
 let opener: HTMLElement | null = null
 // while the guide is open: the rest of the app is inert (Tab stays in the card), and Escape closes it wherever the focus is
 let quiet: HTMLElement[] = []
@@ -502,20 +509,31 @@ function button(text: string, on: () => void, cls = ''): HTMLButtonElement {
   return b
 }
 
-/** Asks the questions one after the other, each when the answer before it is done (at most a minute each). */
-async function askAll(qs: string[], h: HowtoHooks) {
-  for (const q of qs) {
-    for (let t = 0; h.busy() && t < 400; t++) await new Promise((r) => setTimeout(r, 150))
-    if (h.busy()) return
-    h.ask(q)
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+/** Whether "Try it" cannot send now: an answer is on its way, or the PIN lock is on. */
+const unavailable = (h: HowtoHooks) => h.busy() || h.locked()
+/**
+ * Asks the questions one after the other, each when the answer before it is done (at most a minute each). Nothing is asked while
+ * an answer is on its way or the lock is on, and the next question is dropped if the lock came on or the conversation changed in
+ * between (a question belongs to the conversation it started in). False when not all were asked.
+ */
+export async function askAll(qs: string[], h: HowtoHooks, step = 150): Promise<boolean> {
+  if (unavailable(h)) return false
+  const id = h.conv()
+  for (let i = 0; i < qs.length; i++) {
+    if (i > 0) {
+      for (let t = 0; h.busy() && t < 400; t++) await sleep(step)
+      if (unavailable(h) || h.conv() !== id) return false
+    }
+    if (!h.ask(qs[i]!)) return false
   }
+  return true
 }
 
 /** The same, for a ready sheet. */
-async function askSheet(sh: WhoExample, h: HowtoHooks) {
-  for (let t = 0; h.busy() && t < 400; t++) await new Promise((r) => setTimeout(r, 150))
-  if (h.busy()) return
-  h.askSheet(sh.label, { ref: sh.ref, what: sh.what, lang: sh.lang })
+export async function askSheet(sh: WhoExample, h: HowtoHooks): Promise<boolean> {
+  if (unavailable(h)) return false
+  return h.askSheet(sh.label, { ref: sh.ref, what: sh.what, lang: sh.lang })
 }
 
 /** Closes the guide (Android's back button, Escape, ×); false when it was not open. */
@@ -526,6 +544,8 @@ export function closeHowto(): boolean {
   for (const q of quiet) q.inert = false
   quiet = []
   document.removeEventListener('keydown', onKey)
+  if (poll) clearInterval(poll)
+  poll = null
   opener?.focus?.({ preventScroll: true })
   opener = null
   return true
@@ -562,7 +582,7 @@ export function openHowTo(ui: string, start?: CardId) {
   let whoAsked = false
   const make = () => cardsFor(ui, found, onlineHere(), typingOn(), has, who ?? null)
   let cards = make()
-  if (start) at = Math.max(0, cards.findIndex((c) => c.id === start))
+  let at = Math.max(0, cards.findIndex((c) => c.id === (start ?? atId)))
   /** The cards again with what arrived; the card on screen stays. */
   const refresh = () => {
     const id = cards[at]?.id
@@ -580,6 +600,7 @@ export function openHowTo(ui: string, start?: CardId) {
   const draw = (toTitle = false) => {
     at = Math.min(at, cards.length - 1)
     const c = cards[at]!
+    atId = c.id
     // a redraw drops the focus to the page: it goes back to the same button, or to the title
     const was = document.activeElement instanceof HTMLElement && box.contains(document.activeElement) ? document.activeElement : null
     const key = was?.dataset.k
@@ -599,13 +620,19 @@ export function openHowTo(ui: string, start?: CardId) {
       box.appendChild(ul)
     }
     const acts = el('div', 'howto-try')
-    if (c.ask.length || c.fill || c.tryBrowse || c.sheet) acts.appendChild(btn('try', s.tryIt, () => {
-      closeHowto()
-      if (c.fill) h.type(c.fill)
-      else if (c.tryBrowse) h.browse()
-      else if (c.sheet) void askSheet(c.sheet, h)
-      else void askAll(c.ask, h)
-    }, 'primary'))
+    if (c.ask.length || c.fill || c.tryBrowse || c.sheet) {
+      const go = btn('try', s.tryIt, () => {
+        // (what sends waits for no one: while an answer is on its way or the lock is on the button is off)
+        if ((c.ask.length || c.sheet) && unavailable(h)) return
+        closeHowto()
+        if (c.fill) h.type(c.fill)
+        else if (c.tryBrowse) h.browse()
+        else if (c.sheet) void askSheet(c.sheet, h)
+        else void askAll(c.ask, h)
+      }, 'primary')
+      go.disabled = !!(c.ask.length || c.sheet) && unavailable(h)
+      acts.appendChild(go)
+    }
     if (c.extra === 'saved') acts.appendChild(btn('extra', s.openSaved, () => { closeHowto(); h.saved() }, 'secondary'))
     if (c.extra === 'menu') acts.appendChild(btn('extra', s.openMenu, () => { closeHowto(); h.menu() }, 'secondary'))
     if (c.extra === 'browse') acts.appendChild(btn('extra', XT(ui).browse, () => { closeHowto(); h.browse() }, 'secondary'))
@@ -617,7 +644,7 @@ export function openHowTo(ui: string, start?: CardId) {
     prev.disabled = at === 0
     const last = at === cards.length - 1
     nav.append(prev, btn('next', last ? s.done : s.next, () => {
-      if (last) { at = 0; closeHowto() } else { at++; draw(true) }
+      if (last) { atId = null; closeHowto() } else { at++; draw(true) }
     }, 'primary'))
     box.appendChild(nav)
     const again = !toTitle && key ? box.querySelector<HTMLElement>(`[data-k="${key}"]:not(:disabled)`) : null
@@ -633,6 +660,12 @@ export function openHowTo(ui: string, start?: CardId) {
   }
   draw()
   box.focus({ preventScroll: true })
+  // the buttons that send follow the chat: off while an answer is on its way or the lock is on, on again when it is done
+  poll = setInterval(() => {
+    const go = box.querySelector<HTMLButtonElement>('[data-k="try"]')
+    const sends = !!(cards[at]?.ask.length || cards[at]?.sheet)
+    if (go && sends) go.disabled = unavailable(h)
+  }, 400)
   // what the phone has decides which cards there are (a moment, no book is read); the examples come from the packs (a book is
   // read): the cards show at once, their examples a moment later
   phoneHas(h.packs()).then((x) => {

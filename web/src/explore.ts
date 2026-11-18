@@ -359,8 +359,9 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer'): boolea
 export function openExploreAt(at: { book?: string; manual?: string; lang?: string; obs?: boolean; mode?: ModeId | 'list'; from?: 'welcome' }) {
   if (at.mode === 'list') {
     // the guided modes alone (the empty conversation's [Start a mode]), Browse's home behind it
+    const home = stack.find((x): x is Extract<View, { k: 'home' }> => x.k === 'home')
     stack.length = 0
-    stack.push({ k: 'home', tab: 'bible' }, { k: 'modes' })
+    stack.push({ k: 'home', tab: home?.tab ?? 'bible' }, { k: 'modes' })
   } else if (at.mode === 'obs5m') {
     // a guided mode's own view, Browse's home behind it (Back goes there)
     stack.length = 0
@@ -576,7 +577,7 @@ async function draw() {
     b.title.textContent = MT(ui).section
     const [five, modes] = await Promise.all([fiveStories(packs).catch((): Five => 'unreadable'), modesOn(packs)])
     if (!done()) return
-    if (modes.length) b.body.appendChild(modeRows(ui, modes, five))
+    b.body.appendChild(modes.length ? modeRows(ui, modes, five) : el('p', 'ex-note', MT(ui).noModes))
     return
   }
 

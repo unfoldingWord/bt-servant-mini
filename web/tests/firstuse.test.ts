@@ -2,7 +2,7 @@
 // question's / app's / phone's language, and the download fetches a few segments at a time without changing what the client sees.
 import { test, expect } from 'bun:test'
 import { installPacks, ALL_PACKS } from './fs-packs'
-import { emptyLine, packFor, preferred, quickSpec } from '../src/firstuse'
+import { emptyLine, packFor, preferred, quickSpec, quickTap } from '../src/firstuse'
 import { exportPack, installedLangs, markPartial, missingUnits, openLang, partialLangs, prefetching, updateLang } from '../src/packs'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
@@ -147,4 +147,30 @@ test('the quick actions: Explore, Start a mode (only with a mode), How to ask; a
   expect(quickSpec('es', { ...o, modes: false }).map((q) => q.kind)).toEqual(['explore', 'howto'])
   expect(quickSpec('es', { ...o, resume: ['Continuar OBS 1', 'Continuar OBS 2'] }).map((q) => q.kind)).toEqual(['resume', 'resume', 'explore', 'mode', 'howto'])
   expect(quickSpec('ar', { ...o, explore: 'تصفّح', howto: 'كيف تسأل' }).map((q) => q.label)).toEqual(['تصفّح', 'ابدأ مسارًا موجّهًا', 'كيف تسأل'])
+})
+
+test('the quick actions keep their order and their slots: the mode slot is held while it is read, and only filled or taken away', () => {
+  const o = { resume: ['Continuar A'], explore: 'Explorar', howto: 'Cómo preguntar' }
+  const unknown = quickSpec('es', { ...o, modes: null })
+  const yes = quickSpec('es', { ...o, modes: true })
+  // the same pills in the same places while the mode is being read and after it is there: How to ask does not move
+  expect(unknown.map((q) => q.kind)).toEqual(yes.map((q) => q.kind))
+  expect(unknown.find((q) => q.kind === 'mode')!.hidden).toBe(true)
+  expect(yes.find((q) => q.kind === 'mode')!.hidden).toBeUndefined()
+  // no mode: the slot is not there
+  expect(quickSpec('es', { ...o, modes: false }).map((q) => q.kind)).toEqual(['resume', 'explore', 'howto'])
+})
+
+test('a tap on a pill: resume goes by its index (two sessions with the same words are two pills), the others call their way, a refusal is false', () => {
+  const calls: string[] = []
+  const h = {
+    explore: () => calls.push('explore'), modes: () => calls.push('modes'), howto: () => calls.push('howto'),
+    resume: (i: number) => { calls.push(`resume ${i}`); return i !== 1 },
+  }
+  const q = quickSpec('es', { modes: true, resume: ['Continuar OBS 1', 'Continuar OBS 1'], explore: 'E', howto: 'H' })
+  expect(q.filter((x) => x.kind === 'resume').map((x) => x.index)).toEqual([0, 1])
+  expect(quickTap(q[0]!, h)).toBe(true)
+  expect(quickTap(q[1]!, h)).toBe(false) // refused (an answer on its way, or the lock): the page says so
+  for (const x of q.slice(2)) expect(quickTap(x, h)).toBe(true)
+  expect(calls).toEqual(['resume 0', 'resume 1', 'explore', 'modes', 'howto'])
 })

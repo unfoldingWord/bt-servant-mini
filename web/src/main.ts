@@ -26,7 +26,7 @@ import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, gue
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
-import { FU, languagePicker, packFor, emptyLine, quickSpec } from './firstuse'
+import { FU, languagePicker, packFor, emptyLine, quickSpec, quickTap } from './firstuse'
 import { backExplore, closeExplore, modesOn, openExplore, openExploreAt, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
@@ -632,30 +632,48 @@ function placeModelOffer() {
 }
 /**
  * The empty conversation's quick actions, one row of pills (RTL mirrors by the row's dir): a saved 5M session to continue, Browse,
- * a guided mode (only when the phone has one: read a moment later, as Browse reads them), and How to ask.
+ * a guided mode (only when the phone has one), and How to ask. The row is drawn once: the mode's slot is kept while it is read (the
+ * last answer is remembered, so a later screen is exact at once), then shown or taken away in place, so the other pills stay put
+ * and the focus is not lost.
  */
+let quickModes: boolean | null = null
 function quickRow(): HTMLElement {
   const row = el('div', 'quick')
   row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
   const saved = resumeEntries()
-  const draw = (modes: boolean) => {
-    row.replaceChildren()
-    for (const q of quickSpec(nav, { modes, resume: saved.map((r) => r.label), explore: XT(nav).browse, howto: howtoLabel(nav) })) {
-      const b = el('button', q.kind === 'resume' ? 'quick-resume' : '', bidiLabel(q.label, nav)) as HTMLButtonElement
-      b.type = 'button'
-      b.dataset.quick = q.kind
-      b.onclick = () => {
-        if (q.kind === 'resume') saved.find((r) => r.label === q.label)?.go()
-        else if (q.kind === 'explore') openExplore('welcome')
-        else if (q.kind === 'mode') openExploreAt({ mode: 'list', from: 'welcome' })
-        else openHowTo(nav)
-      }
-      row.appendChild(b)
-    }
+  const note = el('p', 'quick-note')
+  note.setAttribute('role', 'status')
+  const hooks = {
+    explore: () => openExplore('welcome'),
+    modes: () => openExploreAt({ mode: 'list', from: 'welcome' }),
+    howto: () => openHowTo(nav),
+    resume: (i: number) => (busy || locked() ? false : saved[i]?.go() ?? false),
   }
-  draw(false)
-  modesOn(INSTALLED).then((m) => { if (m.length && row.isConnected) draw(true) }).catch(() => {})
-  return row
+  const modeBtn: { b?: HTMLButtonElement } = {}
+  for (const q of quickSpec(nav, { modes: quickModes, resume: saved.map((r) => r.label), explore: XT(nav).browse, howto: howtoLabel(nav) })) {
+    const b = el('button', q.kind === 'resume' ? 'quick-resume' : '', bidiLabel(q.label, nav)) as HTMLButtonElement
+    b.type = 'button'
+    b.dataset.quick = q.kind
+    if (q.hidden) { b.style.visibility = 'hidden'; b.disabled = true; b.setAttribute('aria-hidden', 'true') }
+    if (q.kind === 'mode') modeBtn.b = b
+    b.onclick = () => {
+      note.textContent = ''
+      // the same note Browse gives for a mode or a story asked while an answer is on its way
+      if (!quickTap(q, hooks)) note.textContent = XT(nav).busy
+    }
+    row.appendChild(b)
+  }
+  if (quickModes === null) {
+    modesOn(INSTALLED).then((m) => {
+      quickModes = m.length > 0
+      const b = modeBtn.b
+      if (!b?.isConnected) return
+      if (quickModes) { b.style.visibility = ''; b.disabled = false; b.removeAttribute('aria-hidden') } else b.remove()
+    }).catch(() => {})
+  }
+  const box = el('div', 'quick-box')
+  box.append(row, note)
+  return box
 }
 function renderConv() {
   log.innerHTML = ''
@@ -1344,13 +1362,10 @@ function runSheet(label: string, sheet: Sheet, ui: string) {
 
 // How to ask (howto.ts): its "Try it" sends through the form, as if typed; its example for the composer is typed in the box
 setHowtoHooks({
-  ask: (q) => {
-    const typed = input.value
-    input.value = q
-    form.requestSubmit()
-    input.value = typed // what the person was writing stays in the box (as reaskWaiting)
-  },
+  ask: (q) => !busy && !locked() && sendTyped(input, form, q), // (what the person was writing stays in the box)
   busy: () => busy,
+  locked: () => locked(),
+  conv: () => conv().id,
   type: (text) => {
     input.value = text
     input.focus()
@@ -1368,7 +1383,11 @@ setHowtoHooks({
     panel.classList.add('show')
     renderPanel()
   },
-  askSheet: (label, s) => runSheet(label, { ...bare(s.lang), intent: 'passage', ref: s.ref, what: s.what }, nav),
+  askSheet: (label, s) => {
+    if (busy || locked()) return false
+    runSheet(label, { ...bare(s.lang), intent: 'passage', ref: s.ref, what: s.what }, nav)
+    return true
+  },
   packs: () => INSTALLED,
   helpsLang: () => helpsLang,
 })
@@ -1551,7 +1570,7 @@ function end5() {
   cmp.answered()
 }
 /** The resume buttons of the welcome: the sessions used last (up to 3) */
-function resumeEntries(): { label: string; go: () => void }[] {
+function resumeEntries(): { label: string; go: () => boolean }[] {
   const fx = fixture5()
   if (!devOn('obs5m') || !fx) return []
   return savedSessions().filter((e) => e.story === fx.story).slice(0, 3)

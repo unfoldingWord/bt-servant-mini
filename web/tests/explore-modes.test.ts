@@ -442,6 +442,33 @@ describe('the modes list (the empty conversation, Start a mode)', () => {
     expect($('.ex-modes')!.dir).toBe('rtl')
   })
 })
+describe('the modes list, when there is nothing to list or Browse was left on a tab', () => {
+  test('no mode with what is on the phone: one line says so, in the app language (no empty screen)', async () => {
+    for (const [l, line] of [['es', 'No hay modos guiados con lo que tiene este teléfono.'], ['en', 'There are no guided modes with what is on this phone.'], ['ar', 'لا توجد مسارات موجّهة بما هو متوفر على هذا الهاتف.']] as const) {
+      closeExplore(false)
+      resetExplore()
+      ui = l
+      packs = []
+      openExploreAt({ mode: 'list', from: 'welcome' })
+      await until('.ex-note')
+      expect($('.ex-note')!.textContent).toBe(line)
+      expect($$('.ex-modes .ex-row').length).toBe(0)
+      expect(MT(l).noModes).toBe(line)
+    }
+  })
+  test('Browse home behind the list keeps the tab it was left on', async () => {
+    openExplore('bar')
+    await until('.ex-tabs')
+    $$('.ex-tabs button')[1]!.click() // Translation Academy
+    await sleep(50)
+    closeExplore(false)
+    openExploreAt({ mode: 'list', from: 'welcome' })
+    await until('.ex-modes .ex-row')
+    expect(backExplore()).toBe(true)
+    await until('.ex-tabs')
+    expect($$('.ex-tabs button')[1]!.className).toContain('on')
+  })
+})
 function sheetOfSession(_fx: Awaited<ReturnType<typeof loadFixture>>) {
   return { story: 1, part: 'm1' as const, at: 2, lang: 'en', tfLang: 'en' as const, started: Date.now(), done: [] }
 }

@@ -82,15 +82,28 @@ const EMPTY: Record<string, { line: string; mode: string }> = {
 }
 export const emptyLine = (ui: string): string => (EMPTY[ui] ?? EMPTY.en!).line
 export const emptyModeLabel = (ui: string): string => (EMPTY[ui] ?? EMPTY.en!).mode
-/** The pills of the empty conversation, in order: Resume (a saved 5M session, each), Browse, Start a mode (only when a mode is there), How to ask. */
-export type Quick = { kind: 'resume' | 'explore' | 'mode' | 'howto'; label: string }
-export function quickSpec(ui: string, o: { modes: boolean; resume: string[]; explore: string; howto: string }): Quick[] {
+/**
+ * The pills of the empty conversation, in order: Resume (a saved 5M session, each, by its index in the list), Browse, Start a mode, How
+ * to ask. `modes`: whether a guided mode is there; null while it is being read: the slot is kept (`hidden`), so How to ask does not
+ * move under a finger when the answer comes, and the row is not drawn again.
+ */
+export type Quick = { kind: 'resume' | 'explore' | 'mode' | 'howto'; label: string; index?: number; hidden?: boolean }
+export function quickSpec(ui: string, o: { modes: boolean | null; resume: string[]; explore: string; howto: string }): Quick[] {
   return [
-    ...o.resume.map((label): Quick => ({ kind: 'resume', label })),
+    ...o.resume.map((label, index): Quick => ({ kind: 'resume', label, index })),
     { kind: 'explore', label: o.explore },
-    ...(o.modes ? [{ kind: 'mode' as const, label: emptyModeLabel(ui) }] : []),
+    ...(o.modes === false ? [] : [{ kind: 'mode' as const, label: emptyModeLabel(ui), ...(o.modes === null ? { hidden: true } : {}) }]),
     { kind: 'howto', label: o.howto },
   ]
+}
+/** What a tap on a pill does in the page (main.ts gives the ways); false when it was not taken because an answer is on its way or the lock is on. */
+export type QuickHooks = { explore: () => void; modes: () => void; howto: () => void; resume: (index: number) => boolean }
+export function quickTap(q: Quick, h: QuickHooks): boolean {
+  if (q.kind === 'resume') return h.resume(q.index ?? -1)
+  if (q.kind === 'explore') h.explore()
+  else if (q.kind === 'mode') h.modes()
+  else h.howto()
+  return true
 }
 
 /** "2.6 MB", "0.4 MB". */
