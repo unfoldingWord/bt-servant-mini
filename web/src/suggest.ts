@@ -574,14 +574,28 @@ const storiesOn = (ctx: Ctx): boolean => !ctx.conv.graph?.session && hasStories(
 /** The OBS packs in the order the send looks in them: the sheet's pack, English, the others. */
 const storyOrder = (ctx: Ctx): string[] => [...new Set([firstPack({ lang: ctx.ui }, ctx), 'en', ...ctx.packs])]
 /** The first `max` graphemes of a text ("…" after them when cut): never half a surrogate pair, a combining mark or a joined sequence. */
-export function cutGraphemes(text: string, max: number): string {
-  const Seg = (Intl as any).Segmenter as (new (l?: string, o?: { granularity: string }) => { segment(s: string): Iterable<{ segment: string }> }) | undefined
+type Seg = { segment(s: string): Iterable<{ segment: string }> }
+const segmenters = new Map<string, Seg | null>()
+/** One grapheme segmenter per language, kept (null where the engine has none). */
+function segmenter(lang: string): Seg | null {
+  if (!segmenters.has(lang)) {
+    const S = (Intl as any).Segmenter as (new (l?: string, o?: { granularity: string }) => Seg) | undefined
+    let seg: Seg | null = null
+    try {
+      seg = S ? new S(lang || undefined, { granularity: 'grapheme' }) : null
+    } catch {}
+    segmenters.set(lang, seg)
+  }
+  return segmenters.get(lang)!
+}
+export function cutGraphemes(text: string, max: number, lang = ''): string {
+  const seg = segmenter(lang)
   // (without Segmenter: a letter with the marks after it, as one)
-  const parts = Seg ? [...new Seg(undefined, { granularity: 'grapheme' }).segment(text)].map((x) => x.segment) : (text.match(/\P{M}\p{M}*/gu) ?? [])
+  const parts = seg ? [...seg.segment(text)].map((x) => x.segment) : (text.match(/\P{M}\p{M}*/gu) ?? [])
   return parts.length <= max ? text : `${parts.slice(0, max - 1).join('').trimEnd()}…`
 }
-const shownTitle = (e: { n: number; title: string }): string => {
-  const t = cutGraphemes(e.title, 34)
+const shownTitle = (e: { n: number; title: string }, lang: string): string => {
+  const t = cutGraphemes(e.title, 34, lang)
   return t ? `${obsLabel(e.n)} · ${t}` : obsLabel(e.n)
 }
 const upFirst = (w: string) => w.charAt(0).toLocaleUpperCase() + w.slice(1)
@@ -615,7 +629,7 @@ function storyRow(t: string, ctx: Ctx, topic: Topic | null, room = MAX): Suggest
   const max = topic ? 4 : room
   const items = found.hits.slice(0, max).map((e): Suggestion => {
     const sheet: Sheet = { id: `c${Date.now()}`, intent: 'passage', ref: `obs ${e.n}`, what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: found.lang }
-    return { kind: 'story', label: `${shownTitle(e)} ${arrow}`, aria: e.title ? `${obsLabel(e.n)} · ${e.title}` : obsLabel(e.n), alang: found.lang, sheet, ask: e.title ? `${obsLabel(e.n)}: ${e.title}` : obsLabel(e.n) }
+    return { kind: 'story', label: `${shownTitle(e, found.lang)} ${arrow}`, aria: e.title ? `${obsLabel(e.n)} · ${e.title}` : obsLabel(e.n), alang: found.lang, sheet, ask: e.title ? `${obsLabel(e.n)}: ${e.title}` : obsLabel(e.n) }
   })
   if (topic && found.hits.length > max)
     items.push({ kind: 'stories', label: `${fillT(s.all, { n: String(found.hits.length) })} ${arrow}`, aria: fillT(s.all, { n: String(found.hits.length) }), list: { lang: found.lang, ids: found.hits.map((e) => e.n), title: fillT(s.withTopic, { topic: upFirst(words.join(' ')) }) } })

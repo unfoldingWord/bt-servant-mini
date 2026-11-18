@@ -64,6 +64,9 @@ async function frameMap(r: Awaited<ReturnType<typeof openLang>>): Promise<FrameM
     const out: FrameMap = { ranges: new Map(), size: new Map(), byVerse: new Map() }
     for (const [key, list] of Object.entries(table)) {
       const seen = new Set<number>()
+      // every consecutive id, exactly as the client's framesAt counts `verses` (query/obsFrames.ts): the table's rule is one chapter
+      // per range, so these are verses; a range across chapters would count ids that are no verses there too, and the row's
+      // order must be the answer's, so it is not "corrected" here (tests/obsindex-review.test.ts crosses chapters)
       for (const [a, b] of list) for (let v = a; v <= b; v++) seen.add(v)
       out.ranges.set(key, list)
       out.size.set(key, seen.size)
@@ -125,18 +128,20 @@ export function buildObsIndex(packs: string[]): Promise<void> {
   const t0 = Date.now()
   const p = (building = (async () => {
     const out = new Map<string, PackIx>()
-    let failed = false
+    const failed: string[] = []
     for (const pack of packs) {
       try {
         const ix = await packIndex(pack)
         if (ix) out.set(pack, ix)
       } catch {
-        failed = true
+        failed.push(pack)
       }
       if (mine !== gen) return
     }
-    // (a pack that did not read: no partial index is kept; the next answer's idle callback tries again, up to three times)
-    if (mine === gen && failed && ++tries < 3) return
+    // (a pack that did not read: no index is kept for now and the next answer's idle callback tries again. After the third failure
+    // the index of the packs that did read is installed, and said in the console: the others offer no stories until the packs change)
+    if (mine === gen && failed.length && ++tries < 3) return
+    if (mine === gen && failed.length) console.warn(`obsindex: ${failed.join(', ')} did not read after ${tries} tries; stories only from ${[...out.keys()].join(', ') || 'none'}`)
     if (mine === gen) {
       INDEX = out
       lastBuildMs = Date.now() - t0
@@ -172,6 +177,9 @@ export function resetObsIndex() {
   tries = 0
 }
 export const obsIndexReady = (): boolean => !!INDEX
+/** The verse count the index holds for a frame ("story:frame"), and how many builds failed since the packs changed (tests). */
+export const frameSizeOf = (key: string): number | undefined => FRAMES?.size.get(key)
+export const failedBuilds = (): number => tries
 /** The stories the index holds per pack (tests). */
 export const obsIndexSizes = (): Record<string, number> => Object.fromEntries([...(INDEX ?? new Map<string, PackIx>()).entries()].map(([k, v]) => [k, v.stories.length]))
 

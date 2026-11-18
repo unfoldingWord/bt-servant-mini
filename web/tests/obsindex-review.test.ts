@@ -2,7 +2,7 @@
 // meaning question keeps its words, grapheme cuts, story-word variants, a stale or failed index. Same fixtures as obsindex.test.ts.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { booksOf, cutGraphemes, type Ctx, ready, resetSuggest } from '../src/suggest'
-import { buildObsIndex, findStoriesIx, obsIndexSizes, resetObsIndex, storyTelling } from '../src/obsindex'
+import { buildObsIndex, failedBuilds, findStoriesIx, frameSizeOf, obsIndexSizes, resetObsIndex, storyTelling } from '../src/obsindex'
 import { namedStory, rangeOfRef, storyAt } from '../src/obs'
 import { findStories } from '../src/storyfind'
 import { keywords } from '../src/search'
@@ -48,6 +48,8 @@ afterAll(async () => {
   resetObsIndex()
   resetTermIndex()
 })
+/** The pack the row looks in first for an app language (suggest.ts firstPack), as namedStory is called by the send. */
+const packOf = (ui: string): string => (ui === 'es' ? 'es-419' : ui)
 const ctx = (ui: string): Ctx => ({ ui, conv: { last: null }, helpsLang: null, packs: ALL_PACKS, books: all })
 const row = async (q: string, ui: string) => (await ready(q, ctx(ui))).items
 const nums = (items: Awaited<ReturnType<typeof row>>) => items.filter((x) => x.kind === 'story').map((x) => Number(/(\d+)/.exec(x.sheet!.ref!)![1]))
@@ -125,7 +127,7 @@ describe('the row agrees with the answer and the send', () => {
     let named = 0
     for (const [q, ui] of texts) {
       const top = nums(await row(q, ui))[0]
-      const n = await namedStory(q, 'en')
+      const n = await namedStory(q, packOf(ui))
       if (n) {
         named++
         expect(top, q).toBe(Number(/\d+/.exec(n.ref)![0]))
@@ -152,17 +154,76 @@ describe('the index over time', () => {
     await buildObsIndex(ALL_PACKS)
     expect((await row('historia de Noé', 'es')).some(isStory)).toBe(true)
   })
-  test('a pack whose stories do not read leaves no partial index', async () => {
+  test('a pack whose stories do not read: no index on the 1st and 2nd tries (and each retry really runs), the readable packs index on the 3rd', async () => {
     resetObsIndex()
     const r = await openLang('hi')
     const orig = r.obs
-    r.obs = (async () => { throw new Error('boom') }) as any
-    await buildObsIndex(ALL_PACKS)
-    expect(obsIndexSizes()).toEqual({})
-    r.obs = orig
+    let calls = 0
+    r.obs = (async () => { calls++; throw new Error('boom') }) as any
+    const warn = console.warn
+    const said: string[] = []
+    console.warn = (m: string) => { said.push(String(m)) }
+    try {
+      await buildObsIndex(ALL_PACKS)
+      expect([calls, failedBuilds(), obsIndexSizes()]).toEqual([1, 1, {}])
+      await buildObsIndex(ALL_PACKS)
+      expect([calls, failedBuilds(), obsIndexSizes()]).toEqual([2, 2, {}])
+      expect(said).toEqual([])
+      await buildObsIndex(ALL_PACKS)
+      expect([calls, failedBuilds()]).toEqual([3, 3])
+      expect(obsIndexSizes()).toEqual({ en: 50 })
+      expect(said.length).toBe(1)
+      expect(said[0]).toContain('hi')
+    } finally {
+      console.warn = warn
+      r.obs = orig
+    }
+    // a change of packs starts again, and a pack that reads gives its index
     resetObsIndex()
+    expect(failedBuilds()).toBe(0)
     await buildObsIndex(ALL_PACKS)
     expect(obsIndexSizes()).toEqual({ en: 50, hi: 50 })
+  })
+})
+
+describe('case C with other pack orders and a range across chapters', () => {
+  const refs = ['gen 6', 'gen 7:1', 'gen 6:9-22', 'luk 2:7', 'mat 3:13-17', 'exo 12:29', 'gen 3:6', 'gen 1:6-8', 'mat 13:31']
+  for (const [name, order, lang] of [['es first (no OBS there: English)', ['es-419', 'en', 'hi'], 'es'], ['hi first', ['hi', 'en', 'es-419'], 'hi']] as const)
+    test(`${name}: the chip's story is storyAt's`, async () => {
+      for (const ref of refs) {
+        const chip = storyTelling(rangeOfRef(ref)!, [...order])
+        const at = await storyAt(ref, lang)
+        expect(chip?.n ?? null, `${name} ${ref}`).toBe(at?.n ?? null)
+        if (chip) expect(chip.lang).toBe(lang === 'hi' ? 'hi' : 'en')
+      }
+    })
+  test('a table range across chapters counts its ids as the client does, so the row orders frames as the answer', async () => {
+    const orig = origMaps.get('en')
+    const r = await openLang('en')
+    const crossing = { ...FRAMES, '50:98': [[1006030, 1008022]] as [number, number][] }
+    r.mapsOf = (async (units: any, o: any) => {
+      const m = await orig.call(r, units, o)
+      return m.xtopics ? { ...m, xtopics: { ...m.xtopics, core: { ...m.xtopics.core, obsFrames: crossing } } } : m
+    }) as any
+    forgetFrameTables()
+    resetObsIndex()
+    await buildObsIndex(ALL_PACKS)
+    try {
+      // 1006030..1008022 is 2993 consecutive ids, as framesAt counts it
+      expect(frameSizeOf('50:98')).toBe(1008022 - 1006030 + 1)
+      const client = await r.framesAt(1006033, 1006033)
+      expect(client.data!.frames.find((x) => x.story === 50 && x.frame === 98)?.verses).toBe(frameSizeOf('50:98')!)
+      for (const ref of ['gen 6:33', 'gen 7:5', 'gen 8:22', 'gen 7:5-9', 'gen 6:9-22'])
+        expect(storyTelling(rangeOfRef(ref)!, ALL_PACKS)?.n ?? null, ref).toBe((await storyAt(ref, 'en'))?.n ?? null)
+    } finally {
+      r.mapsOf = (async (units: any, o: any) => {
+        const m = await orig.call(r, units, o)
+        return m.xtopics ? { ...m, xtopics: { ...m.xtopics, core: { ...m.xtopics.core, obsFrames: FRAMES } } } : m
+      }) as any
+      forgetFrameTables()
+      resetObsIndex()
+      await buildObsIndex(ALL_PACKS)
+    }
   })
 })
 
