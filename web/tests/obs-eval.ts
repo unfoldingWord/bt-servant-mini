@@ -13,8 +13,9 @@ import prompt from '../src/data/prompt.json'
 import type { Slots } from '../src/sheet'
 
 if (process.env.OBS5M) {
-  const store = new Map<string, string>([['btsm.dev.obs5m', '1']])
+  const store = new Map<string, string>()
   ;(globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, String(v)), removeItem: (k: string) => void store.delete(k), key: () => null, length: 0 }
+  await (await import('./five-on')).fiveOn(true)
 }
 const GRAMMAR = readFileSync(new URL('../src/data/slots.gbnf', import.meta.url), 'utf8')
 const post = (body: object) => new Promise<any>((res, rej) => {

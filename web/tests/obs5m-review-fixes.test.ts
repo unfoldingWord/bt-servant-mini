@@ -5,10 +5,11 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fullPhone, turn } from './harness'
 import { withObs } from './obs-fixture'
-import { answer, type ConvState, loadFixture5, type Made, resetFixture5, sessionAsks } from '../src/pipeline'
+import { answer, type ConvState, loadFixture5, type Made, sessionAsks } from '../src/pipeline'
 import { buildContext } from '../src/context'
 import { newGraph } from '../src/graph'
 import { loadFixture } from '../src/dev'
+import { fiveOn } from './five-on'
 import { sheetOf, type Session } from '../src/obs5m'
 import { forgetAllReveals, forgetCard, forgetReveals, KEY5, revealedIn, revealedOn, revealOn, saveSession } from '../src/obs5mstore'
 import { shareSession } from '../src/share'
@@ -26,7 +27,7 @@ const fake = {
 const before = (globalThis as any).localStorage
 beforeAll(async () => {
   ;(globalThis as any).localStorage = fake
-  store.set('btsm.dev.obs5m', '1')
+  await fiveOn(true)
   await fullPhone()
 })
 afterAll(async () => {
@@ -78,13 +79,13 @@ describe('I1: reveals outlive neither the card nor the session', () => {
 
 describe('I2: a cold start has the session chips', () => {
   test('before the tables are primed: no crash and no chip; after: [Resume] and the step buttons', async () => {
-    resetFixture5()
+    await fiveOn(true, false)
     const s: Session = { story: 1, part: 'drafting', at: 6, lang: 'en', tfLang: 'en', started: 1, done: ['intro', 'frames'] }
     store.delete(KEY5)
     saveSession('c9', s)
     const c: ConvState = { last: null }
     expect(startRow(ctx(c)).items.some((x) => x.resume !== undefined)).toBe(false)
-    await loadFixture5()
+    await loadFixture5(1)
     expect(startRow(ctx(c)).items.some((x) => x.resume === 1)).toBe(true)
     const g = newGraph()
     g.session = s
@@ -92,7 +93,7 @@ describe('I2: a cold start has the session chips', () => {
   })
   test('main.ts uses the pipeline loader', () => {
     const m = src('main.ts')
-    expect(m).toContain('loadFixture5()')
+    expect(m).toContain('loadFixture5(story)')
     expect(m).not.toContain('loadFixture()')
   })
 })

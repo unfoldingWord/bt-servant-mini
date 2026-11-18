@@ -1,4 +1,4 @@
-// The 5M study session's view (dev switch `obs5m`): a step's card, the session bar and the outline. Each draw* is a thin layer
+// The 5M study session's view (5M in the pack): a step's card, the session bar and the outline. Each draw* is a thin layer
 // over a DOM-free model (cardModel, barModel, outlineModel) that the tests read.
 // The core rule: the manual's answers are never on a card by default. Each one is drawn only when its own [Show answer] is
 // tapped, and a new draw starts hidden again (nothing remembers it). No card has a text field. The marks of the checking cards

@@ -7,6 +7,7 @@ import { answer, type ConvState, type Made } from '../src/pipeline'
 import { buildContext, SESSION_RULES } from '../src/context'
 import { newGraph } from '../src/graph'
 import { loadFixture } from '../src/dev'
+import { fiveOn } from './five-on'
 import { cardOf, type Session } from '../src/obs5m'
 import { shareSession, shareText } from '../src/share'
 import { todayCounts } from '../src/usage'
@@ -22,7 +23,7 @@ const fake = {
 const before = (globalThis as any).localStorage
 beforeAll(async () => {
   ;(globalThis as any).localStorage = fake
-  store.set('btsm.dev.obs5m', '1')
+  await fiveOn(true)
   await fullPhone()
 })
 afterAll(async () => {
