@@ -41,6 +41,7 @@ import type { Fixture } from './dev'
 import { covered5, fixtureNow5, on5m, onFive, refresh5 } from './five'
 import { fiveText, sendTyped } from './modes'
 import { initToBottom } from './tobottom'
+import { initKeepView, toEnd, toQuestion } from './keepview'
 import { waiting } from './waiting'
 import { type Code as Code5, jump as jump5, next as next5, prev as prev5, type Session, sheetOf as sheetOf5, stepPlace } from './obs5m'
 import { drawBar, drawCard, drawOutline } from './obs5mview'
@@ -204,6 +205,7 @@ const log = $('#log'), form = $<HTMLFormElement>('#ask'), input = $<HTMLTextArea
 const status = $('#status'), notice = $<HTMLButtonElement>('#notice'), panel = $('#panel'), menu = $<HTMLButtonElement>('#menu')
 const browse = $<HTMLButtonElement>('#browse')
 const toBottom = initToBottom(log, form) // the arrow back to the latest message (tobottom.ts)
+const view = initKeepView(log) // the keyboard opening keeps the last message in view; a send follows the question (keepview.ts)
 function applyUi() {
   document.documentElement.lang = nav
   document.documentElement.dir = nav === 'ar' ? 'rtl' : 'ltr'
@@ -765,6 +767,7 @@ function renderConv() {
   if (noPacks) log.appendChild(pickerFor(waitingLang(c)))
   updateMapBtn()
   placeModelOffer()
+  view.release() // another conversation: a send's target in the one left is let go
   log.lastElementChild?.scrollIntoView({ block: 'end' })
 }
 let panelView: PanelView = 'main'
@@ -1315,10 +1318,13 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   c.msgs.push(mine)
   if (!c.title) c.title = label.slice(0, 48)
   log.querySelector('.welcome')?.remove()
-  log.appendChild(renderMsg(mine))
+  const mineEl = renderMsg(mine)
+  log.appendChild(mineEl)
   const wait = waiting(T.thinking, 'div', 'msg bot')
   log.appendChild(wait)
-  wait.scrollIntoView({ block: 'end', behavior: 'smooth' })
+  // at once, not smooth: the keyboard closes now and the page grows under a smooth scroll (Abel, Nov 18: left far up). Kept at
+  // the end while the keyboard closes (keepview.ts)
+  view.follow(toEnd(log))
   const t0 = performance.now()
   if (!isOnline() && !document.querySelector('#netnote')) netNote('off')
   let answered = 'other'
@@ -1387,7 +1393,9 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     log.querySelectorAll('.fu').forEach((x) => x.remove())
     node.after(pickerFor(waitingLang(c)))
   }
-  log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  // the question at the top and its answer's start under it (the web scrolled to the answer's start, which hid the question);
+  // kept there if the keyboard is still closing
+  view.follow(toQuestion(log, mineEl))
   busy = false
   setReady()
   if (log.contains(node)) placeModelOffer()
@@ -1589,9 +1597,10 @@ function goTo(id: string, from: 'back' | 'map') {
   c.updated = Date.now()
   save()
   log.querySelector('.welcome')?.remove()
-  log.appendChild(renderMsg(mine))
+  const mineEl = renderMsg(mine)
+  log.appendChild(mineEl)
   log.appendChild(renderMsg(again))
-  log.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  view.follow(toQuestion(log, mineEl)) // the mark and the answer under it, as after a send (keepview.ts)
   updateMapBtn()
 }
 
