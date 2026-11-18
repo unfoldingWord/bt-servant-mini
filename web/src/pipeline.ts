@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { askedName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2254,6 +2254,51 @@ async function partsStep(base: Sheet, ui: string, missing: boolean): Promise<Fol
   return [{ label: KT(ui).getPeople, sheet: { ...base, id: `k${Date.now()}` }, add: { lang: base.lang, unit: 'xtopics' } }]
 }
 
+/** The pack whose family data a sheet is read with: its own when it has `xtopics`, else English, else none. */
+async function kinPack(l: string): Promise<string | null> {
+  for (const x of new Set([l, 'en'])) if ((await openLang(x).catch(() => null))?.installed('xtopics')) return x
+  return null
+}
+/**
+ * Under a Translation Words article about a person (`same-as`): a short line of the family at the end of its text, and the way to the
+ * person's card; an article about several people (the Abijahs), a button per person. Null when no person is joined to it.
+ */
+async function articleFamily(sheet: Sheet, ui: string): Promise<{ line: string; steps: Follow[] } | null> {
+  const pack = await kinPack(sheet.lang)
+  if (!pack || !sheet.concept?.startsWith('tw:names/')) return null
+  const ids = await peopleOf(pack, sheet.concept)
+  if (!ids.length) return null
+  const t = KT(ui)
+  const base = { ...sheet, lang: pack }
+  if (ids.length > 1) {
+    const steps: Follow[] = []
+    for (const id of ids.slice(0, 4)) {
+      const p = await personOf(pack, id)
+      steps.push({ label: p ? personLabel(p) : id, sheet: kinSheet(base, 'who', { concept: id }) })
+    }
+    return { line: '', steps }
+  }
+  const f = (await familyOf(pack, ids[0]!)).data
+  if (!f) return null
+  const part = (head: string, list: Relative[]) => (list.length ? `${head}: ${joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))}` : '')
+  const parts = [part(t.parents, f.parents), part(t.partners, f.partners), part(t.children, f.children), part(t.siblings, f.siblings)].filter(Boolean)
+  const label = t.family.replace('{x}', f.name)
+  return { line: parts.length ? `**${label}** — ${parts.join(' · ')}
+
+${creditLine(ui, f.sources)}` : '', steps: [{ label, sheet: kinSheet(base, 'who', { concept: f.id }) }] }
+}
+/** Under one verse (or verses of one chapter) or a frame of Open Bible Stories: "People here: Isaac, Esau…", when the data names any. */
+async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | null> {
+  if (!/^(?:[0-9a-z]{3} \d+:\d+(?:-\d+)?|obs \d+:\d+)$/.test(ref)) return null
+  const pack = await kinPack(sheet.lang)
+  if (!pack) return null
+  const ids = await peopleAt(pack, ref)
+  if (!ids.length) return null
+  const names: string[] = []
+  for (const id of ids.slice(0, 3)) names.push((await personOf(pack, id))?.name ?? id)
+  return { label: KT(ui).here.replace('{names}', names.join(', ') + (ids.length > 3 ? '…' : '')), sheet: kinSheet({ ...sheet, lang: pack }, 'here', { ref }) }
+}
+
 async function kinAnswer(x: Ctx): Promise<Done> {
   const { sheet, ui } = x
   const t = KT(ui)
@@ -2773,6 +2818,11 @@ ${x.meta}` },
         const st = await sessionButton(parseObsRef(sheet.ref)?.n ?? 0, ui).catch(() => null)
         if (st) follow.splice(Math.min(2 + terms.length, follow.length), 0, st)
       }
+      // a frame: who is named in the verses it tells (kin.ts, obs-frames), last, only when there is room
+      if (f.f && f.state === 'ok' && dropShown([...x.others, ...follow], null, new Set(), x.r?.answer ?? '').length < MAX_FOLLOW) {
+        const here = await hereStep(sheet, sheet.ref!, ui).catch(() => null)
+        if (here) follow.push(here)
+      }
       if (!follow.length) follow.push(browseStep(ui))
       const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
       // the frames' words tied to their notes and key terms (obswords.ts), tappable when drawn
@@ -2926,6 +2976,20 @@ ${x.meta}` },
       // a free search answered by an article or an introduction says so first
       // no button that asks again for a help the passage shows (its notes, key terms, questions, text: each in its fold)
       const shown = new Set(study ? [study.texts.length ? 'text' : '', study.notes.length ? 'notes' : '', study.terms.length ? 'terms' : '', study.questions.length ? 'questions' : ''].filter(Boolean) : [])
+      // (kin.ts) under one verse, who is named in it; under a Translation Words article about a person, its family at the end of the
+      // text and the way to the person's card: last, and only in the room left once the buttons the answer shows are dropped
+      const room = () => MAX_FOLLOW - dropShown([...x.others, ...follow], sheet.ref, shown).length
+      if (sheet.intent === 'passage' && pack && !none && follow.length && sheet.ref && room() > 0) {
+        const here = await hereStep(sheet, sheet.ref, ui).catch(() => null)
+        if (here) follow.push(here)
+      }
+      if (sheet.intent === 'article' && sheet.concept?.startsWith('tw:names/') && r) {
+        const fam = await articleFamily(sheet, ui).catch(() => null)
+        if (fam?.line) r.answer += `
+
+${fam.line}`
+        for (const st of fam?.steps ?? []) if (room() > 0) follow.push(st)
+      }
       const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: dropShown([...x.others, ...follow], sheet.ref, shown).slice(0, MAX_FOLLOW), ui,
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
         sources: sheet.intent === 'article' && ta ? [{ id: sheet.concept! }, { id: ta, title: titleOfStep(follow, ta) }] : undefined,
