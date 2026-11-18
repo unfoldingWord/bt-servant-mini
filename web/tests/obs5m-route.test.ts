@@ -8,6 +8,7 @@ import { withObs } from './obs-fixture'
 import { answer, type ConvState, type Made, returnTo } from '../src/pipeline'
 import { type GNode, mapRows, newGraph, nodeOf } from '../src/graph'
 import { loadFixture } from '../src/dev'
+import { fiveOn } from './five-on'
 import { sheetOf, type Session } from '../src/obs5m'
 import { W5 } from '../src/obs5mwords'
 import { frameAgain } from '../src/obs5mview'
@@ -21,10 +22,10 @@ const fake = {
   key: () => null, length: 0,
 }
 const before = (globalThis as any).localStorage
-const devOnNow = () => store.set('btsm.dev.obs5m', '1')
+const devOnNow = () => fiveOn(true)
 beforeAll(async () => {
   ;(globalThis as any).localStorage = fake
-  devOnNow()
+  await devOnNow()
   await fullPhone()
 })
 afterAll(async () => {
@@ -43,7 +44,7 @@ const answers = fx.questions.map((q) => q.a).filter((a): a is string => !!a)
 const backTo = (place: string) => `← ${W5('en').back.replace('{place}', place)}`
 const at = (c: ConvState) => `${c.graph!.session!.part}/${c.graph!.session!.at}`
 
-describe('a 5M session (dev on)', () => {
+describe('a 5M session (5M on)', () => {
   test('5M OBS 1 → … → M1 frame 5 → notes (deeper) → Academy (deeper) → back to the session → next (line) → Genesis 1:20 (branch)', async () => {
     const c: ConvState = { last: null }
     const r0: any = await turn(c, { q: '5M OBS 1' }, 'en')
@@ -344,9 +345,9 @@ describe('a 5M session (dev on)', () => {
   }, 60_000)
 })
 
-describe('dev switch off', () => {
+describe('no pack with 5M', () => {
   test('"5M OBS 1" is 2c\'s story answer, as before', async () => {
-    store.delete('btsm.dev.obs5m')
+    await fiveOn(false)
     try {
       const c: ConvState = { last: null }
       const r: any = await turn(c, { q: '5M OBS 1' }, 'en')
@@ -355,7 +356,7 @@ describe('dev switch off', () => {
       expect(r.reply.card).toBeUndefined()
       expect(c.graph!.session).toBeUndefined()
     } finally {
-      devOnNow()
+      await devOnNow()
     }
   }, 60_000)
 })

@@ -33,7 +33,8 @@ import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, unde
 import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHooks } from './howto'
 import { helpLines } from './helplines'
 import { closeWelcome, forgetWelcome, offerFirst, openWelcome, setWelcomeHooks, welcomeLabel } from './welcome'
-import { devOn, type Fixture, initDev } from './dev'
+import type { Fixture } from './dev'
+import { covered5, fixtureNow5, on5m, onFive, refresh5 } from './five'
 import { fiveText, sendTyped } from './modes'
 import { initToBottom } from './tobottom'
 import { waiting } from './waiting'
@@ -315,7 +316,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(pm)
   }
   // a step of a 5M session: where it is ("Movement 1 · observation · frame 5/16"), first
-  if (m.sessionMark && devOn('obs5m')) {
+  if (m.sessionMark && on5m()) {
     const sm = el('div', 'path-mark s5-mark', bidiLabel(m.sessionMark, m.ui ?? nav))
     sm.dir = rtlLang(m.ui ?? nav) ? 'rtl' : 'ltr'
     d.appendChild(sm)
@@ -385,8 +386,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(m.ai ? aiBlock(m.ai) : waiting(OT().writing, 'p', 'ai'))
   }
   // a step of a 5M session: its card (obs5mview.ts; the manual's answers only behind [Show answer]), in place of its plain text
-  // (with the dev switch off, a saved step reads as before: its plain text, no way back to a session)
-  const s5 = devOn('obs5m')
+  // (with the 5M off, a saved step reads as before: its plain text, no way back to a session)
+  const s5 = on5m()
   // (a card always draws hidden: what was revealed on it before is forgotten)
   if (m.card && s5 && cv && m.node) forgetCard(cv.id, m.node)
   if (m.card && s5) d.appendChild(drawCard(m.card, m.ui ?? nav, cardHooks(cv, m.ui ?? nav, m.node)))
@@ -693,11 +694,11 @@ function placeModelOffer() {
  * and the focus is not lost.
  */
 let quickModes: boolean | null = null
-let quickKey = '' // what quickModes was read for: the packs and the dev switch (a change reads it again)
+let quickKey = '' // what quickModes was read for: the packs and the 5M (a change reads it again)
 function quickRow(): HTMLElement {
   const row = el('div', 'quick')
   row.dir = rtlLang(nav) ? 'rtl' : 'ltr'
-  const key = `${INSTALLED.join()}|${devOn('obs5m')}`
+  const key = `${INSTALLED.join()}|${on5m()}`
   if (quickKey !== key) { quickKey = key; quickModes = null }
   const saved = resumeEntries()
   const note = el('p', 'quick-note')
@@ -1287,8 +1288,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   updateMapBtn()
   c.updated = Date.now()
   save()
-  // a 5M session (dev switch): where it is now, to resume it from another conversation (only while conversations are kept)
-  if (devOn('obs5m') && c.graph?.session) saveSession(c.id, c.graph.session)
+  // a 5M session (5M in the pack): where it is now, to resume it from another conversation (only while conversations are kept)
+  if (on5m() && c.graph?.session) saveSession(c.id, c.graph.session)
   // the row of suggestions shows where the conversation is now (and builds its word index at idle after the first answer)
   cmp.answered()
   // level 3 below: the online answer, if allowed and there is internet; the offline answer already stands
@@ -1319,8 +1320,8 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     // (on any error there, the phone's answer and the passage's context as before, so "writing…" never stays)
     const { helps, history, sources } = await buildContext({
       question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
-      // a 5M session (dev switch): its step, and the answers revealed on that card only
-      ...(devOn('obs5m') && fx5 && c.graph?.session ? { fx: fx5, ui: m.ui ?? nav, revealed: revealedOn(c.id, sessionNode(c.graph)?.id ?? '') } : {}),
+      // a 5M session (5M in the pack): its step, and the answers revealed on that card only
+      ...(on5m() && c.graph?.session && fixtureNow5(c.graph.session.story) ? { fx: fixtureNow5(c.graph.session.story)!, ui: m.ui ?? nav, revealed: revealedOn(c.id, sessionNode(c.graph)?.id ?? '') } : {}),
     }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
@@ -1393,7 +1394,7 @@ setExploreHooks({
   saved5: () => savedSessions(),
   resume5: (e) => {
     if (busy || locked()) return false
-    if (!fixture5()) return 'loading'
+    if (!fixture5(e.story)) return 'loading'
     return resume5(e) ? true : 'failed'
   },
 })
@@ -1508,33 +1509,36 @@ function goTo(id: string, from: 'back' | 'map') {
 }
 
 // ------------------------------------------------------------------------------------------------------------ the 5M session
-// (dev switch `obs5m`; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
+// (5M from the packs; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
 // has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
 // [≡] opens the outline, full screen like the Map (under the PIN lock like it). With the switch off none of this exists.
-let fx5: Fixture | null = null
-let fx5p: Promise<Fixture | null> | null = null
-/** The story's tables, read once (the dev fixture); the bar and the cards are drawn again when they arrive */
-function fixture5(): Fixture | null {
-  if (fx5 || !devOn('obs5m')) return fx5
+const loading5 = new Set<number>()
+const failed5 = new Set<number>() // covered stories whose tables did not come: not asked again until the packs change
+/** A story's tables (read once from the packs): null until they arrive; then the bar and the cards are drawn again */
+function fixture5(story: number): Fixture | null {
+  const f = fixtureNow5(story)
+  if (f || !on5m() || !covered5().includes(story) || loading5.has(story) || failed5.has(story)) return f
+  loading5.add(story)
   // (pipeline.ts's loader: the composer's session buttons read the same tables)
-  fx5p ??= loadFixture5().then((f) => {
-    fx5 = f
-    if (conv()?.msgs.some((m) => m.card) || !conv()?.msgs.length) renderConv()
-    else updateBar()
-    cmp.answered() // the composer's row asks again: [Resume] and the step's buttons need the tables
-    return f
-  }, () => { fx5p = null; return null })
+  loadFixture5(story).then((t) => { loading5.delete(story); if (t) fiveReady(); else failed5.add(story) }, () => { loading5.delete(story); failed5.add(story) })
   return null
 }
-/** The share button of a session's card (dev switch): the session as it is when tapped, with the answers revealed so far */
+/** Tables arrived (or 5M turned on or off): what shows 5M is drawn again */
+function fiveReady() {
+  if (conv()?.msgs.some((m) => m.card) || !conv()?.msgs.length) renderConv()
+  else updateBar()
+  cmp.answered() // the composer's row asks again: [Resume] and the step's buttons need the tables
+}
+/** The share button of a session's card (5M in the pack): the session as it is when tapped, with the answers revealed so far */
 function sessionShare(cv: Conv | undefined, ui: string): HTMLElement | null {
   const g = cv?.graph
-  if (!cv || !g?.session || !fx5) return null
-  return shareTextButton(() => shareSession(fx5!, g.session!, revealedIn(cv.id), ui), ui)
+  const fx = g?.session ? fixtureNow5(g.session.story) : null
+  if (!cv || !g?.session || !fx) return null
+  return shareTextButton(() => shareSession(fx, g.session!, revealedIn(cv.id), ui), ui)
 }
 /** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
 function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
-  const fx = fixture5()
+  const fx = cv?.graph?.session ? fixture5(cv.graph.session.story) : null
   if (!fx || !cv?.graph?.session) return undefined
   const g = cv.graph
   // the session as it is when tapped (each step replaces g.session; the marks go to the current copy)
@@ -1564,13 +1568,14 @@ function frameStudy(ref: string, lang: string): Promise<ObsStudy | null> {
 }
 /** A step of the session as a turn of the chat */
 function runStep(label: string, s: Session) {
-  if (!fx5) return
-  runSheet(label, sheetOf5(fx5, s, s.lang), nav)
+  const fx = fixtureNow5(s.story)
+  if (!fx) return
+  runSheet(label, sheetOf5(fx, s, s.lang), nav)
 }
 function updateBar() {
   const g = conv()?.graph
-  const s = devOn('obs5m') ? g?.session : undefined
-  const fx = s ? fixture5() : null
+  const s = on5m() ? g?.session : undefined
+  const fx = s ? fixture5(s.story) : null
   const old = document.querySelector('#s5bar')
   if (!g || !s || !fx) {
     old?.remove()
@@ -1621,8 +1626,8 @@ function ensureOutline() {
 function drawOutlineNow() {
   const o = ensureOutline()
   const s = conv()?.graph?.session
-  if (!s || !fx5) return closeOutline()
-  const fx = fx5
+  const fx = s ? fixtureNow5(s.story) : null
+  if (!s || !fx) return closeOutline()
   o.root.dir = rtlLang(nav) ? 'rtl' : 'ltr'
   o.title.textContent = W5(nav).outline
   o.close.setAttribute('aria-label', W5(nav).view.close)
@@ -1651,17 +1656,16 @@ function end5() {
 }
 /** The resume buttons of the welcome: the sessions used last (up to 3) */
 function resumeEntries(): { label: string; go: () => boolean }[] {
-  const fx = fixture5()
-  if (!devOn('obs5m') || !fx) return []
-  return savedSessions().filter((e) => e.story === fx.story).slice(0, 3)
-    .map((e) => ({ label: W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fx, e.s, nav)), go: () => resume5(e) }))
+  if (!on5m()) return []
+  return savedSessions().filter((e) => covered5().includes(e.story)).slice(0, 3).filter((e) => fixture5(e.story))
+    .map((e) => ({ label: W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fixtureNow5(e.story)!, e.s, nav)), go: () => resume5(e) }))
 }
 /**
  * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this
  * one, where the saved place is put back and its step asked again. Its earlier consultations may be gone; its place is not.
  */
 function resume5(e: Saved5): boolean {
-  const fx = fixture5()
+  const fx = fixture5(e.story)
   if (busy || locked() || !fx) return false
   const t = resumeTarget(e.conv, convs.map((c) => ({ id: c.id, empty: !c.msgs.length })), current, MAX)
   if (t.k === 'open' || t.k === 'empty') current = t.id
@@ -1841,7 +1845,7 @@ function drawMap() {
         drawMap()
       }
     } else if (r.k === 'group') {
-      // a 5M session (dev switch `obs5m`): its name over its steps; the steps themselves are the points to go back to
+      // a 5M session (5M in the pack): its name over its steps; the steps themselves are the points to go back to
       row.classList.add('gm-group')
       row.disabled = true
       const name = el('span', 'ex-row-t', r.label)
@@ -1989,7 +1993,9 @@ function firstSafety() {
 try {
   if (!localStorage.getItem('btsm.onboarded')) localStorage.setItem('btsm.onboarded', '1')
 } catch {}
-initDev()
-// the 5M session's tables, read early so its cards and bar are drawn whole (dev switch only)
-fixture5()
+// 5M: the installed packs asked at the start (and after each change) for the tables; the saved sessions' stories read early so
+// their cards and bar are drawn whole
+const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story); fiveReady() }
+onFive(looked5)
+void refresh5().then(looked5)
 firstSafety()

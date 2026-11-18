@@ -12,7 +12,8 @@ import { CANON, hasLang, installedLangs, openLang, uiLangs } from './packs'
 import { type ObsStudy, obsStudyOf } from './obswords'
 import { fiveAsk, frameHelps, FRAME_ANY, fromOtherLine, introLine, isObsRef, namedStory, type ObsFacts, type ObsStep, obsAsked, obsLabel, obsRef, obsSteps, OW, parseObsRef, searchObs, storyName, storyStep } from './obs'
 import { findSections, findStories, resetSections, type Section, type SectionHit, sectionRef } from './storyfind'
-import { devOn, type Fixture, loadFixture } from './dev'
+import type { Fixture } from './dev'
+import { covered5, fixtureNow5, fixtureOf5, on5m } from './five'
 import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type Session, sessionOfSheet, sheetOf, stepAt, stepId, stepPlace, steps as stepsOf5, stepShort } from './obs5m'
 import { W5 } from './obs5mwords'
 import { savedSessions } from './obs5mstore'
@@ -945,8 +946,8 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
     const { sheet, ui } = await buildSheet(`q${Date.now()}`, who, prefer)
     if (sheet.ref) return { sheet: { ...sheet, what: ['who'] }, ui, meta: `model ${ms} ms\n${raw}\n(who is who: read by code)`, q, inScope: 'who is who' }
   }
-  // the 5M study session (dev switch `obs5m`): "5M OBS 1" starts it; in a session, "and the notes?" and "next" are about its step
-  const five = devOn('obs5m') ? await session5Asked(q, read.slots, c, prefer).catch(() => null) : null
+  // the 5M study session (5M in the pack): "5M OBS 1" starts it; in a session, "and the notes?" and "next" are about its step
+  const five = on5m() ? await session5Asked(q, read.slots, c, prefer).catch(() => null) : null
   if (five) return { ...five, meta: `model ${ms} ms\n${raw}\n${five.meta}` }
   const given = read.slots ? { ...read.slots } : null
   // "and the notes in Spanish?": the reader may take the language named for the question's own; the reply's words stay in
@@ -1893,7 +1894,7 @@ export type Reply = {
   drift?: boolean
   /** who is who in a verse, or its sentence structure (macula.ts), drawn by syntaxview.ts */
   macula?: MacView
-  /** a step of a 5M session (dev switch `obs5m`): where it is ("Movement 1 · observation · frame 5/16"), and its card (obs5m.ts) */
+  /** a step of a 5M session (5M in the pack): where it is ("Movement 1 · observation · frame 5/16"), and its card (obs5m.ts) */
   sessionMark?: string; card?: Card5
   /** in a 5M session, any other answer: "← Back to the session: …", the way back to its current step (first on the row of the way back) */
   sessionBack?: Follow
@@ -2183,7 +2184,7 @@ export const ROUTES: Route[] = [
     // a step of the 5M study session (obs5m.ts; dev switch `obs5m`): its card from the story's tables, the next step first, then
     // the frame's helps (its OBS answers), its Bible passage and the Academy articles its notes cite; a story with no session says so
     name: 'obs5m',
-    when: (x) => x.sheet.intent === 'obs5m' && devOn('obs5m'),
+    when: (x) => x.sheet.intent === 'obs5m' && on5m(),
     run: (x) => step5(x),
   },
   {
@@ -2581,14 +2582,14 @@ ${x.meta}` },
       // the frame's key terms (two of them), after the next frame and the whole story
       const terms = (await Promise.all(f.terms.slice(0, 2).map((id) => twStep(sheet, id).catch(() => null)))).filter((t): t is Follow => !!t)
       follow.splice(Math.min(2, follow.length), 0, ...terms)
-      // in a 5M session (dev switch): the Academy articles the frame's notes cite, after its key terms (its step offers them too)
-      if (devOn('obs5m') && x.c.graph?.session && f.f && f.state === 'ok') {
+      // in a 5M session (5M in the pack): the Academy articles the frame's notes cite, after its key terms (its step offers them too)
+      if (on5m() && x.c.graph?.session && f.f && f.state === 'ok') {
         const h = await frameHelps(sheet.ref!, sheet.lang, ui).catch(() => null)
         const ta = (await Promise.all((h?.academy ?? []).slice(0, 2).map((id) => taStep(sheet, id, ui).catch(() => null)))).filter((t): t is Follow => !!t)
         follow.splice(Math.min(2 + terms.length, follow.length), 0, ...ta)
       }
-      // the story's own 5M session, when it has one (dev switch `obs5m`; not in a session already: that one would start over)
-      if (devOn('obs5m') && !x.c.graph?.session && f.state === 'ok') {
+      // the story's own 5M session, when it has one (5M in the pack; not in a session already: that one would start over)
+      if (on5m() && !x.c.graph?.session && f.state === 'ok') {
         const st = await sessionButton(parseObsRef(sheet.ref)?.n ?? 0, ui).catch(() => null)
         if (st) follow.splice(Math.min(2 + terms.length, follow.length), 0, st)
       }
@@ -2774,10 +2775,10 @@ const clip = (q: string, words = 6): string => { const w = q.replace(/[¿?¡!]/g
 export function placeLabel(n: GNode, ui: string): string {
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(n.sheet.ref ?? '')
   if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
-  // in a 5M session (dev switch): a step says where it is ("Movement 1 · observation · frame 5/16"), a frame's help what it
+  // in a 5M session (5M in the pack): a step says where it is ("Movement 1 · observation · frame 5/16"), a frame's help what it
   // shows ("OBS 1:5 · notes")
-  if (devOn('obs5m')) {
-    const fx = fx5v
+  if (on5m()) {
+    const fx = n.kind === 'obs5m' ? fixtureNow5(parseObsRef(n.sheet.ref)?.n ?? 0) : null
     const st = fx && n.kind === 'obs5m' ? sessionOfSheet(sheetOfNode(n), fx, null) : null
     if (fx && st) return stepPlace(fx, st, ui)
     const w = n.kind === 'passage' && parseObsRef(n.sheet.ref)?.f && n.sheet.what.length === 1 ? whatWord(ui, n.sheet.what[0]!) : null
@@ -2789,7 +2790,7 @@ export function placeLabel(n: GNode, ui: string): string {
 async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | undefined): Promise<string> {
   // a 5M session's step: "OBS 1 · M1 · f5"
   if (kind === 'obs5m') {
-    const fx = await fixture5().catch(() => null)
+    const fx = await fixture5(parseObsRef(s.ref)?.n ?? 0).catch(() => null)
     const st = fx ? sessionOfSheet({ ...s, id: '', version: null, phrase: null, candidates: null }, fx, null) : null
     if (fx && st) return stepShort(fx, st, ui)
   }
@@ -3016,22 +3017,17 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
 }
 
 // ------------------------------------------------------------------------------------------------- the 5M study session
-// A study session through one Open Bible Story in the manual's five movements (obs5m.ts, the design of Nov 16), behind the dev
-// switch `obs5m`: every step is a turn (a sheet with intent 'obs5m', route `obs5m`), kept in the graph as `g.session` beside the
+// A study session through one Open Bible Story in the manual's five movements (obs5m.ts, the design of Nov 16), from the packs
+// (five.ts): every step is a turn (a sheet with intent 'obs5m', route `obs5m`), kept in the graph as `g.session` beside the
 // light path (paused meanwhile, never replaced). Its frame's helps are 2c's OBS answers; any other answer offers the way back.
 
-let fx5: Promise<Fixture> | null = null
-let fx5v: Fixture | null = null
-/** The story the session reads (the dev fixture: read once, when first needed). */
-const fixture5 = (): Promise<Fixture> => (fx5 ??= loadFixture().then((f) => (fx5v = f)).catch((e) => { fx5 = null; throw e }))
-/** The story's tables if read already (the composer and the labels cannot wait for them); null before */
-export const fixture5Now = (): Fixture | null => fx5v
+/** A story's tables from the installed packs (five.ts), read once; null when no pack has the story (no session) */
+const fixture5 = (n: number): Promise<Fixture | null> => fixtureOf5(n, packCode(env.nav))
 /**
- * The one loader of the story's tables (the phone's window reads them through it too, with the dev switch on): the composer's
- * session buttons and the labels read what it loaded. `resetFixture5` forgets it (tests).
+ * The loader of a story's tables (the phone's window reads them through it too): the composer's session buttons and the labels
+ * read what it loaded (`fixtureNow5`).
  */
-export const loadFixture5 = (): Promise<Fixture> => fixture5()
-export function resetFixture5(): void { fx5 = null; fx5v = null }
+export const loadFixture5 = (n: number): Promise<Fixture | null> => fixture5(n)
 
 /**
  * Whether the conversation is at the session (R9): its current point is a step, or under one through `deeper` points only (the
@@ -3056,7 +3052,7 @@ function atSession(g: Graph): boolean {
  * words: answered as usual), and always with the dev switch off or no session.
  */
 export function sessionAsks(q: string, c: ConvState): 'next' | string[] | { frame: number } | null {
-  if (!c.graph?.session || !devOn('obs5m') || !atSession(c.graph)) return null
+  if (!c.graph?.session || !on5m() || !atSession(c.graph)) return null
   const t = latinDigits(withoutWeak(q))
   // a frame's number alone ("7"), in a part that goes frame by frame: that frame's step of the part
   const num = /^\s*(\d{1,3})\s*[.?!؟]?\s*$/.exec(t)
@@ -3088,18 +3084,25 @@ export type Chip5 = { kind: 'next' | 'place' | 'ok'; label: string; sheet?: Shee
  * Null with the switch off, or before the story's tables are read.
  */
 export function sessionChips(c: ConvState, ui: string): { items: Chip5[]; rest: 'all' | 'place' | null } | null {
-  const fx = fx5v
-  if (!devOn('obs5m')) return null
+  if (!on5m()) return null
   const g = c.graph
   const s = g?.session
   // (the story's tables not read yet: no session's button, and never the paused light path's)
-  if (!fx) return s ? { items: [], rest: 'place' } : null
+  const fx = s ? fixtureNow5(s.story) : null
+  if (!fx && s) return { items: [], rest: 'place' }
   const fwd = rtlArrow(ui)
   if (!g || !s) {
-    const last = savedSessions().find((x) => x.story === fx.story && sessionOfSheet(sheetOf(fx, x.s, x.s.lang), fx, x.s))
-    if (!last) return null
+    let last: ReturnType<typeof savedSessions>[number] | undefined
+    let fl: Fixture | null = null
+    for (const x of savedSessions()) {
+      const f = fixtureNow5(x.story)
+      if (f && sessionOfSheet(sheetOf(f, x.s, x.s.lang), f, x.s)) { last = x; fl = f; break }
+    }
+    if (!last || !fl) return null
+    const fx = fl
     return { items: [{ kind: 'next', label: W5(ui).resume.replace('{story}', obsLabel(last.story)).replace('{place}', stepPlace(fx, last.s, ui)), resume: last.story }], rest: 'all' }
   }
+  if (!fx) return null
   if (!atSession(g)) {
     return { items: [{ kind: 'next', label: `${ui === 'ar' ? '→' : '←'} ${W5(ui).back.replace('{place}', stepPlace(fx, s, ui))}`, sheet: sheetOf(fx, s, s.lang) }], rest: 'place' }
   }
@@ -3122,7 +3125,7 @@ const rtlArrow = (ui: string) => (ui === 'ar' ? '◂' : '▸')
 export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | null {
   const asked = sessionAsks(q, c)
   const s = c.graph?.session
-  const fx = fx5v
+  const fx = s ? fixtureNow5(s.story) : null
   if (!asked || !s || !fx) return null
   const w = W5(ui)
   if (asked === 'next') {
@@ -3145,8 +3148,8 @@ export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | 
  * same kind as the current step (M1 has an observation and a translation step per frame); null elsewhere, or with no such frame.
  */
 function frameStep(s: Session, n: number): Session | null {
-  const fx = fx5v
-  if (!fx || s.story !== fx.story || !['frames', 'm1', 'drafting', 'checking'].includes(s.part)) return null
+  const fx = fixtureNow5(s.story)
+  if (!fx || !['frames', 'm1', 'drafting', 'checking'].includes(s.part)) return null
   const all = stepsOf5(fx, s.part)
   const kind = all[s.at]?.kind
   const f = `${s.story}:${n}`
@@ -3157,8 +3160,9 @@ function frameStep(s: Session, n: number): Session | null {
 /** [5M session for this story], under an Open Bible Story that has a session: a button that sends "5M OBS n" as typed. Null when it has none. */
 async function sessionButton(n: number, ui: string): Promise<Follow | null> {
   // (the tables are read once, then this is a lookup)
-  const fx = fx5v ?? (await fixture5())
-  if (n !== fx.story || !ORDER5.some((x) => stepsOf5(fx, x).length)) return null
+  if (!on5m() || !covered5().includes(n)) return null
+  const fx = await fixture5(n)
+  if (!fx || n !== fx.story || !ORDER5.some((x) => stepsOf5(fx, x).length)) return null
   // the question typed: session5Asked builds the session at tap time with its language rule, keeps the state and counts 5m.start
   return { label: W5(ui).startStory, typed: fiveAsk(n) }
 }
@@ -3169,22 +3173,23 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
   const o = has('obs5m', q) ? obsAsked(q) : null
   const p = o ? parseObsRef(o.ref) : null
   if (p) {
-    const fx = await fixture5()
+    const fx = await fixture5(p.n)
     const lang = prefer ?? packCode(slots?.lang ?? env.nav)
-    const first = ORDER5.find((x) => stepsOf5(fx, x).length)
-    // a story with no session (the mock has story 1): the route says so
-    const sheet: Sheet = p.n === fx.story && first
+    const first = fx ? ORDER5.find((x) => stepsOf5(fx, x).length) : undefined
+    // a story with no session (no installed pack has it): the route says so
+    const sheet: Sheet = fx && first
       ? sheetOf(fx, { story: fx.story, part: first, at: 0, lang, tfLang: fx.tfLang, started: Date.now(), done: [] }, lang)
       : { id: `q${Date.now()}`, intent: 'obs5m', ref: obsRef(p.n), what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang }
     keepState(c, slotsOfSheet(sheet), { sheet, ui })
-    if (p.n === fx.story && first) count('5m.start')
+    if (fx && first) count('5m.start')
     return { sheet, ui, meta: '(a 5M session asked for, read by code)', q, inScope: 'a 5M session' }
   }
   const s = c.graph?.session
   const unread = !slots || !slots.intent || slots.intent === 'unknown' || (slots.intent === 'passage' && !slots.book)
   const asked = s && unread ? sessionAsks(q, c) : null
   if (!s || !asked) return null
-  const fx = await fixture5()
+  const fx = await fixture5(s.story)
+  if (!fx) return null
   let sheet: Sheet | null = null
   if (asked === 'next') {
     const nx = nextOf5(fx, s)
@@ -3210,12 +3215,13 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
  */
 async function step5(x: Ctx): Promise<Done | null> {
   const { sheet, ui } = x
-  const fx = await fixture5()
+  const story = parseObsRef(sheet.ref)?.n ?? 0
+  const fx = await fixture5(story)
   const meta = `${env.details} · ${secs(x)} s\n${x.meta}`
   // (no session in this conversation, e.g. after [End session]: the saved place of the story is the base, never a blank one)
-  const base = x.c.graph?.session ?? savedSessions().find((e) => e.story === fx.story)?.s ?? null
-  const s = sheet.concept ? sessionOfSheet(sheet, fx, base) : null
-  if (!s) {
+  const base = x.c.graph?.session?.story === story ? x.c.graph.session : savedSessions().find((e) => e.story === story)?.s ?? null
+  const s = fx && sheet.concept ? sessionOfSheet(sheet, fx, base) : null
+  if (!s || !fx) {
     const n = parseObsRef(sheet.ref)?.n ?? 0
     const follow: Follow[] = n >= 1 && n <= 50 ? [{ label: obsLabel(n), sheet: passageSheet(sheet, obsRef(n), ['text', 'notes']) }] : []
     // the way to the stories that do have one (Browse's 5M view)
@@ -3282,18 +3288,19 @@ function underStep(g: Graph, pt: GNode): boolean {
 }
 
 /**
- * After an answer, in a 5M session (dev switch `obs5m`): a step moves the session there (`g.session`), says where it is
+ * After an answer, in a 5M session (5M in the pack): a step moves the session there (`g.session`), says where it is
  * (`sessionMark`), keeps its frame's links on its point, and pauses a light path (`pathPaused`: kept, not offered); any other
  * answer offers the way back to the current step first (`sessionBack`), which is also where the graph's way back to a step of the
  * session went (that one is left out), and no other button to that step.
  */
 async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<void> {
   const g = c.graph
-  if (!g || !devOn('obs5m')) return
+  if (!g || !on5m()) return
   const reply = done.reply
   if (done.answered === 'obs5m' && x.five) {
-    const fx = await fixture5()
     const { s, links } = x.five
+    const fx = await fixture5(s.story)
+    if (!fx) return
     g.session = s
     // usage (counts only, no text): a step, the way back to one, the review
     count(x.at ? '5m.back' : '5m.step')
@@ -3311,7 +3318,8 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
   const s = g.session
   if (!s) return
   delete g.pathNext
-  const fx = await fixture5()
+  const fx = await fixture5(s.story)
+  if (!fx) return
   // a frame's help ("OBS 1:5 · notes"): says what it shows, as the Map and the way back do (placeLabel)
   const pt = nodeOf(g, g.cur)
   if (pt?.kind === 'passage' && parseObsRef(pt.sheet.ref)?.f && pt.sheet.what.length === 1) reply.sessionMark = placeLabel(pt, x.ui)
@@ -3353,13 +3361,13 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     }
     // the answer's point in the conversation's graph, and under a point that left the passage, the way back to it
     const node = await graphStep(c, made, done, x, route.name).catch(() => null)
-    // in a 5M session (dev switch): where its step is, or the way back to it; a light path waits meanwhile (kept, not offered)
+    // in a 5M session (5M in the pack): where its step is, or the way back to it; a light path waits meanwhile (kept, not offered)
     await sessionStep(c, made, done, x).catch(() => {})
     // on a light path: where it is and its next step first; off it, the way back to it
-    if (!(devOn('obs5m') && c.graph?.session)) await pathStep(c, made, done, x).catch(() => {})
+    if (!(on5m() && c.graph?.session)) await pathStep(c, made, done, x).catch(() => {})
     // on a learning path (learn.ts): where it is, the next article and a verse to try; off it, the way back to it
     // (not in a 5M session either: its next step and its way back come first)
-    if (!(devOn('obs5m') && c.graph?.session)) await learnStep(c, done, x.sheet, x.ui).catch(() => {})
+    if (!(on5m() && c.graph?.session)) await learnStep(c, done, x.sheet, x.ui).catch(() => {})
     return { ...done, route: route.name, sheet: x.r ? x.sheet : null, node }
   }
   throw new Error('no route answered') // `reply` always answers

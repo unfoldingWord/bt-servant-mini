@@ -1,25 +1,10 @@
-// Dev switches: work in progress that stays off unless `?dev=<flag>` was opened once on this device (kept in localStorage).
-// The 5M study session (obs5m) lives behind `obs5m`; with it off the app is unchanged.
+// The 5M study session's tables as the session reads them (`Fixture`), and the built-in story 1 of phase 0, which only the tests
+// use (five.ts reads the packs; there is no dev switch any more: a phone without a pack with the tables has no 5M).
+import type { Source5 } from './five'
 
 /** The parts of a 5M session, in order (phase 0's `codes.parts`) */
 export const ORDER = ['intro', 'frames', 'community', 'm1', 'm2', 'drafting', 'm3', 'checking', 'm4', 'm5', 'conclusion'] as const
 export type Code = (typeof ORDER)[number]
-
-export type DevFlag = 'obs5m'
-const KEY = (f: DevFlag) => `btsm.dev.${f}`
-
-/** Is this dev switch on? (false on any storage error) */
-export function devOn(flag: DevFlag): boolean {
-  try { return localStorage.getItem(KEY(flag)) === '1' } catch { return false }
-}
-
-/** At startup: `?dev=obs5m` in the address turns the switch on (it stays on after the address changes) */
-export function initDev(): void {
-  try {
-    const v = new URLSearchParams(location.search).get('dev')
-    if (v === 'obs5m') localStorage.setItem(KEY('obs5m'), '1')
-  } catch {}
-}
 
 export type FxList = 'observation' | 'terms' | 'discourse' | 'theology' | 'journal'
 /** Frame refs are Mini's OBS refs, "1:5" (see obs.ts `obsRef`) */
@@ -27,10 +12,10 @@ export type FxQuestion = { id: string; part: Code; list: FxList; frames: string[
 export type FxTerm = { frame: string; k: number; term: string; text: string }  // text verbatim (guidance with the bold term)
 export type FxPart = { part: Code; list: FxList | null; title: string | null; text: string | null; shared: string | null }  // one tf-parts row, in file order
 export type Fixture = {
-  story: 1; title: string; reference: string
+  story: number; title: string; reference: string
   frames: { ref: string; text: string; image: string }[]
   parts: FxPart[]; shared: Record<string, { title: string; text: string }>
-  questions: FxQuestion[]; terms: FxTerm[]; tfLang: 'en'
+  questions: FxQuestion[]; terms: FxTerm[]; tfLang: string; release?: string
 }
 
 type Raw = {
@@ -63,3 +48,9 @@ export async function loadFixture(): Promise<Fixture> {
     terms: raw['tf-terms'].map((t) => ({ frame: of(t.frame), k: t.k, term: t.term, text: t.text })),
   }
 }
+
+/** The tests' source: story 1 of phase 0, as an English pack would give it */
+export const fixtureSource = (): Source5 => ({
+  coverage: async () => new Map([[1, ['en']]]),
+  session: async (n) => (n === 1 ? loadFixture() : null),
+})

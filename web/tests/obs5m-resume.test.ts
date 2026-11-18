@@ -11,6 +11,7 @@ import { withObs } from './obs-fixture'
 import { answer, type ConvState, type Made, MAX_CONVS, placeLabel } from '../src/pipeline'
 import { newGraph, nodeOf } from '../src/graph'
 import { loadFixture } from '../src/dev'
+import { fiveOn } from './five-on'
 import { sheetOf, type Session } from '../src/obs5m'
 import { W5 } from '../src/obs5mwords'
 import { startRow, suggest, type Ctx } from '../src/suggest'
@@ -26,20 +27,20 @@ const fake = {
   key: () => null, length: 0,
 }
 const before = (globalThis as any).localStorage
-const devOnNow = () => store.set('btsm.dev.obs5m', '1')
+const devOnNow = () => fiveOn(true)
 beforeAll(async () => {
   ;(globalThis as any).localStorage = fake
-  devOnNow()
+  await devOnNow()
   await fullPhone()
 })
 afterAll(async () => {
   ;(globalThis as any).localStorage = before
   await withObs('en', 'installed')
 })
-beforeEach(() => {
+beforeEach(async () => {
   store.delete(KEY5)
   store.delete('btsm.history')
-  devOnNow()
+  await devOnNow()
 })
 
 const fx = await loadFixture()
@@ -312,12 +313,12 @@ describe('the step a frame help names', () => {
   }, 120_000)
 })
 
-describe('dev switch off', () => {
+describe('no pack with 5M', () => {
   test('no session chips, no [Resume], no session reading of "notes" or "7", labels as before', async () => {
     const c = await atFrame5()
     saveSession('c1', c.graph!.session!)
     const step = nodeOf(c.graph, c.graph!.cur)!
-    store.delete('btsm.dev.obs5m')
+    await fiveOn(false)
     try {
       expect(startRow(ctx(c)).items.every((x) => x.kind === 'shape')).toBe(true)
       expect(startRow(ctx({ last: null })).items.some((x) => x.resume !== undefined)).toBe(false)
@@ -325,7 +326,7 @@ describe('dev switch off', () => {
       expect(suggest('7', ctx(c)).items.some((x) => x.label.includes('frame'))).toBe(false)
       expect(placeLabel(step, 'en')).toBe(step.label)
     } finally {
-      devOnNow()
+      await devOnNow()
     }
   }, 60_000)
 })
