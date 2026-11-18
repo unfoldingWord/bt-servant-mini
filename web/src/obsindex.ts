@@ -280,7 +280,8 @@ function find(words: string[], o: FindOpts): { hits: StoryHit[]; lang: string } 
   const group = (x: { title: number; named: boolean }) => (x.title ? 0 : x.named ? 1 : 2)
   // The order: the titles that name the topic, then a common name, then the frame counts, the story's number within each group, so
   // «historia de Jesús» starts with OBS 23, the birth (decided by the coordinator on Nov 18 and confirmed by Abel that day). The send uses
-  // the same order when several stories may be meant (storychoice.ts); the story it would have answered is always among the offered.
+  // the same order when several stories may be meant (storychoice.ts). When the words are complete (not a name alone, not being typed),
+  // the story obs.ts namedStory would pick (the old single pick) is added below if the rules above missed it.
   const sent = o.namesOnly || o.partial ? null : sentStory(ws, ix, named)
   if (sent && !out.some((x) => x.s.n === sent)) out.push({ s: ix.stories.find((x) => x.n === sent)!, title: 0, named: false, frames: 0 })
   out.sort((a, b) => group(a) - group(b) || b.title - a.title || (group(a) === 2 ? b.frames - a.frames : 0) || a.s.n - b.s.n)

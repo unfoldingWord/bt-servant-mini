@@ -881,7 +881,7 @@ export async function namedStory(q: string, lang: string): Promise<{ ref: string
 export type ObsHit = { ref: string; label: string; snippet: string; lang: string }
 /** Each frame's words, read once per unit (a whole unit is about 600 frames). */
 const FRAME_WORDS = new WeakMap<ObsModel, Map<object, string[]>>()
-function frameWords(model: ObsModel): Map<object, string[]> {
+export function frameWords(model: ObsModel): Map<object, string[]> {
   let m = FRAME_WORDS.get(model)
   if (!m) {
     m = new Map()

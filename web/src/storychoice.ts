@@ -8,11 +8,16 @@
 //     frames), a short line and a button for each story, in the typing row's order: the titles that name the topic (the most words,
 //     then the story's number), then the common names, then the frame counts (most first), the story's number within each group.
 // Read the packs here (no index needed at send time): the same rules as the row, with the word forms of storyfind.ts findStories.
+// Where the order can differ from the row's beyond the first stories: the row's frame group counts the frames that link the article the
+// word names (tw ids, so a Spanish word finds an English pack's stories), the send counts the frames whose text holds the word (the
+// pack's own language, 3 or more frames); the row's title group also takes a word's English forms from the word index, the send from
+// storyfind's englishForms. Both start with the titles and the common names, so the first stories agree; the frame groups may not.
+// The labels are drawn by main.ts followButton, which isolates their directions (bidiLabel): not wrapped twice here.
 import type { Sheet } from './answer'
 import type { Followup } from './converse'
 import { keywords } from './search'
 import { fold } from './sheet'
-import { NAMED, obsLabel, obsPack, obsRef, storiesNamed, storyList, wordsOf } from './obs'
+import { frameWords, NAMED, obsLabel, obsPack, obsRef, storiesNamed, storyList, wordsOf } from './obs'
 import { findStories } from './storyfind'
 
 export type Choice = { n: number; title: string }
@@ -44,16 +49,16 @@ export async function namedStories(q: string, lang: string): Promise<Named | nul
   const loose = await findStories(words, at.lang).catch(() => [])
   const titles = [...new Map([...strict.map((n) => [n, want.length] as const), ...loose.map((e) => [e.n, e.matched.length] as const)]
     .sort((a, b) => b[1] - a[1] || a[0] - b[0])).keys()]
-  // a story is told by name: the one title that has every word
-  if (strict.length === 1 && titles.length === 1) return one(strict[0]!)
-
-  // 2. the stories whose frames name the topic in three or more frames (the count of the old pick), most first
+  // 2. the stories whose frames name the topic in three or more frames (the count of the old pick), most first; the words of each
+  // frame are the ones obs.ts keeps for its search (read once per unit)
   const model = await at.r.obs().catch(() => undefined)
-  const counts = (model?.stories ?? []).map((s) => ({ n: s.n, c: s.frames.filter((fr) => has(fr.text) === want.length).length })).filter((x) => x.c >= 3)
-    .sort((a, b) => b.c - a.c || a.n - b.n).map((x) => x.n)
+  const words2 = model ? frameWords(model) : null
+  const counts = (model?.stories ?? []).map((s) => ({ n: s.n, c: s.frames.filter((fr) => {
+    const toks = words2?.get(fr) ?? wordsOf(fr.text)
+    return want.filter((w) => toks.some((x) => x === w || (w.length >= 5 && x.startsWith(w.slice(0, w.length - 1))))).length === want.length
+  }).length })).filter((x) => x.c >= 3).sort((a, b) => b.c - a.c || a.n - b.n).map((x) => x.n)
 
-  // a common name that names one story and nothing else is a candidate: that story
-  if (!titles.length && named.length === 1 && counts.every((n) => n === named[0])) return one(named[0]!)
+  // one story answers directly only when the whole set of candidates (titles, common names, frame counts) is that story alone
   const all = [...new Set([...titles, ...named, ...counts])]
   if (!all.length) return null
   return all.length === 1 ? one(all[0]!) : many(all)
@@ -76,7 +81,7 @@ export function choiceReply(m: Extract<Named, { many: Choice[] }>, ui: string): 
   const topic = upFirst(m.topic)
   const shown = m.many.length > MAX_CHOICES ? m.many.slice(0, MAX_CHOICES - 1) : m.many
   const follow: Followup[] = shown.map((e) => {
-    const sheet: Sheet = { id: `c${Date.now()}`, intent: 'passage', ref: obsRef(e.n), what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: m.lang }
+    const sheet: Sheet = { id: `c${e.n}-${Date.now()}`, intent: 'passage', ref: obsRef(e.n), what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: m.lang }
     return { label: e.title ? `${obsLabel(e.n)} · ${e.title}` : obsLabel(e.n), sheet }
   })
   if (m.many.length > MAX_CHOICES)

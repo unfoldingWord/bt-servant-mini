@@ -1272,9 +1272,9 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
   count('answers')
   count(`kind.${answered}`)
   if (qLang) count(`lang.${qLang}`)
-  // (out of scope says what Mini helps with on purpose: counted as such, not as an empty answer)
+  // (out of scope says what Mini helps with on purpose: counted as such, not as an empty answer; nor is a "which one?" with its buttons)
   if (answered === 'outofscope') count('oos')
-  else if (answered !== 'failed' && !m.info && !m.study && !m.helps) count('empty')
+  else if (answered !== 'failed' && answered !== 'choose' && !m.info && !m.study && !m.helps) count('empty')
   if (!m.packs && !m.waiting && (answered === 'failed' || (!m.info && !m.study && !m.helps && !m.follow?.length))) m.limits = true
   count('secs', Math.round((performance.now() - t0) / 1000))
   retries.set(m, () => respond(conv(), label, make, again, mark))
