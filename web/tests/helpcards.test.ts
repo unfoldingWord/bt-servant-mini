@@ -186,6 +186,9 @@ describe('sharing an online answer', () => {
     expect(shareText({ who: 'bot', info: 'The phone answer.', ai } as any, 'en')).not.toContain('The phone answer.')
     expect(shareText({ who: 'bot', study: {} as any, ai } as any, 'en')).toContain('The online answer.')
     expect(shareText({ who: 'bot', info: 'The phone answer.' } as any, 'en')).toContain('The phone answer.')
+    // marked as the online AI's, in the app's language; the phone's own answer is not
+    expect(shareText({ who: 'bot', info: 'x', ai } as any, 'es')).toContain('IA en línea: The online answer.')
+    expect(shareText({ who: 'bot', info: 'The phone answer.' } as any, 'es')).not.toContain('IA en línea')
   })
 })
 

@@ -6,21 +6,17 @@
 // Run in worker/, with wrangler signed in to the unfoldingWord account (WRANGLER: a wrangler.js path, if not on PATH).
 // The file holds people's questions: it is git-ignored; keep it off shared drives and delete it once the set is built.
 // Reports expire 180 days after they arrive: export before then.
-import { execFileSync } from 'node:child_process'
+// --since <ISO date|last>: only the reports received after that moment (`last`: after the newest this script exported).
+// All reports are fetched in one `wrangler kv bulk get` (see fb-kv.mjs).
 import { writeFileSync } from 'node:fs'
+import { countOf, getReports, keysAfter, listKeys, parseArgs, pick, saveMark, sinceMark, wrangler } from './fb-kv.mjs'
 
-const out = process.argv[2] ?? 'training-candidates.jsonl'
-const n = Number(process.argv[3] ?? 200)
+const { positional, since } = parseArgs(process.argv.slice(2))
+const out = positional[0] ?? 'training-candidates.jsonl'
+const n = countOf(positional[1], since == null ? 200 : Infinity) // with --since: every report after the mark, unless a count is given
 const where = process.env.LOCAL ? '--local' : '--remote' // LOCAL=1: the reports of a local `wrangler dev`
-const wr = (...args) => {
-  const cmd = process.env.WRANGLER ? [process.execPath, [process.env.WRANGLER, ...args]] : ['npx', ['wrangler', ...args]]
-  return execFileSync(cmd[0], cmd[1], { encoding: 'utf8', shell: !process.env.WRANGLER, stdio: ['ignore', 'pipe', 'ignore'] })
-}
-const keys = JSON.parse(wr('kv', 'key', 'list', '--binding', 'USAGE', '--prefix', 'fb:', where, '-c', 'wrangler.toml'))
-  .map((k) => k.name)
-  .sort()
-  .reverse()
-  .slice(0, n)
+const wr = wrangler()
+const keys = pick(keysAfter(listKeys(wr, where), sinceMark(since, where === '--local' ? 'training-local' : 'training')), n, since)
 
 /** From an answer's details: the model's slots (the JSON line after "model N ms") and the app's call sheet (the last JSON block). */
 function parseDetails(details = '') {
@@ -35,8 +31,8 @@ function parseDetails(details = '') {
 }
 
 const rows = []
-for (const k of keys) {
-  const r = JSON.parse(wr('kv', 'key', 'get', k, '--binding', 'USAGE', where, '-c', 'wrangler.toml'))
+const got = getReports(wr, where, keys)
+for (const { key: k, report: r } of got) {
   const answer = r.conversation[r.reported]
   // the question is the person's message right before the reported answer
   const question = [...r.conversation.slice(0, r.reported)].reverse().find((m) => m.who === 'me')?.text
@@ -51,4 +47,6 @@ for (const k of keys) {
   })
 }
 writeFileSync(out, rows.map((x) => JSON.stringify(x)).join('\n') + (rows.length ? '\n' : ''))
+// (only `--since last` moves the mark: a plain run or a date shows reports without marking them seen)
+if (since === 'last') saveMark(where === '--local' ? 'training-local' : 'training', got.map((g) => g.key))
 console.log(`${rows.length} candidate(s) from ${keys.length} report(s) -> ${out}`)

@@ -1,21 +1,21 @@
 // The reports people sent about answers (the thumbs down in the app), newest first.
 //   node scripts/feedback.mjs [how many=20]      (run in worker/, with wrangler signed in to the unfoldingWord account)
 //   node scripts/feedback.mjs 20 --json          the reports as they are stored
-// Set WRANGLER to a wrangler.js path to use one that is not on PATH.
-import { execFileSync } from 'node:child_process'
+//   node scripts/feedback.mjs --since 2026-11-15 the reports received from that date on (ISO date or date-time, UTC)
+//   node scripts/feedback.mjs --since last       the reports after the newest one shown by the last `--since last` (with
+//                                                a count, the oldest first: the next run goes on from there)
+// All reports are fetched in one `wrangler kv bulk get` (see fb-kv.mjs). Set WRANGLER to a wrangler.js path to use one
+// that is not on PATH. The reports hold people's questions: print them, never save them into the repo.
+import { countOf, getReports, keysAfter, listKeys, parseArgs, pick, saveMark, sinceMark, wrangler } from './fb-kv.mjs'
 
-const n = Number(process.argv[2] ?? 20)
+const { positional, since } = parseArgs(process.argv.slice(2))
+const n = countOf(positional[0], since == null ? 20 : Infinity) // with --since: every report after the mark, unless a count is given
 const asJson = process.argv.includes('--json')
-const wr = (...args) => {
-  const cmd = process.env.WRANGLER ? [process.execPath, [process.env.WRANGLER, ...args]] : ['npx', ['wrangler', ...args]]
-  return execFileSync(cmd[0], cmd[1], { encoding: 'utf8', shell: !process.env.WRANGLER, stdio: ['ignore', 'pipe', 'ignore'] })
-}
-const keys = JSON.parse(wr('kv', 'key', 'list', '--binding', 'USAGE', '--prefix', 'fb:', '--remote', '-c', 'wrangler.toml'))
-  .map((k) => k.name)
-  .sort()
-  .reverse()
-  .slice(0, n)
-const reports = keys.map((k) => JSON.parse(wr('kv', 'key', 'get', k, '--binding', 'USAGE', '--remote', '-c', 'wrangler.toml')))
+const where = '--remote'
+const wr = wrangler()
+const keys = pick(keysAfter(listKeys(wr, where), sinceMark(since, 'feedback')), n, since)
+const got = getReports(wr, where, keys)
+const reports = got.map((g) => g.report)
 if (asJson) {
   console.log(JSON.stringify(reports, null, 1))
 } else {
@@ -31,3 +31,5 @@ if (asJson) {
   }
   console.log(`\n${reports.length} report(s)`)
 }
+// (only `--since last` moves the mark: a plain run or a date shows reports without marking them seen)
+if (since === 'last') saveMark('feedback', got.map((g) => g.key))

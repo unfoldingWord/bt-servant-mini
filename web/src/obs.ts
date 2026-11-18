@@ -11,7 +11,7 @@
 // that does not list it says plainly that its packs have no Open Bible Stories yet. Nothing here throws for a missing unit.
 import { BOOKS, bookNumber, type ObsModel, parseRef as v3Ref, verseId } from '@bt-synergy/language-pack-v3'
 import type { PackReader } from '@bt-synergy/language-pack-client'
-import { installedLangs, openLang, origin, PACK_NAMES } from './packs'
+import { installedLangs, openLang, origin, PACK_NAMES, serverUnitSize, uiLangs } from './packs'
 import { FOLD } from './focus'
 import { bidiLabel } from './bidi'
 import { keywords } from './search'
@@ -143,8 +143,8 @@ export const obsRef = (n: number, f?: number | null): string => (f ? `obs ${n}:$
 /** What a tap on a story's 5M sends, as if typed ("5M OBS 1"): the one place it is spelled (modes.ts, pipeline.ts). */
 export const fiveAsk = (n: number): string => `5M ${obsLabel(n)}`
 export const obsLabel = (n: number, f?: number | null): string => (f ? `OBS ${n}:${f}` : `OBS ${n}`)
-/** "3. The Flood" -> "The Flood" (the packs keep the number in the title). */
-export const cleanTitle = (t: string | undefined): string => String(t ?? '').replace(/^\s*\d{1,2}\s*[.:)\-–]\s*/, '').trim()
+/** "3. The Flood" -> "The Flood" (the packs keep the number in the title; Arabic's "٢. …" too). */
+export const cleanTitle = (t: string | undefined): string => String(t ?? '').replace(/^\s*\p{Nd}{1,2}\s*[.:)\-–]\s*/u, '').trim()
 
 const BOOK_EN = (booknames as any).BOOK_EN as Record<string, string>
 const BOOK_ES = (booknames as any).BOOK_ES as Record<string, string>
@@ -233,10 +233,34 @@ export async function obsPack(lang: string): Promise<{ lang: string; r: PackRead
 }
 /** A pack that lists the obs unit and does not have it: its size, and whether this phone can add it (a pack it downloaded). */
 export type ObsMissing = { lang: string; bytes: number; canAdd: boolean }
-export async function obsMissing(lang: string): Promise<ObsMissing | null> {
-  for (const l of await order(lang)) {
+/**
+ * Asking the packs server whether it has Open Bible Stories for a language: main.ts allows it where the person allows the
+ * internet (online AI or usage counts) and there is a connection; tests replace `size` and `origin`.
+ */
+export const obsServer = {
+  allowed: (): boolean => false,
+  size: (lang: string): Promise<number | null> => serverUnitSize(lang, 'obs'),
+  origin: (lang: string): Promise<'added' | 'shipped' | null> => origin(lang),
+}
+/** What the server said per language this session: asked once, not under every answer (no answer is asked again later). */
+const serverSaid = new Map<string, Promise<number | null>>()
+/** `ask`: may ask the packs server (an answer about OBS itself; never the buttons under a passage, storyAt). */
+export async function obsMissing(lang: string, ask = false): Promise<ObsMissing | null> {
+  const langs = await order(lang)
+  for (const l of langs) {
     const r = await read(l)
     if (r && r.listed('obs') && !r.installed('obs')) return { lang: l, bytes: r.size('obs'), canAdd: (await origin(l).catch(() => null)) === 'added' }
+  }
+  // no pack here lists them (installed before the server had them, a report of Nov 17: "OBS 1" said there were none and online
+  // AI answered): the server may have them for the question's language or English, when this phone downloaded that language
+  // (its unit can be added on a tap: addUnit)
+  if (!ask || !obsServer.allowed()) return null
+  for (const l of langs.filter((x) => x === lang || x === 'en')) {
+    if ((await obsServer.origin(l).catch(() => null)) !== 'added') continue
+    if (!serverSaid.has(l)) serverSaid.set(l, obsServer.size(l).catch(() => null))
+    const bytes = await serverSaid.get(l)!
+    if (bytes === null) serverSaid.delete(l)
+    if (bytes) return { lang: l, bytes, canAdd: true }
   }
   return null
 }
@@ -281,6 +305,16 @@ async function entryOf(lang: string, n: number): Promise<StoryEntry | null> {
     if (e) return e
   }
   return null
+}
+/** A story's title from a pack in the app's language (not `had`, the one already read), or '' (none on the phone, no title). */
+async function uiTitle(n: number, ui: string, had: string): Promise<string> {
+  for (const l of uiLangs(ui, await installedLangs().catch(() => [] as string[]))) {
+    if (l === had) continue
+    const r = await read(l)
+    const e = r ? (await storyList(r).catch(() => [])).find((x) => x.n === n) : undefined
+    if (e?.title) return e.title
+  }
+  return ''
 }
 /** "OBS 3: The Flood", "OBS 3" without a title. */
 export const storyName = (e: { n: number; title: string }, f?: number | null): string => (e.title ? `${obsLabel(e.n, f)}: ${e.title}` : obsLabel(e.n, f))
@@ -490,7 +524,7 @@ export async function obsAnswer(s: { ref: string | null; what: string[]; lang: s
   if (entry) Object.assign(facts, { title: entry.title, refs: entry.refs })
   const at = await obsPack(s.lang)
   if (!at) {
-    const miss = await obsMissing(s.lang)
+    const miss = await obsMissing(s.lang, true)
     const told = entry?.refs.length ? `\n\n${entry.title ? `**${storyName(entry)}** — ` : ''}${entry.refs.map((r) => bibleLabel(ui, r)).join('; ')}` : ''
     if (miss) {
       facts.state = 'missing'
@@ -550,16 +584,31 @@ export async function obsAnswer(s: { ref: string | null; what: string[]; lang: s
     const lab = obsLabel(p.n, p.f)
     const notes = noteLines(fr)
     const qs = qLines(fr)
-    if (wantNotes) out.push(...(notes.length ? [`### ${fill(w.notes, { ref: lab })}`, notes.join('\n')] : [fill(w.noNotes, { ref: lab })]))
-    if (wantQs) out.push(...(qs.length ? [`### ${fill(w.questions, { ref: lab })}`, ...qs] : [fill(w.noQuestions, { ref: lab })]))
     // the key terms of the frame, each a link to its article (the panel opens it)
     const terms = [...new Map(fr.links.filter((x) => x.concept).map((x) => [x.concept!, String(x.cols.origWords ?? '').trim() || x.concept!.split('/').pop()!])).entries()]
     facts.terms = terms.map(([id]) => id)
-    if (terms.length && wantTerms) out.push(`*${w.terms}:* ${terms.map(([id, t]) => `[${t}](${id})`).join(' · ')}`)
     for (const [id] of terms) cites.push(`id:${id}`)
-    // what was not asked for, one tap away
-    if (!wantNotes && notes.length) out.push(FOLD + fill(w.notesFold, { ref: lab, n: notes.length }), notes.join('\n'))
-    if (!wantQs && qs.length) out.push(FOLD + fill(w.questionsFold, { n: qs.length }), ...qs)
+    const links = terms.map(([id, t]) => `[${t}](${id})`).join(' · ')
+    // each help behind its own button with its count, as under a passage (Abel, Nov 17: open, a frame's helps took the whole
+    // screen); only the one help a question asks for alone stays open ("the notes of story 3, frame 4"). "There are none" only
+    // for that one (it is the answer then; otherwise only the helps there are show, Abel, Nov 17), said first: after a fold it
+    // would be inside it.
+    const asked = (['notes', 'questions', 'terms'] as const).filter((x) => what.includes(x))
+    const only = asked.length === 1 ? asked[0] : null
+    const said: string[] = [], open: string[] = [], folds: string[] = []
+    if (notes.length) {
+      if (only === 'notes') open.push(`### ${fill(w.notes, { ref: lab })}`, notes.join('\n'))
+      else folds.push(FOLD + fill(w.notesFold, { ref: lab, n: notes.length }), notes.join('\n'))
+    } else if (only === 'notes') said.push(fill(w.noNotes, { ref: lab }))
+    if (qs.length) {
+      if (only === 'questions') open.push(`### ${fill(w.questions, { ref: lab })}`, ...qs)
+      else folds.push(FOLD + fill(w.questionsFold, { n: qs.length }), ...qs)
+    } else if (only === 'questions') said.push(fill(w.noQuestions, { ref: lab }))
+    if (terms.length && wantTerms) {
+      if (only === 'terms') open.push(`*${w.terms}:* ${links}`)
+      else folds.push(`${FOLD}${w.terms} (${terms.length})`, links)
+    }
+    out.push(...said, ...open, ...folds)
   } else {
     // a whole story: the notes of each frame behind its own button, then the questions
     if (wantNotes || what.includes('text'))
@@ -664,7 +713,10 @@ export async function obsSteps(f: ObsFacts, lang: string, ui: string): Promise<O
 export async function storyStep(ref: string, lang: string, ui: string, text = ''): Promise<{ label: string; ref: string; lang: string } | null> {
   const t = await storyAt(ref, lang, text).catch(() => null)
   if (!t) return null
-  const label = fill(OW(ui).toldIn, { ref: obsLabel(t.n, t.f), title: t.title || obsLabel(t.n) }).replace(/: OBS \d+$/, '')
+  // the story's title in the app's language when a pack on the phone has it (Abel, Nov 17: "Sin Enters the World" in a Spanish
+  // app, the passage's pack being English), else the story pack's
+  const title = (await uiTitle(t.n, ui, t.lang)) || t.title
+  const label = fill(OW(ui).toldIn, { ref: obsLabel(t.n, t.f), title: title || obsLabel(t.n) }).replace(/: OBS \d+$/, '')
   const also = (t.also ?? []).map((x) => { const p = parseObsRef(x); return p ? obsLabel(p.n, p.f) : x })
   return { label: also.length ? `${label} ${fill(OW(ui).also, { refs: also.join(', ') })}` : label, ref: t.ref, lang: t.lang }
 }

@@ -9,9 +9,10 @@ import { OBS_BYTES, obsBytes, withObs } from './obs-fixture'
 import { answer, type ConvState, contextSheet, type Made } from '../src/pipeline'
 import { newGraph, nodeOf } from '../src/graph'
 import { passageContext, type Sheet } from '../src/answer'
-import { namedStory, obsAsked, obsPack, storyByName, obsSteps, OW, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
+import { namedStory, obsAnswer, obsAsked, obsPack, storyByName, obsSteps, OW, rangeOfRef, searchObs, storyAt, storyList, type ObsFacts } from '../src/obs'
 import { openLang } from '../src/packs'
 import { strip } from '../src/bidi'
+import { unfold } from '../src/focus'
 
 afterAll(async () => { await installPacks(ALL_PACKS) })
 
@@ -59,9 +60,11 @@ describe('questions that name a story or a frame', () => {
     expect(r.reply.info.match(/unfoldingWord\/en\/obs v9|Open Bible Stories v9/g)).toHaveLength(1)
     expect(r.reply.info.split('\n')[1]).toBe('*A Bible story from: Genesis 6-8*')
     expect(buttons(r)).toEqual([
-      'Next: OBS 3:6 => obs 3:6 text,notes,questions,terms', 'The whole story: OBS 3 => obs 3 text,notes', 'God => tw:kt/god', 'Noah => tw:names/noah',
+      // (its key terms, God and Noah, are linked in the answer: no button asks for them again, Abel, Nov 17)
+      'Next: OBS 3:6 => obs 3:6 text,notes,questions,terms', 'The whole story: OBS 3 => obs 3 text,notes',
       'Bible: Genesis 6:1–8:22 => gen 6:1-8:22 text,notes', 'Bible stories (OBS) => browse',
     ])
+    expect(r.reply.info).toContain('(tw:kt/god)')
   })
 
   test('a frame\'s notes and questions (story 3, frame 4), as the q36 case asks them', async () => {
@@ -72,6 +75,39 @@ describe('questions that name a story or a frame', () => {
     expect(r.reply.info).toContain('**«to turn to God»**')
     // the question was not asked for: one tap away
     expect(r.reply.info).toContain('▸ Questions (1)')
+  })
+
+  test('a frame with all its helps: each one folded with its count, as under a passage (Abel, Nov 17)', async () => {
+    const r: any = await ask('obs 3:4', 'en')
+    const info: string = r.reply.info
+    expect(info).not.toContain('### ')
+    const folds = info.split('\n\n').filter((b) => b.startsWith('▸ ')).map((b) => b.split('\n')[0])
+    expect(folds).toEqual([expect.stringMatching(/^▸ Notes for OBS 3:4 \(\d+\)$/), '▸ Questions (1)', expect.stringMatching(/^▸ Key terms \(\d+\)$/)])
+    // all of it is still in the answer (sharing, online AI): the notes, the question, the terms' links
+    expect(info).toContain('**«Noah warned the people»**')
+    expect(info).toMatch(/\[Noah\]\(tw:names\/noah\)/)
+    // the frame's text before the folds; "no notes" said before them, not inside the last one
+    expect(info.indexOf('**3:4**')).toBeLessThan(info.indexOf('▸ '))
+    const r5: any = await ask('obs 3:5', 'en')
+    // only the helps there are: no "There are no questions" line between the frame and its folds (Abel, Nov 17)
+    expect(r5.reply.info).not.toContain('There are no')
+    // asked alone, "none" is the answer
+    const q5 = await obsAnswer({ ref: 'obs 3:5', what: ['notes'], lang: 'en' }, 'en')
+    expect(q5.answer).toContain('There are no translation notes for OBS 3:5')
+    // shared or sent to the online AI without the fold marks: every note and the question still there
+    const plain = unfold(info)
+    expect(plain).not.toContain('▸')
+    expect(plain).toContain('**«Noah warned the people»**')
+    expect(plain).toMatch(/^- \*\*/m)
+  })
+
+  test('the one help a frame question asks for stays open; the text and the others folded', async () => {
+    const o = await obsAnswer({ ref: 'obs 3:4', what: ['text', 'notes'], lang: 'en' }, 'en')
+    expect(o.answer).toContain('### Translation notes for OBS 3:4')
+    expect(o.answer).toContain('▸ Questions (1)')
+    const q = await obsAnswer({ ref: 'obs 3:4', what: ['questions'], lang: 'en' }, 'en')
+    expect(q.answer).toContain('### Comprehension questions for OBS 3:4')
+    expect(q.answer).toMatch(/▸ Notes for OBS 3:4 \(\d+\)/)
   })
 
   test('a whole story in five languages, from the English pack (said so), with its Bible passages', async () => {
@@ -393,7 +429,8 @@ describe('the graph and online AI', () => {
     const ctx = await passageContext(contextSheet(c, o)!)
     expect(ctx).toMatch(/^## Open Bible Stories 3: The Flood \(A Bible story from: Genesis 6-8\)\n3:1 After a long time/)
     expect(ctx).toContain('3:16 ')
-    const noah = o.reply.follow.find((f: any) => f.sheet?.concept === 'tw:names/noah')
+    // Noah's article, tapped in the answer (its link; the button is gone, the answer shows it)
+    const noah = { sheet: { ...o.reply.follow[0].sheet, intent: 'article', concept: 'tw:names/noah', ref: null, what: [], lang: 'en' } }
     const a = await press(c, noah, 'en')
     expect(contextSheet(c, a)?.ref).toBe('obs 3:5')
   })

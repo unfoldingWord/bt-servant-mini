@@ -163,9 +163,39 @@ export type Followup = { label: string; sheet?: Sheet; browse?: Browse; again?: 
   /** a question sent as if typed ("5M OBS 1"): read, kept and counted like the typed words, and "Try again" asks it again as typed */
   typed?: string
   /** a unit to add to a language on a tap ("Add Open Bible Stories (218 KB)"), then `sheet` is asked again (main.ts) */
-  add?: { lang: string; unit: string } }
+  add?: { lang: string; unit: string }
+  /** one of the steps that stay in sight when the others go behind "More ▸" (the verse or chapter before and after, the next
+   *  section, the story this passage is told in, an introduction's chapter to read) */
+  key?: boolean }
 /** The most buttons under one answer (they wrap; more is a wall on a phone). */
 export const MAX_FOLLOW = 9
+/**
+ * The buttons that only ask again for what the answer shows, taken off (Abel, Nov 17: "si ya forman parte de la respuesta no
+ * deberían estar como un follow up"): a button for the same passage (`ref`) whose helps are all among `shown` ("notes",
+ * "terms", "questions", "text"), and a key term's article the answer (`answer`, its Markdown) links already. The others stay (the verse
+ * before and after, the chapter, the story, an Academy article).
+ */
+export function dropShown(follow: Followup[], ref: string | null | undefined, shown: ReadonlySet<string>, answer = ''): Followup[] {
+  // a key term's article the answer links already (an OBS frame's "Key terms (1)" fold: "God"); an Academy article stays
+  const linked = (id: string) => id.startsWith('tw:') && answer.includes(`](${id})`)
+  return follow.filter((f) => !(ref && f.sheet?.intent === 'passage' && f.sheet.ref === ref && f.sheet.what.length && f.sheet.what.every((w) => shown.has(w)))
+    && !(f.sheet?.intent === 'article' && f.sheet.concept && linked(f.sheet.concept)))
+}
+/** The buttons in sight under an answer, the way back included; the others behind "More ▸" (Abel, Nov 17: ten were too many). */
+export const SHOWN = 5
+/**
+ * The buttons in sight and the ones behind "More ▸", each in its order. `backs`: how many ways back are drawn above them (they
+ * count). In sight first: a path's or a session's next step, a unit to add, try again, the key steps; then the others in their
+ * order, until there is no room (never more than SHOWN with the ways back, Abel: "4–5 a la vista").
+ */
+export function splitFollow(follow: Followup[], backs = 0): { shown: Followup[]; more: Followup[] } {
+  const room = Math.max(3, SHOWN - backs)
+  if (follow.length <= room) return { shown: follow, more: [] }
+  const must = (f: Followup) => !!(f.pathNext || f.sessionNext || f.add || f.again || f.back || f.toPath || f.toSession)
+  const pick = new Set<Followup>()
+  for (const ok of [must, (f: Followup) => !!f.key, () => true]) for (const f of follow) if (pick.size < room && ok(f)) pick.add(f)
+  return { shown: follow.filter((f) => pick.has(f)), more: follow.filter((f) => !pick.has(f)) }
+}
 
 /** The words of the next steps that are not about one verse: a chapter to read, Browse, try again. */
 const NX: Record<L, { read: string; notesOf: string; termsOf: string; browseBook: string; browseAcademy: string; browse: string; again: string; howName: string; howThing: string }> = {
@@ -205,7 +235,7 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, 
     const n = NX[lang(ui)]
     const label = INTRO[lang(ui)].label
     const ch = at === 'front' ? 1 : +at!
-    const out: Followup[] = [{ label: fill(n.read, { ref: `${book} ${ch}` }), sheet: same(['text', 'notes'], `${code} ${ch}`) }]
+    const out: Followup[] = [{ label: fill(n.read, { ref: `${book} ${ch}` }), sheet: same(['text', 'notes'], `${code} ${ch}`), key: true }]
     if (at === 'front') out.push({ label: fill(label, { what: `${book} 1` }), sheet: same(['intro'], `${code} 1:intro`) })
     out.push({ label: fill(n.notesOf, { ref: `${book} ${ch}:1` }), sheet: same(['notes'], `${code} ${ch}:1`) })
     out.push(...extra)
@@ -230,12 +260,12 @@ export function followups(sheet: Sheet, facts: Record<string, any>, ui: string, 
   const c = +ch!
   if (v1) {
     const prev = +v1 > 1 ? `${c}:${+v1 - 1}` : c > 1 && bounds?.get(c - 1) ? `${c - 1}:${bounds.get(c - 1)}` : null
-    if (prev) out.push({ label: `${w.lPrev} (${book} ${prev})`, sheet: same(sheet.what, `${code} ${prev}`) })
-    if (facts.next) out.push({ label: `${w.lNext} (${book} ${facts.next})`, sheet: same(sheet.what, `${code} ${facts.next}`) })
+    if (prev) out.push({ label: `${w.lPrev} (${book} ${prev})`, sheet: same(sheet.what, `${code} ${prev}`), key: true })
+    if (facts.next) out.push({ label: `${w.lNext} (${book} ${facts.next})`, sheet: same(sheet.what, `${code} ${facts.next}`), key: true })
     out.push({ label: `${w.lChapter} (${book} ${ch})`, sheet: same(['text', 'notes'], `${code} ${ch}`) })
   } else {
-    if (c > 1) out.push({ label: `${w.lPrevCh} (${book} ${c - 1})`, sheet: same(sheet.what, `${code} ${c - 1}`) })
-    if (bounds?.has(c + 1)) out.push({ label: `${w.lNextCh} (${book} ${c + 1})`, sheet: same(sheet.what, `${code} ${c + 1}`) })
+    if (c > 1) out.push({ label: `${w.lPrevCh} (${book} ${c - 1})`, sheet: same(sheet.what, `${code} ${c - 1}`), key: true })
+    if (bounds?.has(c + 1)) out.push({ label: `${w.lNextCh} (${book} ${c + 1})`, sheet: same(sheet.what, `${code} ${c + 1}`), key: true })
   }
   out.push(...extra)
   // the chapter's and the book's introductions: the context a translator needs, one tap away

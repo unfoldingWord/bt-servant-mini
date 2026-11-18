@@ -75,6 +75,7 @@
   .follow button:active { background: var(--line); }
   details { margin-top: 8px; font: 12px system-ui, sans-serif; color: var(--faint); }
   details pre { white-space: pre-wrap; font-size: 11px; max-height: 240px; overflow: auto; }
+  details > p.src-line { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: 6px 0; overflow-wrap: anywhere; } /* the answer's source, from under the answer (main.ts) */
   .welcome { margin: auto 0; text-align: center; padding: 24px 6px 8px; }
   .welcome svg { width: 34px; height: 39px; }
   .welcome h2 { font: 400 26px/1.25 Georgia, "Noto Serif", "Noto Serif Devanagari", serif; margin: 14px 0 8px; }
@@ -294,7 +295,9 @@
   #safety button.secondary { width: 100%; border: 0; background: transparent; color: var(--muted); padding: 12px; font: inherit; margin-top: 2px; }
   .ai { margin: 0 0 10px; }
   .ai.pending { color: var(--faint); font-style: italic; }
+  .msg > .ai, .msg > .ai.pending { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); } /* last, under the phone's answer */
   .ai-badge { display: inline-block; font: 600 11px/1 system-ui, sans-serif; letter-spacing: .4px; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 8px 3px; margin-bottom: 8px; }
+  details.ai > summary .ai-badge { margin: 0; } /* the fold's title: the online answer is behind it */
   .ai-text p { margin: 0 0 10px; }
   .ai-text ul, .ai-text ol { margin: 0 0 10px; padding-inline-start: 22px; }
   /* under an online answer: the helps the phone found, in sight as cards (view.ts renderHelpCards), then all of it folded */
@@ -343,6 +346,9 @@
   .pager-label { flex: 1; text-align: center; font: 600 13px/1.3 system-ui, sans-serif; color: var(--muted); }
   .pager-btn { min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); color: var(--accent); font: 16px system-ui, sans-serif; cursor: pointer; }
   .pager-btn:disabled { color: var(--faint); opacity: .5; cursor: default; }
+  /* a picture never taller than about half the screen (phone turned: a frame's text and the bar in sight with it, pager.ts) */
+  figure.obs-pic img { aspect-ratio: 16 / 9; object-fit: contain; max-height: 55vh; } /* its room kept before it loads */
+  .obs-pic:empty, .obs-pic-none { max-height: 55vh; }
   .study details.more-tx, .study details.qs { margin: 4px 0 10px; }
   .study details > summary { font: 600 13px system-ui, sans-serif; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
@@ -372,6 +378,12 @@
   :is(.info, .md) details.fold[open] > summary { margin-bottom: 10px; }
   :is(.info, .md) details.fold.verse { margin: 4px 0; }
   :is(.info, .md) details.fold.verse > summary { font-weight: 500; color: var(--fg); padding: 7px 12px; }
+  /* helps in three levels (view.ts groupFold, itemFold): the group, a verse's or a frame's, each help */
+  :is(.info, .md) details.fold.hgroup > details.fold, :is(.info, .md) details.fold.verse > details.fold.item { margin-inline-start: 12px; }
+  :is(.info, .md) details.fold.item { margin: 4px 0; }
+  :is(.info, .md) details.fold.item > summary { font-weight: 400; color: var(--fg); padding: 6px 10px; border-style: dashed; }
+  :is(.info, .md) details.item > .item-body { padding: 2px 10px 6px; }
+  :is(.info, .md) details.item > .item-body p { margin: 0 0 6px; }
   .study .nref { font: 600 12px system-ui, sans-serif; color: var(--accent); }
   .study h4.focus { margin-top: 4px; }
   .nrow strong { font-weight: 650; }
@@ -473,6 +485,7 @@
   .ex-busy { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--fg); }
   /* The conversation's graph (main.ts, graph.ts): "← Back to …" under an answer, the divider where the person went back, the Map */
   .follow.back-row { margin-bottom: -4px; }
+  .follow button.more { color: var(--accent); font-weight: 600; } /* the next steps not in sight (main.ts followRow) */
   .follow button.back { min-height: 44px; border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
   .msg.mark { align-self: stretch; display: flex; align-items: center; gap: 10px; color: var(--muted); font: 13px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
   .msg.mark::before, .msg.mark::after { content: ""; flex: 1; border-top: 1px solid var(--line); }

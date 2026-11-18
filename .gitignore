@@ -13,6 +13,7 @@ worker/.wrangler/
 
 build.log
 worker/training-candidates*.jsonl
+worker/.feedback-state.json
 site/app/
 web/node_modules/
 

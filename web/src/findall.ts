@@ -17,39 +17,47 @@ type T = {
   empty: string
   /** the ways to ask again, each with an example */
   ways: string; ref: string; word: string; phrase: string
+  /** an event or story found by a section's heading (storyfind.ts): the sentence before its passage; `{title}` the heading */
+  section: string
 }
 const TS: Record<string, T> = {
   en: {
+    section: 'This is the section «{title}» ({ref}).',
     where: 'It is in {ref}:', article: 'No verse fits «{all}» well; this article is about it.',
     academy: 'No verse fits «{all}» well; this Translation Academy article is about it.', intro: 'No verse fits «{all}» well; this introduction talks about it.', others: 'Other verses', partial: 'No verse has all of «{all}». These have «{some}»:',
     none: "I didn't find anything that fits «{all}» well in the verses, notes and articles.", empty: 'I could not tell what to search for.',
     ways: 'You can ask again in one of these ways:', ref: 'a reference, like **{x}**', word: 'one word, like **{x}**', phrase: 'a phrase in quotes, like **"{x}"**',
   },
   es: {
+    section: 'Esta es la sección «{title}» ({ref}).',
     where: 'Está en {ref}:', article: 'Ningún versículo encaja bien con «{all}»; este artículo trata de eso.',
     academy: 'Ningún versículo encaja bien con «{all}»; este artículo de Translation Academy trata de eso.', intro: 'Ningún versículo encaja bien con «{all}»; esta introducción habla de eso.', others: 'Otros versículos', partial: 'Ningún versículo tiene todo «{all}». Estos tienen «{some}»:',
     none: 'No encontré nada que encaje bien con «{all}» en los versículos, las notas y los artículos.', empty: 'No supe qué buscar.',
     ways: 'Puedes preguntar de nuevo de una de estas formas:', ref: 'con una referencia, como **{x}**', word: 'con una sola palabra, como **{x}**', phrase: 'con una frase entre comillas, como **"{x}"**',
   },
   fr: {
+    section: 'Voici la section « {title} » ({ref}).',
     where: "C'est dans {ref} :", article: 'Aucun verset ne correspond bien à « {all} » ; cet article en parle.',
     academy: 'Aucun verset ne correspond bien à « {all} » ; cet article de Translation Academy en parle.', intro: 'Aucun verset ne correspond bien à « {all} » ; cette introduction en parle.', others: 'Autres versets', partial: "Aucun verset n'a tout « {all} ». Ceux-ci ont « {some} » :",
     none: "Je n'ai rien trouvé qui corresponde bien à « {all} » dans les versets, les notes et les articles.", empty: 'Je ne sais pas quoi chercher.',
     ways: "Vous pouvez redemander d'une de ces façons :", ref: 'avec une référence, comme **{x}**', word: 'avec un seul mot, comme **{x}**', phrase: 'avec une expression entre guillemets, comme **"{x}"**',
   },
   id: {
+    section: 'Ini bagian «{title}» ({ref}).',
     where: 'Ada di {ref}:', article: 'Tidak ada ayat yang cocok dengan «{all}»; artikel ini membahasnya.',
     academy: 'Tidak ada ayat yang cocok dengan «{all}»; artikel Translation Academy ini membahasnya.', intro: 'Tidak ada ayat yang cocok dengan «{all}»; pengantar ini membahasnya.', others: 'Ayat lain', partial: 'Tidak ada ayat yang memuat semua «{all}». Ayat-ayat ini memuat «{some}»:',
     none: 'Saya tidak menemukan yang cocok dengan «{all}» di ayat, catatan, dan artikel.', empty: 'Saya tidak tahu apa yang harus dicari.',
     ways: 'Anda dapat bertanya lagi dengan salah satu cara ini:', ref: 'dengan referensi, misalnya **{x}**', word: 'dengan satu kata, misalnya **{x}**', phrase: 'dengan frasa dalam tanda kutip, misalnya **"{x}"**',
   },
   hi: {
+    section: 'यह खंड «{title}» ({ref}) है।',
     where: 'यह {ref} में है:', article: 'कोई पद «{all}» से ठीक मेल नहीं खाता; यह लेख इसके बारे में है।',
     academy: 'कोई पद «{all}» से ठीक मेल नहीं खाता; Translation Academy का यह लेख इसके बारे में है।', intro: 'कोई पद «{all}» से ठीक मेल नहीं खाता; यह परिचय इसके बारे में बताता है।', others: 'अन्य पद', partial: 'किसी पद में पूरा «{all}» नहीं है। इन पदों में «{some}» है:',
     none: 'मुझे पदों, नोट्स और लेखों में «{all}» से ठीक मेल खाता कुछ नहीं मिला।', empty: 'मुझे समझ नहीं आया कि क्या खोजूँ।',
     ways: 'आप इनमें से किसी एक तरीके से फिर पूछ सकते हैं:', ref: 'संदर्भ के साथ, जैसे **{x}**', word: 'एक शब्द के साथ, जैसे **{x}**', phrase: 'उद्धरण चिह्नों में वाक्यांश के साथ, जैसे **"{x}"**',
   },
   ar: {
+    section: 'هذا القسم «{title}» ({ref}).',
     where: 'إنه في {ref}:', article: 'لا توجد آية تناسب «{all}» جيدًا؛ هذه المقالة تتحدث عن ذلك.',
     academy: 'لا توجد آية تناسب «{all}» جيدًا؛ مقالة Translation Academy هذه تتحدث عن ذلك.', intro: 'لا توجد آية تناسب «{all}» جيدًا؛ هذه المقدمة تتحدث عن ذلك.', others: 'آيات أخرى', partial: 'لا توجد آية فيها كل «{all}». هذه فيها «{some}»:',
     none: 'لم أجد ما يناسب «{all}» جيدًا في الآيات والملاحظات والمقالات.', empty: 'لم أعرف عمّا أبحث.',

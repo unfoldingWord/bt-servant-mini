@@ -1,0 +1,91 @@
+// The answer polish of Nov 17 (Abel): the next steps under an answer, a few in sight and the others behind "More ▸" (about ten under Genesis 3 with
+// online AI were a wall: converse.ts splitFollow, main.ts followRow); the source line in "details"; titles in the app's language.
+import { describe, expect, test } from 'bun:test'
+import { type Followup, splitFollow, SHOWN } from '../src/converse'
+
+const f = (label: string, x: Partial<Followup> = {}): Followup => ({ label, ...x })
+const labels = (xs: Followup[]) => xs.map((x) => x.label)
+
+describe('the buttons in sight and behind "More ▸"', () => {
+  // Genesis 3 (chapter) as Abel saw it, the way back to OBS 2 drawn above
+  const gen3 = [
+    f('Preguntas'), f('Palabras clave'), f('Capítulo anterior (Génesis 2)', { key: true }), f('Capítulo siguiente (Génesis 4)', { key: true }),
+    f('Esta parte se cuenta en OBS 2:11', { key: true }), f('Academia: …'), f('Introducción a Génesis 3'), f('Introducción a Génesis'),
+  ]
+  test('the way back counted: five in sight in all, the key steps first, the rest in their order', () => {
+    const { shown, more } = splitFollow(gen3, 1)
+    expect(shown.length + 1).toBe(SHOWN)
+    // (in their order: "Preguntas" came first, and there was room for it after the three key steps)
+    expect(labels(shown)).toEqual(['Preguntas', 'Capítulo anterior (Génesis 2)', 'Capítulo siguiente (Génesis 4)', 'Esta parte se cuenta en OBS 2:11'])
+    expect(labels(more)).toEqual(['Palabras clave', 'Academia: …', 'Introducción a Génesis 3', 'Introducción a Génesis'])
+  })
+  test('the order of the buttons in sight is the order they came in', () => {
+    const { shown } = splitFollow([f('a'), f('b'), f('c', { key: true }), f('d'), f('e'), f('g'), f('h')], 0)
+    expect(labels(shown)).toEqual(['a', 'b', 'c', 'd', 'e'])
+  })
+  test("a path's next step, a unit to add and try again are always in sight", () => {
+    const xs = [f('a'), f('b'), f('c'), f('d'), f('e'), f('next', { pathNext: true }), f('add', { add: { lang: 'es-419', unit: 'obs' } })]
+    const { shown, more } = splitFollow(xs, 2)
+    expect(labels(shown)).toEqual(['a', 'next', 'add'])
+    expect(labels(more)).toEqual(['b', 'c', 'd', 'e'])
+  })
+  test('few buttons: all in sight; never more than five with the ways back', () => {
+    expect(splitFollow([f('a'), f('b'), f('c')], 1).more).toEqual([])
+    expect(splitFollow([f('a'), f('b'), f('c'), f('d')], 1).more).toEqual([])
+    expect(labels(splitFollow([f('a'), f('b'), f('c'), f('d'), f('e')], 1).more)).toEqual(['e'])
+    // Genesis 3 without a way back: six buttons, five in sight
+    expect(splitFollow(gen3.slice(2), 0)).toEqual({ shown: gen3.slice(2, 7), more: gen3.slice(7) })
+  })
+  test("a path's next step before the key steps; the key steps before the others (Abel: the OBS story stays in sight)", () => {
+    const xs = [f('Preguntas'), f('prev', { key: true }), f('next', { key: true }), f('obs', { key: true }), f('step', { pathNext: true })]
+    expect(labels(splitFollow(xs, 2).shown)).toEqual(['prev', 'next', 'step'])
+    expect(labels(splitFollow(xs, 1).shown)).toEqual(['prev', 'next', 'obs', 'step'])
+  })
+  test('many ways back: at least three next steps in sight', () => {
+    expect(splitFollow([f('a'), f('b'), f('c'), f('d'), f('e')], 3).shown.length).toBe(3)
+  })
+})
+
+describe('the source line goes into "details" (Abel, Nov 17)', () => {
+  test('recognized in the six languages, not an ordinary line', async () => {
+    const { isSourceLine } = await import('../src/answer')
+    for (const t of ['Source: unfoldingWord/en/tn v91.', 'Fuente: es-419_gl/es-419/obs v2, es-419_gl/es-419/obs-tn v2.', 'Source : x v1.', 'Sumber: x v1.', 'स्रोत: x v1।', 'المصدر: x v1.'])
+      expect(isSourceLine(t), t).toBe(true)
+    for (const t of ['Translation Notes v91 — Nehemías', 'Fuentes de agua en el desierto', 'The source of the river']) expect(isSourceLine(t), t).toBe(false)
+  })
+})
+
+describe("a story's title without its number (Abel, Nov 17: \"OBS 2:11: ٢. …\" in Arabic)", () => {
+  test('in any digits', async () => {
+    const { cleanTitle } = await import('../src/obs')
+    expect(cleanTitle('3. The Flood')).toBe('The Flood')
+    expect(cleanTitle('٢. دخول الخطية إلى العالم')).toBe('دخول الخطية إلى العالم')
+    expect(cleanTitle('२. पाप का संसार में प्रवेश')).toBe('पाप का संसार में प्रवेश')
+    expect(cleanTitle('2 Kings')).toBe('2 Kings')
+  })
+})
+describe("the packs in the app's language", () => {
+  test('"es" finds "es-419"; another language none', async () => {
+    const { uiLangs } = await import('../src/packs')
+    expect(uiLangs('es', ['en', 'es-419', 'ar'])).toEqual(['es-419'])
+    expect(uiLangs('ar', ['en', 'es-419', 'ar'])).toEqual(['ar'])
+    expect(uiLangs('fr', ['en', 'es-419'])).toEqual([])
+  })
+})
+
+describe('no button for what the answer shows (Abel, Nov 17: "ya tengo una lista de notas y de términos clave")', () => {
+  test('the same passage asked again for helps it shows: gone; the rest stays', async () => {
+    const { dropShown } = await import('../src/converse')
+    const sh = (ref: string, what: string[]) => ({ id: 'f', intent: 'passage', ref, what, version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'en' }) as any
+    const xs = [f('Preguntas', { sheet: sh('gen 43:29', ['questions']) }), f('Palabras clave', { sheet: sh('gen 43:29', ['terms']) }),
+      f('Versículo anterior', { sheet: sh('gen 43:28', ['text', 'notes']), key: true }), f('Texto', { sheet: sh('gen 43:29', ['text']) }),
+      f('Academia: Kinship', { sheet: { ...sh('', []), intent: 'article', ref: null, concept: 'ta:translate/translate-kinship' } })]
+    expect(labels(dropShown(xs, 'gen 43:29', new Set(['text', 'notes', 'terms'])))).toEqual(['Preguntas', 'Versículo anterior', 'Academia: Kinship'])
+    expect(labels(dropShown(xs, 'gen 43:29', new Set(['text', 'notes', 'terms', 'questions'])))).toEqual(['Versículo anterior', 'Academia: Kinship'])
+    expect(dropShown(xs, null, new Set(['terms']))).toEqual(xs)
+    // a key term the answer links (an OBS frame's key terms fold) is not a button again; an Academy article the notes link is
+    const god = f('Dios', { sheet: { ...sh('', []), intent: 'article', ref: null, concept: 'tw:kt/god' } })
+    const ans = 'Palabras clave (1): [God](tw:kt/god) … [Academia: Kinship](ta:translate/translate-kinship)'
+    expect(labels(dropShown([god, ...xs], null, new Set(), ans))).toEqual(['Dios', ...labels(xs)].filter((l) => l !== 'Dios'))
+  })
+})

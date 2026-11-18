@@ -30,12 +30,12 @@ const STOP = new Set(
     'my me your his her their this that these those what which who whom whose where when why how there here about with from by as into ' +
     'verse verses bible book chapter passage say says said talk talks speak speaks tell tells story find show me please find where ' +
     // es
-    'el la los las un una unos unas de del en y o u que qué quien quién donde dónde cuando cuándo como cómo cual cuál es son fue era ' +
+    'el la los las un una unos unas de del en y o u que qué quien quién quienes quiénes donde dónde cuando cuándo como cómo cual cuál es son fue fueron era eran ser sido ' +
     'se su sus mi mis tu tus lo le les al por para con sin sobre hay habla hablan dice dicen versiculo versículo versiculos biblia libro ' +
     'capitulo capítulo pasaje parte cuenta historia encuentra muestra muestrame muéstrame donde aparece ' +
     // fr
     'le la les un une des de du d l et ou que qui quoi où quand comment est sont était se sa son ses mon ma mes dans sur pour par avec ' +
-    'parle parlent dit disent verset versets bible livre chapitre passage quel quelle il elle ils elles avec est été être par ' +
+    'parle parlent dit disent verset versets bible livre chapitre passage quel quelle il elle ils elles avec est été être par furent fut étaient ' +
     // id
     'yang di ke dari dan atau apa siapa mana kapan bagaimana adalah itu ini ada dalam pada untuk dengan tentang ayat ayatnya alkitab ' +
     'kitab pasal bagian berbicara mengatakan berkata cerita tunjukkan ' +
@@ -62,9 +62,12 @@ const STOP = new Set(
   ).split(/\s+/).map((w) => fold(w)),
 )
 // ar
-const AR_STOP = new Set('لا لم لن قد كل له لي به بها فيه فيها يا يوجد توجد أترجم نترجم ترجم بلادنا بلدنا عندنا لغتنا يذكر تذكر يذكره ذكر يحدث حدث حدثت وقع وقعت أسفار الأسفار يرد ترد في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
+const AR_STOP = new Set('هم هن كانوا لا لم لن قد كل له لي به بها فيه فيها يا يوجد توجد أترجم نترجم ترجم بلادنا بلدنا عندنا لغتنا يذكر تذكر يذكره ذكر يحدث حدث حدثت وقع وقعت أسفار الأسفار يرد ترد في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
 const HI_STOP = new Set('किन पुस्तकों किताबों पुस्तकें किताबें टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता हुआ हुई हुए होता होती गया गई वर्णन उल्लेख भी तो ही जो वो हो एक इस उस'.split(' '))
 
+/** Words of how a question asks that are also names when capitalized: «¿quiénes eran…?», but Eran (Numbers 26:36); not first
+ *  in the question («Eran muchos…»), nor in capitals. */
+const NAMES_TOO = new Set(['eran'])
 /** The content words of a question, longest first within the question order (names usually survive). */
 export function keywords(q: string): string[] {
   const toks = q
@@ -72,10 +75,10 @@ export function keywords(q: string): string[] {
     .split(/\s+/)
     .filter(Boolean)
   const out: string[] = []
-  for (const t of toks) {
+  for (const [i, t] of toks.entries()) {
     const f = fold(t)
     // two letters are a word in Arabic (دم "blood"); not in Hindi, whose vowel signs the index leaves out (जौ would be ज)
-    if (/^\d+$/.test(f) || f.length < (/^[ء-ي]/.test(f) ? 2 : 3) || STOP.has(f) || HI_STOP.has(t) || AR_STOP.has(f) || AR_STOP.has(f.replace(/^(ال|و|ب|ل)/, ''))) continue
+    if (/^\d+$/.test(f) || f.length < (/^[ء-ي]/.test(f) ? 2 : 3) || (STOP.has(f) && !(NAMES_TOO.has(f) && i > 0 && /^\p{Lu}\p{Ll}/u.test(t))) || HI_STOP.has(t) || AR_STOP.has(f) || AR_STOP.has(f.replace(/^(ال|و|ب|ل)/, ''))) continue
     // one Arabic word once, with or without its article (ثلج, الثلج)
     const key = f.replace(/^ال(?=[ء-ي]{2})/, '')
     if (!out.some((o) => fold(o).replace(/^ال(?=[ء-ي]{2})/, '') === key)) out.push(t)
@@ -174,6 +177,18 @@ function conceptOf(word: string, m: Map<string, string[]>, strict = false): stri
     }
   }
   return best ? m.get(best)! : null
+}
+
+/**
+ * A question's word in the forms an English heading or story title may have it (storyfind.ts): the word, its English story
+ * word ("leones" -> lion, data/story-words.json) and the last part of the Translation Words articles it names ("Salomón" ->
+ * solomon, "templo" -> temple).
+ */
+export async function englishForms(word: string, lang: string): Promise<string[]> {
+  const out = new Set([fold(word), ...toEnglish([word], lang).map((w) => fold(w))])
+  const ids = conceptOf(word, await names().catch(() => new Map<string, string[]>()), true) ?? []
+  for (const id of ids) if (/^tw:(names|kt|other)\//.test(id)) out.add(id.slice(id.lastIndexOf('/') + 1).replace(/\d+$/, ''))
+  return [...out].filter(Boolean)
 }
 
 /** A verse found: `text` as a list shows it (a snippet around the words, or the whole verse), `full` the whole verse. */
