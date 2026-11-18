@@ -157,3 +157,8 @@ describe('«familia de X»: the whole family (Abel, Nov 18)', () => {
     expect(c.graph!.nodes.map((n) => n.label)).toContain('Familia de Abraham')
   })
 })
+
+test('Arabic «ملك» (king) is a word, not the person «ٱلْمَلِك» of Jeremiah 36:26 (review, Nov 18)', async () => {
+  const r = await ask('ملك', 'ar')
+  expect(r.route).not.toBe('kin')
+})

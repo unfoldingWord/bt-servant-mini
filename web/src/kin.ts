@@ -306,6 +306,12 @@ export async function kinQuestion(q: string, nav: string, last: string | null): 
   if (kind === 'who' && (await articleForQuestion(q).catch(() => null))?.length) return null
   // a name alone ("Hamul"): only a person with no Translation Words article (one with an article is answered by it, as before)
   if (s.bare && (await Promise.all(ids.map((id) => hasArticle(pack!, id)))).some(Boolean)) return null
+  // (an Arabic name alone that is the article plus a word, «ٱلْمَلِك» "the king" of Jeremiah 36:26, is a description: «ملك» stays a word)
+  if (s.bare && s.lang === 'ar') {
+    const named = await Promise.all(ids.map(async (id) => ((await personOf(pack!, id))?.name ?? '').normalize('NFD').replace(/\p{Mn}/gu, '')))
+    ids = ids.filter((_, i) => !/^[اٱ]ل/.test(named[i]!))
+    if (!ids.length) return null
+  }
   const ix = (await peopleIx(pack))!
   const count = (id: string) => ix.byId.get(id)?.verses ?? 0
   const sorted = [...ids].sort((a, b) => count(b) - count(a) || (a < b ? -1 : 1))

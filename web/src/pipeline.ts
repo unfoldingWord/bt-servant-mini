@@ -2304,7 +2304,8 @@ async function articleFamily(sheet: Sheet, ui: string): Promise<{ line: string; 
   const name = p?.name ?? sheet.concept
   const label = withName(ui, t.family, name)
   const text = tiesLine(ui, p?.gender, ties, (x) => names.get(x) ?? x)
-  const sources = ['STEPBible/STEPBible-Data/TIPNR', ...((await openLang(pack).catch(() => null)) && (p?.gender !== undefined || p?.note) ? ['BibleAquifer/ACAI'] : [])]
+  // (the family data's own sources: ACAI only when the packs have it)
+  const sources = (await familyOf(pack, ids[0]!).catch(() => null))?.data?.sources ?? ['STEPBible/STEPBible-Data/TIPNR']
   // (its sources in a short parenthesis: inside the fold, not the answer's last line, so no source line of its own)
   return { line: text ? `${colon(ui, label)} ${text} (${sources.map((x) => (SOURCE_NAMES[x] ?? x).replace(/ \(.*\)$/, '')).join(', ')}).` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }] }
 }
@@ -2420,7 +2421,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const sources = stories.length ? [...f.sources, 'robertrouse/theographic-bible-metadata'] : f.sources
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
     // (MAX_FOLLOW: the other one of that name and the download first, the article, every relative that fits, then verses and a story)
-    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...(await Promise.all(rel.map(person))),
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...(await Promise.all(rel.slice(0, MAX_FOLLOW).map(person))),
       ...verses, ...stories]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
       line(t.siblings, f.siblings), namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
@@ -2442,7 +2443,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const info = [`**${colon(ui, head)}** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
   // (MAX_FOLLOW: the other one of that name and the download first, the person's article, then every relative that fits, the verses
   // last: Abel, Nov 18, missed Madián among Abraham's sons when only five relatives were buttons)
-  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), ...(await Promise.all(list.map(person))), ...verses.slice(0, others.length ? 1 : 2)]
+  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), ...(await Promise.all(list.slice(0, MAX_FOLLOW).map(person))), ...verses.slice(0, others.length ? 1 : 2)]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }
 }
 
