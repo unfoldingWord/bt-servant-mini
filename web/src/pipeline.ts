@@ -2322,12 +2322,13 @@ async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow |
 
 /**
  * A person's button (a relative, someone named in a verse, one of several people of a name): the person's Translation Words article when
- * there is one, from a pack that has it; the family card only when there is none (Abel, Nov 18: "la familia debe ser un fallback").
+ * there is one, from the family data's own pack (its family line and button need that pack); the family card when there is none, or
+ * when only another pack has the article (the card then offers it: "Artículo: X"). Abel, Nov 18: "la familia debe ser un fallback".
  */
 async function personStep(base: Sheet, id: string, label: string): Promise<Follow> {
   const tw = await articleOf(base.lang, id).catch(() => null)
-  const l = tw ? await packWithArticle(tw, base.lang).catch(() => null) : null
-  return tw && l ? { label, sheet: articleSheet(base, tw, l) } : { label, sheet: kinSheet(base, 'who', { concept: id }) }
+  const has = tw ? !!(await (await openLang(base.lang)).article(tw).catch(() => null))?.data : false
+  return tw && has ? { label, sheet: articleSheet(base, tw, base.lang) } : { label, sheet: kinSheet(base, 'who', { concept: id }) }
 }
 
 async function kinAnswer(x: Ctx): Promise<Done> {
