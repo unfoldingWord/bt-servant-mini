@@ -13,7 +13,7 @@ import { has } from '../src/commands'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { forgetFrameTables } from '../src/obs'
-import { ALL_PACKS } from './fs-packs'
+import { ALL_PACKS, installPacks } from './fs-packs'
 import { fullPhone } from './harness'
 import { withObs } from './obs-fixture'
 
@@ -34,6 +34,8 @@ async function withFrames(lang: string) {
 }
 let all: Ctx['books'] = null
 beforeAll(async () => {
+  // (new readers: another test file may have read the stories of the old ones before the fixture was put in them)
+  await installPacks(ALL_PACKS)
   await fullPhone()
   await withObs('hi')
   for (const l of ['en', 'hi']) await withFrames(l)

@@ -13,7 +13,7 @@ import { Composer, setComposerOn } from '../src/composer'
 import { buildTermIndex, resetTermIndex } from '../src/termindex'
 import { has } from '../src/commands'
 import { rtlLang } from '../src/bidi'
-import { ALL_PACKS } from './fs-packs'
+import { ALL_PACKS, installPacks } from './fs-packs'
 import { fullPhone } from './harness'
 import { withObs } from './obs-fixture'
 
@@ -22,6 +22,8 @@ const store = new Map<string, string>()
 
 let all: Ctx['books'] = null
 beforeAll(async () => {
+  // (new readers: another test file may have read the stories of the old ones before the fixture was put in them)
+  await installPacks(ALL_PACKS)
   await fullPhone()
   await withObs('hi')
   all = await booksOf(ALL_PACKS)
