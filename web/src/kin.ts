@@ -172,7 +172,8 @@ export function kinShape(q: string): KinShape | null {
     if (!nameLike(name)) continue
     const f = foldName(name)
     if (PRONOUNS.has(f)) return null
-    if ((w.kind === 'children' || w.kind === 'sons') && PEOPLES.has(f)) return null
+    // («hijas de Israel», «las mujeres de Israel» are the people too)
+    if ((w.kind === 'children' || w.kind === 'sons' || w.kind === 'daughters' || w.kind === 'partners') && PEOPLES.has(f)) return null
     // («les fils de David» is plural: David's sons; «fils de David», «putra Daud», «दाऊद का पुत्र» the title)
     const plural = /^les\s/i.test(rest)
     if ((w.kind === 'sons' || w.kind === 'children') && (w.one || / का /.test(rest)) && !plural && DAVID.has(f)) return null
@@ -321,6 +322,8 @@ export function kinKnown(q: string, nav: string): boolean {
   return order.some((l) => { const ix = ready.get(l); return !!ix && lookup(ix, [s.name, ...s.alts]).length > 0 })
 }
 
+/** Whether the people index of a pack is built already (a button that names people waits for it rather than build it during an answer). */
+export const kinReady = (pack: string): boolean => !!ready.get(pack)
 /** Builds the people index of these packs at idle (the app's start, after a change of packs): a family question then skips the readers. */
 export function warmKin(langs: string[]) {
   const ric = (globalThis as any).requestIdleCallback as ((f: () => void, o?: { timeout: number }) => void) | undefined

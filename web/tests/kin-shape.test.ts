@@ -83,9 +83,11 @@ describe('never a family question (§4.1, §7)', () => {
     // not this shape at all
     'Rut 2:3', 'notas de Rut 2', '¿Qué significa gracia?', 'hello',
   ]) test(q, () => expect(kinShape(q)?.kind === 'who' ? null : kinShape(q)).toBeNull())
-  test('the brothers of Joseph are asked (only the children of the peoples are not)', () => {
+  test('the brothers of Joseph are asked (only the children, daughters and women of the peoples are not)', () => {
     expect(shape('إخوة يوسف')).toEqual(['siblings', 'يوسف', 'ar'])
-    expect(shape('daughters of Israel')).toEqual(['daughters', 'Israel', 'en'])
+    expect(kinShape('daughters of Israel')).toBeNull()
+    expect(kinShape('las mujeres de Israel')).toBeNull()
+    expect(shape('hijas de Saúl')).toEqual(['daughters', 'Saúl', 'es'])
   })
   test('a sentence after "of" is no name', () => {
     expect(kinShape('the father of the boy who was healed in the temple yesterday')).toBeNull()

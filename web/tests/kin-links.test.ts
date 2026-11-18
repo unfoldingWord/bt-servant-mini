@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { fullPhone, turn } from './harness'
 import { kinFixture } from './fixtures/kin/family'
-import { setKinReader } from '../src/kin'
+import { kinQuestion, setKinReader } from '../src/kin'
 import type { ConvState } from '../src/pipeline'
 import type { Sheet } from '../src/answer'
 
@@ -12,7 +12,11 @@ const open = (s: Partial<Sheet>, ui = 'en', c: ConvState = { last: null }) => tu
 const labels = (r: { reply: { follow?: { label: string }[] } }) => (r.reply.follow ?? []).map((f) => f.label)
 
 describe('with the packs on disk', () => {
-  beforeAll(fullPhone)
+  // (the people index is built at idle in the app, warmKin: the links under a verse or an article wait for it)
+  beforeAll(async () => {
+    await fullPhone()
+    await kinQuestion('sons of Isaac', 'en', null)
+  })
   test('verse → people: Genesis 25:26 offers who is named there, and that button lists them, each a card', async () => {
     const c: ConvState = { last: null }
     const r = await open({ ref: 'gen 25:26' }, 'en', c)
@@ -24,6 +28,13 @@ describe('with the packs on disk', () => {
     expect(labels(list)).toEqual(expect.arrayContaining(['Isaac', 'Esau']))
     const card = await turn(c, { q: '', sheet: list.reply.follow!.find((f) => f.label === 'Isaac')!.sheet! }, 'en')
     expect(card.reply.info).toMatch(/^\*\*Isaac\*\*/)
+  })
+  test('no "people here" before the index is built (never built during an answer)', async () => {
+    const { resetKin } = await import('../src/kin')
+    resetKin()
+    const r = await open({ ref: 'gen 25:26' })
+    expect((r.reply.follow ?? []).some((f) => f.sheet?.intent === 'kin')).toBe(false)
+    await kinQuestion('sons of Isaac', 'en', null)
   })
   test('a whole chapter offers no "people here" (only a verse, or verses of a chapter)', async () => {
     const r = await open({ ref: 'gen 25' })

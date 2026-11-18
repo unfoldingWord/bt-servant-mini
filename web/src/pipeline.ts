@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, colon, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { askedName, colon, kinReady, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2254,10 +2254,12 @@ async function partsStep(base: Sheet, ui: string, missing: boolean): Promise<Fol
   return [{ label: KT(ui).getPeople, sheet: { ...base, id: `k${Date.now()}` }, add: { lang: base.lang, unit: 'xtopics' } }]
 }
 
-/** The pack whose family data a sheet is read with: its own when it has `xtopics`, else English, else none. */
+/**
+ * The pack whose family data a passage or an article is linked with: its own, when it has `xtopics` (another pack would put its
+ * names in the answer's language), and its people index is built already (at idle: never built during an answer). Else none.
+ */
 async function kinPack(l: string): Promise<string | null> {
-  for (const x of new Set([l, 'en'])) if ((await openLang(x).catch(() => null))?.installed('xtopics')) return x
-  return null
+  return kinReady(l) && (await openLang(l).catch(() => null))?.installed('xtopics') ? l : null
 }
 /**
  * Under a Translation Words article about a person (`same-as`): a short line of the family at the end of its text, and the way to the
@@ -2358,7 +2360,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     // never "X had no children": the data names none; the person's article and first verses
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
     const follow = [...others, ...(tw ? [tw] : []), ...(await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)),
-      { label: f.name, sheet: kinSheet(sheet, 'who', { concept: f.id }) }]
+      { label: f.name, sheet: kinSheet(sheet, 'who', { concept: f.id }) }, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0))]
     return { answered: 'family', ref: null, concept: f.id, found: 1,
       reply: { ui, info: [t.none.replace('{head}', head), creditLine(ui, f.sources)].join('\n\n'), follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: none`) } }
   }
@@ -2366,7 +2368,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const names = joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))
   const info = [`**${colon(ui, head)}** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
   // (MAX_FOLLOW: the other one of that name and the download first; then up to five relatives, two verses, the article)
-  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...list.slice(0, 5).map(person), ...verses.slice(0, 2), ...(tw ? [tw] : [])]
+  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...list.slice(0, 5).map(person), ...verses.slice(0, others.length ? 1 : 2), ...(tw ? [tw] : [])]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }
 }
 
