@@ -615,6 +615,33 @@ const ASKS: RegExp[] = [
   /^(.+?)\s+(?:कौन|क्या)\s+(?:था|थे|थी|है|हैं)$/,
   /^(?:من|ما|ماذا)\s+(?:هو|هي|كان|كانت|هم|يعني)?\s*(.+)$/,
 ]
+/**
+ * "Who were Jesus' disciples / the apostles / the twelve?": who they were, «The twelve» (tw:kt/thetwelve, whose article names
+ * them), not what a disciple is (tw:kt/disciple: "What is a disciple?" still opens it). Only a "who" question, in the plural.
+ */
+const WHO = /^(?:who|qui[eé]n(?:es)?|qui|siapa(?:kah)?|من)\s|\sकौन\s/i
+const OF_JESUS = /\b(?:de|of|du|d)\s+(?:jesus[\s-]christ|jesus[\s-]cristo|jesucristo|jesus|cristo|christ)\b|\b(?:jesus[\s-]christ|jesus)['’]s?(?=\s)|\byesus(?: kristus)?\b|(?:^|\s)(?:يسوع|المسيح)(?=\s|$)|यीशु(?: मसीह)? के/g
+const PLURAL_TWELVE = new Set([
+  'disciples', 'apostles', 'twelve', 'twelve disciples', 'twelve apostles', '12', '12 disciples', '12 apostles',
+  '12 discipulos', '12 apostoles', '12 apotres', '12 murid', '12 rasul',
+  'discipulos', 'apostoles', 'doce', 'doce discipulos', 'doce apostoles',
+  'apotres', 'douze', 'douze disciples', 'douze apotres',
+  'murid-murid', 'murid', 'rasul-rasul', 'kedua belas murid', 'kedua belas rasul', 'dua belas murid', 'dua belas rasul', 'kedua belas', 'dua belas',
+  'تلاميذ', 'التلاميذ', 'رسل', 'الرسل', 'الاثنا عشر', 'الاثني عشر', 'الرسل الاثنا عشر', 'الرسل الاثني عشر', 'التلاميذ الاثنا عشر', 'الاثنا عشر تلميذا', 'الاثني عشر تلميذا',
+  'चेले', 'चेलों', 'प्रेरित', 'प्रेरितों', 'बारह चेले', 'बारह प्रेरित', 'बारहों',
+])
+export function asksTheTwelve(t: string): boolean {
+  if (!WHO.test(` ${t} `.trimStart())) return false
+  const f = fold(t).replace(/[«»"“”]/g, '').replace(OF_JESUS, ' ').replace(/\s+/g, ' ').trim()
+  const rest = f
+    .replace(/^(?:who(?:'s| is| was| were| are)?|quienes|quien|qui|siapa(?:kah)?|من)\s+/, '')
+    .replace(/^(?:fueron|eran|son|etaient|furent|sont|est|etait|itu|adalah|saja|هم|كانوا|كان)\s+/, '')
+    .replace(/^(?:the|los|las|les|para|un|una)\s+/, '')
+    .replace(/\s+(?:कौन\s+(?:थे|हैं|था|है))$/, '')
+    .trim()
+  return PLURAL_TWELVE.has(rest)
+}
+
 /** Whether the question asks about something ("who was…", "¿qué es…?") rather than only naming it ("John the Baptist"). */
 export function asksAbout(q: string): boolean {
   const t = q.trim().replace(/[¿?!¡.؟।]+/g, ' ').replace(/\s+/g, ' ').trim()
@@ -626,6 +653,7 @@ export async function versesOf(ids: string[], packLang = 'en'): Promise<Found[]>
 }
 export async function articleForQuestion(q: string): Promise<string[] | null> {
   const t = q.trim().replace(/[¿?!¡.؟।]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (asksTheTwelve(t)) return ['tw:kt/thetwelve']
   const m = await names()
   for (const re of ASKS) {
     const hit = re.exec(t)

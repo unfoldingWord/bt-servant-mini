@@ -1405,6 +1405,8 @@ const titleOfStep = (follow: Follow[], id: string): string | undefined => {
   const f = follow.find((x) => x.sheet?.concept === id)
   return f ? (id.startsWith('ta:') ? f.label.replace(/^[^:]+:\s*/, '') : f.label) : undefined
 }
+/** Articles whose list stands in one passage: that passage, the first button of the article's answer. */
+const LIST_PASSAGE: Record<string, string> = { 'tw:kt/thetwelve': 'mat 10:2-4' }
 /** "How to translate it": the Translation Academy article for a Translation Words article (names, things unknown where one translates). */
 const howToOf = (id: string): string | null =>
   id.startsWith('tw:names/') ? 'ta:translate/translate-names' : id.startsWith('tw:other/') ? 'ta:translate/translate-unknown' : null
@@ -1414,6 +1416,13 @@ const START_TA = ['ta:translate/translate-process', 'ta:translate/first-draft']
 async function packWithBook(code: string, l: string): Promise<string | null> {
   for (const x of new Set([l, env.helpsLang ?? l, 'en', ...(await installedLangs())])) {
     try { if ((await openLang(x)).installed(`book:${code}`)) return x } catch {}
+  }
+  return null
+}
+/** The pack that has an article, the sheet's first, then English, then the others. */
+async function packWithArticle(id: string, l: string): Promise<string | null> {
+  for (const x of new Set([l, 'en', ...(await installedLangs())])) {
+    try { if ((await (await openLang(x)).article(id)).data) return x } catch {}
   }
   return null
 }
@@ -2035,6 +2044,13 @@ async function otherSteps(x: Ctx, steps: Follow[]): Promise<Follow[]> {
       if (!id) return steps
       if (id.startsWith('ta:')) return [...steps, browseStep(ui, { manual: id.slice(3, id.indexOf('/')), lang: sheet.lang })]
       const verses = x.others.length ? [] : await verseSteps(sheet, id, ui)
+      // an article whose list is a passage («The twelve»: Matthew 10:2-4 names them), that passage first when a pack has it
+      const list = LIST_PASSAGE[id]
+      if (list && (await packWithBook(list.split(' ')[0]!, sheet.lang))) {
+        const chapter = list.slice(0, list.indexOf(':') + 1)
+        verses.splice(0, verses.length, { label: refLabelOf(ui, list), sheet: passageSheet(sheet, list, ['text']), key: true },
+          ...verses.filter((f) => !f.sheet?.ref?.startsWith(chapter)))
+      }
       const how = howToOf(id)
       const howB = how && !steps.some((f) => f.sheet?.concept === how) ? await taStep(sheet, how, ui).catch(() => null) : null
       // the Academy article first among the links ("How to Translate Names")
@@ -2389,6 +2405,8 @@ ${x.meta}` },
     run: async (x) => {
       const ids = await articleForQuestion(x.q!)
       if (ids?.length) x.sheet = { ...x.sheet, intent: ids.length === 1 ? 'article' : 'choose', concept: ids.length === 1 ? ids[0]! : null, candidates: ids.length > 1 ? ids : null, term: null }
+      // one article a pack of the language lacks («The twelve» in Indonesian): from the first pack that has it (English first)
+      if (ids?.length === 1) x.sheet.lang = (await packWithArticle(ids[0]!, x.sheet.lang)) ?? x.sheet.lang
       return null
     },
   },
