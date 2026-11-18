@@ -95,3 +95,22 @@ test('«दाऊद का पुत्र» (singular, the title) is not asked
   expect(kinShape('दाऊद का पुत्र')).toBeNull()
   expect(kinShape('anak Ishak')?.kind).toBe('children')
 })
+
+describe('review fixes (Nov 18)', () => {
+  test('«fils de David», «putra Daud» are the title; «les fils de David» are his sons', () => {
+    expect(kinShape('Fils de David')).toBeNull()
+    expect(kinShape('le fils de David')).toBeNull()
+    expect(kinShape('putra Daud')).toBeNull()
+    expect(kinShape('les fils de David')).toMatchObject({ kind: 'sons', name: 'David' })
+  })
+  test('only "who" asks for a card: "what is Grace", «من يعقوب» (also "from Jacob") do not', () => {
+    expect(kinShape('what is Grace')).toBeNull()
+    expect(kinShape('من يعقوب')).toBeNull()
+    expect(kinShape('من هو يعقوب؟')).toMatchObject({ kind: 'who' })
+    expect(kinShape('what are the sons of Isaac')).toMatchObject({ kind: 'sons' })
+  })
+  test('plural wives ask for the spouses', () => {
+    expect(kinShape('esposas de Jacob')?.kind).toBe('partners')
+    expect(kinShape('wives of Jacob')?.kind).toBe('partners')
+  })
+})

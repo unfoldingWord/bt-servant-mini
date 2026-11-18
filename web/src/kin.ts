@@ -28,22 +28,22 @@ const WORDS: Record<KinLang, Record<string, Word>> = {
   en: {
     son: W('sons', true), sons: W('sons'), child: W('children', true), children: W('children'), kids: W('children'),
     daughter: W('daughters', true), daughters: W('daughters'), father: W('father'), dad: W('father'), mother: W('mother'), mom: W('mother'),
-    parents: W('parents'), wife: W('wife'), wives: W('wife'), husband: W('husband'), spouse: W('partners'), spouses: W('partners'),
+    parents: W('parents'), wife: W('wife'), wives: W('partners'), husband: W('husband'), spouse: W('partners'), spouses: W('partners'),
     brother: W('brothers', true), brothers: W('brothers'), sister: W('sisters', true), sisters: W('sisters'), siblings: W('siblings'),
   },
   es: {
     hijo: W('sons', true), hijos: W('children'), hija: W('daughters', true), hijas: W('daughters'), padre: W('father'), papa: W('father'),
-    madre: W('mother'), mama: W('mother'), padres: W('parents'), esposa: W('wife'), esposas: W('wife'), mujer: W('wife'), mujeres: W('wife'),
+    madre: W('mother'), mama: W('mother'), padres: W('parents'), esposa: W('wife'), esposas: W('partners'), mujer: W('wife'), mujeres: W('partners'),
     esposo: W('husband'), marido: W('husband'), hermano: W('brothers', true), hermanos: W('siblings'), hermana: W('sisters', true), hermanas: W('sisters'),
   },
   fr: {
-    fils: W('sons'), enfant: W('children', true), enfants: W('children'), fille: W('daughters', true), filles: W('daughters'), pere: W('father'),
-    mere: W('mother'), parents: W('parents'), femme: W('wife'), femmes: W('wife'), epouse: W('wife'), epouses: W('wife'), mari: W('husband'),
+    fils: W('sons', true), enfant: W('children', true), enfants: W('children'), fille: W('daughters', true), filles: W('daughters'), pere: W('father'),
+    mere: W('mother'), parents: W('parents'), femme: W('wife'), femmes: W('partners'), epouse: W('wife'), epouses: W('partners'), mari: W('husband'),
     epoux: W('husband'), frere: W('brothers', true), freres: W('siblings'), soeur: W('sisters', true), soeurs: W('sisters'),
   },
   id: {
     // («anak» is one son or many: «anak Daud» is the title of Jesus, so it counts as singular there)
-    anak: W('children', true), 'anak-anak': W('children'), 'anak laki-laki': W('sons'), 'anak-anak laki-laki': W('sons'), putra: W('sons'),
+    anak: W('children', true), 'anak-anak': W('children'), 'anak laki-laki': W('sons'), 'anak-anak laki-laki': W('sons'), putra: W('sons', true),
     'anak perempuan': W('daughters'), 'anak-anak perempuan': W('daughters'), putri: W('daughters'), ayah: W('father'), bapa: W('father'),
     bapak: W('father'), ibu: W('mother'), 'orang tua': W('parents'), 'orangtua': W('parents'), istri: W('wife'), isteri: W('wife'),
     suami: W('husband'), saudara: W('siblings'), 'saudara-saudara': W('siblings'), 'saudara laki-laki': W('brothers'),
@@ -53,14 +53,14 @@ const WORDS: Record<KinLang, Record<string, Word>> = {
     'पुत्र': W('sons'), 'पुत्रों': W('sons'), 'बेटा': W('sons', true), 'बेटे': W('sons'), 'बेटों': W('sons'), 'बच्चे': W('children'),
     'बच्चों': W('children'), 'संतान': W('children'), 'सन्तान': W('children'), 'पुत्री': W('daughters'), 'पुत्रियाँ': W('daughters'),
     'पुत्रियों': W('daughters'), 'बेटी': W('daughters', true), 'बेटियाँ': W('daughters'), 'बेटियों': W('daughters'), 'पिता': W('father'),
-    'माता': W('mother'), 'माँ': W('mother'), 'माता-पिता': W('parents'), 'पत्नी': W('wife'), 'पत्नियाँ': W('wife'), 'पति': W('husband'),
+    'माता': W('mother'), 'माँ': W('mother'), 'माता-पिता': W('parents'), 'पत्नी': W('wife'), 'पत्नियाँ': W('partners'), 'पति': W('husband'),
     'भाई': W('brothers'), 'भाइयों': W('brothers'), 'बहन': W('sisters'), 'बहनें': W('sisters'), 'बहनों': W('sisters'),
   },
   ar: {
     'أبناء': W('sons'), 'ابناء': W('sons'), 'بنو': W('sons'), 'بني': W('sons'), 'ابن': W('sons', true), 'أولاد': W('children'),
     'اولاد': W('children'), 'بنات': W('daughters'), 'ابنة': W('daughters', true), 'بنت': W('daughters', true), 'والد': W('father'),
     'أبو': W('father'), 'ابو': W('father'), 'أب': W('father'), 'اب': W('father'), 'أم': W('mother'), 'ام': W('mother'), 'والدة': W('mother'),
-    'والدا': W('parents'), 'والدي': W('parents'), 'أبوا': W('parents'), 'ابوا': W('parents'), 'زوجة': W('wife'), 'زوجات': W('wife'),
+    'والدا': W('parents'), 'والدي': W('parents'), 'أبوا': W('parents'), 'ابوا': W('parents'), 'زوجة': W('wife'), 'زوجات': W('partners'),
     'زوج': W('husband'), 'إخوة': W('siblings'), 'اخوة': W('siblings'), 'إخوان': W('siblings'), 'اخوان': W('siblings'), 'أخ': W('brothers', true),
     'اخ': W('brothers', true), 'أخو': W('brothers', true), 'اخو': W('brothers', true), 'أخوات': W('sisters'), 'اخوات': W('sisters'),
     'أخت': W('sisters', true), 'اخت': W('sisters', true),
@@ -72,17 +72,20 @@ const alt = (list: string[]) => list.sort((a, b) => b.length - a.length).map((w)
 const LATIN_WORDS = (l: 'en' | 'es' | 'fr' | 'id') => alt(Object.keys(WORDS[l]))
 
 // "who was / ¿quién fue / qui était / siapa / कौन था / من هو" around the rest: taken off, the rest read again
-const WRAP: [KinLang, RegExp][] = [
-  ['en', /^(?:who|what)\s+(?:was|were|is|are)\s+(.+)$/i],
-  ['en', /^who['’]s\s+(.+)$/i],
-  ['en', /^(?:tell me about|who is called)\s+(.+)$/i],
-  ['es', /^qui[eé]n(?:es)?\s+(?:fue|fueron|era|eran|es|son)\s+(.+)$/i],
-  ['es', /^(?:c[oó]mo se llamaba(?:n)?|h[aá]blame de)\s+(.+)$/i],
-  ['fr', /^qui\s+(?:était|etait|étaient|etaient|est|sont|fut|furent)\s+(.+)$/i],
-  ['fr', /^qui\s+(?:est-ce que|etait-ce)\s+(.+)$/i],
-  ['id', /^siapa(?:kah)?\s+(?:saja\s+|itu\s+|nama\s+)?(.+?)(?:\s+itu)?$/i],
-  ['hi', /^(.+?)\s+कौन(?:-कौन)?\s+(?:था|थे|थी|थीं|है|हैं)$/],
-  ['ar', /^(?:من|مَن|مَنْ)\s+(?:هو|هي|هم|هما|كان|كانت|كانوا|كانا)?\s*(.+)$/],
+/** `who`: the wrapper asks who someone is (a card when no family word follows); otherwise only a family shape may follow. */
+const WRAP: [KinLang, RegExp, boolean][] = [
+  ['en', /^who\s+(?:was|were|is|are)\s+(.+)$/i, true],
+  ['en', /^what\s+(?:was|were|is|are)\s+(.+)$/i, false],
+  ['en', /^who['’]s\s+(.+)$/i, true],
+  ['en', /^tell me about\s+(.+)$/i, false],
+  ['es', /^qui[eé]n(?:es)?\s+(?:fue|fueron|era|eran|es|son)\s+(.+)$/i, true],
+  ['es', /^(?:c[oó]mo se llamaba(?:n)?|h[aá]blame de)\s+(.+)$/i, false],
+  ['fr', /^qui\s+(?:était|etait|étaient|etaient|est|sont|fut|furent)\s+(.+)$/i, true],
+  ['fr', /^qui\s+(?:est-ce que|etait-ce)\s+(.+)$/i, true],
+  ['id', /^siapa(?:kah)?\s+(?:saja\s+|itu\s+|nama\s+)?(.+?)(?:\s+itu)?$/i, true],
+  ['hi', /^(.+?)\s+कौन(?:-कौन)?\s+(?:था|थे|थी|थीं|है|हैं)$/, true],
+  ['ar', /^(?:من|مَن|مَنْ)\s+(?:هو|هي|هم|هما|كان|كانت|كانوا|كانا)\s+(.+)$/, true],
+  ['ar', /^(?:من|مَن|مَنْ)\s+(.+)$/, false],
 ]
 /** The family word, then the name: one pattern per language (Hindi: the name first). */
 const SHAPES: { lang: KinLang; re: RegExp; word: 1 | 2; name: 1 | 2 }[] = [
@@ -150,11 +153,11 @@ export function kinShape(q: string): KinShape | null {
   if (!t) return null
   let rest = t
   let wrapped: KinLang | null = null
-  for (const [lang, re] of WRAP) {
+  for (const [lang, re, who] of WRAP) {
     const m = re.exec(t)
     if (m?.[1]) {
       rest = m[1].trim()
-      wrapped = lang
+      wrapped = who ? lang : null
       break
     }
   }
@@ -170,9 +173,11 @@ export function kinShape(q: string): KinShape | null {
     const f = foldName(name)
     if (PRONOUNS.has(f)) return null
     if ((w.kind === 'children' || w.kind === 'sons') && PEOPLES.has(f)) return null
-    if ((w.kind === 'sons' || w.kind === 'children') && (w.one || / का /.test(rest)) && DAVID.has(f)) return null
+    // («les fils de David» is plural: David's sons; «fils de David», «putra Daud», «दाऊद का पुत्र» the title)
+    const plural = /^les\s/i.test(rest)
+    if ((w.kind === 'sons' || w.kind === 'children') && (w.one || / का /.test(rest)) && !plural && DAVID.has(f)) return null
     const out: KinShape = { kind: w.kind, name, alts, lang: s.lang }
-    if (w.one) out.one = true
+    if (w.one && !plural) out.one = true
     if (s.lang === 'ar' && (key === 'أبو' || key === 'ابو')) out.abu = true
     return out
   }
@@ -223,7 +228,11 @@ function peopleIx(lang: string): Promise<PeopleIx | null> {
         }
       }
       return { byName, byId }
-    })().catch(() => null)
+    })().catch(() => {
+      // (a failed read is not kept: tried again next time, not null for the whole session)
+      if (ixs.get(lang) === made) ixs.delete(lang)
+      return null
+    })
     ixs.set(lang, made)
     void made.then((ix) => { if (ixs.get(lang) === made) ready.set(lang, ix) })
     p = made
@@ -492,6 +501,9 @@ export const KIN_T: Record<KinLang, KinText> = {
   },
 }
 export const KT = (ui: string): KinText => KIN_T[ui as KinLang] ?? KIN_T.en
+/** A text with the person's name in it: French «de» before a vowel or h is «d’» («Enfants d’Isaac»). */
+export const withName = (ui: string, text: string, x: string): string =>
+  (ui === 'fr' && /^[aeiouyhâàäéèêëîïôöûüœ]/i.test(x) ? text.replace(/\bde \{x\}/, 'd’{x}') : text).replace('{x}', x)
 /** "Esaú y Jacob", "Abraham, Sara y Agar" ("A, B و C": the Arabic «و» joins the next word). */
 export function joinNames(ui: string, names: string[]): string {
   if (names.length < 2) return names[0] ?? ''

@@ -9,7 +9,9 @@ import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSec
 import { anyOf, backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
 import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
-import { addUnits, installedLangs, onPacksChanged, openLang, updateLangs } from './packs'
+import { addUnits, installedLangs, onPacksChanged, openLang, setPacksServers, updateLangs } from './packs'
+import { PREVIEW_SERVER } from './shared'
+import { warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
@@ -2001,6 +2003,11 @@ input.addEventListener('keydown', (e) => {
   }
 })
 
+// ?dev=preview (a list: ?dev=a,b): the packs from the staging preview server instead of Mini's, to try packs published there and not
+// yet copied to Mini's server (handoff/relevo-parentescos.md). Only where dev/preview.json is: build.py --dev and --devapk put it
+// there, the normal and debug APKs never; elsewhere the parameter does nothing
+if ((new URLSearchParams(location.search).get('dev') ?? '').split(',').includes('preview'))
+  fetch('dev/preview.json').then((r) => { if (r.ok) setPacksServers([PREVIEW_SERVER]) }).catch(() => {})
 // a PIN (menu > Safety) covers the app before anything shows, and again after a minute away
 lock(nav)
 watchAway(() => nav)
@@ -2018,6 +2025,9 @@ function refreshInstalled() {
     if (had !== ls.length > 0 && (!conv().msgs.length || !ls.length || had === false)) renderConv()
     // and a question that waited for a language is asked now (also at the start, if the app closed before it was)
     if (had !== true && ls.length) reaskWaiting()
+    // the people index of each language, at idle (kin.ts): a family question then skips the readers (the app's language first)
+    const mine = ls.filter((l) => l.split('-')[0] === nav.split('-')[0])
+    warmKin([...mine, ...ls.filter((l) => !mine.includes(l))])
   }).catch(() => {})
 }
 refreshInstalled()

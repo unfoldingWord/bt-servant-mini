@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { askedName, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2282,7 +2282,7 @@ async function articleFamily(sheet: Sheet, ui: string): Promise<{ line: string; 
   if (!f) return null
   const part = (head: string, list: Relative[]) => (list.length ? `${head}: ${joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))}` : '')
   const parts = [part(t.parents, f.parents), part(t.partners, f.partners), part(t.children, f.children), part(t.siblings, f.siblings)].filter(Boolean)
-  const label = t.family.replace('{x}', f.name)
+  const label = withName(ui, t.family, f.name)
   return { line: parts.length ? `**${label}** — ${parts.join(' · ')}
 
 ${creditLine(ui, f.sources)}` : '', steps: [{ label, sheet: kinSheet(base, 'who', { concept: f.id }) }] }
@@ -2334,7 +2334,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const missingParts = a.notInstalled.some((n) => n.unit === 'xtopics' && n.what === 'part')
   const shownName = askedName(sheet.term, f.name)
   const others: Follow[] = (sheet.candidates ?? []).length
-    ? [{ label: t.other.replace('{x}', sheet.term ?? f.name), sheet: kinSheet(sheet, kind, { candidates: sheet.candidates, term: sheet.term }) }] : []
+    ? [{ label: withName(ui, t.other, sheet.term ?? f.name), sheet: kinSheet(sheet, kind, { candidates: sheet.candidates, term: sheet.term }) }] : []
   const tw = f.tw.length ? await twStep(sheet, f.tw[0]!).catch(() => null) : null
   const plain: string[] = []
   const person = (r: { id: string; name: string }) => ({ label: r.name, sheet: kinSheet(sheet, 'who', { concept: r.id }) })
@@ -2344,27 +2344,29 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
     const rel = [...f.parents, ...f.partners, ...f.children, ...f.siblings]
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
-    const follow: Follow[] = [...(tw ? [tw] : []), ...rel.slice(0, 5).map(person), ...verses, ...(await storySteps(sheet, f.id)), ...others,
-      ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0))]
+    // (MAX_FOLLOW: the other one of that name and the download first, a few relatives, then verses and a story)
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...rel.slice(0, 4).map(person),
+      ...verses, ...(await storySteps(sheet, f.id, 1))]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
       line(t.siblings, f.siblings), t.named.replace('{n}', String(f.verses)) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}`) } }
   }
   const k = kind as Exclude<KinKind, 'who'>
   const list = relativesOf(k, f)
-  const head = t.head[headKind(k, list)].replace('{x}', shownName)
+  const head = withName(ui, t.head[headKind(k, list)], shownName)
   if (!list.length) {
     // never "X had no children": the data names none; the person's article and first verses
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
-    const follow = [...(tw ? [tw] : []), ...(await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)),
-      { label: f.name, sheet: kinSheet(sheet, 'who', { concept: f.id }) }, ...others]
+    const follow = [...others, ...(tw ? [tw] : []), ...(await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)),
+      { label: f.name, sheet: kinSheet(sheet, 'who', { concept: f.id }) }]
     return { answered: 'family', ref: null, concept: f.id, found: 1,
       reply: { ui, info: [t.none.replace('{head}', head), creditLine(ui, f.sources)].join('\n\n'), follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: none`) } }
   }
   const verses = await pairSteps(sheet, ui, list.flatMap((r) => r.verses.slice(0, 1)), plain, sheet)
   const names = joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))
   const info = [`**${head}:** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
-  const follow: Follow[] = [...list.map(person), ...verses, ...(tw ? [tw] : []), ...others, ...(await partsStep(sheet, ui, missingParts))]
+  // (MAX_FOLLOW: the other one of that name and the download first; then up to five relatives, two verses, the article)
+  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...list.slice(0, 5).map(person), ...verses.slice(0, 2), ...(tw ? [tw] : [])]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }
 }
 
@@ -3044,7 +3046,8 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
     if (kind === 'here') return `${refLabelOf(ui, s.ref ?? '')} · ${KT(ui).here.replace(/[:：]?\s*\{names\}/, '')}`
     const p = s.concept ? await personOf(s.lang, s.concept).catch(() => null) : null
     const name = askedName(s.term, p?.name ?? s.term ?? '…')
-    return kind === 'who' ? name : KT(ui).head[kind as Exclude<KinKind, 'who'>]?.replace('{x}', name) ?? name
+    const h = KT(ui).head[kind as Exclude<KinKind, 'who'>]
+    return kind === 'who' || !h ? name : withName(ui, h, name)
   }
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')
   if (im) return introLabel(ui, im[2] === 'front' ? bookLabel(ui, im[1]!) : `${bookLabel(ui, im[1]!)} ${im[2]}`)
