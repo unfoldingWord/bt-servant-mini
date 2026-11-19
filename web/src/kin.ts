@@ -308,7 +308,8 @@ export async function kinQuestion(q: string, nav: string, last: string | null): 
   if (s.bare && (await Promise.all(ids.map((id) => hasArticle(pack!, id)))).some(Boolean)) return null
   // (an Arabic name alone that is the article plus a word, «ٱلْمَلِك» "the king" of Jeremiah 36:26, is a description: «ملك» stays a word)
   if (s.bare && s.lang === 'ar') {
-    const named = await Promise.all(ids.map(async (id) => ((await personOf(pack!, id))?.name ?? '').normalize('NFD').replace(/\p{Mn}/gu, '')))
+    // (only the vowel marks go: «إِلْيَاس», Elijah, keeps its «إ» and is no «ال…»)
+    const named = await Promise.all(ids.map(async (id) => ((await personOf(pack!, id))?.name ?? '').normalize('NFC').replace(/[ً-ٰٟ]/g, '')))
     ids = ids.filter((_, i) => !/^[اٱ]ل/.test(named[i]!))
     if (!ids.length) return null
   }
