@@ -15,7 +15,7 @@ name: iOS
 on:
   workflow_dispatch:
   push:
-    branches: [master, ios-native, ms/ios-testflight]
+    branches: [master, ios-native, 'ms/ios-*'] # an ms/ios-* branch is checked unsigned before it merges
     tags: ['v*'] # path filters do not apply to tags
     paths: ['ios/**', '.github/workflows/ios.yml']
 
@@ -28,7 +28,8 @@ defaults:
 
 jobs:
   build:
-    runs-on: macos-15
+    # Apple takes uploads built with the iOS 26 SDK or later (Xcode 26); from April 2027, the iOS 27 SDK (Xcode 27).
+    runs-on: macos-26
     timeout-minutes: 90
     env:
       # Only whether the key is there: the secrets themselves go to the one step that signs.
@@ -39,7 +40,7 @@ jobs:
 
       - name: Xcode
         run: |
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          sudo xcode-select -s /Applications/Xcode_26.6.app # pinned: the image default, see actions/runner-images macos-26-arm64-Readme
           xcodebuild -version
 
       - name: llama.cpp (cache)
@@ -47,11 +48,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/vendor/llama.xcframework
-          key: llama-xcframework-${{ env.LLAMA_TAG }}-ios-v1
+          key: llama-xcframework-${{ env.LLAMA_TAG }}-ios-xcode26.6
 
       - name: llama.cpp (build for iPhone and the simulator)
         if: steps.llama.outputs.cache-hit != 'true'
         run: |
+          # Xcode 26 ships the Metal toolchain as a separate component; fetch it if this image lacks it
+          xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
           git clone --depth 1 --branch "$LLAMA_TAG" https://github.com/ggml-org/llama.cpp.git "$RUNNER_TEMP/llama.cpp"
           cd "$RUNNER_TEMP/llama.cpp"
           ./build-xcframework.sh ios-sim ios-device
