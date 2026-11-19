@@ -26,7 +26,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { answer, backNow, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
@@ -434,7 +434,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     d.appendChild(a)
   }
   // share the answer (WhatsApp or the phone's share sheet), with the question it answers when the message before is the person's
-  const sh = m.waiting ? null : (s5 && m.card ? sessionShare(cv, m.ui ?? nav) : null) ?? shareButton(m, m.ui ?? nav, asked)
+  // (the button is the app's: its words follow the app's language, not the answer's)
+  const sh = m.waiting ? null : (s5 && m.card ? sessionShare(cv, nav) : null) ?? shareButton(m, m.ui ?? nav, asked, nav)
   if (sh) d.appendChild(sh)
   // ☆ Save and ✎ Note (savedview.ts); with an online answer, Save keeps its text too
   const keep = keepOf(m)
@@ -501,8 +502,8 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTML
   const { shown, more } = backs < 0 ? { shown: follow, more: [] as Followup[] } : splitFollow(follow, backs)
   for (const x of shown) f.appendChild(followButton(m, x))
   if (more.length) {
-    const rtl = rtlLang(ui)
-    const b = el('button', 'more', bidiLabel(`${MORE[ui.split('-')[0]!] ?? MORE.en} ${rtl ? '◂' : '▸'}`, ui)) as HTMLButtonElement
+    // (the app's words, not the answer's: an English question in a Spanish app does not turn "Más" into "More")
+    const b = el('button', 'more', bidiLabel(`${MORE[nav.split('-')[0]!] ?? MORE.en} ${rtlLang(nav) ? '◂' : '▸'}`, nav)) as HTMLButtonElement
     b.type = 'button'
     b.onclick = () => {
       const bs = more.map((x) => followButton(m, x))
@@ -516,7 +517,9 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTML
 /** One next step's button. */
 function followButton(m: Msg, x: Followup): HTMLButtonElement {
   const ui = m.ui ?? nav
-  const b = el('button', '', bidiLabel(x.label, ui)) as HTMLButtonElement
+  // a way back reads as it is now, in the app's language (a message kept from before has the words and the place it was drawn with)
+  const now = backNow(conv().graph, x, nav)
+  const b = el('button', '', now ? bidiLabel(now, nav) : bidiLabel(x.label, ui)) as HTMLButtonElement
   b.type = 'button'
   if (x.back || x.toPath || x.toSession) b.className = 'back'
   else if (x.pathNext) b.className = 'path-next'
@@ -1511,6 +1514,7 @@ const cmp = mountComposer(form, input, {
   send: () => form.requestSubmit(), ask: (label, sheet, ui) => runSheet(label, sheet, ui), browse: () => openExplore('bar'),
   // (a free question is read by the phone's model or online; with neither, the row's grey line says it is searched)
   reader: () => (modelReady() && !modelOff()) || (onlineOn() && onlineAvailable() && isOnline() && (!signInAvailable() || !!onlineSession())),
+  backShown: () => { const l = conv().msgs[conv().msgs.length - 1]; return on5m() && !!l?.sessionBack },
   resume: (story) => { const e = savedSessions().find((x) => x.story === story); if (e) resume5(e) },
   stories: (lang, ids, title) => openExploreAt({ obs: true, lang, only: ids, title }),
 })

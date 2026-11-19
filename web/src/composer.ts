@@ -68,6 +68,8 @@ export type Hooks = {
   reader?: () => boolean
   /** [Resume] a saved 5M session of this story (5M in the pack; main.ts) */
   resume?: (story: number) => void
+  /** the last answer already draws the way back to the 5M session: the row does not repeat it (main.ts) */
+  backShown?: () => boolean
   /** "All (n)": Browse's list of Bible stories filtered to these (their numbers), under this title (main.ts openExploreAt) */
   stories?: (lang: string, ids: number[], title: string) => void
 }
@@ -112,7 +114,7 @@ export class Composer {
     live.add(this)
   }
   ctx(): Ctx {
-    return { ui: this.hooks.ui(), conv: this.hooks.conv(), helpsLang: env.helpsLang, packs: this.hooks.packs(), books: this.books, choosing: this.choosing }
+    return { ui: this.hooks.ui(), conv: this.hooks.conv(), helpsLang: env.helpsLang, packs: this.hooks.packs(), books: this.books, choosing: this.choosing, backShown: this.hooks.backShown?.() }
   }
   /** Reads which books the packs have (once; again after the packs change). */
   readBooks(): Promise<void> {

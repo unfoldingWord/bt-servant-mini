@@ -75,6 +75,8 @@ export type Ctx = {
   books: Record<string, Set<string>> | null
   /** state A's Passage was tapped: the empty box lists the books */
   choosing?: boolean
+  /** the last answer already draws the way back to the 5M session: the row leaves its own out */
+  backShown?: boolean
 }
 
 const UI_LANGS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
@@ -428,7 +430,8 @@ export function startRow(ctx: Ctx): Row {
   const items: Suggestion[] = []
   // a 5M session (5M on): its next step and frame, the way back to it, or [Resume] for one saved
   const five = sessionChips(ctx.conv, ui)
-  if (five) items.push(...five.items)
+  // (the way back to the session is under the last answer already: one button, not two)
+  if (five) items.push(...(ctx.backShown && five.rest === 'place' ? five.items.filter((x) => !(x.kind === 'next' && x.sheet?.intent === 'obs5m')) : five.items))
   const first = !five || five.rest === 'all' ? pathOf(ctx) ?? placeOf(ctx) : five.rest === 'place' ? placeOf(ctx) : null
   if (first) items.push(first)
   for (const shape of SHAPES_ORDER) {
