@@ -75,7 +75,7 @@ const STR: Record<string, ST> = {
     missing: 'This needs {lang}, which is no longer on this phone.', addLang: 'Add a language',
     noLang: 'There is no language on this phone yet.', full: 'There is no room left on the phone to save this.',
     many: 'You have reached {n}. Delete some to save more.', busy: 'An answer is on its way: tap again when it is here.',
-    notKept: 'Conversations are not kept (menu > Safety): saved items and notes are gone when the app closes.',
+    notKept: 'Conversations are not kept (Menu → Settings → Safety): saved items and notes are gone when the app closes.',
     private: 'Saved items and notes stay on this phone only. They are never sent to online AI.',
     saveVerses: '☆ Save verses', done: 'Done', versesHint: 'Tap a verse to save it, or tap it again to remove it.',
     online: 'Online AI · {model}', close: 'Close', back: 'Back',
@@ -95,7 +95,7 @@ const STR: Record<string, ST> = {
     missing: 'Esto necesita el idioma {lang}, que ya no está en este teléfono.', addLang: 'Agregar un idioma',
     noLang: 'Todavía no hay ningún idioma en este teléfono.', full: 'No queda espacio en el teléfono para guardar esto.',
     many: 'Llegaste a {n}. Borra algunos para guardar más.', busy: 'Ya viene una respuesta: toca de nuevo cuando llegue.',
-    notKept: 'Las conversaciones no se guardan (menú > Seguridad): los guardados y las notas desaparecen al cerrar la app.',
+    notKept: 'Las conversaciones no se guardan (Menú → Ajustes → Seguridad): los guardados y las notas desaparecen al cerrar la app.',
     private: 'Los guardados y las notas quedan solo en este teléfono. Nunca se envían a la IA en línea.',
     saveVerses: '☆ Guardar versículos', done: 'Listo', versesHint: 'Toca un versículo para guardarlo, o tócalo otra vez para quitarlo.',
     online: 'IA en línea · {model}', close: 'Cerrar', back: 'Atrás',
@@ -115,7 +115,7 @@ const STR: Record<string, ST> = {
     missing: "Il faut la langue {lang}, qui n'est plus sur ce téléphone.", addLang: 'Ajouter une langue',
     noLang: "Il n'y a encore aucune langue sur ce téléphone.", full: "Il n'y a plus de place sur le téléphone pour enregistrer ceci.",
     many: 'Vous avez atteint {n}. Supprimez-en pour en enregistrer d’autres.', busy: 'Une réponse arrive : touchez à nouveau quand elle sera là.',
-    notKept: "Les conversations ne sont pas gardées (menu > Sécurité) : les favoris et les notes disparaissent à la fermeture de l'application.",
+    notKept: "Les conversations ne sont pas gardées (Menu → Réglages → Sécurité) : les favoris et les notes disparaissent à la fermeture de l'application.",
     private: "Les favoris et les notes restent uniquement sur ce téléphone. Ils ne sont jamais envoyés à l'IA en ligne.",
     saveVerses: '☆ Enregistrer des versets', done: 'Terminé', versesHint: "Touchez un verset pour l'enregistrer, ou touchez-le encore pour le retirer.",
     online: 'IA en ligne · {model}', close: 'Fermer', back: 'Retour',
@@ -135,7 +135,7 @@ const STR: Record<string, ST> = {
     missing: 'Ini memerlukan {lang}, yang sudah tidak ada di ponsel ini.', addLang: 'Tambah bahasa',
     noLang: 'Belum ada bahasa di ponsel ini.', full: 'Ruang di ponsel sudah penuh: ini tidak bisa disimpan.',
     many: 'Anda sudah mencapai {n}. Hapus beberapa untuk menyimpan lagi.', busy: 'Jawaban sedang datang: ketuk lagi setelah jawaban muncul.',
-    notKept: 'Percakapan tidak disimpan (menu > Keamanan): yang tersimpan dan catatan hilang saat aplikasi ditutup.',
+    notKept: 'Percakapan tidak disimpan (Menu → Pengaturan → Keamanan): yang tersimpan dan catatan hilang saat aplikasi ditutup.',
     private: 'Yang tersimpan dan catatan hanya ada di ponsel ini. Tidak pernah dikirim ke AI daring.',
     saveVerses: '☆ Simpan ayat', done: 'Selesai', versesHint: 'Ketuk ayat untuk menyimpannya, atau ketuk lagi untuk menghapusnya.',
     online: 'AI daring · {model}', close: 'Tutup', back: 'Kembali',
@@ -155,7 +155,7 @@ const STR: Record<string, ST> = {
     missing: 'इसके लिए {lang} भाषा चाहिए, जो अब इस फ़ोन पर नहीं है।', addLang: 'भाषा जोड़ें',
     noLang: 'इस फ़ोन पर अभी कोई भाषा नहीं है।', full: 'फ़ोन में जगह नहीं बची: इसे सहेजा नहीं जा सका।',
     many: 'आप {n} तक पहुँच गए हैं। और सहेजने के लिए कुछ हटाएँ।', busy: 'एक उत्तर आ रहा है: उसके आने पर फिर से टैप करें।',
-    notKept: 'बातचीत रखी नहीं जाती (मेनू > सुरक्षा): ऐप बंद होने पर सहेजी गई चीज़ें और नोट मिट जाते हैं।',
+    notKept: 'बातचीत रखी नहीं जाती (मेनू → सेटिंग → सुरक्षा): ऐप बंद होने पर सहेजी गई चीज़ें और नोट मिट जाते हैं।',
     private: 'सहेजी गई चीज़ें और नोट केवल इसी फ़ोन पर रहते हैं। वे ऑनलाइन AI को कभी नहीं भेजे जाते।',
     saveVerses: '☆ पद सहेजें', done: 'हो गया', versesHint: 'किसी पद को सहेजने के लिए टैप करें, या हटाने के लिए फिर से टैप करें।',
     online: 'ऑनलाइन AI · {model}', close: 'बंद करें', back: 'वापस',
@@ -175,7 +175,7 @@ const STR: Record<string, ST> = {
     missing: 'يحتاج هذا إلى لغة {lang}، وهي لم تعد على هذا الهاتف.', addLang: 'إضافة لغة',
     noLang: 'لا توجد أي لغة على هذا الهاتف بعد.', full: 'لم تعد في الهاتف مساحة لحفظ هذا.',
     many: 'بلغت الحد ({n}). احذف بعضها لتحفظ المزيد.', busy: 'هناك إجابة في الطريق: المس مجددًا عندما تصل.',
-    notKept: 'لا يُحتفظ بالمحادثات (القائمة > الأمان): تختفي المحفوظات والملاحظات عند إغلاق التطبيق.',
+    notKept: 'لا يُحتفظ بالمحادثات (القائمة → الإعدادات → الأمان): تختفي المحفوظات والملاحظات عند إغلاق التطبيق.',
     private: 'تبقى المحفوظات والملاحظات على هذا الهاتف فقط، ولا تُرسَل أبدًا إلى الذكاء الاصطناعي عبر الإنترنت.',
     saveVerses: '☆ حفظ آيات', done: 'تم', versesHint: 'المس آية لحفظها، أو المسها مرة أخرى لإزالتها.',
     online: 'ذكاء اصطناعي عبر الإنترنت · {model}', close: 'إغلاق', back: 'رجوع',
@@ -286,7 +286,7 @@ const newId = (p: string) => `${p}${Date.now().toString(36)}${Math.random().toSt
 export function resetSaved() {
   mem = null
 }
-/** Menu > Safety > Erase: every saved item and note, here and on the phone. */
+/** Menu → Settings → Safety → Erase: every saved item and note, here and on the phone. */
 export function eraseSaved() {
   mem = { v: 1, items: [], notes: [] }
   try {

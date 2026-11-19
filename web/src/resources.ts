@@ -152,7 +152,7 @@ const TX: Record<string, T> = {
     noFor: 'Tidak tersedia untuk bahasa ini: {parts}', noLangs: 'Belum ada bahasa di ponsel ini.',
     all: 'Untuk semua bahasa', more: 'Unduh lebih banyak', search: 'Cari bahasa lain di server', openFile: 'Buka berkas yang diterima',
     download: 'Unduh', resume: 'Lanjutkan', remove: 'Hapus', share: 'Simpan untuk dibagikan', cancel: 'Batal', retry: 'Coba lagi',
-    downloading: 'Mengunduh…', failed: 'Tidak bisa diunduh:', failedGen: 'Tidak bisa diunduh.', back: 'Sumber', needNet: 'Perlu internet untuk mengunduh.',
+    downloading: 'Mengunduh…', failed: 'Tidak bisa diunduh:', failedGen: 'Tidak bisa diunduh.', back: 'Sumber daya', needNet: 'Perlu internet untuk mengunduh.',
     metered: '{mb} lewat data seluler. Lanjutkan?', differs: 'Ukurannya {mb}. Lanjutkan?', saved: 'Tersimpan di Unduhan', working: 'Sedang bekerja…',
     images: 'Gambar Kisah-kisah Alkitab', imagesHave: '{c} · {mb} ✓', imagesNone: 'Belum ada di ponsel ini.',
     imagesPartial: 'Unduhan belum selesai: belum ada gambar yang tampil.', there: 'sudah ada di ponsel',
