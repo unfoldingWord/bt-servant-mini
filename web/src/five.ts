@@ -114,7 +114,7 @@ export function fixtureOf5(n: number, prefer?: string | null): Promise<Fixture |
   let p = cache.get(k)
   if (!p) {
     const g = gen
-    p = src.session(n, prefer).then((f) => { if (f && g === gen) now.set(`${n}|${f.tfLang}`, f); return f }, () => { if (g === gen) cache.delete(k); return null })
+    p = src.session(n, prefer).then((f) => { if (f && g === gen) { now.set(`${n}|${f.tfLang}`, f); now.set(k, f) } return f }, () => { if (g === gen) cache.delete(k); return null })
     cache.set(k, p)
   }
   // (what a story was last asked for, also from the cache: the labels that know no language read it)
