@@ -15,7 +15,7 @@ name: iOS
 on:
   workflow_dispatch:
   push:
-    branches: [master, ios-native, ms/ios-testflight]
+    branches: [master, ios-native, 'ms/ios-*'] # an ms/ios-* branch is checked unsigned before it merges
     tags: ['v*'] # path filters do not apply to tags
     paths: ['ios/**', '.github/workflows/ios.yml']
 
