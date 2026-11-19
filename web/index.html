@@ -267,6 +267,9 @@
   .share:hover, .share:focus-visible { color: var(--accent); }
   /* saved items and notes (savedview.ts): ☆ Save and ✎ Note next to Share, "Your note" above an answer, the Saved view */
   .keep, .keep-one { display: inline-flex; gap: 2px; align-items: center; flex-wrap: wrap; }
+  /* Share and the ☆ Save / ✎ Note group on one line: by their middle, not their text baseline (Share's icon put its baseline lower and
+     lifted it a few pixels; Abel, Nov 18) */
+  .share, .keep { vertical-align: middle; }
   .keep-btn { display: inline-flex; gap: 4px; align-items: center; margin-top: 4px; border: 0; background: transparent; color: var(--faint); padding: 6px; border-radius: 8px; font: inherit; font-size: 12.5px; cursor: pointer; }
   .keep-btn:hover, .keep-btn:focus-visible, .keep-btn.on { color: var(--accent); }
   .keep-btn:disabled { opacity: .5; }
@@ -400,6 +403,8 @@
   .nrow:active { background: var(--accent-soft); }
   /* focus (focus.ts): the source at the top, a chapter's summary, and the rest folded behind buttons that look like buttons */
   .info p.src, .study p.src { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: -6px 0 10px; }
+  .info p.credit, .plain p.credit { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: 6px 0 0; } /* a family answer's sources (main.ts) */
+  .info p.credit em, .plain p.credit em { font-style: normal; }
   .info :is(h3, h4) + p > em:only-child, .md :is(h3, h4) + p > em:only-child { font: 12px/1.4 system-ui, sans-serif; font-style: normal; }
   .study p.summary { font: 600 13.5px/1.4 system-ui, sans-serif; margin: 0 0 10px; }
   :is(.info, .md) details.fold { margin: 6px 0 8px; font: inherit; color: inherit; }

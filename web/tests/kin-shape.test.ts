@@ -128,3 +128,8 @@ test('«dari» only right after the family word: «Ibu Maria dari Magdala» is a
   expect(kinShape('Ibu Maria dari Magdala')).toBeNull()
   expect(kinShape('Apa nama ibu Musa?')).toBeNull()
 })
+
+test('«familia de Israel», «family of Judah» are the people, not the man (review, Nov 18)', () => {
+  for (const q of ['familia de Israel', 'family of Judah', 'famille de Lévi', 'عائلة إسرائيل']) expect(kinShape(q)).toBeNull()
+  expect(kinShape('familia de Abraham')).toMatchObject({ kind: 'family', name: 'Abraham' })
+})

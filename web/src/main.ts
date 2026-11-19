@@ -11,7 +11,7 @@ import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCt
 import { resetMacula } from './macula'
 import { addUnits, installedLangs, onPacksChanged, openLang, setPacksServers, updateLangs } from './packs'
 import { PREVIEW_SERVER } from './shared'
-import { warmKin } from './kin'
+import { isCreditLine, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
@@ -361,6 +361,9 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
       sourceLine = last.textContent?.trim() ?? ''
       last.remove()
     }
+    // a family answer's sources ("Datos de familia: TIPNR (STEPBible), ACAI (BiblioNexus)", kin.ts): in sight, small and grey like an
+    // article's source label (Abel, Nov 18: not big, not hidden in «detalles»)
+    else if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isCreditLine(last.textContent ?? '')) last.className = 'credit'
     // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
     addObsPictures(box, m.meta, m.ui ?? nav)
     // an OBS story or frame: the words its notes and key terms quote, tappable as a passage's (obswords.ts)

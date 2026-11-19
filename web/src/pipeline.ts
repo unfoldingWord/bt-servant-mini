@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { askedName, colon, kinReady, shownAs, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -958,6 +958,17 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
     return { sheet, ui: kin.ui, meta: `model ${ms} ms
 ${raw}
 (family: ${kin.kind} of ${kin.ids.join(' | ')}, ${kin.pick}; read by code)`, q, inScope: 'kinship' }
+  }
+  // "Abraham": a name alone with a Translation Words article about a person is that article, whatever the reader made of it (Abel,
+  // Nov 18: a reader read "Abraham" in a 5M session as a passage of Genesis, and the verses that mention him came instead)
+  const named = await nameOnly(q, env.nav).catch(() => null)
+  if (named) {
+    const { sheet, ui } = await buildSheet(`q${Date.now()}`, { intent: 'article', term: q.trim(), lang: named.lang } as Slots, prefer)
+    const lang = named.ids.length === 1 ? (await packWithArticle(named.ids[0]!, sheet.lang).catch(() => null)) ?? sheet.lang : sheet.lang
+    const s: Sheet = { ...sheet, intent: named.ids.length === 1 ? 'article' : 'choose', concept: named.ids.length === 1 ? named.ids[0]! : null,
+      candidates: named.ids.length > 1 ? named.ids : null, ref: null, what: [], phrase: null, lang }
+    keepState(c, { intent: 'article', term: q.trim(), lang: named.lang } as Slots, { q })
+    return { sheet: s, ui, meta: `model ${ms} ms\n${raw}\n(a name alone: ${named.ids.join(' | ')}; read by code)`, q, inScope: 'a name' }
   }
   // the 5M study session (5M in the pack): "5M OBS 1" starts it; in a session, "and the notes?" and "next" are about its step
   const five = on5m() ? await session5Asked(q, read.slots, c, prefer).catch(() => null) : null
@@ -2281,14 +2292,22 @@ async function articleFamily(sheet: Sheet, ui: string): Promise<{ line: string; 
     }
     return { line: '', steps }
   }
-  const f = (await familyOf(pack, ids[0]!)).data
-  if (!f) return null
-  const part = (head: string, list: Relative[]) => (list.length ? `${head}: ${joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))}` : '')
-  const parts = [part(t.parents, f.parents), part(t.partners, f.partners), part(t.children, f.children), part(t.siblings, f.siblings)].filter(Boolean)
-  const label = withName(ui, t.family, f.name)
-  return { line: parts.length ? `**${label}** — ${parts.join(' · ')}
-
-${creditLine(ui, f.sources)}` : '', steps: [{ label, sheet: kinSheet(base, 'who', { concept: f.id }) }] }
+  // (Abel, Nov 18: the article answers who the person is; the family is one plain line inside its fold, "hijo de Taré, padre de
+  // Isaac e Ismael", and the whole of it behind the button)
+  const p = await personOf(pack, ids[0]!)
+  const ties = await tiesOfPerson(pack, ids[0]!).catch(() => [] as Tie[])
+  const names = new Map<string, string>()
+  for (const x of ties.flatMap((tt) => tt.ids)) {
+    const q = await personOf(pack, x)
+    names.set(x, await shownAs(pack, x, q?.name ?? x).catch(() => q?.name ?? x))
+  }
+  const name = p?.name ?? sheet.concept
+  const label = withName(ui, t.family, name)
+  const text = tiesLine(ui, p?.gender, ties, (x) => names.get(x) ?? x)
+  // (the family data's own sources: ACAI only when the packs have it)
+  const sources = (await familyOf(pack, ids[0]!).catch(() => null))?.data?.sources ?? ['STEPBible/STEPBible-Data/TIPNR']
+  // (its sources in a short parenthesis: inside the fold, not the answer's last line, so no source line of its own)
+  return { line: text ? `${colon(ui, label)} ${text} (${sources.map((x) => (SOURCE_NAMES[x] ?? x).replace(/ \(.*\)$/, '')).join(', ')}).` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }] }
 }
 /** Under one verse (or verses of one chapter) or a frame of Open Bible Stories: "People here: Isaac, Esau…", when the data names any. */
 async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | null> {
@@ -2302,6 +2321,18 @@ async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow |
   return { label: KT(ui).here.replace('{names}', names.join(', ') + (ids.length > 3 ? '…' : '')), sheet: kinSheet({ ...sheet, lang: pack }, 'here', { ref }) }
 }
 
+/**
+ * A person's button (a relative, someone named in a verse, one of several people of a name): the person's Translation Words article when
+ * there is one, from the family data's own pack (its family line and button need that pack); the family card when there is none, or
+ * when only another pack has the article (the card then offers it: "Artículo: X"). Abel, Nov 18: "la familia debe ser un fallback".
+ */
+async function personStep(base: Sheet, id: string, label: string): Promise<Follow> {
+  const tw = await articleOf(base.lang, id).catch(() => null)
+  // (the open too: a pack that does not open gives the card, never no button)
+  const has = tw ? await (async () => !!(await (await openLang(base.lang)).article(tw)).data)().catch(() => false) : false
+  return tw && has ? { label, sheet: articleSheet(base, tw, base.lang) } : { label, sheet: kinSheet(base, 'who', { concept: id }) }
+}
+
 async function kinAnswer(x: Ctx): Promise<Done> {
   const { sheet, ui } = x
   const t = KT(ui)
@@ -2312,8 +2343,9 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const follow: Follow[] = []
     for (const id of sheet.candidates) {
       const p = await personOf(sheet.lang, id)
-      const label = p?.note ? personLabel(p) : `${p?.name ?? id} (${t.versesN.replace('{n}', String(p?.verses ?? 0))})`
-      follow.push({ label, sheet: kinSheet(sheet, kind, { concept: id, term: sheet.term }) })
+      const label = p?.note ? personLabel(p) : `${p?.name ?? id} (${versesCount(ui, p?.verses ?? 0)})`
+      // (who one of them is: the article when there is one; a family question goes on to that person's family)
+      follow.push(kind === 'who' ? await personStep(sheet, id, label) : { label, sheet: kinSheet(sheet, kind, { concept: id, term: sheet.term }) })
     }
     return { answered: 'choose', ref: null, concept: null, found: follow.length,
       reply: { ui, intro: t.choose.replace('{x}', sheet.term ?? ''), follow, lang: sheet.lang, meta: meta(`choose ${sheet.candidates.join(', ')}`) } }
@@ -2326,7 +2358,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const follow: Follow[] = []
     for (const id of ids) {
       const p = await personOf(sheet.lang, id)
-      follow.push({ label: p ? personLabel(p) : id, sheet: kinSheet(sheet, 'who', { concept: id }) })
+      follow.push(await personStep(sheet, id, p ? personLabel(p) : id))
     }
     return { answered: 'family', ref, concept: null, found: ids.length,
       reply: { ui, intro: (ids.length ? t.hereHead : t.hereNone).replace('{ref}', at), info: creditLine(ui, ['STEPBible/STEPBible-Data/TIPNR']), follow, lang: sheet.lang, meta: meta(`here ${ref}: ${ids.join(', ')}`) } }
@@ -2339,11 +2371,45 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const shownName = askedName(sheet.term, f.name)
   const others: Follow[] = (sheet.candidates ?? []).length
     ? [{ label: withName(ui, t.other, sheet.term ?? f.name), sheet: kinSheet(sheet, kind, { candidates: sheet.candidates, term: sheet.term }) }] : []
-  const tw = f.tw.length ? await twStep(sheet, f.tw[0]!).catch(() => null) : null
+  // («Artículo: Abraham»: the person's article, not one more person among the relatives' buttons)
+  const tw0 = f.tw.length ? await twStep(sheet, f.tw[0]!).catch(() => null) : null
+  const tw = tw0 ? { ...tw0, label: withName(ui, t.article, tw0.label) } : null
   const plain: string[] = []
-  const person = (r: { id: string; name: string }) => ({ label: r.name, sheet: kinSheet(sheet, 'who', { concept: r.id }) })
+  const person = (r: { id: string; name: string }) => personStep(sheet, r.id, r.name)
   if (kind === 'who') {
-    // a person's card: parents, spouses, children, siblings, each a button; its article, its first verses, its stories
+    // who a person is (Abel, Nov 18): one line of how they are tied to someone known ("hijo de Isaí, padre de David",
+    // "descendiente de Judá"), not every relation; the whole family behind "Más familia", the verses behind "Dónde se nombra"
+    const ties = await tiesOfPerson(sheet.lang, f.id).catch(() => [] as Tie[])
+    const names = new Map<string, string>()
+    for (const x of ties.flatMap((tt) => tt.ids)) {
+      const p = await personOf(sheet.lang, x)
+      names.set(x, await shownAs(sheet.lang, x, p?.name ?? x).catch(() => p?.name ?? x))
+    }
+    const tieText = tiesLine(ui, f.gender, ties, (x) => names.get(x) ?? x)
+    const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
+    const stories = await storySteps(sheet, f.id, 1)
+    const sources = stories.length ? [...f.sources, 'robertrouse/theographic-bible-metadata'] : f.sources
+    const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
+    const rel = f.parents.length + f.partners.length + f.children.length + f.siblings.length
+    const more: Follow[] = rel ? [{ label: t.moreFamily, sheet: kinSheet(sheet, 'family', { concept: f.id, term: sheet.term }) }] : []
+    const where: Follow[] = f.verses > own.verses.length ? [{ label: withName(ui, t.whereNamed, f.name), sheet: kinSheet(sheet, 'verses', { concept: f.id, term: sheet.term }) }] : []
+    // (MAX_FOLLOW: the other one of that name and the download first, the article, the family, the verses, a story)
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...more, ...verses, ...where, ...stories]
+    const head = [tieText, f.note].filter(Boolean).join('; ')
+    const info = [`**${shownName}**${head ? ` — ${head}` : ''}`, namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].join('\n\n')
+    return { answered: 'family', ref: null, concept: f.id, found: rel + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}: ${ties.map((tt) => `${tt.kind} ${tt.ids.join('+')}`).join(', ') || 'no ties'}`) } }
+  }
+  if (kind === 'verses') {
+    // where a person is named: the first verses (canonical order), each a button, and the way back to the card
+    const own = await firstVerses(sheet.lang, f.id, 8).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
+    const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
+    const follow: Follow[] = [...verses, ...(tw ? [tw] : []), { label: shownName, sheet: kinSheet(sheet, 'who', { concept: f.id, term: sheet.term }) },
+      ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0))]
+    const info = [`**${shownName}** — ${namedIn(ui, f.verses)}`, plain.join(', '), creditLine(ui, ['STEPBible/STEPBible-Data/TIPNR'])].filter(Boolean).join('\n\n')
+    return { answered: 'family', ref: null, concept: f.id, found: Math.max(1, own.verses.length), reply: { ui, info, follow, lang: sheet.lang, meta: meta(`verses of ${f.id}`) } }
+  }
+  if (kind === 'family') {
+    // the whole family ("Más familia"): parents, spouses, children, siblings, each a button; the article, first verses, a story
     const line = (head: string, list: Relative[]) => (list.length ? `**${colon(ui, head)}** ${joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))}.` : '')
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
     const named = (l: Relative[]) => Promise.all(l.map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
@@ -2354,14 +2420,14 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     // (a copy: the family data is the reader's)
     const sources = stories.length ? [...f.sources, 'robertrouse/theographic-bible-metadata'] : f.sources
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
-    // (MAX_FOLLOW: the other one of that name and the download first, a few relatives, then verses and a story)
-    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...rel.slice(0, 4).map(person),
+    // (MAX_FOLLOW: the other one of that name and the download first, the article, every relative that fits, then verses and a story)
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...(await Promise.all(rel.slice(0, MAX_FOLLOW).map(person))),
       ...verses, ...stories]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
-      line(t.siblings, f.siblings), t.named.replace('{n}', String(f.verses)) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
-    return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}`) } }
+      line(t.siblings, f.siblings), namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
+    return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`family ${f.id}`) } }
   }
-  const k = kind as Exclude<KinKind, 'who'>
+  const k = kind as Exclude<KinKind, 'who' | 'family'>
   const list = await Promise.all(relativesOf(k, f).map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
   const head = withName(ui, t.head[headKind(k, list)], shownName)
   if (!list.length) {
@@ -2375,8 +2441,9 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const verses = await pairSteps(sheet, ui, list.flatMap((r) => r.verses.slice(0, 1)), plain, sheet)
   const names = joinNames(ui, list.map((r) => r.name + halfOf(ui, r)))
   const info = [`**${colon(ui, head)}** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
-  // (MAX_FOLLOW: the other one of that name and the download first; then up to five relatives, two verses, the article)
-  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...list.slice(0, 5).map(person), ...verses.slice(0, others.length ? 1 : 2), ...(tw ? [tw] : [])]
+  // (MAX_FOLLOW: the other one of that name and the download first, the person's article, then every relative that fits, the verses
+  // last: Abel, Nov 18, missed Madián among Abraham's sons when only five relatives were buttons)
+  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), ...(await Promise.all(list.slice(0, MAX_FOLLOW).map(person))), ...verses.slice(0, others.length ? 1 : 2)]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }
 }
 
@@ -2997,9 +3064,9 @@ ${x.meta}` },
       }
       if (sheet.intent === 'article' && sheet.concept?.startsWith('tw:names/') && r) {
         const fam = await articleFamily(sheet, ui).catch(() => null)
-        if (fam?.line) r.answer += `
-
-${fam.line}`
+        // inside the article's fold, before its end mark (answer.ts: "◂"), else at the end
+        const end = /\n\n◂(?=\n|$)/
+        if (fam?.line) r.answer = end.test(r.answer) ? r.answer.replace(end, `\n\n${fam.line}\n\n◂`) : `${r.answer}\n\n${fam.line}`
         for (const st of fam?.steps ?? []) if (room() > 0) follow.push(st)
       }
       const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: dropShown([...x.others, ...follow], sheet.ref, shown).slice(0, MAX_FOLLOW), ui,
@@ -3056,7 +3123,8 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
     if (kind === 'here') return `${refLabelOf(ui, s.ref ?? '')} · ${KT(ui).here.replace(/[:：]?\s*\{names\}/, '')}`
     const p = s.concept ? await personOf(s.lang, s.concept).catch(() => null) : null
     const name = askedName(s.term, p?.name ?? s.term ?? '…')
-    const h = KT(ui).head[kind as Exclude<KinKind, 'who'>]
+    if (kind === 'family') return withName(ui, KT(ui).family, name)
+    const h = KT(ui).head[kind as Exclude<KinKind, 'who' | 'family'>]
     return kind === 'who' || !h ? name : withName(ui, h, name)
   }
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')

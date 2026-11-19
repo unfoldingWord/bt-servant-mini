@@ -9,16 +9,19 @@
 import { BOOKS, type XtopicsCore, type XtopicsPart } from '@bt-synergy/language-pack-v3'
 import type { FamilyData, PackReader, PersonEntry } from '@bt-synergy/language-pack-client'
 import { installedLangs, onPacksChanged, openLang } from './packs'
-import { articleForQuestion } from './search'
+import { articleForQuestion, asksAbout, keywords } from './search'
+import { bookExact } from './sheet'
 
 export type KinKind = 'children' | 'sons' | 'daughters' | 'father' | 'mother' | 'parents' | 'partners' | 'wife' | 'husband'
   | 'siblings' | 'brothers' | 'sisters' | 'who'
+  /** "familia de Abraham": the whole family (the «Más familia» view) */
+  | 'family'
 export type KinLang = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 /**
  * A question shaped like a family question. `name`: the person as written (without an article); `alts`: other ways to read it
  * (Arabic without a first «و»). `one`: a singular word ("hijo de", "son of"). `abu`: Arabic «أبو X», which may be a name (أبو شالوم).
  */
-export type KinShape = { kind: KinKind; name: string; alts: string[]; lang: KinLang; one?: true; abu?: true }
+export type KinShape = { kind: KinKind; name: string; alts: string[]; lang: KinLang; one?: true; abu?: true; bare?: true }
 
 // ------------------------------------------------------------------------------------------------- the words of each language
 type Word = { kind: KinKind; one?: true }
@@ -26,38 +29,38 @@ const W = (kind: KinKind, one?: true): Word => (one ? { kind, one } : { kind })
 /** Each language's family words (lower case, as typed), to the kind they ask. */
 const WORDS: Record<KinLang, Record<string, Word>> = {
   en: {
-    son: W('sons', true), sons: W('sons'), child: W('children', true), children: W('children'), kids: W('children'),
+    family: W('family'), son: W('sons', true), sons: W('sons'), child: W('children', true), children: W('children'), kids: W('children'),
     daughter: W('daughters', true), daughters: W('daughters'), father: W('father'), dad: W('father'), mother: W('mother'), mom: W('mother'),
     parents: W('parents'), wife: W('wife'), wives: W('partners'), husband: W('husband'), spouse: W('partners'), spouses: W('partners'),
     brother: W('brothers', true), brothers: W('brothers'), sister: W('sisters', true), sisters: W('sisters'), siblings: W('siblings'),
   },
   es: {
-    hijo: W('sons', true), hijos: W('children'), hija: W('daughters', true), hijas: W('daughters'), padre: W('father'), papa: W('father'),
+    familia: W('family'), hijo: W('sons', true), hijos: W('children'), hija: W('daughters', true), hijas: W('daughters'), padre: W('father'), papa: W('father'),
     madre: W('mother'), mama: W('mother'), padres: W('parents'), esposa: W('wife'), esposas: W('partners'), mujer: W('wife'), mujeres: W('partners'),
     esposo: W('husband'), marido: W('husband'), hermano: W('brothers', true), hermanos: W('siblings'), hermana: W('sisters', true), hermanas: W('sisters'),
   },
   fr: {
-    fils: W('sons', true), enfant: W('children', true), enfants: W('children'), fille: W('daughters', true), filles: W('daughters'), pere: W('father'),
+    famille: W('family'), fils: W('sons', true), enfant: W('children', true), enfants: W('children'), fille: W('daughters', true), filles: W('daughters'), pere: W('father'),
     mere: W('mother'), parents: W('parents'), femme: W('wife'), femmes: W('partners'), epouse: W('wife'), epouses: W('partners'), mari: W('husband'),
     epoux: W('husband'), frere: W('brothers', true), freres: W('siblings'), soeur: W('sisters', true), soeurs: W('sisters'),
   },
   id: {
     // («anak» is one son or many: «anak Daud» is the title of Jesus, so it counts as singular there)
-    anak: W('children', true), 'anak-anak': W('children'), 'anak laki-laki': W('sons'), 'anak-anak laki-laki': W('sons'), putra: W('sons', true),
+    keluarga: W('family'), anak: W('children', true), 'anak-anak': W('children'), 'anak laki-laki': W('sons'), 'anak-anak laki-laki': W('sons'), putra: W('sons', true),
     'anak perempuan': W('daughters'), 'anak-anak perempuan': W('daughters'), putri: W('daughters'), ayah: W('father'), bapa: W('father'),
     bapak: W('father'), ibu: W('mother'), 'orang tua': W('parents'), 'orangtua': W('parents'), istri: W('wife'), isteri: W('wife'),
     suami: W('husband'), saudara: W('siblings'), 'saudara-saudara': W('siblings'), 'saudara laki-laki': W('brothers'),
     'saudara perempuan': W('sisters'),
   },
   hi: {
-    'पुत्र': W('sons'), 'पुत्रों': W('sons'), 'बेटा': W('sons', true), 'बेटे': W('sons'), 'बेटों': W('sons'), 'बच्चे': W('children'),
+    'परिवार': W('family'), 'पुत्र': W('sons'), 'पुत्रों': W('sons'), 'बेटा': W('sons', true), 'बेटे': W('sons'), 'बेटों': W('sons'), 'बच्चे': W('children'),
     'बच्चों': W('children'), 'संतान': W('children'), 'सन्तान': W('children'), 'पुत्री': W('daughters'), 'पुत्रियाँ': W('daughters'),
     'पुत्रियों': W('daughters'), 'बेटी': W('daughters', true), 'बेटियाँ': W('daughters'), 'बेटियों': W('daughters'), 'पिता': W('father'),
     'माता': W('mother'), 'माँ': W('mother'), 'माता-पिता': W('parents'), 'पत्नी': W('wife'), 'पत्नियाँ': W('partners'), 'पति': W('husband'),
     'भाई': W('brothers'), 'भाइयों': W('brothers'), 'बहन': W('sisters'), 'बहनें': W('sisters'), 'बहनों': W('sisters'),
   },
   ar: {
-    'أبناء': W('sons'), 'ابناء': W('sons'), 'بنو': W('sons'), 'بني': W('sons'), 'ابن': W('sons', true), 'أولاد': W('children'),
+    'عائلة': W('family'), 'عائله': W('family'), 'أسرة': W('family'), 'اسرة': W('family'), 'أبناء': W('sons'), 'ابناء': W('sons'), 'بنو': W('sons'), 'بني': W('sons'), 'ابن': W('sons', true), 'أولاد': W('children'),
     'اولاد': W('children'), 'بنات': W('daughters'), 'ابنة': W('daughters', true), 'بنت': W('daughters', true), 'والد': W('father'),
     'أبو': W('father'), 'ابو': W('father'), 'أب': W('father'), 'اب': W('father'), 'أم': W('mother'), 'ام': W('mother'), 'والدة': W('mother'),
     'والدا': W('parents'), 'والدي': W('parents'), 'أبوا': W('parents'), 'ابوا': W('parents'), 'زوجة': W('wife'), 'زوجات': W('partners'),
@@ -173,7 +176,8 @@ export function kinShape(q: string): KinShape | null {
     const f = foldName(name)
     if (PRONOUNS.has(f)) return null
     // («hijas de Israel», «las mujeres de Israel» are the people too)
-    if ((w.kind === 'children' || w.kind === 'sons' || w.kind === 'daughters' || w.kind === 'partners') && PEOPLES.has(f)) return null
+    // («familia de Israel», «family of Judah» too: the people or the tribe)
+    if ((w.kind === 'children' || w.kind === 'sons' || w.kind === 'daughters' || w.kind === 'partners' || w.kind === 'family') && PEOPLES.has(f)) return null
     // («les fils de David» is plural: David's sons; «fils de David», «putra Daud», «दाऊद का पुत्र» the title)
     const plural = /^les\s/i.test(rest)
     if ((w.kind === 'sons' || w.kind === 'children') && (w.one || / का /.test(rest)) && !plural && DAVID.has(f)) return null
@@ -273,13 +277,15 @@ const chapterOfVerse = (v: number): number => Math.floor(v / 1000) % 1000
  * the passage the conversation is on ("gen 25:26"), for a name several people have.
  */
 export async function kinQuestion(q: string, nav: string, last: string | null): Promise<KinAsk | null> {
-  const s = kinShape(q)
+  const s = kinShape(q) ?? bareName(q, nav)
   if (!s) return null
   let pack: string | null = null
   let ids: string[] = []
   let kind = s.kind
   let name = s.name
-  for (const l of await packsFor(s.lang, nav)) {
+  // (a name alone is looked for in the pack of its own language only: «ira», «sal», «Mesa» are names in some other language's pack)
+  const own = packOf(s.lang)
+  for (const l of (await packsFor(s.lang, nav)).filter((x) => !s.bare || x === own)) {
     const ix = await peopleIx(l)
     if (!ix) continue
     pack ??= l
@@ -298,6 +304,15 @@ export async function kinQuestion(q: string, nav: string, last: string | null): 
   }
   if (!pack || !ids.length) return null
   if (kind === 'who' && (await articleForQuestion(q).catch(() => null))?.length) return null
+  // a name alone ("Hamul"): only a person with no Translation Words article (one with an article is answered by it, as before)
+  if (s.bare && (await Promise.all(ids.map((id) => hasArticle(pack!, id)))).some(Boolean)) return null
+  // (an Arabic name alone that is the article plus a word, «ٱلْمَلِك» "the king" of Jeremiah 36:26, is a description: «ملك» stays a word)
+  if (s.bare && s.lang === 'ar') {
+    // (only the vowel marks go: «إِلْيَاس», Elijah, keeps its «إ» and is no «ال…»)
+    const named = await Promise.all(ids.map(async (id) => ((await personOf(pack!, id))?.name ?? '').normalize('NFC').replace(/[ً-ٰٟ]/g, '')))
+    ids = ids.filter((_, i) => !/^[اٱ]ل/.test(named[i]!))
+    if (!ids.length) return null
+  }
   const ix = (await peopleIx(pack))!
   const count = (id: string) => ix.byId.get(id)?.verses ?? 0
   const sorted = [...ids].sort((a, b) => count(b) - count(a) || (a < b ? -1 : 1))
@@ -315,6 +330,35 @@ export async function kinQuestion(q: string, nav: string, last: string | null): 
   const [a, b] = [count(sorted[0]!), count(sorted[1]!)]
   if (a > 0 && a >= 10 * b) return out('dominant', sorted)
   return out('choose', sorted)
+}
+
+/**
+ * A name alone, as a reader types it to ask who that is ("Hamul", "Fares", "حامول"): one to four words of letters, not a book's name,
+ * with words to look for (not only small words). The language: the script's, else the app's. kinQuestion takes it only when it is a
+ * person with no Translation Words article.
+ */
+function bareName(q: string, nav: string, capital = true): KinShape | null {
+  const t = tidy(q)
+  if (!t || t.split(/\s+/).length > 4 || !/^[\p{L}\p{M}][\p{L}\p{M}'’\s-]*$/u.test(t) || bookExact(t) || !keywords(t).length) return null
+  // (for a person with no article, in Latin script, a name is written with a capital: «Hamul», not «sal» or «mar»; Arabic and
+  // Devanagari have no capitals. A name with an article, nameOnly, needs none: «abraham» is his article too)
+  if (capital && /\p{Script=Latin}/u.test(t) && !/^\p{Lu}/u.test(t)) return null
+  const lang: KinLang = /[؀-ۿ]/.test(t) ? 'ar' : /[ऀ-ॿ]/.test(t) ? 'hi' : (['en', 'es', 'fr', 'id'].includes(nav.split('-')[0]!) ? nav.split('-')[0] : 'en') as KinLang
+  const { name, alts } = cleanName(t, lang)
+  return { kind: 'who', name, alts, lang, bare: true }
+}
+
+/**
+ * A name alone that is a Translation Words article about a person or a place, or several ("Abraham", "Jerusalén", "Juan"): its
+ * `tw:names/` ids, and the language of the reply, whatever a reader made of the question. Only names (`tw:names/`): a key term alone
+ * ("gracia") goes on as before. Null when the question is more than a name, or a book's name ("Rut" is the book, as before).
+ */
+export async function nameOnly(q: string, nav: string): Promise<{ ids: string[]; lang: KinLang } | null> {
+  const s = bareName(q, nav, false)
+  // (only the name itself: "qué es mar" goes on as before, where articleForQuestion also tries close spellings and name starts)
+  if (!s || asksAbout(q)) return null
+  const ids = (await articleForQuestion(q).catch(() => null)) ?? []
+  return ids.length && ids.every((id) => id.startsWith('tw:names/')) ? { ids, lang: s.lang } : null
 }
 
 /** Whether code alone answers a family question now (codeReads: no reader runs): its shape, and X a person in an index already built. */
@@ -453,15 +497,19 @@ export type { FamilyData }
 // ------------------------------------------------------------------------------------------------------------ the words
 type KinText = {
   /** the head of a family answer, per kind ("Hijos de {x}") */
-  head: Record<Exclude<KinKind, 'who'>, string>
-  /** a card's lines */
+  head: Record<Exclude<KinKind, 'who' | 'family'>, string>
+  /** a card's lines; `credit`: the family data's sources under the answer, drawn small and grey like an article's source label
+   *  (main.ts, isCreditLine; Abel, Nov 18: too big at first, then hidden in «detalles»: he wants to see it, small) */
   parents: string; partners: string; children: string; siblings: string
   half: [man: string, woman: string]
   named: string
+  /** the same for one verse */
+  named1: string
   none: string
   choose: string
   other: string
   versesN: string
+  versesN1: string
   credit: string
   family: string
   here: string
@@ -470,63 +518,77 @@ type KinText = {
   getPeople: string
   getBook: string
   and: string
+  /** the button to the whole family of a person, and to the verses a person is named in */
+  moreFamily: string
+  /** the person's Translation Words article as a button ({x}: its title) */
+  article: string
+  whereNamed: string
 }
 export const KIN_T: Record<KinLang, KinText> = {
   en: {
     head: { children: 'Children of {x}', sons: 'Sons of {x}', daughters: 'Daughters of {x}', father: 'Father of {x}', mother: 'Mother of {x}', parents: 'Parents of {x}',
       partners: 'Spouses of {x}', wife: 'Wife of {x}', husband: 'Husband of {x}', siblings: 'Brothers and sisters of {x}', brothers: 'Brothers of {x}', sisters: 'Sisters of {x}' },
     parents: 'Parents', partners: 'Spouses', children: 'Children', siblings: 'Brothers and sisters', half: ['half brother', 'half sister'],
-    named: 'Named in {n} verses.', none: '{head}: the data I have names no one.', choose: 'Several people are called {x}. Which one?',
-    other: 'Another {x}?', versesN: '{n} verses', credit: 'Family data: {src}.', family: 'Family of {x}', here: 'People here: {names}',
-    hereHead: 'People named in {ref}:', hereNone: 'The data I have names no one in {ref}.', getPeople: 'Download the verses of people and places', getBook: 'Download {book}', and: 'and',
+    named: 'Named in {n} verses.', named1: 'Named in 1 verse.', none: '{head}: the data I have names no one.', choose: 'Several people are called {x}. Which one?',
+    other: 'Another {x}?', versesN: '{n} verses', versesN1: '1 verse', credit: 'Family data: {src}.', family: 'Family of {x}', here: 'People here: {names}',
+    hereHead: 'People named in {ref}:', hereNone: 'The data I have names no one in {ref}.', getPeople: 'Download the verses of people and places', getBook: 'Download {book}', and: 'and', moreFamily: 'More family', whereNamed: 'Where {x} is named', article: 'Article: {x}',
   },
   es: {
     head: { children: 'Hijos de {x}', sons: 'Hijos de {x}', daughters: 'Hijas de {x}', father: 'Padre de {x}', mother: 'Madre de {x}', parents: 'Padres de {x}',
       partners: 'Cónyuges de {x}', wife: 'Esposa de {x}', husband: 'Esposo de {x}', siblings: 'Hermanos de {x}', brothers: 'Hermanos de {x}', sisters: 'Hermanas de {x}' },
     parents: 'Padres', partners: 'Cónyuges', children: 'Hijos', siblings: 'Hermanos', half: ['medio hermano', 'media hermana'],
-    named: 'Se nombra en {n} versículos.', none: '{head}: los datos que tengo no nombran a nadie.', choose: 'Hay varias personas llamadas {x}. ¿Cuál?',
-    other: '¿Otro {x}?', versesN: '{n} versículos', credit: 'Datos de familia: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
-    hereHead: 'Personas nombradas en {ref}:', hereNone: 'Los datos que tengo no nombran a nadie en {ref}.', getPeople: 'Descargar los versículos de personas y lugares', getBook: 'Descargar {book}', and: 'y',
+    named: 'Se nombra en {n} versículos.', named1: 'Se nombra en 1 versículo.', none: '{head}: los datos que tengo no nombran a nadie.', choose: 'Hay varias personas llamadas {x}. ¿Cuál?',
+    other: '¿Otro {x}?', versesN: '{n} versículos', versesN1: '1 versículo', credit: 'Datos de familia: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
+    hereHead: 'Personas nombradas en {ref}:', hereNone: 'Los datos que tengo no nombran a nadie en {ref}.', getPeople: 'Descargar los versículos de personas y lugares', getBook: 'Descargar {book}', and: 'y', moreFamily: 'Más familia', whereNamed: 'Dónde se nombra a {x}', article: 'Artículo: {x}',
   },
   fr: {
     head: { children: 'Enfants de {x}', sons: 'Fils de {x}', daughters: 'Filles de {x}', father: 'Père de {x}', mother: 'Mère de {x}', parents: 'Parents de {x}',
       partners: 'Conjoints de {x}', wife: 'Femme de {x}', husband: 'Mari de {x}', siblings: 'Frères et sœurs de {x}', brothers: 'Frères de {x}', sisters: 'Sœurs de {x}' },
     parents: 'Parents', partners: 'Conjoints', children: 'Enfants', siblings: 'Frères et sœurs', half: ['demi-frère', 'demi-sœur'],
-    named: 'Nommé dans {n} versets.', none: '{head} : les données que j’ai ne nomment personne.', choose: 'Plusieurs personnes s’appellent {x}. Laquelle ?',
-    other: 'Un autre {x} ?', versesN: '{n} versets', credit: 'Données familiales : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
-    hereHead: 'Personnes nommées dans {ref} :', hereNone: 'Les données que j’ai ne nomment personne dans {ref}.', getPeople: 'Télécharger les versets des personnes et des lieux', getBook: 'Télécharger {book}', and: 'et',
+    named: 'Nommé dans {n} versets.', named1: 'Nommé dans 1 verset.', none: '{head} : les données que j’ai ne nomment personne.', choose: 'Plusieurs personnes s’appellent {x}. Laquelle ?',
+    other: 'Un autre {x} ?', versesN: '{n} versets', versesN1: '1 verset', credit: 'Données familiales : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
+    hereHead: 'Personnes nommées dans {ref} :', hereNone: 'Les données que j’ai ne nomment personne dans {ref}.', getPeople: 'Télécharger les versets des personnes et des lieux', getBook: 'Télécharger {book}', and: 'et', moreFamily: 'Plus de famille', whereNamed: 'Où {x} est nommé', article: 'Article : {x}',
   },
   id: {
     head: { children: 'Anak-anak {x}', sons: 'Anak-anak laki-laki {x}', daughters: 'Anak-anak perempuan {x}', father: 'Ayah {x}', mother: 'Ibu {x}', parents: 'Orang tua {x}',
       partners: 'Pasangan {x}', wife: 'Istri {x}', husband: 'Suami {x}', siblings: 'Saudara-saudara {x}', brothers: 'Saudara laki-laki {x}', sisters: 'Saudara perempuan {x}' },
     parents: 'Orang tua', partners: 'Pasangan', children: 'Anak-anak', siblings: 'Saudara-saudara', half: ['saudara tiri', 'saudara tiri'],
-    named: 'Disebut dalam {n} ayat.', none: '{head}: data yang saya punya tidak menyebut siapa pun.', choose: 'Ada beberapa orang bernama {x}. Yang mana?',
-    other: '{x} yang lain?', versesN: '{n} ayat', credit: 'Data keluarga: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
-    hereHead: 'Tokoh yang disebut dalam {ref}:', hereNone: 'Data yang saya punya tidak menyebut siapa pun dalam {ref}.', getPeople: 'Unduh ayat-ayat tokoh dan tempat', getBook: 'Unduh {book}', and: 'dan',
+    named: 'Disebut dalam {n} ayat.', named1: 'Disebut dalam 1 ayat.', none: '{head}: data yang saya punya tidak menyebut siapa pun.', choose: 'Ada beberapa orang bernama {x}. Yang mana?',
+    other: '{x} yang lain?', versesN: '{n} ayat', versesN1: '1 ayat', credit: 'Data keluarga: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
+    hereHead: 'Tokoh yang disebut dalam {ref}:', hereNone: 'Data yang saya punya tidak menyebut siapa pun dalam {ref}.', getPeople: 'Unduh ayat-ayat tokoh dan tempat', getBook: 'Unduh {book}', and: 'dan', moreFamily: 'Keluarga lainnya', whereNamed: 'Di mana {x} disebut', article: 'Artikel: {x}',
   },
   hi: {
     head: { children: '{x} की संतान', sons: '{x} के पुत्र', daughters: '{x} की पुत्रियाँ', father: '{x} के पिता', mother: '{x} की माता', parents: '{x} के माता-पिता',
       partners: '{x} के जीवनसाथी', wife: '{x} की पत्नी', husband: '{x} के पति', siblings: '{x} के भाई-बहन', brothers: '{x} के भाई', sisters: '{x} की बहनें' },
     parents: 'माता-पिता', partners: 'जीवनसाथी', children: 'संतान', siblings: 'भाई-बहन', half: ['सौतेला भाई', 'सौतेली बहन'],
-    named: '{n} पदों में नाम आता है।', none: '{head}: मेरे पास के आँकड़ों में किसी का नाम नहीं है।', choose: '{x} नाम के कई लोग हैं। कौन-सा?',
-    other: 'कोई दूसरा {x}?', versesN: '{n} पद', credit: 'परिवार के आँकड़े: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
-    hereHead: '{ref} में जिनका नाम है:', hereNone: 'मेरे पास के आँकड़ों में {ref} में किसी का नाम नहीं है।', getPeople: 'लोगों और स्थानों के पद डाउनलोड करें', getBook: '{book} डाउनलोड करें', and: 'और',
+    named: '{n} पदों में नाम आता है।', named1: '1 पद में नाम आता है।', none: '{head}: मेरे पास के आँकड़ों में किसी का नाम नहीं है।', choose: '{x} नाम के कई लोग हैं। कौन-सा?',
+    other: 'कोई दूसरा {x}?', versesN: '{n} पद', versesN1: '1 पद', credit: 'परिवार के आँकड़े: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
+    hereHead: '{ref} में जिनका नाम है:', hereNone: 'मेरे पास के आँकड़ों में {ref} में किसी का नाम नहीं है।', getPeople: 'लोगों और स्थानों के पद डाउनलोड करें', getBook: '{book} डाउनलोड करें', and: 'और', moreFamily: 'और परिवार', whereNamed: '{x} का नाम कहाँ आता है', article: 'लेख: {x}',
   },
   ar: {
     head: { children: 'أولاد {x}', sons: 'أبناء {x}', daughters: 'بنات {x}', father: 'والد {x}', mother: 'أم {x}', parents: 'والدا {x}',
       partners: 'أزواج {x}', wife: 'زوجة {x}', husband: 'زوج {x}', siblings: 'إخوة {x}', brothers: 'إخوة {x}', sisters: 'أخوات {x}' },
     parents: 'الوالدان', partners: 'الأزواج', children: 'الأولاد', siblings: 'الإخوة والأخوات', half: ['أخ غير شقيق', 'أخت غير شقيقة'],
-    named: 'يُذكر في {n} آية.', none: '{head}: البيانات التي لدي لا تذكر أحدًا.', choose: 'هناك عدة أشخاص اسمهم {x}. أيهم تقصد؟',
-    other: '{x} آخر؟', versesN: '{n} آية', credit: 'بيانات العائلة: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
-    hereHead: 'الأشخاص المذكورون في {ref}:', hereNone: 'البيانات التي لدي لا تذكر أحدًا في {ref}.', getPeople: 'تنزيل آيات الأشخاص والأماكن', getBook: 'تنزيل {book}', and: 'و',
+    named: 'يُذكر في {n} آية.', named1: 'يُذكر في آية واحدة.', none: '{head}: البيانات التي لدي لا تذكر أحدًا.', choose: 'هناك عدة أشخاص اسمهم {x}. أيهم تقصد؟',
+    other: '{x} آخر؟', versesN: '{n} آية', versesN1: 'آية واحدة', credit: 'بيانات العائلة: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
+    hereHead: 'الأشخاص المذكورون في {ref}:', hereNone: 'البيانات التي لدي لا تذكر أحدًا في {ref}.', getPeople: 'تنزيل آيات الأشخاص والأماكن', getBook: 'تنزيل {book}', and: 'و', moreFamily: 'المزيد من العائلة', whereNamed: 'أين يُذكر {x}', article: 'مقالة: {x}',
   },
 }
 export const KT = (ui: string): KinText => KIN_T[ui as KinLang] ?? KIN_T.en
+/** "Se nombra en 12 versículos.", "Se nombra en 1 versículo." */
+export const namedIn = (ui: string, n: number): string => (n === 1 ? KT(ui).named1 : KT(ui).named.replace('{n}', String(n)))
 /** "Hijos de Isaac:" and French "Fils d’Isaac :" (a space before the colon). */
 export const colon = (ui: string, head: string): string => (ui === 'fr' ? `${head} :` : `${head}:`)
 /** A text with the person's name in it: French «de» before a vowel or h is «d’» («Enfants d’Isaac»). */
 export const withName = (ui: string, text: string, x: string): string =>
   (ui === 'fr' && /^[aeiouyhâàäéèêëîïôöûüœ]/i.test(x) ? text.replace(/\bde \{x\}/, 'd’{x}') : text).replace('{x}', x)
+/** Whether a line is the credit of a family answer (any language): main.ts draws it small, as a source label. */
+export function isCreditLine(t: string): boolean {
+  const s = t.trim()
+  return Object.values(KIN_T).some((x) => s.startsWith(x.credit.split('{src}')[0]!.trim()))
+}
+/** "12 versículos", "1 versículo" (the choice among people of one name) */
+export const versesCount = (ui: string, n: number): string => (n === 1 ? KT(ui).versesN1 : KT(ui).versesN.replace('{n}', String(n)))
 /** "Esaú y Jacob", "Abraham, Sara y Agar" ("A, B و C": the Arabic «و» joins the next word). */
 export function joinNames(ui: string, names: string[]): string {
   if (names.length < 2) return names[0] ?? ''
@@ -538,7 +600,7 @@ export function joinNames(ui: string, names: string[]): string {
 export const SOURCE_NAMES: Record<string, string> = { 'STEPBible/STEPBible-Data/TIPNR': 'TIPNR (STEPBible)', 'BibleAquifer/ACAI': 'ACAI (BiblioNexus)', 'robertrouse/theographic-bible-metadata': 'Theographic' }
 
 /** The relatives a kind asks for, by gender when the data has it (a relative with no gender stays in both). */
-export function relativesOf(kind: Exclude<KinKind, 'who'>, f: FamilyData): FamilyData['children'] {
+export function relativesOf(kind: Exclude<KinKind, 'who' | 'family'>, f: FamilyData): FamilyData['children'] {
   const not = (g: 1 | 2) => (r: { gender?: 1 | 2 }) => r.gender !== g
   switch (kind) {
     case 'children': return f.children
@@ -556,10 +618,112 @@ export function relativesOf(kind: Exclude<KinKind, 'who'>, f: FamilyData): Famil
   }
 }
 /** The kind said in the head: a father or mother asked with relatives of no gender is "parents" (§4.6). */
-export function headKind(kind: Exclude<KinKind, 'who'>, shown: { gender?: 1 | 2 }[]): Exclude<KinKind, 'who'> {
+export function headKind(kind: Exclude<KinKind, 'who' | 'family'>, shown: { gender?: 1 | 2 }[]): Exclude<KinKind, 'who' | 'family'> {
   if ((kind === 'father' || kind === 'mother') && shown.some((r) => r.gender === undefined)) return 'parents'
   return kind
 }
 /** The name shown for the person asked: as written when that is not its name ("Jacob (Israel)"), else its name. */
 export const askedName = (written: string | null | undefined, name: string): string =>
   written && foldName(written) !== foldName(name) ? `${written} (${name})` : name
+
+// ------------------------------------------------------------------------------------- who this person is, in one line
+// Abel (Nov 18): a person with no Translation Words article is answered by how they are tied to someone known ("hijo de Isaí,
+// padre de David", "descendiente de Judá"), not by every relation. From the core of `xtopics` only (relations, verse counts,
+// same-as): nothing stored, no parts read.
+
+/** Known: a person a reader can place, with a Translation Words article (`same-as`) or named in this many verses at least. */
+export const KNOWN_VERSES = 40
+/** How a person is tied to someone known: child of, parent of, spouse of, sibling of, descendant of (an ancestor), of the tribe of. */
+export type TieKind = 'childOf' | 'parentOf' | 'spouseOf' | 'siblingOf' | 'descendantOf' | 'tribe'
+/** `more`: there are more known people of that tie than the two named (the line ends «…»). */
+export type Tie = { kind: TieKind; ids: string[]; more?: true }
+/** At most this many ties in the line. */
+const TIES = 2
+/** How far up the parents to look for a known ancestor. */
+const UP = 6
+
+/** The relations of the core, by person, built once per core. */
+const tiesByCore = new WeakMap<XtopicsCore, { parents: Map<string, string[]>; children: Map<string, string[]>; partners: Map<string, string[]>; siblings: Map<string, string[]>; tribe: Map<string, string[]>; tw: Set<string> }>()
+function tiesOf(core: XtopicsCore) {
+  let t = tiesByCore.get(core)
+  if (!t) {
+    const add = (m: Map<string, string[]>, k: string, v: string) => { const l = m.get(k); if (!l) m.set(k, [v]); else if (!l.includes(v)) l.push(v) }
+    t = { parents: new Map(), children: new Map(), partners: new Map(), siblings: new Map(), tribe: new Map(), tw: new Set() }
+    for (const r of core.relations ?? []) {
+      if (r.from === r.to) continue
+      if (r.type === 'parent-of') { add(t.parents, r.to, r.from); add(t.children, r.from, r.to) }
+      else if (r.type === 'partner-of') { add(t.partners, r.from, r.to); add(t.partners, r.to, r.from) }
+      else if (r.type === 'sibling-of') { add(t.siblings, r.from, r.to); add(t.siblings, r.to, r.from) }
+      else if (r.type === 'tribe') add(t.tribe, r.from, r.to)
+      else if (r.type === 'same-as' && r.from.startsWith('tw:names/') && r.to.startsWith('per:')) t.tw.add(r.to)
+    }
+    tiesByCore.set(core, t)
+  }
+  return t
+}
+const versesIn = (core: XtopicsCore, id: string): number => [...(core.occurrences.get(id)?.values() ?? [])].reduce((n, [, v]) => n + v, 0)
+
+/**
+ * Who a person is, in at most two ties to known people (KNOWN_VERSES, a tW article), the nearest first: child of, parent of,
+ * spouse of, sibling of; with none known, the nearest known ancestor (descendant of), else the tribe, else the relatives named in
+ * most verses. [] when the data has no relation for the person.
+ */
+export async function tiesOfPerson(pack: string, id: string): Promise<Tie[]> {
+  const core = await coreOf(pack)
+  if (!core) return []
+  const t = tiesOf(core)
+  const known = (p: string) => p !== id && (t.tw.has(p) || versesIn(core, p) >= KNOWN_VERSES)
+  const byFame = (l: string[]) => [...l].sort((a, b) => versesIn(core, b) - versesIn(core, a) || (a < b ? -1 : 1))
+  const out: Tie[] = []
+  const kinds: [TieKind, Map<string, string[]>][] = [['childOf', t.parents], ['parentOf', t.children], ['spouseOf', t.partners], ['siblingOf', t.siblings]]
+  for (const [kind, m] of kinds) {
+    const all = byFame((m.get(id) ?? []).filter(known))
+    if (all.length && out.length < TIES) out.push({ kind, ids: all.slice(0, 2), ...(all.length > 2 ? { more: true as const } : {}) })
+  }
+  if (out.length) return out
+  // the nearest known ancestor, a generation at a time (the first generation was looked at above)
+  let gen = t.parents.get(id) ?? []
+  const seen = new Set<string>([id, ...gen])
+  for (let up = 2; up <= UP && gen.length; up++) {
+    const next = gen.flatMap((p) => t.parents.get(p) ?? []).filter((p) => !seen.has(p))
+    next.forEach((p) => seen.add(p))
+    const hit = byFame(next.filter(known))
+    if (hit.length) return [{ kind: 'descendantOf', ids: hit.slice(0, 1) }]
+    gen = next
+  }
+  const tribe = t.tribe.get(id) ?? []
+  if (tribe.length) return [{ kind: 'tribe', ids: tribe.slice(0, 1) }]
+  // nobody known near: the relatives named in most verses
+  for (const [kind, m] of kinds) {
+    const ids = byFame(m.get(id) ?? []).slice(0, 2)
+    if (ids.length && out.length < TIES) out.push({ kind, ids })
+  }
+  return out
+}
+
+/** Whether a person has a Translation Words article (`same-as`). */
+export async function hasArticle(pack: string, id: string): Promise<boolean> {
+  const core = await coreOf(pack)
+  return !!core && tiesOf(core).tw.has(id)
+}
+/** The Translation Words article of a person (`same-as`, the first by id), or null: a person's button opens it, the family is the fallback. */
+export async function articleOf(pack: string, id: string): Promise<string | null> {
+  const core = await coreOf(pack)
+  if (!core || !tiesOf(core).tw.has(id)) return null
+  return (core.relations ?? []).filter((r) => r.type === 'same-as' && r.to === id && r.from.startsWith('tw:names/')).map((r) => r.from).sort()[0] ?? null
+}
+
+/** The ties in words: [man, woman] per kind ({x}: the names), and a name with no gender as the man's (the data's usual default). */
+export const TIE_T: Record<KinLang, Record<TieKind, [string, string]>> = {
+  en: { childOf: ['son of {x}', 'daughter of {x}'], parentOf: ['father of {x}', 'mother of {x}'], spouseOf: ['husband of {x}', 'wife of {x}'], siblingOf: ['brother of {x}', 'sister of {x}'], descendantOf: ['descendant of {x}', 'descendant of {x}'], tribe: ['of the tribe of {x}', 'of the tribe of {x}'] },
+  es: { childOf: ['hijo de {x}', 'hija de {x}'], parentOf: ['padre de {x}', 'madre de {x}'], spouseOf: ['esposo de {x}', 'esposa de {x}'], siblingOf: ['hermano de {x}', 'hermana de {x}'], descendantOf: ['descendiente de {x}', 'descendiente de {x}'], tribe: ['de la tribu de {x}', 'de la tribu de {x}'] },
+  fr: { childOf: ['fils de {x}', 'fille de {x}'], parentOf: ['père de {x}', 'mère de {x}'], spouseOf: ['mari de {x}', 'femme de {x}'], siblingOf: ['frère de {x}', 'sœur de {x}'], descendantOf: ['descendant de {x}', 'descendante de {x}'], tribe: ['de la tribu de {x}', 'de la tribu de {x}'] },
+  id: { childOf: ['anak {x}', 'anak perempuan {x}'], parentOf: ['ayah {x}', 'ibu {x}'], spouseOf: ['suami {x}', 'istri {x}'], siblingOf: ['saudara {x}', 'saudara perempuan {x}'], descendantOf: ['keturunan {x}', 'keturunan {x}'], tribe: ['dari suku {x}', 'dari suku {x}'] },
+  hi: { childOf: ['{x} का पुत्र', '{x} की पुत्री'], parentOf: ['{x} का पिता', '{x} की माता'], spouseOf: ['{x} का पति', '{x} की पत्नी'], siblingOf: ['{x} का भाई', '{x} की बहन'], descendantOf: ['{x} का वंशज', '{x} की वंशज'], tribe: ['{x} के गोत्र का', '{x} के गोत्र की'] },
+  ar: { childOf: ['ابن {x}', 'ابنة {x}'], parentOf: ['والد {x}', 'والدة {x}'], spouseOf: ['زوج {x}', 'زوجة {x}'], siblingOf: ['أخو {x}', 'أخت {x}'], descendantOf: ['من نسل {x}', 'من نسل {x}'], tribe: ['من سبط {x}', 'من سبط {x}'] },
+}
+/** "hijo de Isaí, padre de David" (each tie's names joined; French elision as in the heads). */
+export function tiesLine(ui: string, gender: 1 | 2 | undefined, ties: Tie[], nameOf: (id: string) => string): string {
+  const words = TIE_T[ui as KinLang] ?? TIE_T.en
+  return ties.map((t) => withName(ui, words[t.kind][gender === 2 ? 1 : 0], t.more ? `${t.ids.map(nameOf).join(ui === 'ar' ? '، ' : ', ')}…` : joinNames(ui, t.ids.map(nameOf)))).join(ui === 'ar' ? '، ' : ', ')
+}
