@@ -239,10 +239,44 @@ public class MainActivity extends Activity {
         return s.toString();
     }
 
+    /** A GGUF file starts with "GGUF" and is not a few bytes long. */
+    private static boolean looksLikeModel(File f) {
+        try (FileInputStream in = new FileInputStream(f)) {
+            byte[] h = new byte[4];
+            return f.length() > (1 << 20) && in.read(h) == 4 && h[0] == 'G' && h[1] == 'G' && h[2] == 'U' && h[3] == 'F';
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** The last line of llama-server's own log: why it stopped. */
+    private String logTail() {
+        try {
+            File f = new File(getFilesDir(), "llama-server.log");
+            long len = f.length();
+            if (len == 0) return "";
+            try (java.io.RandomAccessFile r = new java.io.RandomAccessFile(f, "r")) {
+                r.seek(Math.max(0, len - 400));
+                byte[] b = new byte[(int) Math.min(len, 400)];
+                r.readFully(b);
+                String[] lines = new String(b, java.nio.charset.StandardCharsets.UTF_8).trim().split("\r?\n");
+                return lines[lines.length - 1].trim();
+            }
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     /** Starts llama-server on the model and waits until it answers /health. */
     private void startServer(File model) throws Exception {
         state = "starting";
         detail = "";
+        // a download cut halfway, or a file that is not a model, makes llama-server exit 1 with no clue: say so first
+        if (!looksLikeModel(model)) {
+            state = "error";
+            detail = "the model file is incomplete or damaged: download it again";
+            return;
+        }
         String libDir = getApplicationInfo().nativeLibraryDir;
         List<String> cmd = new ArrayList<>();
         cmd.add(libDir + "/libllamaserver.so");
@@ -260,7 +294,8 @@ public class MainActivity extends Activity {
         for (int i = 0; i < 600 && !ready; i++) {
             if (!server.isAlive()) {
                 state = "error";
-                detail = "server stopped: " + server.exitValue();
+                String tail = logTail();
+                detail = "server stopped: " + server.exitValue() + (tail.isEmpty() ? "" : " (" + tail + ")");
                 server = null;
                 return;
             }
