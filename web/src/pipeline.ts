@@ -3113,7 +3113,7 @@ export function placeLabel(n: GNode, ui: string): string {
 async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | undefined): Promise<string> {
   // a 5M session's step: "OBS 1 · M1 · f5"
   if (kind === 'obs5m') {
-    const fx = await fixture5(parseObsRef(s.ref)?.n ?? 0).catch(() => null)
+    const fx = await fixture5(parseObsRef(s.ref)?.n ?? 0, s.lang).catch(() => null)
     const st = fx ? sessionOfSheet({ ...s, id: '', version: null, phrase: null, candidates: null }, fx, null) : null
     if (fx && st) return stepShort(fx, st, ui)
   }
@@ -3354,13 +3354,17 @@ async function pathStep(c: ConvState, made: Made, done: Done, x: Ctx): Promise<v
 // (five.ts): every step is a turn (a sheet with intent 'obs5m', route `obs5m`), kept in the graph as `g.session` beside the
 // light path (paused meanwhile, never replaced). Its frame's helps are 2c's OBS answers; any other answer offers the way back.
 
-/** A story's tables from the installed packs (five.ts), read once; null when no pack has the story (no session) */
-const fixture5 = (n: number): Promise<Fixture | null> => fixtureOf5(n, packCode(env.nav))
+/**
+ * A story's tables from the installed packs (five.ts), read once per language; null when no pack has the story (no session).
+ * `prefer`: the language asked ("In Indonesian", a session's own); else the content language, else the app's. A story the asked
+ * language has no tables for comes in English (five.ts). The interface's words are never this (W5 reads `env.nav`).
+ */
+const fixture5 = (n: number, prefer?: string | null): Promise<Fixture | null> => fixtureOf5(n, prefer ?? env.helpsLang ?? packCode(env.nav))
 /**
  * The loader of a story's tables (the phone's window reads them through it too): the composer's session buttons and the labels
  * read what it loaded (`fixtureNow5`).
  */
-export const loadFixture5 = (n: number): Promise<Fixture | null> => fixture5(n)
+export const loadFixture5 = (n: number, prefer?: string | null): Promise<Fixture | null> => fixture5(n, prefer)
 
 /**
  * Whether the conversation is at the session (R9): its current point is a step, or under one through `deeper` points only (the
@@ -3421,14 +3425,14 @@ export function sessionChips(c: ConvState, ui: string): { items: Chip5[]; rest: 
   const g = c.graph
   const s = g?.session
   // (the story's tables not read yet: no session's button, and never the paused light path's)
-  const fx = s ? fixtureNow5(s.story) : null
+  const fx = s ? fixtureNow5(s.story, s.tfLang) : null
   if (!fx && s) return { items: [], rest: 'place' }
   const fwd = rtlArrow(ui)
   if (!g || !s) {
     let last: ReturnType<typeof savedSessions>[number] | undefined
     let fl: Fixture | null = null
     for (const x of savedSessions()) {
-      const f = fixtureNow5(x.story)
+      const f = fixtureNow5(x.story, x.s.tfLang)
       if (f && sessionOfSheet(sheetOf(f, x.s, x.s.lang), f, x.s)) { last = x; fl = f; break }
     }
     if (!last || !fl) return null
@@ -3458,7 +3462,7 @@ const rtlArrow = (ui: string) => (ui === 'ar' ? '◂' : '▸')
 export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | null {
   const asked = sessionAsks(q, c)
   const s = c.graph?.session
-  const fx = s ? fixtureNow5(s.story) : null
+  const fx = s ? fixtureNow5(s.story, s.tfLang) : null
   if (!asked || !s || !fx) return null
   const w = W5(ui)
   if (asked === 'next') {
@@ -3481,7 +3485,7 @@ export function sessionUnderstood(q: string, c: ConvState, ui: string): Chip5 | 
  * same kind as the current step (M1 has an observation and a translation step per frame); null elsewhere, or with no such frame.
  */
 function frameStep(s: Session, n: number): Session | null {
-  const fx = fixtureNow5(s.story)
+  const fx = fixtureNow5(s.story, s.tfLang)
   if (!fx || !['frames', 'm1', 'drafting', 'checking'].includes(s.part)) return null
   const all = stepsOf5(fx, s.part)
   const kind = all[s.at]?.kind
@@ -3506,8 +3510,9 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
   const o = has('obs5m', q) ? obsAsked(q) : null
   const p = o ? parseObsRef(o.ref) : null
   if (p) {
-    const fx = await fixture5(p.n)
     const lang = prefer ?? packCode(slots?.lang ?? env.nav)
+    // (the tables in the language asked or the content's: "5M OBS 1" with Indonesian content reads the Indonesian ones)
+    const fx = await fixture5(p.n, prefer)
     const first = fx ? ORDER5.find((x) => stepsOf5(fx, x).length) : undefined
     // a story with no session (no installed pack has it): the route says so
     const sheet: Sheet = fx && first
@@ -3521,7 +3526,7 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
   const unread = !slots || !slots.intent || slots.intent === 'unknown' || (slots.intent === 'passage' && !slots.book)
   const asked = s && unread ? sessionAsks(q, c) : null
   if (!s || !asked) return null
-  const fx = await fixture5(s.story)
+  const fx = await fixture5(s.story, s.tfLang)
   if (!fx) return null
   let sheet: Sheet | null = null
   if (asked === 'next') {
@@ -3553,10 +3558,11 @@ async function step5(x: Ctx): Promise<Done | null> {
   const ui = env.nav
   x.ui = ui
   const story = parseObsRef(sheet.ref)?.n ?? 0
-  const fx = await fixture5(story)
   const meta = `${env.details} · ${secs(x)} s\n${x.meta}`
   // (no session in this conversation, e.g. after [End session]: the saved place of the story is the base, never a blank one)
   const base = x.c.graph?.session?.story === story ? x.c.graph.session : savedSessions().find((e) => e.story === story)?.s ?? null
+  // the tables' language: the session's own while the answer is in its language; another one asked ("In Indonesian") replaces it
+  const fx = await fixture5(story, base && packCode(sheet.lang) === packCode(base.lang) ? base.tfLang : sheet.lang)
   const s = fx && sheet.concept ? sessionOfSheet(sheet, fx, base) : null
   if (!s || !fx) {
     const n = parseObsRef(sheet.ref)?.n ?? 0
@@ -3636,7 +3642,7 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
   const reply = done.reply
   if (done.answered === 'obs5m' && x.five) {
     const { s, links } = x.five
-    const fx = await fixture5(s.story)
+    const fx = await fixture5(s.story, s.tfLang)
     if (!fx) return
     g.session = s
     // usage (counts only, no text): a step, the way back to one, the review
@@ -3655,7 +3661,7 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
   const s = g.session
   if (!s) return
   delete g.pathNext
-  const fx = await fixture5(s.story)
+  const fx = await fixture5(s.story, s.tfLang)
   if (!fx) return
   // a frame's help ("OBS 1:5 · notes"): says what it shows, as the Map and the way back do (placeLabel)
   const pt = nodeOf(g, g.cur)

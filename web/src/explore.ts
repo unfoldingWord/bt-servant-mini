@@ -492,7 +492,7 @@ async function resumeFiveNow(e: Saved5) {
   for (let i = 0; r === 'loading' && i < 20; i++) {
     const b = ensure()
     if (!b.body.querySelector('.ex-opening')) b.body.prepend(el('p', 'ex-note ex-opening', XT(hooks?.ui() ?? 'en').loading))
-    await loadFixture5(e.story).catch(() => null)
+    await loadFixture5(e.story, e.s.tfLang).catch(() => null)
     await new Promise((res) => setTimeout(res, 50))
     if (!exploreOpen()) return
     r = hooks?.resume5(e)
@@ -632,7 +632,7 @@ async function draw() {
     const have = new Set(five.stories.map((x) => x.story))
     const saved = hooks.saved5().filter((x) => have.has(x.story)).slice(0, 3)
     // (the tables of the saved ones only; the rest of the stories are read when one is opened)
-    const fxs = await Promise.all(saved.map((e) => loadFixture5(e.story).catch(() => null)))
+    const fxs = await Promise.all(saved.map((e) => loadFixture5(e.story, e.s.tfLang).catch(() => null)))
     if (!done()) return
     for (const [i, e] of saved.entries()) {
       const fx = fxs[i]
