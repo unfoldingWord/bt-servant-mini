@@ -93,7 +93,7 @@ describe('I2: a cold start has the session chips', () => {
   })
   test('main.ts uses the pipeline loader', () => {
     const m = src('main.ts')
-    expect(m).toContain('loadFixture5(story)')
+    expect(m).toContain('loadFixture5(story, lang)')
     expect(m).not.toContain('loadFixture()')
   })
 })

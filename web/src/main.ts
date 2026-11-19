@@ -1419,7 +1419,7 @@ async function respond(c: Conv, label: string, make: () => Promise<Made>, again?
     const { helps, history, sources } = await buildContext({
       question: label, m, msgs: c.msgs, graph: c.graph, node: pt?.id ?? null, passage: onlineCtx, lang: m.lang || qLang || nav, read: packReader(openLang),
       // a 5M session (5M in the pack): its step, and the answers revealed on that card only
-      ...(on5m() && c.graph?.session && fixtureNow5(c.graph.session.story) ? { fx: fixtureNow5(c.graph.session.story)!, ui: m.ui ?? nav, revealed: revealedOn(c.id, sessionNode(c.graph)?.id ?? '') } : {}),
+      ...(on5m() && c.graph?.session && fixtureNow5(c.graph.session.story, c.graph.session.tfLang) ? { fx: fixtureNow5(c.graph.session.story, c.graph.session.tfLang)!, ui: m.ui ?? nav, revealed: revealedOn(c.id, sessionNode(c.graph)?.id ?? '') } : {}),
     }).catch(() => plainContext({ m, msgs: c.msgs, passage: onlineCtx }))
     const res = await onlineAnswer(label, m.ui ?? nav, helps, history, sources)
     count(res ? 'online.ok' : onlineProblem === 'limit' ? 'online.limit' : 'online.failed')
@@ -1493,8 +1493,8 @@ setExploreHooks({
   resume5: (e) => {
     if (busy || locked()) return false
     // (a story no pack covers, or whose tables did not come, is not waited for)
-    if (!on5m() || !covered5().includes(e.story) || failed5.has(e.story)) return 'failed'
-    if (!fixture5(e.story)) return failed5.has(e.story) ? 'failed' : 'loading'
+    if (!on5m() || !covered5().includes(e.story) || failed5.has(k5(e.story, e.s.tfLang))) return 'failed'
+    if (!fixture5(e.story, e.s.tfLang)) return failed5.has(k5(e.story, e.s.tfLang)) ? 'failed' : 'loading'
     return resume5(e) ? true : 'failed'
   },
 })
@@ -1615,15 +1615,17 @@ function goTo(id: string, from: 'back' | 'map') {
 // (5M from the packs; obs5mview.ts draws, obs5m.ts knows the steps). The bar sits under the header while the open conversation
 // has a session: dimmed while the conversation is away from it (on a help or a branch), and then tapping it is the way back.
 // [≡] opens the outline, full screen like the Map (under the PIN lock like it). With no pack that has the 5M tables none of this exists.
-const loading5 = new Set<number>()
-const failed5 = new Set<number>() // covered stories whose tables did not come: not asked again until the packs change
+const loading5 = new Set<string>() // `story|language` (a story read in one language does not answer for another)
+const failed5 = new Set<string>() // covered stories whose tables did not come in that language: not asked again until the packs change
+const k5 = (story: number, lang?: string | null) => `${story}|${lang ?? ''}`
 /** A story's tables (read once from the packs): null until they arrive; then the bar and the cards are drawn again */
-function fixture5(story: number): Fixture | null {
-  const f = fixtureNow5(story)
-  if (f || !on5m() || !covered5().includes(story) || loading5.has(story) || failed5.has(story)) return f
-  loading5.add(story)
+function fixture5(story: number, lang?: string | null): Fixture | null {
+  const f = fixtureNow5(story, lang)
+  const k = k5(story, lang)
+  if (f || !on5m() || !covered5().includes(story) || loading5.has(k) || failed5.has(k)) return f
+  loading5.add(k)
   // (pipeline.ts's loader: the composer's session buttons read the same tables)
-  loadFixture5(story).then((t) => { loading5.delete(story); if (t) fiveReady(); else failed5.add(story) }, () => { loading5.delete(story); failed5.add(story) })
+  loadFixture5(story, lang).then((t) => { loading5.delete(k); if (t) fiveReady(); else failed5.add(k) }, () => { loading5.delete(k); failed5.add(k) })
   return null
 }
 /** Tables arrived (or 5M turned on or off): what shows 5M is drawn again */
@@ -1635,13 +1637,13 @@ function fiveReady() {
 /** The share button of a session's card (5M in the pack): the session as it is when tapped, with the answers revealed so far */
 function sessionShare(cv: Conv | undefined, ui: string): HTMLElement | null {
   const g = cv?.graph
-  const fx = g?.session ? fixtureNow5(g.session.story) : null
+  const fx = g?.session ? fixtureNow5(g.session.story, g.session.tfLang) : null
   if (!cv || !g?.session || !fx) return null
   return shareTextButton(() => shareSession(fx, g.session!, revealedIn(cv.id), ui), ui)
 }
 /** What a step's card can do: run a step or an article as a turn, and mark the checking cards in the session copy */
 function cardHooks(cv: Conv | undefined, ui: string, node?: string) {
-  const fx = cv?.graph?.session ? fixture5(cv.graph.session.story) : null
+  const fx = cv?.graph?.session ? fixture5(cv.graph.session.story, cv.graph.session.tfLang) : null
   if (!fx || !cv?.graph?.session) return undefined
   const g = cv.graph
   // the session as it is when tapped (each step replaces g.session; the marks go to the current copy)
@@ -1671,14 +1673,14 @@ function frameStudy(ref: string, lang: string): Promise<ObsStudy | null> {
 }
 /** A step of the session as a turn of the chat */
 function runStep(label: string, s: Session) {
-  const fx = fixtureNow5(s.story)
+  const fx = fixtureNow5(s.story, s.tfLang)
   if (!fx) return
   runSheet(label, sheetOf5(fx, s, s.lang), nav)
 }
 function updateBar() {
   const g = conv()?.graph
   const s = on5m() ? g?.session : undefined
-  const fx = s ? fixture5(s.story) : null
+  const fx = s ? fixture5(s.story, s.tfLang) : null
   const old = document.querySelector('#s5bar')
   if (!g || !s || !fx) {
     old?.remove()
@@ -1729,7 +1731,7 @@ function ensureOutline() {
 function drawOutlineNow() {
   const o = ensureOutline()
   const s = conv()?.graph?.session
-  const fx = s ? fixtureNow5(s.story) : null
+  const fx = s ? fixtureNow5(s.story, s.tfLang) : null
   if (!s || !fx) return closeOutline()
   o.root.dir = rtlLang(nav) ? 'rtl' : 'ltr'
   o.title.textContent = W5(nav).outline
@@ -1760,15 +1762,15 @@ function end5() {
 /** The resume buttons of the welcome: the sessions used last (up to 3) */
 function resumeEntries(): { label: string; go: () => boolean }[] {
   if (!on5m()) return []
-  return savedSessions().filter((e) => covered5().includes(e.story)).slice(0, 3).filter((e) => fixture5(e.story))
-    .map((e) => ({ label: W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fixtureNow5(e.story)!, e.s, nav)), go: () => resume5(e) }))
+  return savedSessions().filter((e) => covered5().includes(e.story)).slice(0, 3).filter((e) => fixture5(e.story, e.s.tfLang))
+    .map((e) => ({ label: W5(nav).resume.replace('{story}', obsLabel(e.story)).replace('{place}', stepPlace(fixtureNow5(e.story, e.s.tfLang)!, e.s, nav)), go: () => resume5(e) }))
 }
 /**
  * [Resume]: the conversation the session was in, if it is still there; else an empty one, a new one, or (no room left) this
  * one, where the saved place is put back and its step asked again. Its earlier consultations may be gone; its place is not.
  */
 function resume5(e: Saved5): boolean {
-  const fx = fixture5(e.story)
+  const fx = fixture5(e.story, e.s.tfLang)
   if (busy || locked() || !fx) return false
   const t = resumeTarget(e.conv, convs.map((c) => ({ id: c.id, empty: !c.msgs.length })), current, MAX)
   if (t.k === 'open' || t.k === 'empty') current = t.id
@@ -2107,7 +2109,7 @@ try {
 } catch {}
 // 5M: the installed packs asked at the start (and after each change) for the tables; the saved sessions' stories read early so
 // their cards and bar are drawn whole
-const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story); fiveReady(); redrawExplore(); refreshWelcome5() }
+const looked5 = () => { failed5.clear(); for (const e of savedSessions().filter((x) => covered5().includes(x.story)).slice(0, 3)) fixture5(e.story, e.s.tfLang); fiveReady(); redrawExplore(); refreshWelcome5() }
 onFive(looked5)
 void refresh5().then(looked5)
 firstSafety()

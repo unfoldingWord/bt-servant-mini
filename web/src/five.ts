@@ -77,7 +77,14 @@ let src: Source5 = fromPacks
 let covered: Map<number, string[]> = new Map()
 let cache = new Map<string, Promise<Fixture | null>>()
 let gen = 0 // changes with every refresh: a read that started before it does not leave its tables behind
-const now = new Map<string, Fixture>()
+const now = new Map<string, Fixture>() // `story|language the tables came in` (a story read in English never answers for Indonesian)
+const last = new Map<number, Fixture>() // the story's tables as last read, for a caller that names no language
+/** The language a story's tables come in when `prefer` is asked: it, else English, else the first pack that has the story (same rule as `order`) */
+const pick = (n: number, prefer?: string | null): string => {
+  const have = covered.get(n)
+  if (!have?.length) return prefer ?? ''
+  return [prefer, 'en'].find((l): l is string => !!l && have.includes(l)) ?? have[0]!
+}
 
 /** Does this phone have 5M (some installed pack carries the tables)? Sync: what `refresh5` last found. */
 export const on5m = (): boolean => covered.size > 0
@@ -96,29 +103,35 @@ export async function refresh5(force = false): Promise<boolean> {
   if (force || key(next) !== key(covered)) {
     gen++
     cache = new Map()
-    now.clear()
+    now.clear(); last.clear()
     covered = next
   }
   return covered.size > 0
 }
 /** The pack tables of a story (read once per story and language); null when no pack has it */
 export function fixtureOf5(n: number, prefer?: string | null): Promise<Fixture | null> {
-  const k = `${n}|${prefer ?? ''}`
+  const k = `${n}|${pick(n, prefer)}`
   let p = cache.get(k)
   if (!p) {
     const g = gen
-    p = src.session(n, prefer).then((f) => { if (f && g === gen) now.set(String(n), f); return f }, () => { if (g === gen) cache.delete(k); return null })
+    p = src.session(n, prefer).then((f) => { if (f && g === gen) now.set(`${n}|${f.tfLang}`, f); return f }, () => { if (g === gen) cache.delete(k); return null })
     cache.set(k, p)
   }
+  // (what a story was last asked for, also from the cache: the labels that know no language read it)
+  const g = gen
+  void p.then((f) => { if (f && g === gen) last.set(n, f) })
   return p
 }
-/** A story's tables if read already (labels and the composer cannot wait); null before */
-export const fixtureNow5 = (n: number): Fixture | null => now.get(String(n)) ?? null
+/**
+ * A story's tables if read already (labels and the composer cannot wait); null before. `lang`: the language they were asked in
+ * (a session's `tfLang`, a sheet's `lang`): only tables that came in the language that asks resolves to; without it, the last read.
+ */
+export const fixtureNow5 = (n: number, lang?: string | null): Fixture | null => lang ? now.get(`${n}|${pick(n, lang)}`) ?? null : last.get(n) ?? null
 /** Tests: another source (null: the packs again); the caches go */
 export function setSource5(s: Source5 | null): void {
   src = s ?? fromPacks
   gen++
-  cache = new Map(); now.clear(); covered = new Map()
+  cache = new Map(); now.clear(); last.clear(); covered = new Map()
 }
 
 onPacksChanged(() => { void refresh5().then(() => { for (const f of listeners) f() }) })
