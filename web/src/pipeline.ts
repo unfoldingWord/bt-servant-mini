@@ -3547,7 +3547,11 @@ async function session5Asked(q: string, slots: Slots | null, c: ConvState, prefe
  * session: said, with the story one tap away.
  */
 async function step5(x: Ctx): Promise<Done | null> {
-  const { sheet, ui } = x
+  const { sheet } = x
+  // the session's words are the interface's, not the language of the last typed question (a button pressed after an English
+  // question in a Spanish app kept English: Nov 18)
+  const ui = env.nav
+  x.ui = ui
   const story = parseObsRef(sheet.ref)?.n ?? 0
   const fx = await fixture5(story)
   const meta = `${env.details} · ${secs(x)} s\n${x.meta}`
@@ -3665,7 +3669,26 @@ async function sessionStep(c: ConvState, made: Made, done: Done, x: Ctx): Promis
   const to = sheetOf(fx, s, s.lang)
   if (reply.back && nodeOf(g, reply.back.back)?.kind === 'obs5m') delete reply.back
   reply.follow = (reply.follow ?? []).filter((f) => !(f.sheet?.intent === 'obs5m' && f.sheet.concept === to.concept))
-  reply.sessionBack = { label: `${x.ui === 'ar' ? '→' : '←'} ${W5(x.ui).back.replace('{place}', stepPlace(fx, s, x.ui))}`, sheet: to, toSession: true, ...(st ? { back: st.id } : {}) }
+  reply.sessionBack = { label: `${env.nav === 'ar' ? '→' : '←'} ${W5(env.nav).back.replace('{place}', stepPlace(fx, s, env.nav))}`, sheet: to, toSession: true, ...(st ? { back: st.id } : {}) }
+}
+
+/**
+ * The label of a "way back" button as it reads now, in the interface language (null: not one, or its target is not known). A
+ * message kept from before (a resumed conversation) has the label it was drawn with: another language, or the place a
+ * session's step had then; the button's own target tells it again.
+ */
+export function backNow(g: Graph | undefined, x: Followup, ui: string): string | null {
+  const arrow = ui === 'ar' ? '→' : '←'
+  if (x.toSession && x.sheet) {
+    const fx = on5m() ? fixtureNow5(parseObsRef(x.sheet.ref)?.n ?? 0) : null
+    const st = fx ? sessionOfSheet(x.sheet, fx, null) : null
+    return fx && st ? `${arrow} ${W5(ui).back.replace('{place}', stepPlace(fx, st, ui))}` : null
+  }
+  if (x.back && !x.toPath && !x.pathNext && !x.sessionNext) {
+    const n = g ? nodeOf(g, x.back) : undefined
+    return n ? backLabel(ui, placeLabel(n, ui)) : null
+  }
+  return null
 }
 
 /** The answer to what a question asks for: the first route that gives one (the conversation keeps the last passage and search results). */

@@ -130,9 +130,10 @@ export function shareSession(fx: Fixture, s: Session, revealed: Set<string>, ui:
 }
 
 /** The share button for a bot answer, or null when it has nothing to share. `question`: what the person asked. */
-export function shareButton(m: ShareMsg, ui: string, question?: string): HTMLElement | null {
+export function shareButton(m: ShareMsg, ui: string, question?: string, labelUi = ui): HTMLElement | null {
   const text = shareText(m, ui, question)
-  return text ? shareTextButton(text, ui) : null
+  // (what is shared keeps the answer's language; the button's own words are the app's: `labelUi`)
+  return text ? shareTextButton(text, labelUi) : null
 }
 /** The share button for a text made already, or made when tapped (a 5M session's `shareSession`: what was revealed since counts) */
 export function shareTextButton(text: string | (() => string), ui: string): HTMLElement {
