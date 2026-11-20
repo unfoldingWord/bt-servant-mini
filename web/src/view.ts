@@ -234,7 +234,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   const many = s.texts[0]!.verses.length > 1
   const drawText = (t: Study['texts'][number], host: HTMLElement) => {
     const wrap = el('div', 'tx')
-    wrap.appendChild(el('div', 'tx-label', t.label))
+    wrap.appendChild(el('div', 'tx-label', t.tag ? `${t.label} · ${t.tag}` : t.label))
     const p = el('p', 'vv')
     p.dir = dirOf(t.verses.map((v) => v.p.map((x) => x[0]).join('')).join(' ')) // the version's own direction
     for (const v of t.verses) {

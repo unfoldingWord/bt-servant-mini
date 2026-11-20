@@ -4,8 +4,8 @@ import { afterAll, expect, test } from 'bun:test'
 import { CANON } from '../src/canon'
 import { FOLD, FOLD_END } from '../src/focus'
 import { ALL_PACKS, installPacks } from './fs-packs'
-import { aquiferAbout, aquiferMenu, licenseName, patchCite, patchForAI, patchNotice, patchTag, reviewOf, type PatchMark } from '../src/aquifer'
-import { aquiferOn, patchOf, setAquifer, isPatch, PATCH_LANGS, updateLang } from '../src/packs'
+import { aquiferAbout, aquiferMenu, yaapiAbout, yaapiMenu, licenseName, patchCite, patchForAI, patchNotice, patchTag, reviewOf, type PatchMark } from '../src/aquifer'
+import { activePatches, aquiferOn, patchesOf, patchKind, setAquifer, setYaapi, yaapiOn, isPatch, PATCH_LANGS, updateLang } from '../src/packs'
 import { settingsRows } from '../src/menu'
 import { buildSheet } from '../src/sheet'
 import { answerSheet, passageContext, resetLangs, setUiLang, studyOf, helpView } from '../src/answer'
@@ -64,10 +64,12 @@ test('the report and the online AI learn where the notes came from', () => {
 
 test('hi, es-419 and id have a patch; the patch is not a language; ru and fr wait', () => {
   expect([...PATCH_LANGS]).toEqual(['hi', 'es-419', 'id'])
-  expect(patchOf('hi')).toBe('hi-x-aquifer')
-  expect(patchOf('es-419')).toBe('es-419-x-aquifer')
-  expect(patchOf('ru')).toBeNull()
-  expect(patchOf('fr')).toBeNull()
+  expect(patchesOf('hi')).toEqual(['hi-x-aquifer'])
+  expect(patchesOf('es-419')).toEqual(['es-419-x-aquifer', 'es-419-x-yaapi'])
+  expect(patchesOf('ru')).toEqual([])
+  expect(patchesOf('fr')).toEqual([])
+  expect(patchKind('es-419-x-yaapi')).toBe('yaapi')
+  expect(patchKind('hi-x-aquifer')).toBe('aquifer')
   expect(isPatch('hi-x-aquifer')).toBe(true)
   expect(isPatch('es-419')).toBe(false)
   expect(isPatch('zxx-obsimg')).toBe(false)
@@ -190,7 +192,7 @@ test('the daily update brings a patch of a language: its newer revision and the 
     install: async (l: string, w: { units: string[] }) => { calls.push(`install ${l} ${w.units.join(',')}`) },
   })
   await updateLang(client(['book:mat', 'book:jhn'], ['book:mat']), 'es-419', [], undefined, false)
-  expect(calls).toEqual(['refresh es-419', 'refresh es-419-x-aquifer', 'install es-419-x-aquifer book:jhn'])
+  expect(calls).toEqual(['refresh es-419', 'refresh es-419-x-aquifer', 'install es-419-x-aquifer book:jhn', 'refresh es-419-x-yaapi', 'install es-419-x-yaapi book:jhn'])
   calls.length = 0
   // metered: nothing of the patch
   await updateLang(client(['book:jhn'], []), 'hi', [], undefined, true)
@@ -211,4 +213,73 @@ test('installPatch: a language with no patch (ru, fr: paused) asks nothing of an
   expect(await installPatch('fr')).toBeNull()
   expect(await installPatch('ru')).toBeNull()
   expect(await installPatch('en')).toBeNull()
+})
+
+// ------------------------------------------------------------------------------------------------------- yaapi (Bible text)
+
+const ymark = (): PatchMark => ({
+  patch: 'es-419-x-yaapi', source: 'yaapi', license: 'CC-BY-SA-4.0', rights: 'Palabra de Dios para ti, (c) Sociedad Biblica',
+  attribution: 'Texto de Palabra de Dios para ti, via yaapi.bible. Texto sin modificar, redistribuido bajo CC BY-SA 4.0.',
+  release: 'SPAPDDPT@sha256:0123456789ab', audience: 'readers', style: 'literal',
+} as PatchMark)
+
+test('yaapi: tag, notice and source line go by source, not by review; the version and the style are named', () => {
+  const m = ymark()
+  expect(patchTag('es', m)).toBe('yaapi · SPAPDDPT · texto sin alinear')
+  expect(patchTag('en', m)).toBe('yaapi · SPAPDDPT · unaligned text')
+  const n = patchNotice('es', [m])
+  expect(n).toContain('Texto bíblico de yaapi.bible: SPAPDDPT (literal)')
+  expect(n).toContain('No es el texto literal alineado de Door43')
+  expect(n).toContain('CC BY-SA 4.0')
+  expect(n).toContain('Palabra de Dios para ti')
+  expect(n).not.toContain('Revisión')
+  expect(patchCite(m)).toContain('yaapi-patch es-419-x-yaapi:SPAPDDPT')
+  for (const l of ['en', 'es', 'fr', 'id', 'hi', 'ar']) {
+    expect(patchTag(l, m)).toContain('SPAPDDPT')
+    expect(patchNotice(l, [m])).toContain('yaapi.bible')
+    expect(yaapiAbout(l)).toContain('yaapi')
+    expect(yaapiMenu(l).title).toContain('yaapi')
+  }
+  // an Aquifer mark and a yaapi mark in one answer: two notices
+  expect(patchNotice('es', [mark('none'), m]).match(/\*\*(Aquifer|yaapi)\.\*\*/g)).toEqual(['**Aquifer.**', '**yaapi.**'])
+})
+
+/** Gives the texts of a book the mark and the key of a yaapi version, as the client does for a patch book with no base text. */
+async function yaapiTexts(lang: string, m: PatchMark) {
+  const r: any = await openLang(lang)
+  const book = r.book.bind(r)
+  const was = r.book
+  r.book = async (code: string) => {
+    const b = await book(code)
+    if (!b) return b
+    const key = 'yaapi/es-419/SPAPDDPT'
+    return { ...b, texts: b.texts.slice(0, 1).map((t: any) => ({ ...t, res: key, patch: m })), res: [...b.res, [key, m.release]] }
+  }
+  return () => { r.book = was }
+}
+
+test('a verse whose text comes from yaapi: the text says its version, that it is unaligned, one notice; no hash shown', async () => {
+  if (!HAS) return
+  await installPacks(['es-419'])
+  const undo = await yaapiTexts('es-419', ymark())
+  try {
+    resetLangs()
+    const n = await ask('es', { intent: 'passage', book: 'Tito', chapter: 2, verse_start: 3, what: ['text'] })
+    expect(n.r.answer).toContain('SPAPDDPT')
+    expect(n.r.answer).toContain('texto sin alinear')
+    expect(n.r.answer.match(/No es el texto literal alineado de Door43/g)?.length).toBe(1)
+    expect(n.r.answer).toContain('CC BY-SA 4.0')
+    expect(n.r.answer).not.toContain('sha256')
+    expect(n.r.cites.some((c) => c.startsWith('yaapi-patch es-419-x-yaapi:SPAPDDPT'))).toBe(true)
+    expect(n.r.cites.filter((c) => !c.startsWith('yaapi-patch')).join(' ')).not.toContain('sha256')
+    const st = await studyOf(n.sheet)
+    if (st) {
+      expect(st.texts[0]!.tag).toBe('yaapi · SPAPDDPT · texto sin alinear')
+      expect(st.aquifer).toContain('yaapi.bible')
+      expect(st.source).not.toContain('sha256')
+    }
+  } finally {
+    undo()
+    resetLangs()
+  }
 })
