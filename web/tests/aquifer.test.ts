@@ -144,6 +144,9 @@ test('a verse with notes from a patch: each note and question is tagged, one not
     // the study view and the opened note carry it too
     const st = await studyOf(n.sheet)
     if (st) {
+      // the study's source line names the notes readably, not by the patch's commit
+      expect(st.source).toContain('Translation Notes (Aquifer)')
+      expect(st.source).not.toContain('@')
       expect(st.notes.length).toBeGreaterThan(0)
       for (const x of st.notes) expect(x.patch).toBe(tag)
       expect(st.aquifer).toContain('Contenido de Aquifer')

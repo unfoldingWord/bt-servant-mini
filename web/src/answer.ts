@@ -973,7 +973,10 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
   const lab = refLabel(ref)
   const releases = [...(model.notes ? [model.notes.res] : []), ...model.texts.map((t) => t.res)]
     .filter((res) => res === model.notes?.res ? noteRows.length : texts.some((t) => t.label === resShort(res).toUpperCase()))
-    .map((res) => `${HELPS[resShort(res)] ?? upper(res)} ${releaseOf(model, res)}`.trim())
+    // (notes from an Aquifer patch have a commit as their release, not a version: "Translation Notes (Aquifer)")
+    .map((res) => (res === model.notes?.res && patchOfRow(model.notes.rows[0])
+      ? `${HELPS[resShort(res)] ?? upper(res)} (Aquifer)`
+      : `${HELPS[resShort(res)] ?? upper(res)} ${releaseOf(model, res)}`.trim()))
   const long = ref.kind === 'chapter' || (ref.ch2 ?? ref.ch) !== ref.ch || (ref.v2 ?? 0) - (ref.v1 ?? 0) >= 3
   const nVerses = new Set(texts[0]!.verses.map((x) => x.v)).size
   const asked = s.what.filter((w) => w !== 'intro')
