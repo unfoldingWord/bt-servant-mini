@@ -3,7 +3,8 @@
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { rtlLang } from './bidi'
 import { downloadImages, imagesInstalled, removeImages } from './obsimg'
-import { availableLangs, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, removeLang } from './packs'
+import { availableLangs, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, patchedLangs, removeLang } from './packs'
+import { aquiferAbout } from './aquifer'
 
 type S = {
   about: string; title: string; body: string[]; version: string; full: string; lite: string; start: string; close: string
@@ -250,6 +251,11 @@ export function showAbout(lang: string, refresh: () => void) {
     para.innerHTML = p.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')
     card.appendChild(para)
   }
+  // Aquifer (aquifer.ts): said once, where the phone has a language that has its patch
+  const aq = el('p', 'meta', aquiferAbout(lang))
+  aq.hidden = true
+  card.appendChild(aq)
+  void patchedLangs().then((l) => { aq.hidden = l.length === 0 }).catch(() => {})
   card.appendChild(el('p', 'meta', `${s.version} ${appVersion()} · ${isLite() ? s.lite : s.full}`))
   if (isLite() && modelState().state !== 'ready') {
     card.appendChild(el('p', 'meta', s.setup))

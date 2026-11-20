@@ -122,8 +122,9 @@ export function menuGroups(s: MenuState): { group: Group; rows: { id: string; su
 }
 
 /** The rows of the Settings screen, in order: Online AI and Look for a new version only where they exist. */
-export function settingsRows(s: Pick<MenuState, 'online' | 'update'>): string[] {
-  return [...(s.online ? ['online'] : []), 'model', 'suggest', 'safety', 'usage', ...(s.update ? ['update'] : [])]
+export function settingsRows(s: Pick<MenuState, 'online' | 'update'> & { aquifer?: boolean }): string[] {
+  // 'aquifer': the switch for Aquifer's complementary helps, only on a phone with a language that has a patch
+  return [...(s.online ? ['online'] : []), 'model', 'suggest', ...(s.aquifer ? ['aquifer'] : []), 'safety', 'usage', ...(s.update ? ['update'] : [])]
 }
 
 /** Where Back goes from a screen: one level up; null from the menu itself (the panel closes). */
