@@ -34,11 +34,17 @@ const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx
 // book introductions of books the language pack has no help for. It is installed in the same store, never listed as a language,
 // opened together with its language (`client.open(lang, { patches })`: the reader keeps Door43's rows and only fills the tables
 // Door43 lacks, marking each row with `patch`), and removed with it. Languages with a published patch (Nov 2026; ru and fr wait).
-export const PATCH_LANGS: readonly string[] = ['hi', 'es-419', 'id']
+// Two kinds: `aquifer` (notes, questions) and `yaapi` (an unaligned Bible text of a version, where Door43 has no text of the book).
+const PATCHES: Record<string, readonly string[]> = { hi: ['hi-x-aquifer'], 'es-419': ['es-419-x-aquifer', 'es-419-x-yaapi'], id: ['id-x-aquifer'] }
+export const PATCH_LANGS: readonly string[] = Object.keys(PATCHES)
 export const isPatch = (name: string): boolean => /-x-[a-z0-9]+$/.test(name)
-/** The patch catalog of a language, or null when it has none. */
-export const patchOf = (lang: string): string | null => (PATCH_LANGS.includes(lang) ? `${lang}-x-aquifer` : null)
+export type PatchKind = 'aquifer' | 'yaapi'
+export const PATCH_KINDS: readonly PatchKind[] = ['aquifer', 'yaapi']
+/** The patch catalogs of a language, in the order of preference (the first that has a table wins), or none. */
+export const patchesOf = (lang: string): readonly string[] => PATCHES[lang] ?? []
+export const patchKind = (name: string): PatchKind => (name.endsWith('-x-yaapi') ? 'yaapi' : 'aquifer')
 const AQUIFER_KEY = 'btsm.aquifer'
+const YAAPI_KEY = 'btsm.yaapi'
 /**
  * The menu's "Use Aquifer complementary helps". On unless the person turned it off: the reader already keeps Door43's own
  * notes and questions, so with it on Aquifer is used only where Door43 has nothing for that book.
@@ -52,12 +58,34 @@ export function aquiferOn(): boolean {
     return true
   }
 }
-/** The added languages whose Aquifer patch is on the phone (the menu's switch and About speak only of these). */
-export async function patchedLangs(): Promise<string[]> {
+let yaapiMem: boolean | null = null
+/** The menu's "Use yaapi Bible texts": on unless turned off; only fills books where Door43 has no text of the Bible at all. */
+export function yaapiOn(): boolean {
+  if (yaapiMem !== null) return yaapiMem
+  try {
+    return (globalThis as any).localStorage?.getItem(YAAPI_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+export function setYaapi(on: boolean) {
+  yaapiMem = on
+  try {
+    ;(globalThis as any).localStorage?.setItem(YAAPI_KEY, on ? '1' : '0')
+  } catch { /* lasts until the app closes */ }
+  changed()
+}
+const kindOn = (kind: PatchKind): boolean => (kind === 'yaapi' ? yaapiOn() : aquiferOn())
+/** The patches of a language the person has switched on. */
+export const activePatches = (lang: string): string[] => patchesOf(lang).filter((p) => kindOn(patchKind(p)))
+/** The kinds of patch that are on the phone, for an installed language (the menu's switches and About speak only of these). */
+export async function patchedKinds(): Promise<PatchKind[]> {
   try {
     const st: any = await (await added()).getState()
     // (a language that came with the app has its patch in the phone's own store too)
-    return (await installedLangs()).filter((l) => { const p = patchOf(l); return !!p && !!st?.active?.[p] })
+    const have = new Set<PatchKind>()
+    for (const l of await installedLangs()) for (const p of patchesOf(l)) if (st?.active?.[p]) have.add(patchKind(p))
+    return PATCH_KINDS.filter((k) => have.has(k))
   } catch {
     return []
   }
@@ -422,21 +450,24 @@ export function openLang(lang: string, plain = false): Promise<PackReader> {
   if (!open.has(key)) {
     const p = (async () => {
       if ((await addedLangs()).includes(lang)) {
-        const patch = patchOf(lang)
+        const ps = activePatches(lang)
         // a patch that is not installed is left out by the client; a patch that cannot be read must not take the language with it
-        if (patch && aquiferOn() && !plain) {
-          try { return await (await addedClient()).open(lang, { patches: [patch] }) } catch { /* the language alone */ }
+        if (ps.length && !plain) {
+          try { return await (await addedClient()).open(lang, { patches: ps }) } catch { /* the language alone */ }
         }
         return (await addedClient()).open(lang)
       }
       const base = await createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
       // a language that came with the app gets its patch from the phone's own store (the daily check installs it)
-      const patch = patchOf(lang)
-      if (patch && aquiferOn() && !plain) {
-        try {
-          const pr = await (await addedClient()).open(patch)
-          if (CANON.some((b) => pr.installed(`book:${b}`))) return patchedReader(base, [pr])
-        } catch { /* the language alone */ }
+      if (!plain) {
+        const readers: PackReader[] = []
+        for (const patch of activePatches(lang)) {
+          try {
+            const pr = await (await addedClient()).open(patch)
+            if (CANON.some((b) => pr.installed(`book:${b}`))) readers.push(pr)
+          } catch { /* that patch is left out */ }
+        }
+        if (readers.length) return patchedReader(base, readers)
       }
       return base
     })()
@@ -694,8 +725,25 @@ export async function downloadPatch(lang: string, o: { signal?: AbortSignal } = 
  * with the app. `bytes` is what was fetched (0: already up to date); null when the language has no patch or no server has it.
  */
 export async function installPatch(lang: string, signal?: AbortSignal): Promise<{ books: number; bytes: number } | null> {
-  const patch = patchOf(lang)
-  if (!patch) return null
+  // every patch of the language, one after the other: one that fails (not on the server yet) does not stop the next
+  let total = null as { books: number; bytes: number } | null
+  let failed: unknown
+  for (const patch of patchesOf(lang)) {
+    try {
+      const r = await installOnePatch(patch, signal)
+      if (r) total = { books: (total?.books ?? 0) + r.books, bytes: (total?.bytes ?? 0) + r.bytes }
+    } catch (e) {
+      if (signal?.aborted) {
+        if (total) changed() // (what an earlier patch of the language installed counts: the readers are dropped)
+        throw e
+      }
+      failed ??= e
+    }
+  }
+  if (!total && failed) throw failed
+  return total
+}
+async function installOnePatch(patch: string, signal?: AbortSignal): Promise<{ books: number; bytes: number } | null> {
   const http = addedSource()
   const cats = await serverCatalogs(patch, http)
   stopIfAborted(signal) // (the person started something while the catalog was asked for)
@@ -831,9 +879,8 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
   if (common.length) await client.install(lang, { units: common, defaults: false }, opts)
   // the language's Aquifer patch: a newer revision, or the books of one the phone never had (never on a metered connection;
   // a patch that cannot be reached must not make the language's update fail)
-  const patch = patchOf(lang)
   const patchInstalled: string[] = []
-  if (patch && metered !== true) {
+  for (const patch of metered === true ? [] : patchesOf(lang)) {
     try {
       await client.refresh(patch, signal ? { signal } : {})
       const pr = await client.open(patch)
@@ -842,7 +889,7 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
         await client.install(patch, { units: todo, defaults: false }, opts)
         patchInstalled.push(...todo.map((u) => `${patch}/${u}`)) // counts as updated: the readers are dropped
       }
-    } catch { /* no patch on any server, or no internet */ }
+    } catch { /* no such patch on any server, or no internet: the next one */ }
   }
   return [...missing, ...obs, ...common, ...patchInstalled]
 }
@@ -892,7 +939,7 @@ export async function updateLangs(): Promise<number> {
   if (!stopped && meteredNow() !== true) {
     const shippedLangs: string[] = []
     try {
-      for (const l of await installedLangs()) if (patchOf(l) && (await origin(l)) === 'shipped') shippedLangs.push(l)
+      for (const l of await installedLangs()) if (patchesOf(l).length && (await origin(l)) === 'shipped') shippedLangs.push(l)
     } catch { /* the store cannot be read: tomorrow */ }
     for (const lang of shippedLangs) {
       if (userWaiting) {
@@ -1051,7 +1098,7 @@ export async function removeLang(lang: string): Promise<void> {
       const st: any = await store.getState()
       if (!st) return
       // the language's Aquifer patch goes with it
-      for (const name of [lang, patchOf(lang)].filter((x): x is string => !!x)) {
+      for (const name of [lang, ...patchesOf(lang)]) {
         for (const k of ['active', 'published']) if (st[k]) delete st[k][name]
         for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${name}/`)) delete st.units[key]
       }

@@ -9,8 +9,8 @@ import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSec
 import { anyOf, backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
 import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
-import { addUnits, aquiferOn, installedLangs, onPacksChanged, openLang, patchedLangs, setAquifer, setPacksServers, updateLangs } from './packs'
-import { aquiferMenu } from './aquifer'
+import { addUnits, aquiferOn, installedLangs, onPacksChanged, openLang, patchedKinds, setAquifer, setPacksServers, setYaapi, updateLangs, yaapiOn, type PatchKind } from './packs'
+import { aquiferMenu, yaapiMenu } from './aquifer'
 import { PREVIEW_SERVER } from './shared'
 import { isCreditLine, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
@@ -1001,15 +1001,35 @@ function aquiferSwitch(): HTMLButtonElement {
   paint()
   return b
 }
+/** "Use yaapi Bible texts": on, a published version's text fills the books Door43 has no Bible text for (unaligned, marked). */
+function yaapiSwitch(): HTMLButtonElement {
+  const q = yaapiMenu(nav)
+  const b = el('button', 'mrow') as HTMLButtonElement
+  b.type = 'button'
+  b.setAttribute('role', 'switch')
+  const sub = el('span', 'mrow-s')
+  const paint = () => {
+    b.setAttribute('aria-checked', String(yaapiOn()))
+    sub.textContent = `${yaapiOn() ? q.on : q.off} · ${q.hint}`
+  }
+  b.append(el('span', 'mrow-t', q.title), sub)
+  b.onclick = () => {
+    setYaapi(!yaapiOn())
+    paint()
+  }
+  paint()
+  return b
+}
 /** Settings: the rows of the old menu that are about how the app works, each opening its own screen. */
 function renderSettingsView() {
   const list = el('div', 'mrows')
   const onOff = (b: boolean) => (b ? MT().on : MT().off)
-  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported(), aquifer: PATCHED.length > 0 })) {
+  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported(), aquifer: PATCHED.includes('aquifer'), yaapi: PATCHED.includes('yaapi') })) {
     if (id === 'online') mrow(list, OT().label, onOff(onlineOn() && (!signInAvailable() || !!onlineSession())), go('online'))
     else if (id === 'model') mrow(list, modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
     else if (id === 'suggest') list.appendChild(composerSwitch(nav, MT().on, MT().off))
     else if (id === 'aquifer') list.appendChild(aquiferSwitch())
+    else if (id === 'yaapi') list.appendChild(yaapiSwitch())
     else if (id === 'safety') mrow(list, PT(nav).title, protectSummary(nav, MT().off), go('safety'))
     else if (id === 'usage') mrow(list, UT().title, onOff(usageOn()), go('usage'))
     else if (id === 'update') {
@@ -2053,9 +2073,9 @@ lock(nav)
 watchAway(() => nav)
 load()
 renderConv()
-let PATCHED: string[] = []
+let PATCHED: PatchKind[] = []
 function refreshInstalled() {
-  void patchedLangs().then((p) => { PATCHED = p })
+  void patchedKinds().then((p) => { PATCHED = p })
   return installedLangs().then((ls) => {
     const had = packsKnown ? INSTALLED.length > 0 : null
     INSTALLED = ls

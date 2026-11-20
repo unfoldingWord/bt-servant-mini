@@ -7,7 +7,7 @@ import { type BookModel, type HelpRow, verseId } from '@bt-synergy/language-pack
 import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
-import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag } from './aquifer'
+import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag, patchTextForAI } from './aquifer'
 import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { isObsRef, obsAnswer, storyText } from './obs'
 import tEn from './data/tpl-en.json'
@@ -182,7 +182,8 @@ async function alignedOf(l: Lang, code: string, model: BookModel): Promise<Align
 /** A patch's release is a git commit (`UWTranslationNotes@603546c…`), not a version: shown as "Aquifer", never as the hash. */
 const releaseOf = (model: BookModel, key: string): string => {
   const r = model.res.find((x) => x[0] === key)?.[1] ?? ''
-  return /@[0-9a-f]{7,}$/i.test(r) ? 'Aquifer' : r
+  // (a yaapi text's release is `ABBR@sha256:…`: shown as its source too)
+  return /@(sha256:)?[0-9a-f]{7,}$/i.test(r) ? (key.startsWith('yaapi/') ? 'yaapi' : 'Aquifer') : r
 }
 const cite = (res: string, release: string, extra = ''): string => `${res} ${release}${extra ? ' (' + extra + ')' : ''}`.trim()
 const sourceLine = (lang: string, cites: string[]): string => {
@@ -267,7 +268,9 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const textKeys: string[] = [...(l.maps.map?.core.coverage.keys() ?? [])].filter((k: string) => /\/(ult|ust|glt|gst|bsb|t4t)$/.test(k))
   if (wantText && s.version) {
     const key = textKeys.find((k) => k.endsWith('/' + verKey(s.version as 'ult' | 'ust')))
-    if (key && !cover(key)) {
+    // (not when the book's only texts are a patch's, unaligned Bible texts: they are shown, labelled, below)
+    const patchTextsOnly = !!model?.texts.length && model.texts.every((t) => !!patchOfRow(t as unknown as HelpRow))
+    if (key && !cover(key) && !patchTextsOnly) {
       const others = textKeys.filter((k) => cover(k)).map((k) => upper(k))
       const label = upper(key)
       const msg = others.length ? say(lang, 'not_covered', { label, book, others: others.join(', ') }) : say(lang, 'not_covered_none', { label, book })
@@ -331,7 +334,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     for (const t of texts) {
       const text = plain(textOfRange(ref.book, t.pieces as any, t.events as any, from, to))
       if (!text || wrongScript(lang, text)) continue
-      lines.push(say(lang, 'text_line', { label: `**${resShort(t.res).toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }))
+      lines.push(say(lang, 'text_line', { label: `**${resShort(t.res).toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }) + tagOf(t as unknown as HelpRow))
       if (!cited.has(t.res)) {
         cited.add(t.res)
         facts.texts++
@@ -844,7 +847,8 @@ export type StudyTerm = { id: string; title: string; said: string; orig: string 
 /** A passage as the bubble shows it: each text with its words tied to the notes and key terms that quote them. */
 export type Study = {
   lang: string; head: string; book: string; ch: number; v1: number; v2: number
-  texts: { label: string; verses: { v: string; p: StudyPiece[] }[] }[]
+  /** `tag`: an unaligned text of a patch (yaapi) says so, with its version (aquifer.ts patchTag) */
+  texts: { label: string; tag?: string; verses: { v: string; p: StudyPiece[] }[] }[]
   notes: StudyNote[]; terms: StudyTerm[]; questions: { q: string; a: string; patch?: string }[]
   /** items came from an Aquifer patch: the notice with its attribution (aquifer.ts patchNotice) */
   aquifer?: string
@@ -944,7 +948,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
     }))
     const sample = verses.map((x) => x.p.map((p) => p[0]).join('')).join(' ')
     if (!sample.trim() || wrongScript(lang, sample)) continue
-    texts.push({ label: resShort(t.res).toUpperCase(), verses })
+    texts.push({ label: resShort(t.res).toUpperCase(), verses, ...(patchOfRow(t as unknown as HelpRow) ? { tag: patchTag(UI ?? lang, patchOfRow(t as unknown as HelpRow)!) } : {}) })
   }
   if (!texts.length) return null
   const titles = new Map<string, string>()
@@ -972,7 +976,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
     })
   }
   const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? ''), ...(patchOfRow(q) ? { patch: patchTag(UI ?? lang, patchOfRow(q)!) } : {}) }))
-  const marks = [...noteRows, ...rowsIn(model.questions)].map(patchOfRow).filter((m): m is PatchMark => !!m)
+  const marks = [...noteRows, ...rowsIn(model.questions), ...model.texts.filter((t) => texts.some((x) => x.label === resShort(t.res).toUpperCase())) as unknown as HelpRow[]].map(patchOfRow).filter((m): m is PatchMark => !!m)
   const book = bookName(lang, ref.book)
   const lab = refLabel(ref)
   const releases = [...(model.notes ? [model.notes.res] : []), ...model.texts.map((t) => t.res)]
@@ -1098,6 +1102,9 @@ export async function passageContext(s: Sheet): Promise<string> {
   const chapIntro = intros.find((x) => x !== bookIntro && x.from === verseId(ref.book, ref.ch!, 1))
   if (chapIntro) parts.push(`## Introduction to ${book} ${ref.ch} (translation notes)\n${clip(clean(chapIntro.cols.note), 1300)}`)
   if (bookIntro) parts.push(`## Introduction to ${book} (translation notes, beginning)\n${clip(clean(bookIntro.cols.note), 1600)}`)
+  // the surrounding verses are a patch's unaligned text: its source, license and that it is not Door43's go with it
+  const tm = patchOfRow(simple as unknown as HelpRow)
+  if (tm && parts.some((x) => x.startsWith('## Surrounding verses'))) parts.unshift(patchTextForAI(tm))
   // the book's notes come from an Aquifer patch (the reader keeps a table whole): the model says so when it uses them
   const pm = patchOfRow(model.notes?.rows[0])
   if (pm) parts.push(patchForAI(pm))
