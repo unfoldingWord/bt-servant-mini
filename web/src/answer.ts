@@ -7,7 +7,7 @@ import { type BookModel, type HelpRow, verseId } from '@bt-synergy/language-pack
 import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
-import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag, patchTextForAI } from './aquifer'
+import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag, patchTextForAI, versionName } from './aquifer'
 import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { isObsRef, obsAnswer, storyText } from './obs'
 import tEn from './data/tpl-en.json'
@@ -140,6 +140,11 @@ const patchOfRow = (row: HelpRow | undefined): PatchMark | undefined => (row as 
 function patchTail(lang: string, model: BookModel): { notice: string; cite: string } | null {
   const m = patchOfRow(model.notes?.rows[0])
   return m ? { notice: patchNotice(UI ?? lang, [m]), cite: patchCite(m) } : null
+}
+/** What a text is called: a patch text (yaapi) by its readable name, a pack's by its short code (GLT, GST). */
+const textName = (t: { res: string }): string => {
+  const m = patchOfRow(t as unknown as HelpRow)
+  return m ? versionName(m) : resShort(t.res).toUpperCase()
 }
 const isIntroRow = (row: HelpRow): boolean => row.cols.isIntro === true || row.cols.isIntro === 'true'
 const inRange = (row: HelpRow, [from, to]: [number, number]): boolean => row.from <= to && row.to >= from
@@ -334,7 +339,8 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     for (const t of texts) {
       const text = plain(textOfRange(ref.book, t.pieces as any, t.events as any, from, to))
       if (!text || wrongScript(lang, text)) continue
-      lines.push(say(lang, 'text_line', { label: `**${resShort(t.res).toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }) + tagOf(t as unknown as HelpRow))
+      const tm = patchOfRow(t as unknown as HelpRow)
+      lines.push((tm ? `**${textName(t)}**: ${text}` : say(lang, 'text_line', { label: `**${textName(t)}**`, res: t.res, release: releaseOf(model, t.res), text })) + tagOf(t as unknown as HelpRow))
       if (!cited.has(t.res)) {
         cited.add(t.res)
         facts.texts++
@@ -948,7 +954,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
     }))
     const sample = verses.map((x) => x.p.map((p) => p[0]).join('')).join(' ')
     if (!sample.trim() || wrongScript(lang, sample)) continue
-    texts.push({ label: resShort(t.res).toUpperCase(), verses, ...(patchOfRow(t as unknown as HelpRow) ? { tag: patchTag(UI ?? lang, patchOfRow(t as unknown as HelpRow)!) } : {}) })
+    texts.push({ label: textName(t), verses, ...(patchOfRow(t as unknown as HelpRow) ? { tag: patchTag(UI ?? lang, patchOfRow(t as unknown as HelpRow)!) } : {}) })
   }
   if (!texts.length) return null
   const titles = new Map<string, string>()
@@ -976,15 +982,17 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
     })
   }
   const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? ''), ...(patchOfRow(q) ? { patch: patchTag(UI ?? lang, patchOfRow(q)!) } : {}) }))
-  const marks = [...noteRows, ...rowsIn(model.questions), ...model.texts.filter((t) => texts.some((x) => x.label === resShort(t.res).toUpperCase())) as unknown as HelpRow[]].map(patchOfRow).filter((m): m is PatchMark => !!m)
+  const marks = [...noteRows, ...rowsIn(model.questions), ...model.texts.filter((t) => texts.some((x) => x.label === textName(t))) as unknown as HelpRow[]].map(patchOfRow).filter((m): m is PatchMark => !!m)
   const book = bookName(lang, ref.book)
   const lab = refLabel(ref)
   const releases = [...(model.notes ? [model.notes.res] : []), ...model.texts.map((t) => t.res)]
-    .filter((res) => res === model.notes?.res ? noteRows.length : texts.some((t) => t.label === resShort(res).toUpperCase()))
+    .filter((res) => res === model.notes?.res ? noteRows.length : texts.some((t) => t.label === textName(model.texts.find((x) => x.res === res) ?? { res })))
     // (notes from an Aquifer patch have a commit as their release, not a version: "Translation Notes (Aquifer)")
     .map((res) => (res === model.notes?.res && patchOfRow(model.notes.rows[0])
       ? `${HELPS[resShort(res)] ?? upper(res)} (Aquifer)`
-      : `${HELPS[resShort(res)] ?? upper(res)} ${releaseOf(model, res)}`.trim()))
+      : patchOfRow(model.texts.find((x) => x.res === res) as unknown as HelpRow)
+        ? textName(model.texts.find((x) => x.res === res)!)
+        : `${HELPS[resShort(res)] ?? upper(res)} ${releaseOf(model, res)}`.trim()))
   const long = ref.kind === 'chapter' || (ref.ch2 ?? ref.ch) !== ref.ch || (ref.v2 ?? 0) - (ref.v1 ?? 0) >= 3
   const nVerses = new Set(texts[0]!.verses.map((x) => x.v)).size
   const asked = s.what.filter((w) => w !== 'intro')
