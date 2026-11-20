@@ -698,6 +698,7 @@ export async function installPatch(lang: string, signal?: AbortSignal): Promise<
   if (!patch) return null
   const http = addedSource()
   const cats = await serverCatalogs(patch, http)
+  stopIfAborted(signal) // (the person started something while the catalog was asked for)
   if (!cats) return null
   const listed = new Set(cats[0]!.catalog.units.map((u) => u.id))
   const units = CANON.filter((b) => listed.has(`book:${b}`)).map((b) => `book:${b}`)
@@ -898,6 +899,8 @@ export async function updateLangs(): Promise<number> {
           } finally {
             clearTimeout(t)
             background = null
+            // (books installed before a stop or a failure count too: the readers are dropped)
+            changed()
           }
         }, true)
         if (got && got.bytes > 0) n++
