@@ -1104,7 +1104,7 @@ export async function passageContext(s: Sheet): Promise<string> {
   if (bookIntro) parts.push(`## Introduction to ${book} (translation notes, beginning)\n${clip(clean(bookIntro.cols.note), 1600)}`)
   // the surrounding verses are a patch's unaligned text: its source, license and that it is not Door43's go with it
   const tm = patchOfRow(simple as unknown as HelpRow)
-  if (tm) parts.push(patchTextForAI(tm))
+  if (tm && parts.some((x) => x.startsWith('## Surrounding verses'))) parts.unshift(patchTextForAI(tm))
   // the book's notes come from an Aquifer patch (the reader keeps a table whole): the model says so when it uses them
   const pm = patchOfRow(model.notes?.rows[0])
   if (pm) parts.push(patchForAI(pm))
