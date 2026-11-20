@@ -335,7 +335,7 @@ async function load(): Promise<Model> {
   for (const l of have) {
     const from = (await deps.origin(l)) ?? 'shipped'
     // a downloaded language is told from its stored catalog; one that comes with the app only from what its files hold
-    const parts = from === 'added' ? partsOfReader(await deps.openLang(l)) : partsOfUnits(await deps.installedUnits(l))
+    const parts = from === 'added' ? partsOfReader(await deps.openLang(l, true)) : partsOfUnits(await deps.installedUnits(l))
     langs.push({ lang: l, from, parts })
   }
   const partial = deps.partialLangs().filter((l) => !have.includes(l)).map((l) => ({ lang: l, b: deps.partialMark(l)?.b ?? null }))

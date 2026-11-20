@@ -9,7 +9,7 @@ import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSec
 import { anyOf, backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
 import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
-import { addUnits, aquiferOn, installedLangs, onPacksChanged, openLang, patchOf, setAquifer, setPacksServers, updateLangs } from './packs'
+import { addUnits, aquiferOn, installedLangs, onPacksChanged, openLang, patchedLangs, setAquifer, setPacksServers, updateLangs } from './packs'
 import { aquiferMenu } from './aquifer'
 import { PREVIEW_SERVER } from './shared'
 import { isCreditLine, warmKin } from './kin'
@@ -1005,7 +1005,7 @@ function aquiferSwitch(): HTMLButtonElement {
 function renderSettingsView() {
   const list = el('div', 'mrows')
   const onOff = (b: boolean) => (b ? MT().on : MT().off)
-  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported(), aquifer: INSTALLED.some((l) => !!patchOf(l)) })) {
+  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported(), aquifer: PATCHED.length > 0 })) {
     if (id === 'online') mrow(list, OT().label, onOff(onlineOn() && (!signInAvailable() || !!onlineSession())), go('online'))
     else if (id === 'model') mrow(list, modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
     else if (id === 'suggest') list.appendChild(composerSwitch(nav, MT().on, MT().off))
@@ -2053,7 +2053,9 @@ lock(nav)
 watchAway(() => nav)
 load()
 renderConv()
+let PATCHED: string[] = []
 function refreshInstalled() {
+  void patchedLangs().then((p) => { PATCHED = p })
   return installedLangs().then((ls) => {
     const had = packsKnown ? INSTALLED.length > 0 : null
     INSTALLED = ls

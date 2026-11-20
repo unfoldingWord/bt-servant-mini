@@ -3,7 +3,7 @@
 import { appVersion, downloadModel, exportModel, isLite, MODEL, modelOff, modelOutdated, modelState, LIMITED, pickModelFile, saveToDownloads, setModelOff } from './model'
 import { rtlLang } from './bidi'
 import { downloadImages, imagesInstalled, removeImages } from './obsimg'
-import { availableLangs, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, patchOf, removeLang } from './packs'
+import { availableLangs, exportPack, importPack, installedLangs, offers, openLang, origin, PACK_NAMES, patchedLangs, removeLang } from './packs'
 import { aquiferAbout } from './aquifer'
 
 type S = {
@@ -255,7 +255,7 @@ export function showAbout(lang: string, refresh: () => void) {
   const aq = el('p', 'meta', aquiferAbout(lang))
   aq.hidden = true
   card.appendChild(aq)
-  void installedLangs().then((l) => { aq.hidden = !l.some((x) => !!patchOf(x)) }).catch(() => {})
+  void patchedLangs().then((l) => { aq.hidden = l.length === 0 }).catch(() => {})
   card.appendChild(el('p', 'meta', `${s.version} ${appVersion()} · ${isLite() ? s.lite : s.full}`))
   if (isLite() && modelState().state !== 'ready') {
     card.appendChild(el('p', 'meta', s.setup))

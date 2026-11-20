@@ -2,6 +2,7 @@
 // switch and the AI's note. The rows are marked as the client marks them (language-pack-client patch.ts: `row.patch`).
 import { afterAll, expect, test } from 'bun:test'
 import { CANON } from '../src/canon'
+import { FOLD, FOLD_END } from '../src/focus'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { aquiferAbout, aquiferMenu, licenseName, patchCite, patchForAI, patchNotice, patchTag, reviewOf, type PatchMark } from '../src/aquifer'
 import { aquiferOn, patchOf, setAquifer, isPatch, PATCH_LANGS, updateLang } from '../src/packs'
@@ -133,6 +134,11 @@ test('a verse with notes from a patch: each note and question is tagged, one not
     // one notice, with the attribution and the license
     expect(n.r.answer.match(/Contenido de Aquifer; no es parte de las ayudas oficiales/g)?.length).toBe(1)
     expect(n.r.answer).toContain('Released under CC BY-SA 4.0 license')
+    // outside the last fold: a fold's button would hide the attribution
+    const blocks = n.r.answer.split(/\n\n/)
+    const at = blocks.findIndex((b) => b.includes('Contenido de Aquifer'))
+    const lastFold = blocks.reduce((m, b, i) => (b.startsWith(FOLD) && i < at ? i : m), -1)
+    if (lastFold >= 0) expect(blocks.slice(lastFold + 1, at)).toContain(FOLD_END)
     expect(n.r.answer).toContain('Mission Mutual')
     expect(n.r.cites.some((c) => c.startsWith('aquifer-patch es-419-x-aquifer:community'))).toBe(true)
     // the study view and the opened note carry it too

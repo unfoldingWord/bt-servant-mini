@@ -136,6 +136,11 @@ const refLabel = (r: Ref): string =>
 
 /** The Aquifer patch mark of a row that came from one (the client marks every such row; a base row has none). */
 const patchOfRow = (row: HelpRow | undefined): PatchMark | undefined => (row as { patch?: PatchMark } | undefined)?.patch
+/** The notice and the source-line entry when the book's notes (a table the reader keeps whole) came from an Aquifer patch. */
+function patchTail(lang: string, model: BookModel): { notice: string; cite: string } | null {
+  const m = patchOfRow(model.notes?.rows[0])
+  return m ? { notice: patchNotice(UI ?? lang, [m]), cite: patchCite(m) } : null
+}
 const isIntroRow = (row: HelpRow): boolean => row.cols.isIntro === true || row.cols.isIntro === 'true'
 const inRange = (row: HelpRow, [from, to]: [number, number]): boolean => row.from <= to && row.to >= from
 
@@ -446,6 +451,8 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   // where it comes from, at the top: resource, release and passage (the full source line still ends the answer)
   // items from an Aquifer patch: one notice with the attribution, and the patch in the source line (a report carries it)
   if (patched.length) {
+    // (outside the last fold, or the attribution would stay hidden behind its button)
+    if (out.some((b) => b.startsWith(FOLD))) out.push(FOLD_END)
     out.push(patchNotice(UI ?? lang, patched))
     for (const m of new Map(patched.map((x) => [x.patch + x.release + x.review, x])).values()) cites.push(patchCite(m))
   }
@@ -665,6 +672,8 @@ async function rank(s: Sheet, l0: Lang): Promise<Result> {
   const lines = ['**' + say(lang, 'rank_head', { book, ref: lab, n: rows.length }) + '**', '']
   for (const [i, [id, c]] of sorted.slice(0, 10).entries()) lines.push(say(lang, 'rank_line', { n: i + 1, title: await titleOf(l, id), count: c }))
   for (const [id] of sorted.slice(0, 10)) cites.push(`id:${id}`)
+  const pt = patchTail(lang, model)
+  if (pt) { lines.push('', pt.notice); cites.push(pt.cite) }
   return { answer: lines.join('\n'), cites }
 }
 
@@ -782,6 +791,8 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
       for (const c of ans.cites.slice(0, 1)) cites.push(cite(c.res, c.release, articleId))
     }
   } else if (!matched) out.push(say(lang, 'advice_none'))
+  const pt = (model ? patchTail(lang, model) : null)
+  if (pt) { out.push(pt.notice); cites.push(pt.cite) }
   const top = topSource(cites)
   if (top) withTop(out, top)
   return { answer: out.join('\n\n'), cites }
@@ -979,7 +990,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
       more: raw('more_notes', ['n']), verse: raw('verse_fold', ['ref', 'n']), termsN: raw('terms_fold', ['n']), questionsN: raw('questions_fold', ['n']),
     },
     source: `${[...new Set(releases)].join(' · ')} — ${book} ${lab}`.trim(),
-    ...(marks.length ? { aquifer: patchNotice(UI ?? lang, marks) } : {}),
+    ...(marks.length ? { aquifer: patchNotice(UI ?? lang, marks).split('**').join('') } : {}),
     long, summary: long ? say(lang, 'chapter_summary', { book, ref: lab, v: nVerses, n: notes.length }) : undefined,
     first: asked.length === 1 ? asked[0] : undefined,
     focus: wordsOf(focusWords(QUESTION, [s.term, s.phrase, ...NAMED]), s.term, s.phrase, ...NAMED, QUESTION),

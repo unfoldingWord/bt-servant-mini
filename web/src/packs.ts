@@ -43,14 +43,26 @@ const AQUIFER_KEY = 'btsm.aquifer'
  * The menu's "Use Aquifer complementary helps". On unless the person turned it off: the reader already keeps Door43's own
  * notes and questions, so with it on Aquifer is used only where Door43 has nothing for that book.
  */
+let aquiferMem: boolean | null = null
 export function aquiferOn(): boolean {
+  if (aquiferMem !== null) return aquiferMem
   try {
     return (globalThis as any).localStorage?.getItem(AQUIFER_KEY) !== '0'
   } catch {
     return true
   }
 }
+/** The added languages whose Aquifer patch is on the phone (the menu's switch and About speak only of these). */
+export async function patchedLangs(): Promise<string[]> {
+  try {
+    const st: any = await (await added()).getState()
+    return (await addedLangs()).filter((l) => { const p = patchOf(l); return !!p && !!st?.active?.[p] })
+  } catch {
+    return []
+  }
+}
 export function setAquifer(on: boolean) {
+  aquiferMem = on // (kept here too, so the choice holds when the phone cannot write it)
   try {
     ;(globalThis as any).localStorage?.setItem(AQUIFER_KEY, on ? '1' : '0')
   } catch { /* the choice lasts until the app closes */ }
@@ -403,24 +415,26 @@ export async function origin(lang: string): Promise<'added' | 'shipped' | null> 
 
 const noNetwork = { fetch: async () => { throw new Error('offline') } } as any
 const open = new Map<string, Promise<PackReader>>()
-export function openLang(lang: string): Promise<PackReader> {
-  if (!open.has(lang)) {
+export function openLang(lang: string, plain = false): Promise<PackReader> {
+  // `plain`: the language alone, without its Aquifer patch (the Resources screen counts the books Door43 gave)
+  const key = plain ? `plain:${lang}` : lang
+  if (!open.has(key)) {
     const p = (async () => {
       if ((await addedLangs()).includes(lang)) {
         const patch = patchOf(lang)
         // a patch that is not installed is left out by the client; a patch that cannot be read must not take the language with it
-        if (patch && aquiferOn()) {
+        if (patch && aquiferOn() && !plain) {
           try { return await (await addedClient()).open(lang, { patches: [patch] }) } catch { /* the language alone */ }
         }
         return (await addedClient()).open(lang)
       }
       return createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
     })()
-    open.set(lang, p)
+    open.set(key, p)
     // a failed open is not kept: one failure (at the app's start, say) must not break every later read of the language
-    p.catch(() => { if (open.get(lang) === p) open.delete(lang) })
+    p.catch(() => { if (open.get(key) === p) open.delete(key) })
   }
-  return open.get(lang)!
+  return open.get(key)!
 }
 const listeners: (() => void)[] = []
 /** Called after a language is added or removed, so every cache that holds readers can drop them. */
@@ -794,15 +808,19 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
   // the language's Aquifer patch: a newer revision, or the books of one the phone never had (never on a metered connection;
   // a patch that cannot be reached must not make the language's update fail)
   const patch = patchOf(lang)
+  const patchInstalled: string[] = []
   if (patch && metered !== true) {
     try {
       await client.refresh(patch, signal ? { signal } : {})
       const pr = await client.open(patch)
       const todo = CANON.filter((b) => pr.listed(`book:${b}`) && !pr.installed(`book:${b}`)).map((b) => `book:${b}`)
-      if (todo.length) await client.install(patch, { units: todo, defaults: false }, opts)
+      if (todo.length) {
+        await client.install(patch, { units: todo, defaults: false }, opts)
+        patchInstalled.push(...todo.map((u) => `${patch}/${u}`)) // counts as updated: the readers are dropped
+      }
     } catch { /* no patch on any server, or no internet */ }
   }
-  return [...missing, ...obs, ...common]
+  return [...missing, ...obs, ...common, ...patchInstalled]
 }
 const CHECKED = 'btsm.packs.checked'
 /**
