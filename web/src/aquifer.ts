@@ -18,7 +18,21 @@ export const shortName = (title: string): string => {
   const s = title.replace(/\s*\([^)]*\)\s*$/, '').replace(/^Biblica[®™]?\s+(Open\s+)?/i, '').trim()
   return s || title
 }
-export const noteTitles = (list: readonly { key: string; title?: string }[]) => { for (const r of list) if (r.title) TITLES.set(r.key, shortName(r.title)) }
+export const noteTitles = (list: readonly { key: string; title?: string }[]) => {
+  for (const r of list) {
+    const t = r.title?.trim()
+    if (!t) continue
+    const name = shortName(t)
+    TITLES.set(r.key, name)
+    // two versions that end up with one name are told apart by their code (a label must name one text)
+    for (const [k, v] of TITLES) {
+      if (k !== r.key && v.startsWith(name) && (v === name || v === `${name} (${k.split('/').pop()})`)) {
+        TITLES.set(k, `${name} (${k.split('/').pop()})`)
+        TITLES.set(r.key, `${name} (${r.key.split('/').pop()})`)
+      }
+    }
+  }
+}
 /** The key of a yaapi text's resource (`yaapi/es-419/SPAPDDPT`) from its mark. */
 const yaapiKey = (m: { patch: string; release: string }): string => `yaapi/${m.patch.split('-x-')[0]}/${m.release.split('@')[0]}`
 /** The readable name of a yaapi version (its catalog title), or its code when the catalog was not read. */

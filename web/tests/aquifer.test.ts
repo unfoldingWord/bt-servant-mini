@@ -338,3 +338,10 @@ test('a version is named as a person says it: the catalog title without its publ
   // no title read: the code
   expect(versionName({ patch: 'hi-x-yaapi', release: 'OHCV@sha256:abcdef012345' })).toBe('OHCV')
 })
+
+test('two versions with the same short name are told apart by their code; a blank title is ignored', () => {
+  noteTitles([{ key: 'yaapi/xx/AAA', title: 'Reina Valera (1960)' }, { key: 'yaapi/xx/BBB', title: 'Reina Valera (1995)' }, { key: 'yaapi/xx/CCC', title: '   ' }])
+  expect(versionName({ patch: 'xx-x-yaapi', release: 'AAA@sha256:abcdef012345' })).toBe('Reina Valera (AAA)')
+  expect(versionName({ patch: 'xx-x-yaapi', release: 'BBB@sha256:abcdef012345' })).toBe('Reina Valera (BBB)')
+  expect(versionName({ patch: 'xx-x-yaapi', release: 'CCC@sha256:abcdef012345' })).toBe('CCC')
+})
