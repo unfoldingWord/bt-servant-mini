@@ -179,7 +179,11 @@ async function alignedOf(l: Lang, code: string, model: BookModel): Promise<Align
   if (a === undefined) l.aligned.set(code, (a = alignIndex(model as any)))
   return a
 }
-const releaseOf = (model: BookModel, key: string): string => model.res.find((x) => x[0] === key)?.[1] ?? ''
+/** A patch's release is a git commit (`UWTranslationNotes@603546c…`), not a version: shown as "Aquifer", never as the hash. */
+const releaseOf = (model: BookModel, key: string): string => {
+  const r = model.res.find((x) => x[0] === key)?.[1] ?? ''
+  return /@[0-9a-f]{7,}$/i.test(r) ? 'Aquifer' : r
+}
 const cite = (res: string, release: string, extra = ''): string => `${res} ${release}${extra ? ' (' + extra + ')' : ''}`.trim()
 const sourceLine = (lang: string, cites: string[]): string => {
   // one entry per resource and release
