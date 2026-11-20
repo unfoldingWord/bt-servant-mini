@@ -707,7 +707,14 @@ export async function installPatch(lang: string, signal?: AbortSignal): Promise<
   const client = createClient({ store, source: http, trust })
   const st: any = await store.getState().catch(() => undefined)
   if (st?.published?.[patch]) await client.refresh(patch, signal ? { signal } : {})
-  const report: any = await client.install(patch, { defaults: false, units }, { concurrency: 1, ...(signal ? { signal } : {}) })
+  let report: any
+  try {
+    report = await client.install(patch, { defaults: false, units }, { concurrency: 1, ...(signal ? { signal } : {}) })
+  } catch (e) {
+    // (books installed before a stop or a failure count too: the readers are dropped; nothing else here changed anything)
+    changed()
+    throw e
+  }
   return { books: units.length, bytes: report?.bytes ?? 0 }
 }
 
@@ -899,8 +906,6 @@ export async function updateLangs(): Promise<number> {
           } finally {
             clearTimeout(t)
             background = null
-            // (books installed before a stop or a failure count too: the readers are dropped)
-            changed()
           }
         }, true)
         if (got && got.bytes > 0) n++
