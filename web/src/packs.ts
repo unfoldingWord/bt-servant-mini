@@ -890,8 +890,11 @@ export async function updateLangs(): Promise<number> {
   }
   // the languages that came with the app: only their Aquifer patch (their own packs are the app's), never on a metered connection
   if (!stopped && meteredNow() !== true) {
-    for (const lang of await installedLangs()) {
-      if (!patchOf(lang) || (await origin(lang)) !== 'shipped') continue
+    const shippedLangs: string[] = []
+    try {
+      for (const l of await installedLangs()) if (patchOf(l) && (await origin(l)) === 'shipped') shippedLangs.push(l)
+    } catch { /* the store cannot be read: tomorrow */ }
+    for (const lang of shippedLangs) {
       if (userWaiting) {
         stopped = true
         break
