@@ -2,7 +2,7 @@
 // build), and the ones the person adds — downloaded from the packs server or imported from a .tcpack file (SD card, phone
 // memory, another phone) — kept in the page's IndexedDB. A language lives in one layer: an added one wins.
 import {
-  ClientError, createClient, emptyState, httpSource, indexedDbStore, planInstall, verifyCatalogFile,
+  ClientError, createClient, patchedReader, emptyState, httpSource, indexedDbStore, planInstall, verifyCatalogFile,
   type BlobStore, type PackReader, type PackSource, type VerifiedCatalog,
 } from '@bt-synergy/language-pack-client'
 import { PACKS_SERVERS, SHARED_UNITS, trustedKeys } from './shared'
@@ -56,7 +56,8 @@ export function aquiferOn(): boolean {
 export async function patchedLangs(): Promise<string[]> {
   try {
     const st: any = await (await added()).getState()
-    return (await addedLangs()).filter((l) => { const p = patchOf(l); return !!p && !!st?.active?.[p] })
+    // (a language that came with the app has its patch in the phone's own store too)
+    return (await installedLangs()).filter((l) => { const p = patchOf(l); return !!p && !!st?.active?.[p] })
   } catch {
     return []
   }
@@ -428,7 +429,16 @@ export function openLang(lang: string, plain = false): Promise<PackReader> {
         }
         return (await addedClient()).open(lang)
       }
-      return createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
+      const base = await createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
+      // a language that came with the app gets its patch from the phone's own store (the daily check installs it)
+      const patch = patchOf(lang)
+      if (patch && aquiferOn() && !plain) {
+        try {
+          const pr = await (await addedClient()).open(patch)
+          if (CANON.some((b) => pr.installed(`book:${b}`))) return patchedReader(base, [pr])
+        } catch { /* the language alone */ }
+      }
+      return base
     })()
     open.set(key, p)
     // a failed open is not kept: one failure (at the app's start, say) must not break every later read of the language
@@ -670,28 +680,34 @@ export async function downloadLang(
  * refreshes it when it is there. Null when the language has no patch or no server has it; no internet is not an error.
  */
 export async function downloadPatch(lang: string, o: { signal?: AbortSignal } = {}): Promise<{ books: number; bytes: number } | null> {
-  const patch = patchOf(lang)
-  if (!patch) return null
   try {
-    const http = addedSource()
-    const cats = await serverCatalogs(patch, http)
-    if (!cats) return null
-    const listed = new Set(cats[0]!.catalog.units.map((u) => u.id))
-    const units = CANON.filter((b) => listed.has(`book:${b}`)).map((b) => `book:${b}`)
-    if (!units.length) return null
-    const store = await added()
-    const client = createClient({ store, source: http, trust })
-    const report: any = await serial(async () => {
-      const st: any = await store.getState().catch(() => undefined)
-      if (st?.published?.[patch]) await client.refresh(patch, o.signal ? { signal: o.signal } : {})
-      return client.install(patch, { defaults: false, units }, { concurrency: 1, ...(o.signal ? { signal: o.signal } : {}) })
-    })
-    return { books: units.length, bytes: report?.bytes ?? 0 }
+    return await serial(() => installPatch(lang, o.signal))
   } catch {
     return null
   } finally {
     changed()
   }
+}
+/**
+ * The install itself (no queue: `downloadPatch` and the daily check each wrap it as they need). Installs the books of the patch
+ * the server lists, or refreshes it when the phone has it; into the phone's own store, so it also serves a language that came
+ * with the app. `bytes` is what was fetched (0: already up to date); null when the language has no patch or no server has it.
+ */
+export async function installPatch(lang: string, signal?: AbortSignal): Promise<{ books: number; bytes: number } | null> {
+  const patch = patchOf(lang)
+  if (!patch) return null
+  const http = addedSource()
+  const cats = await serverCatalogs(patch, http)
+  if (!cats) return null
+  const listed = new Set(cats[0]!.catalog.units.map((u) => u.id))
+  const units = CANON.filter((b) => listed.has(`book:${b}`)).map((b) => `book:${b}`)
+  if (!units.length) return null
+  const store = await added()
+  const client = createClient({ store, source: http, trust })
+  const st: any = await store.getState().catch(() => undefined)
+  if (st?.published?.[patch]) await client.refresh(patch, signal ? { signal } : {})
+  const report: any = await client.install(patch, { defaults: false, units }, { concurrency: 1, ...(signal ? { signal } : {}) })
+  return { books: units.length, bytes: report?.bytes ?? 0 }
 }
 
 /** What the server offers for a catalog that is not a language (the pictures): the size of `want`, its segments in install order. */
@@ -862,6 +878,36 @@ export async function updateLangs(): Promise<number> {
         break
       }
       /* this language fails: tried again tomorrow */
+    }
+  }
+  // the languages that came with the app: only their Aquifer patch (their own packs are the app's), never on a metered connection
+  if (!stopped && meteredNow() !== true) {
+    for (const lang of await installedLangs()) {
+      if (!patchOf(lang) || (await origin(lang)) !== 'shipped') continue
+      if (userWaiting) {
+        stopped = true
+        break
+      }
+      try {
+        const got = await serial(async () => {
+          const c = new AbortController()
+          const t = setTimeout(() => c.abort(new Error('timeout')), 120000)
+          background = c
+          try {
+            return await installPatch(lang, c.signal)
+          } finally {
+            clearTimeout(t)
+            background = null
+          }
+        }, true)
+        if (got && got.bytes > 0) n++
+      } catch {
+        if (userWaiting) {
+          stopped = true
+          break
+        }
+        /* no patch on any server, or no internet: tomorrow */
+      }
     }
   }
   if (!stopped) {
