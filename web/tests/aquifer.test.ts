@@ -197,3 +197,10 @@ test('the daily update brings a patch of a language: its newer revision and the 
   expect(calls).toEqual(['refresh fr'])
   expect(CANON.length).toBeGreaterThan(60)
 })
+
+test('installPatch: a language with no patch (ru, fr: paused) asks nothing of any server', async () => {
+  const { installPatch } = await import('../src/packs')
+  expect(await installPatch('fr')).toBeNull()
+  expect(await installPatch('ru')).toBeNull()
+  expect(await installPatch('en')).toBeNull()
+})
