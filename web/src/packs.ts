@@ -27,7 +27,35 @@ export const PACK_NAMES: Record<string, string> = {
  * language. The Open Bible Stories pictures (obsimg.ts) are the only one.
  */
 export const IMAGES_CATALOG = 'zxx-obsimg'
-const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx-')
+const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx-') || isPatch(name)
+
+// ------------------------------------------------------------------------------------------------------ Aquifer patches
+// A patch catalog (`hi-x-aquifer`, `{lang}-x-{source}`, plan-aquifer.md) fills what Door43 lacks in a language: notes, questions or
+// book introductions of books the language pack has no help for. It is installed in the same store, never listed as a language,
+// opened together with its language (`client.open(lang, { patches })`: the reader keeps Door43's rows and only fills the tables
+// Door43 lacks, marking each row with `patch`), and removed with it. Languages with a published patch (Nov 2026; ru and fr wait).
+export const PATCH_LANGS: readonly string[] = ['hi', 'es-419', 'id']
+export const isPatch = (name: string): boolean => /-x-[a-z0-9]+$/.test(name)
+/** The patch catalog of a language, or null when it has none. */
+export const patchOf = (lang: string): string | null => (PATCH_LANGS.includes(lang) ? `${lang}-x-aquifer` : null)
+const AQUIFER_KEY = 'btsm.aquifer'
+/**
+ * The menu's "Use Aquifer complementary helps". On unless the person turned it off: the reader already keeps Door43's own
+ * notes and questions, so with it on Aquifer is used only where Door43 has nothing for that book.
+ */
+export function aquiferOn(): boolean {
+  try {
+    return (globalThis as any).localStorage?.getItem(AQUIFER_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+export function setAquifer(on: boolean) {
+  try {
+    ;(globalThis as any).localStorage?.setItem(AQUIFER_KEY, on ? '1' : '0')
+  } catch { /* the choice lasts until the app closes */ }
+  changed()
+}
 
 // ------------------------------------------------------------------------------------------------------------ servers
 
@@ -378,7 +406,14 @@ const open = new Map<string, Promise<PackReader>>()
 export function openLang(lang: string): Promise<PackReader> {
   if (!open.has(lang)) {
     const p = (async () => {
-      if ((await addedLangs()).includes(lang)) return (await addedClient()).open(lang)
+      if ((await addedLangs()).includes(lang)) {
+        const patch = patchOf(lang)
+        // a patch that is not installed is left out by the client; a patch that cannot be read must not take the language with it
+        if (patch && aquiferOn()) {
+          try { return await (await addedClient()).open(lang, { patches: [patch] }) } catch { /* the language alone */ }
+        }
+        return (await addedClient()).open(lang)
+      }
       return createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
     })()
     open.set(lang, p)
@@ -607,9 +642,40 @@ export async function downloadLang(
       onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
     }))
     markPartial(lang, false)
+    // the language's Aquifer patch (a few MB at most): after the language is whole, and a failure here never fails the language
+    await downloadPatch(lang, o.signal ? { signal: o.signal } : {}).catch(() => null)
     return { books: offer.books.length, bytes: report.bytes ?? 0 }
   } finally {
     // what is complete was activated even after a cancel or a failure: every cache that holds readers drops them
+    changed()
+  }
+}
+
+/**
+ * Installs the books of a language's Aquifer patch (every `book:*` its catalog lists, with the common `orig:*` they need), or
+ * refreshes it when it is there. Null when the language has no patch or no server has it; no internet is not an error.
+ */
+export async function downloadPatch(lang: string, o: { signal?: AbortSignal } = {}): Promise<{ books: number; bytes: number } | null> {
+  const patch = patchOf(lang)
+  if (!patch) return null
+  try {
+    const http = addedSource()
+    const cats = await serverCatalogs(patch, http)
+    if (!cats) return null
+    const listed = new Set(cats[0]!.catalog.units.map((u) => u.id))
+    const units = CANON.filter((b) => listed.has(`book:${b}`)).map((b) => `book:${b}`)
+    if (!units.length) return null
+    const store = await added()
+    const client = createClient({ store, source: http, trust })
+    const report: any = await serial(async () => {
+      const st: any = await store.getState().catch(() => undefined)
+      if (st?.published?.[patch]) await client.refresh(patch, o.signal ? { signal: o.signal } : {})
+      return client.install(patch, { defaults: false, units }, { concurrency: 1, ...(o.signal ? { signal: o.signal } : {}) })
+    })
+    return { books: units.length, bytes: report?.bytes ?? 0 }
+  } catch {
+    return null
+  } finally {
     changed()
   }
 }
@@ -725,6 +791,17 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
     }
   }
   if (common.length) await client.install(lang, { units: common, defaults: false }, opts)
+  // the language's Aquifer patch: a newer revision, or the books of one the phone never had (never on a metered connection;
+  // a patch that cannot be reached must not make the language's update fail)
+  const patch = patchOf(lang)
+  if (patch && metered !== true) {
+    try {
+      await client.refresh(patch, signal ? { signal } : {})
+      const pr = await client.open(patch)
+      const todo = CANON.filter((b) => pr.listed(`book:${b}`) && !pr.installed(`book:${b}`)).map((b) => `book:${b}`)
+      if (todo.length) await client.install(patch, { units: todo, defaults: false }, opts)
+    } catch { /* no patch on any server, or no internet */ }
+  }
   return [...missing, ...obs, ...common]
 }
 const CHECKED = 'btsm.packs.checked'
@@ -898,8 +975,11 @@ export async function removeLang(lang: string): Promise<void> {
       const store = await added()
       const st: any = await store.getState()
       if (!st) return
-      for (const k of ['active', 'published']) if (st[k]) delete st[k][lang]
-      for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${lang}/`)) delete st.units[key]
+      // the language's Aquifer patch goes with it
+      for (const name of [lang, patchOf(lang)].filter((x): x is string => !!x)) {
+        for (const k of ['active', 'published']) if (st[k]) delete st[k][name]
+        for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${name}/`)) delete st.units[key]
+      }
       await store.setState(st)
       await (await addedClient()).prune()
     })

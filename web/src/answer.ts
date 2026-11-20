@@ -7,6 +7,7 @@ import { type BookModel, type HelpRow, verseId } from '@bt-synergy/language-pack
 import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
+import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag } from './aquifer'
 import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { isObsRef, obsAnswer, storyText } from './obs'
 import tEn from './data/tpl-en.json'
@@ -133,6 +134,8 @@ const refLabel = (r: Ref): string =>
   r.kind === 'book' ? '' : r.kind === 'bookintro' ? '' : r.kind === 'chapter' || r.kind === 'chapintro' ? String(r.ch)
     : r.ch2 !== undefined && r.ch2 !== r.ch ? `${r.ch}:${r.v1}-${r.ch2}:${r.v2}` : `${r.ch}:${r.v1}${r.v2 !== r.v1 ? '-' + r.v2 : ''}`
 
+/** The Aquifer patch mark of a row that came from one (the client marks every such row; a base row has none). */
+const patchOfRow = (row: HelpRow | undefined): PatchMark | undefined => (row as { patch?: PatchMark } | undefined)?.patch
 const isIntroRow = (row: HelpRow): boolean => row.cols.isIntro === true || row.cols.isIntro === 'true'
 const inRange = (row: HelpRow, [from, to]: [number, number]): boolean => row.from <= to && row.to >= from
 
@@ -273,6 +276,14 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const al = await alignedOf(l, ref.book, model)
   const range = rangeOf(ref)
   const out: string[] = []
+  /** The marks of the patches the items shown came from: the notice, and the source line (a report) say so. */
+  const patched: PatchMark[] = []
+  const tagOf = (row: HelpRow | undefined): string => {
+    const m = patchOfRow(row)
+    if (!m) return ''
+    patched.push(m)
+    return ` *(${patchTag(UI ?? lang, m)})*`
+  }
   const head = say(lang, 'passage_head', { book, ref: refLabel(ref), lang }).replace(/\s+\(/, ' (').replace(/\s{2,}/g, ' ')
   out.push('## ' + head)
   facts = { kind: 'passage', book, ref: refLabel(ref), texts: 0, notes: 0, questions: 0, terms: 0, code: ref.book, ch: ref.ch ?? null }
@@ -293,7 +304,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       const note = clean(row.cols.note, true)
       // a note with its own title needs no second one; its headings go under the answer's
       if (!/^#/.test(note)) out.push('### ' + say(lang, 'intro_head', { what: what_ }))
-      out.push(note.replace(/^#{1,2}\s/gm, '### '))
+      out.push(note.replace(/^#{1,2}\s/gm, '### ') + tagOf(row))
       facts.intro = what_
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} intro, note ${row.id}`))
     } else out.push(say(lang, 'intro_none', { what: what_ }))
@@ -368,13 +379,13 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     // "[Academy: title]" is a tap when the article can be opened: "[text](id)" is the link md() and linkTarget() know
     const academy = n.concept ? say(lang, 'note_academy', { title: await title(n.concept) }) + (!clean(n.cols.note).includes(n.concept) && (await hasArticle(l, n.concept)) ? `(${n.concept})` : '') : ''
     cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${n.ref}, note ${n.id}`))
-    return say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy })
+    return say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy }) + tagOf(n)
   }
   const qs = wantQs ? rowsIn(model.questions) : []
   facts.questions = qs.length
   const qLines = qs.map((q) => {
     cites.push(cite(model.questions!.res, releaseOf(model, model.questions!.res), `${ref.book} ${q.ref}`))
-    return say(lang, 'question_line', { q: `**${String(q.cols.question ?? '')}**`, a: String(q.cols.response ?? '') })
+    return say(lang, 'question_line', { q: `**${String(q.cols.question ?? '')}**`, a: String(q.cols.response ?? '') }) + tagOf(q)
   })
   // one thing asked (only notes, only the text…): that thing, as it is
   const only = what.filter((w) => w !== 'intro').length === 1
@@ -433,6 +444,11 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     else out.push(FOLD + say(lang, 'questions_fold', { n: qs.length }), ...qLines)
   }
   // where it comes from, at the top: resource, release and passage (the full source line still ends the answer)
+  // items from an Aquifer patch: one notice with the attribution, and the patch in the source line (a report carries it)
+  if (patched.length) {
+    out.push(patchNotice(UI ?? lang, patched))
+    for (const m of new Map(patched.map((x) => [x.patch + x.release + x.review, x])).values()) cites.push(patchCite(m))
+  }
   const top = topSource(cites)
   if (top) withTop(out, `${top} — ${book} ${lab}`.trim())
   return { answer: out.join('\n\n'), cites }
@@ -806,13 +822,17 @@ export async function answerSheet(s: Sheet): Promise<Result> {
 /** One piece of a verse: its text, and for a word the helps it is part of (`n3` the fourth note, `t0` the first term). */
 export type StudyPiece = [text: string, keys?: string]
 /** quotes: what the note quotes in every text; about: the titles of its key terms and article (what focus.ts matches) */
-export type StudyNote = { said: string; orig: string; note: string; concept?: string; ref: string; quotes?: string; about?: string }
+export type StudyNote = { said: string; orig: string; note: string; concept?: string; ref: string; quotes?: string; about?: string
+  /** it came from an Aquifer patch: the short tag that says so (aquifer.ts patchTag) */
+  patch?: string }
 export type StudyTerm = { id: string; title: string; said: string; orig: string }
 /** A passage as the bubble shows it: each text with its words tied to the notes and key terms that quote them. */
 export type Study = {
   lang: string; head: string; book: string; ch: number; v1: number; v2: number
   texts: { label: string; verses: { v: string; p: StudyPiece[] }[] }[]
-  notes: StudyNote[]; terms: StudyTerm[]; questions: { q: string; a: string }[]
+  notes: StudyNote[]; terms: StudyTerm[]; questions: { q: string; a: string; patch?: string }[]
+  /** items came from an Aquifer patch: the notice with its attribution (aquifer.ts patchNotice) */
+  aquifer?: string
   heads: { notes: string; terms: string; questions: string
     /** templates the view fills: {words} {n} {all}, {n}, {ref} {n} (older studies kept in a conversation have none) */
     focus?: string; more?: string; verse?: string; termsN?: string; questionsN?: string }
@@ -933,9 +953,11 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
       ref: n.ref,
       quotes: qs.map((q) => q.text).join(' / '),
       about: (await Promise.all(aboutOf(n, linkRows).map(title))).join(' / '),
+      ...(patchOfRow(n) ? { patch: patchTag(UI ?? lang, patchOfRow(n)!) } : {}),
     })
   }
-  const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? '') }))
+  const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? ''), ...(patchOfRow(q) ? { patch: patchTag(UI ?? lang, patchOfRow(q)!) } : {}) }))
+  const marks = [...noteRows, ...rowsIn(model.questions)].map(patchOfRow).filter((m): m is PatchMark => !!m)
   const book = bookName(lang, ref.book)
   const lab = refLabel(ref)
   const releases = [...(model.notes ? [model.notes.res] : []), ...model.texts.map((t) => t.res)]
@@ -957,6 +979,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
       more: raw('more_notes', ['n']), verse: raw('verse_fold', ['ref', 'n']), termsN: raw('terms_fold', ['n']), questionsN: raw('questions_fold', ['n']),
     },
     source: `${[...new Set(releases)].join(' · ')} — ${book} ${lab}`.trim(),
+    ...(marks.length ? { aquifer: patchNotice(UI ?? lang, marks) } : {}),
     long, summary: long ? say(lang, 'chapter_summary', { book, ref: lab, v: nVerses, n: notes.length }) : undefined,
     first: asked.length === 1 ? asked[0] : undefined,
     focus: wordsOf(focusWords(QUESTION, [s.term, s.phrase, ...NAMED]), s.term, s.phrase, ...NAMED, QUESTION),
@@ -997,9 +1020,16 @@ export async function helpView(lang: string, book: string, id: string, which: 'n
   const row = (which === 'note' ? model?.notes : model?.questions)?.rows.find((x) => x.id === id)
   if (!model || !row) return null
   const title = `${bookName(l.lang, book)} ${row.ref}`
+  // an item from an Aquifer patch says so, with the notice and the attribution
+  const pm = patchOfRow(row)
+  const aq = pm ? `
+
+*(${patchTag(UI ?? l.lang, pm)})*
+
+${patchNotice(UI ?? l.lang, [pm])}` : ''
   if (which === 'question') return { title, ref: row.ref, md: `**${String(row.cols.question ?? '')}**
 
-${String(row.cols.response ?? '')}` }
+${String(row.cols.response ?? '')}${aq}` }
   const al = await alignedOf(l, book, model)
   const qs = quoteIn(al, row.quote)
   const said = (qs.find((q) => /\/(ult|glt)$/.test(q.res)) ?? qs[0])?.text ?? ''
@@ -1011,7 +1041,7 @@ ${String(row.cols.response ?? '')}` }
 [[${row.concept}]]` : ''
   return { title, ref: row.ref, md: (head ? `**${head}**
 
-` : '') + note + academy }
+` : '') + note + academy + aq }
 }
 
 // ------------------------------------------------------------------------------------------------- context for online AI
@@ -1050,5 +1080,8 @@ export async function passageContext(s: Sheet): Promise<string> {
   const chapIntro = intros.find((x) => x !== bookIntro && x.from === verseId(ref.book, ref.ch!, 1))
   if (chapIntro) parts.push(`## Introduction to ${book} ${ref.ch} (translation notes)\n${clip(clean(chapIntro.cols.note), 1300)}`)
   if (bookIntro) parts.push(`## Introduction to ${book} (translation notes, beginning)\n${clip(clean(bookIntro.cols.note), 1600)}`)
+  // the book's notes come from an Aquifer patch (the reader keeps a table whole): the model says so when it uses them
+  const pm = patchOfRow(model.notes?.rows[0])
+  if (pm) parts.push(patchForAI(pm))
   return parts.join('\n\n')
 }

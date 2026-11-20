@@ -9,7 +9,8 @@ import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSec
 import { anyOf, backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
 import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
-import { addUnits, installedLangs, onPacksChanged, openLang, setPacksServers, updateLangs } from './packs'
+import { addUnits, aquiferOn, installedLangs, onPacksChanged, openLang, patchOf, setAquifer, setPacksServers, updateLangs } from './packs'
+import { aquiferMenu } from './aquifer'
 import { PREVIEW_SERVER } from './shared'
 import { isCreditLine, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
@@ -981,14 +982,34 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
   }
 }
 
+/** "Use Aquifer complementary helps": on, Aquifer fills the notes, questions and introductions Door43 lacks (never replaces Door43's). */
+function aquiferSwitch(): HTMLButtonElement {
+  const q = aquiferMenu(nav)
+  const b = el('button', 'mrow') as HTMLButtonElement
+  b.type = 'button'
+  b.setAttribute('role', 'switch')
+  const sub = el('span', 'mrow-s')
+  const paint = () => {
+    b.setAttribute('aria-checked', String(aquiferOn()))
+    sub.textContent = `${aquiferOn() ? q.on : q.off} · ${q.hint}`
+  }
+  b.append(el('span', 'mrow-t', q.title), sub)
+  b.onclick = () => {
+    setAquifer(!aquiferOn())
+    paint()
+  }
+  paint()
+  return b
+}
 /** Settings: the rows of the old menu that are about how the app works, each opening its own screen. */
 function renderSettingsView() {
   const list = el('div', 'mrows')
   const onOff = (b: boolean) => (b ? MT().on : MT().off)
-  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported() })) {
+  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported(), aquifer: INSTALLED.some((l) => !!patchOf(l)) })) {
     if (id === 'online') mrow(list, OT().label, onOff(onlineOn() && (!signInAvailable() || !!onlineSession())), go('online'))
     else if (id === 'model') mrow(list, modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
     else if (id === 'suggest') list.appendChild(composerSwitch(nav, MT().on, MT().off))
+    else if (id === 'aquifer') list.appendChild(aquiferSwitch())
     else if (id === 'safety') mrow(list, PT(nav).title, protectSummary(nav, MT().off), go('safety'))
     else if (id === 'usage') mrow(list, UT().title, onOff(usageOn()), go('usage'))
     else if (id === 'update') {
