@@ -107,9 +107,10 @@ test('an installed language gets only the shared units the server lists and it l
   const listed = new Set([...have, 'art:ta:intro', 'art:ta:process'])
   const calls: string[] = []
   const client = {
-    refresh: async (lang: string) => void calls.push(`refresh ${lang}`),
+    refresh: async (lang: string) => void (lang.includes('-x-') || calls.push(`refresh ${lang}`)), // (a patch's own calls: aquifer.test.ts)
     open: async () => ({ listed: (u: string) => listed.has(u), installed: (u: string) => have.has(u) }),
     install: async (lang: string, want: { units: string[]; defaults: false }) => {
+      if (lang.includes('-x-')) return
       calls.push(`install ${lang} ${want.units.join(',')} defaults=${want.defaults}`)
       for (const u of want.units) have.add(u)
     },

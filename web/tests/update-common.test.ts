@@ -11,11 +11,12 @@ function fake(updates: { key: string; bytes: number; from?: number; to?: number 
   const signals: (AbortSignal | undefined)[] = []
   const client = {
     refresh: async (lang: string) => {
-      calls.push(`refresh ${lang}`)
+      if (!lang.includes('-x-')) calls.push(`refresh ${lang}`) // (the patch's own calls: aquifer.test.ts)
       return updates === undefined ? undefined : { updates: updates.map((u) => ({ from: 2, to: 3, ...u })) }
     },
     open: async () => ({ listed: () => true, installed: (u: string) => !lacks.includes(u) }),
     install: async (lang: string, want: { units: string[]; defaults: false }, o?: { signal?: AbortSignal; concurrency?: number }) => {
+      if (lang.includes('-x-')) return
       calls.push(`install ${lang} ${want.units.join(',')} defaults=${want.defaults} concurrency=${o?.concurrency}`)
       signals.push(o?.signal)
     },
@@ -81,13 +82,13 @@ test('a downgrade the refresh lists (a language built against an older common) i
 function withObsUnit(o: { listed?: boolean; installed?: boolean; bytes?: number; lacks?: string[] } = {}) {
   const calls: string[] = []
   const client = {
-    refresh: async (lang: string) => { calls.push(`refresh ${lang}`) },
+    refresh: async (lang: string) => { if (!lang.includes('-x-')) calls.push(`refresh ${lang}`) },
     open: async () => ({
       listed: (u: string) => (u === 'obs' ? o.listed ?? true : true),
       installed: (u: string) => (u === 'obs' ? o.installed ?? false : !(o.lacks ?? []).includes(u)),
       size: (u: string) => (u === 'obs' ? o.bytes ?? 287_929 : 50_000),
     }),
-    install: async (lang: string, want: { units: string[]; defaults: false }) => { calls.push(`install ${lang} ${want.units.join(',')}`) },
+    install: async (lang: string, want: { units: string[]; defaults: false }) => { if (!lang.includes('-x-')) calls.push(`install ${lang} ${want.units.join(',')}`) },
   }
   return { client, calls }
 }
