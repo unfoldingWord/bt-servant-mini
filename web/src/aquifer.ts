@@ -144,6 +144,9 @@ export const patchCite = (m: PatchMark): string =>
 export const patchForAI = (m: PatchMark): string =>
   `(These translation notes are from Aquifer, ${m.rights ?? 'adapted from unfoldingWord'}, ${licenseName(m.license)}; review: ${reviewOf(m)}. They are not part of the official helps of this language. When you use them, say they come from Aquifer.)`
 
+/** The note for the online AI's context when the surrounding verses are a yaapi text. */
+export const patchTextForAI = (m: PatchMark): string =>
+  `(These verses are the unaligned Bible text ${versionOf(m)} from yaapi.bible, ${licenseName(m.license)}${m.rights ? `, ${m.rights}` : ''}. It is not Door43's literal text. When you quote it, say it comes from yaapi.bible.)`
 export const aquiferAbout = (lang: string): string => T(lang).about
 export const yaapiAbout = (lang: string): string => T(lang).yaapi.about
 export const yaapiMenu = (lang: string): { title: string; on: string; off: string; hint: string } => {

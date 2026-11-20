@@ -733,7 +733,10 @@ export async function installPatch(lang: string, signal?: AbortSignal): Promise<
       const r = await installOnePatch(patch, signal)
       if (r) total = { books: (total?.books ?? 0) + r.books, bytes: (total?.bytes ?? 0) + r.bytes }
     } catch (e) {
-      if (signal?.aborted) throw e
+      if (signal?.aborted) {
+        if (total) changed() // (what an earlier patch of the language installed counts: the readers are dropped)
+        throw e
+      }
       failed ??= e
     }
   }

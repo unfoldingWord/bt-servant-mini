@@ -283,3 +283,30 @@ test('a verse whose text comes from yaapi: the text says its version, that it is
     resetLangs()
   }
 })
+
+test('a request for a version the book lacks still says so when the base has some other text (a patch text does not hide it)', async () => {
+  if (!HAS) return
+  await installPacks(['es-419'])
+  resetLangs()
+  // Titus has the GLT in the pack; asking for the simple text it may lack keeps the old behaviour: never an empty answer
+  const n = await ask('es', { intent: 'passage', book: 'Tito', chapter: 2, verse_start: 3, what: ['text'], version: 'ust' })
+  expect(n.r.answer.length).toBeGreaterThan(40)
+  expect(n.r.answer).not.toContain('yaapi')
+})
+
+test('online AI: surrounding verses from a yaapi text come with their source and license', async () => {
+  if (!HAS) return
+  await installPacks(['es-419'])
+  const undo = await yaapiTexts('es-419', ymark())
+  try {
+    resetLangs()
+    const n = await ask('es', { intent: 'passage', book: 'Tito', chapter: 2, verse_start: 3, what: ['text'] })
+    const ctx = await passageContext(n.sheet)
+    expect(ctx).toContain('yaapi.bible')
+    expect(ctx).toContain('CC BY-SA 4.0')
+    expect(ctx).toContain('SPAPDDPT')
+  } finally {
+    undo()
+    resetLangs()
+  }
+})

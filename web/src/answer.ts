@@ -7,7 +7,7 @@ import { type BookModel, type HelpRow, verseId } from '@bt-synergy/language-pack
 import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
-import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag } from './aquifer'
+import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag, patchTextForAI } from './aquifer'
 import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { isObsRef, obsAnswer, storyText } from './obs'
 import tEn from './data/tpl-en.json'
@@ -268,7 +268,9 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const textKeys: string[] = [...(l.maps.map?.core.coverage.keys() ?? [])].filter((k: string) => /\/(ult|ust|glt|gst|bsb|t4t)$/.test(k))
   if (wantText && s.version) {
     const key = textKeys.find((k) => k.endsWith('/' + verKey(s.version as 'ult' | 'ust')))
-    if (key && !cover(key) && !model?.texts.length) {
+    // (not when the book's only texts are a patch's, unaligned Bible texts: they are shown, labelled, below)
+    const patchTextsOnly = !!model?.texts.length && model.texts.every((t) => !!patchOfRow(t as unknown as HelpRow))
+    if (key && !cover(key) && !patchTextsOnly) {
       const others = textKeys.filter((k) => cover(k)).map((k) => upper(k))
       const label = upper(key)
       const msg = others.length ? say(lang, 'not_covered', { label, book, others: others.join(', ') }) : say(lang, 'not_covered_none', { label, book })
@@ -1100,6 +1102,9 @@ export async function passageContext(s: Sheet): Promise<string> {
   const chapIntro = intros.find((x) => x !== bookIntro && x.from === verseId(ref.book, ref.ch!, 1))
   if (chapIntro) parts.push(`## Introduction to ${book} ${ref.ch} (translation notes)\n${clip(clean(chapIntro.cols.note), 1300)}`)
   if (bookIntro) parts.push(`## Introduction to ${book} (translation notes, beginning)\n${clip(clean(bookIntro.cols.note), 1600)}`)
+  // the surrounding verses are a patch's unaligned text: its source, license and that it is not Door43's go with it
+  const tm = patchOfRow(simple as unknown as HelpRow)
+  if (tm) parts.push(patchTextForAI(tm))
   // the book's notes come from an Aquifer patch (the reader keeps a table whole): the model says so when it uses them
   const pm = patchOfRow(model.notes?.rows[0])
   if (pm) parts.push(patchForAI(pm))
