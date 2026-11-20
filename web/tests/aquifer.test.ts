@@ -105,7 +105,9 @@ async function markedReader(lang: string, m: PatchMark) {
     const b = await book(code)
     if (!b) return b
     const pm = (t: any) => (t ? { ...t, rows: t.rows.map((x: any) => ({ ...x, patch: m })) } : t)
-    return { ...b, notes: pm(b.notes), questions: pm(b.questions) }
+    // (a patch's release is a commit, as in the real catalogs)
+    const res = b.res.map(([k, v]: [string, string]) => [k, /\/(tn|tq)$/.test(k) ? 'UWTranslationNotes@603546cd949d694d42d2b85dc0e37fdacb20407f' : v])
+    return { ...b, res, notes: pm(b.notes), questions: pm(b.questions) }
   }
   return () => { r.book = was }
 }
@@ -133,6 +135,9 @@ test('a verse with notes from a patch: each note and question is tagged, one not
     for (const l of lines) expect(l).toContain(tag)
     // one notice, with the attribution and the license
     expect(n.r.answer.match(/Contenido de Aquifer; no es parte de las ayudas oficiales/g)?.length).toBe(1)
+    // the source line (and the answer) never show the patch's commit as if it were a version
+    expect(n.r.answer).not.toContain('603546cd')
+    expect(n.r.cites.filter((c) => !c.startsWith('aquifer-patch')).join(' ')).not.toContain('603546cd')
     expect(n.r.answer).toContain('Released under CC BY-SA 4.0 license')
     // outside the last fold: a fold's button would hide the attribution
     const blocks = n.r.answer.split(/\n\n/)
@@ -144,6 +149,9 @@ test('a verse with notes from a patch: each note and question is tagged, one not
     // the study view and the opened note carry it too
     const st = await studyOf(n.sheet)
     if (st) {
+      // the study's source line names the notes readably, not by the patch's commit
+      expect(st.source).toContain('Translation Notes (Aquifer)')
+      expect(st.source).not.toContain('@')
       expect(st.notes.length).toBeGreaterThan(0)
       for (const x of st.notes) expect(x.patch).toBe(tag)
       expect(st.aquifer).toContain('Contenido de Aquifer')
