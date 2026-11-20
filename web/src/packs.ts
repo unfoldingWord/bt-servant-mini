@@ -7,6 +7,7 @@ import {
 } from '@bt-synergy/language-pack-client'
 import { PACKS_SERVERS, SHARED_UNITS, trustedKeys } from './shared'
 import { CANON } from './canon'
+import { noteTitles } from './aquifer'
 import { partsOfUnits, type PartLine } from './modules'
 export { CANON } from './canon'
 
@@ -444,6 +445,12 @@ export async function origin(lang: string): Promise<'added' | 'shipped' | null> 
 
 const noNetwork = { fetch: async () => { throw new Error('offline') } } as any
 const open = new Map<string, Promise<PackReader>>()
+/** Reads the names of the patch versions (their catalog titles) for the labels: a patch that cannot be read just has no names. */
+async function learnTitles(patches: readonly string[]) {
+  for (const patch of patches) {
+    try { noteTitles((await (await addedClient()).open(patch)).resources?.() ?? []) } catch { /* the code is shown instead */ }
+  }
+}
 export function openLang(lang: string, plain = false): Promise<PackReader> {
   // `plain`: the language alone, without its Aquifer patch (the Resources screen counts the books Door43 gave)
   const key = plain ? `plain:${lang}` : lang
@@ -453,6 +460,7 @@ export function openLang(lang: string, plain = false): Promise<PackReader> {
         const ps = activePatches(lang)
         // a patch that is not installed is left out by the client; a patch that cannot be read must not take the language with it
         if (ps.length && !plain) {
+          await learnTitles(ps)
           try { return await (await addedClient()).open(lang, { patches: ps }) } catch { /* the language alone */ }
         }
         return (await addedClient()).open(lang)
@@ -467,7 +475,10 @@ export function openLang(lang: string, plain = false): Promise<PackReader> {
             if (CANON.some((b) => pr.installed(`book:${b}`))) readers.push(pr)
           } catch { /* that patch is left out */ }
         }
-        if (readers.length) return patchedReader(base, readers)
+        if (readers.length) {
+          for (const pr of readers) noteTitles(pr.resources?.() ?? [])
+          return patchedReader(base, readers)
+        }
       }
       return base
     })()

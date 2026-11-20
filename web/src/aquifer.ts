@@ -11,6 +11,18 @@ export type Review = 'none' | 'community' | 'professional'
 /** Where a patch's content comes from: `aquifer` (notes) or `yaapi` (an unaligned Bible text). */
 export type Source = 'aquifer' | 'yaapi'
 export const sourceOf = (m: { source?: string; patch?: string }): Source => (m.source === 'yaapi' || m.patch?.endsWith('-x-yaapi') ? 'yaapi' : 'aquifer')
+/** The names of the versions, from the patch catalogs' resource entries (`title`), as the packs have them: key -> title. */
+const TITLES = new Map<string, string>()
+/** A version's name as a person says it: without the publisher in parentheses or a leading brand ("Biblica® Open Nueva Biblia Viva (Biblica, Inc.)" -> "Nueva Biblia Viva"). */
+export const shortName = (title: string): string => {
+  const s = title.replace(/\s*\([^)]*\)\s*$/, '').replace(/^Biblica[®™]?\s+(Open\s+)?/i, '').trim()
+  return s || title
+}
+export const noteTitles = (list: readonly { key: string; title?: string }[]) => { for (const r of list) if (r.title) TITLES.set(r.key, shortName(r.title)) }
+/** The key of a yaapi text's resource (`yaapi/es-419/SPAPDDPT`) from its mark. */
+const yaapiKey = (m: { patch: string; release: string }): string => `yaapi/${m.patch.split('-x-')[0]}/${m.release.split('@')[0]}`
+/** The readable name of a yaapi version (its catalog title), or its code when the catalog was not read. */
+export const versionName = (m: { patch: string; release: string }): string => TITLES.get(yaapiKey(m)) ?? m.release.split('@')[0]!
 /** The version of a yaapi text (`SPAPDDPT@sha256:…` -> SPAPDDPT). */
 export const versionOf = (m: { release: string }): string => m.release.split('@')[0]!
 export const reviewOf = (m: { review?: string } | undefined): Review => (m?.review === 'community' || m?.review === 'professional' ? m.review : 'none')
@@ -115,7 +127,7 @@ const T = (lang: string): Texts => TEXTS[lang.split('-')[0]!] ?? TEXTS.en!
 
 /** The short tag of one item that came from a patch. */
 export const patchTag = (lang: string, m: PatchMark): string =>
-  sourceOf(m) === 'yaapi' ? `yaapi · ${versionOf(m)} · ${T(lang).yaapi.unaligned}` : T(lang).tag[reviewOf(m)]
+  sourceOf(m) === 'yaapi' ? `yaapi · ${T(lang).yaapi.unaligned}` : T(lang).tag[reviewOf(m)]
 /** "CC-BY-SA-4.0" -> "CC BY-SA 4.0" */
 export const licenseName = (id: string): string => id.replace(/^CC-/, 'CC ').replace(/-(\d)/, ' $1')
 
@@ -131,7 +143,7 @@ export function patchNotice(lang: string, marks: readonly PatchMark[]): string {
   return [...seen.values()].map((m) => {
     const y = sourceOf(m) === 'yaapi'
     const style = m.style ? ` (${t.yaapi.styles[m.style] ?? m.style})` : ''
-    const lines = [y ? `**yaapi.** ${t.yaapi.notice.replace('{version}', versionOf(m)).replace('{style}', style)}` : `**${t.head}.** ${t.notice[reviewOf(m)]}`]
+    const lines = [y ? `**yaapi.** ${t.yaapi.notice.replace('{version}', versionName(m) === versionOf(m) ? versionOf(m) : `${versionName(m)} (${versionOf(m)})`).replace('{style}', style)}` : `**${t.head}.** ${t.notice[reviewOf(m)]}`]
     if (m.attribution) lines.push(m.attribution)
     lines.push(t.rights.replace('{license}', licenseName(m.license)).replace('{rights}', m.rights ?? '').trim().replace(/\.\s*$/, '.'))
     return lines.join('\n')

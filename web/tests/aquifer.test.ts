@@ -4,7 +4,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { CANON } from '../src/canon'
 import { FOLD, FOLD_END } from '../src/focus'
 import { ALL_PACKS, installPacks } from './fs-packs'
-import { aquiferAbout, aquiferMenu, yaapiAbout, yaapiMenu, licenseName, patchCite, patchForAI, patchNotice, patchTag, reviewOf, type PatchMark } from '../src/aquifer'
+import { noteTitles, shortName, versionName, aquiferAbout, aquiferMenu, yaapiAbout, yaapiMenu, licenseName, patchCite, patchForAI, patchNotice, patchTag, reviewOf, type PatchMark } from '../src/aquifer'
 import { activePatches, aquiferOn, patchesOf, patchKind, setAquifer, setYaapi, yaapiOn, isPatch, PATCH_LANGS, updateLang } from '../src/packs'
 import { settingsRows } from '../src/menu'
 import { buildSheet } from '../src/sheet'
@@ -225,8 +225,9 @@ const ymark = (): PatchMark => ({
 
 test('yaapi: tag, notice and source line go by source, not by review; the version and the style are named', () => {
   const m = ymark()
-  expect(patchTag('es', m)).toBe('yaapi · SPAPDDPT · texto sin alinear')
-  expect(patchTag('en', m)).toBe('yaapi · SPAPDDPT · unaligned text')
+  // the tag never repeats the version: its name is the label, its code is in the notice
+  expect(patchTag('es', m)).toBe('yaapi · texto sin alinear')
+  expect(patchTag('en', m)).toBe('yaapi · unaligned text')
   const n = patchNotice('es', [m])
   expect(n).toContain('Texto bíblico de yaapi.bible: SPAPDDPT (literal)')
   expect(n).toContain('No es el texto literal alineado de Door43')
@@ -235,7 +236,7 @@ test('yaapi: tag, notice and source line go by source, not by review; the versio
   expect(n).not.toContain('Revisión')
   expect(patchCite(m)).toContain('yaapi-patch es-419-x-yaapi:SPAPDDPT')
   for (const l of ['en', 'es', 'fr', 'id', 'hi', 'ar']) {
-    expect(patchTag(l, m)).toContain('SPAPDDPT')
+    expect(patchTag(l, m)).toContain('yaapi')
     expect(patchNotice(l, [m])).toContain('yaapi.bible')
     expect(yaapiAbout(l)).toContain('yaapi')
     expect(yaapiMenu(l).title).toContain('yaapi')
@@ -246,6 +247,7 @@ test('yaapi: tag, notice and source line go by source, not by review; the versio
 
 /** Gives the texts of a book the mark and the key of a yaapi version, as the client does for a patch book with no base text. */
 async function yaapiTexts(lang: string, m: PatchMark) {
+  noteTitles([{ key: 'yaapi/es-419/SPAPDDPT', title: 'Palabra de Dios para ti' }])
   const r: any = await openLang(lang)
   const book = r.book.bind(r)
   const was = r.book
@@ -265,7 +267,13 @@ test('a verse whose text comes from yaapi: the text says its version, that it is
   try {
     resetLangs()
     const n = await ask('es', { intent: 'passage', book: 'Tito', chapter: 2, verse_start: 3, what: ['text'] })
-    expect(n.r.answer).toContain('SPAPDDPT')
+    // the readable name (the catalog's title) labels the text; the code appears once, in the notice
+    expect(n.r.answer).toContain('**Palabra de Dios para ti**')
+    expect(n.r.answer).toContain('Palabra de Dios para ti (SPAPDDPT)')
+    // the code: once in the notice, and in the source line the answer ends with; never in the text's label
+    expect(n.r.answer).not.toContain('SPAPDDPT, ')
+    expect(n.r.answer).not.toContain('SPAPDDPT ·')
+    expect(n.r.answer).not.toContain('· SPAPDDPT')
     expect(n.r.answer).toContain('texto sin alinear')
     expect(n.r.answer.match(/No es el texto literal alineado de Door43/g)?.length).toBe(1)
     expect(n.r.answer).toContain('CC BY-SA 4.0')
@@ -274,9 +282,13 @@ test('a verse whose text comes from yaapi: the text says its version, that it is
     expect(n.r.cites.filter((c) => !c.startsWith('yaapi-patch')).join(' ')).not.toContain('sha256')
     const st = await studyOf(n.sheet)
     if (st) {
-      expect(st.texts[0]!.tag).toBe('yaapi · SPAPDDPT · texto sin alinear')
+      expect(st.texts[0]!.tag).toBe('yaapi · texto sin alinear')
       expect(st.aquifer).toContain('yaapi.bible')
       expect(st.source).not.toContain('sha256')
+      expect(st.texts[0]!.label).toBe('Palabra de Dios para ti')
+      expect(st.source).toContain('Palabra de Dios para ti')
+      expect(st.source).not.toContain('yaapi')
+      expect(st.source).not.toContain('SPAPDDPT')
     }
   } finally {
     undo()
@@ -291,7 +303,7 @@ test('asking for a version when the book has only a patch text: the patch text i
   try {
     resetLangs()
     const n = await ask('es', { intent: 'passage', book: 'Tito', chapter: 2, verse_start: 3, what: ['text'], version: 'ust' })
-    expect(n.r.answer).toContain('SPAPDDPT')
+    expect(n.r.answer).toContain('Palabra de Dios para ti')
     expect(n.r.answer).toContain('texto sin alinear')
   } finally {
     undo()
@@ -314,4 +326,15 @@ test('online AI: surrounding verses from a yaapi text come with their source and
     undo()
     resetLangs()
   }
+})
+
+test('a version is named as a person says it: the catalog title without its publisher', () => {
+  expect(shortName('Palabra de Dios para ti (Latinamerican Textual Bible Foundation Inc)')).toBe('Palabra de Dios para ti')
+  expect(shortName('Biblica® Open Nueva Biblia Viva (Biblica, Inc.)')).toBe('Nueva Biblia Viva')
+  expect(shortName('Nueva Biblia Viva')).toBe('Nueva Biblia Viva')
+  expect(shortName('(x)')).toBe('(x)')
+  noteTitles([{ key: 'yaapi/es-419/ONBV-AST', title: 'Biblica® Open Nueva Biblia Viva (Biblica, Inc.)' }])
+  expect(versionName({ patch: 'es-419-x-yaapi', release: 'ONBV-AST@sha256:abcdef012345' })).toBe('Nueva Biblia Viva')
+  // no title read: the code
+  expect(versionName({ patch: 'hi-x-yaapi', release: 'OHCV@sha256:abcdef012345' })).toBe('OHCV')
 })
