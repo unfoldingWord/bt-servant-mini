@@ -27,6 +27,7 @@ import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, 
 import { kinVerses, trip as tripOf, type PlaceRef, type Relative } from '@bt-synergy/language-pack-client'
 import { hasGeo, personPlace, personVerses, placeData, placeNamed, placeQuestion, placeRefs, placeShape, placesAt, placeVerses, referenceFor, type PlaceAsk } from './places'
 import { PLACE_SOURCES, PLT } from './placetext'
+import { isolate } from './bidi'
 import type { MapPoint } from './mapview'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2545,7 +2546,7 @@ export function placeSheetOf(ask: PlaceAsk, names: string[]): Sheet {
   const two = ask.kind === 'distance' || ask.kind === 'days'
   if (ask.choose) {
     // (the options of the name that has no winner; the other name of a distance goes with them, written, to be resolved after the choice)
-    const second = two && names[1] !== undefined && ask.choose.name === names[1]
+    const second = two && ask.choose.index === 1
     const what = two ? [ask.kind, `~${names[second ? 0 : 1] ?? ''}`, ...(second ? ['2'] : [])] : [ask.kind]
     return placeSheet(base, what, { candidates: ask.choose.options.map((o) => o.id), term: ask.choose.name })
   }
@@ -2556,11 +2557,11 @@ export function placeSheetOf(ask: PlaceAsk, names: string[]): Sheet {
 }
 
 /** What a place answer shows next to its map, and the tags that say how sure a place is (a color alone never says it). */
-const tagOf = (t: ReturnType<typeof PLT>, p: PlaceRef): string => (p.sure === 0 ? t.tagUnknown : p.form === 2 ? t.tagRegion : p.form === 3 ? t.tagWater : p.sure === 1 ? t.tagUncertain : '')
+const tagOf = (t: ReturnType<typeof PLT>, p: PlaceRef, geo: boolean): string => (p.sure === 0 ? (geo ? t.tagUnknown : '') : p.form === 2 ? t.tagRegion : p.form === 3 ? t.tagWater : p.sure === 1 ? t.tagUncertain : '')
 const mapPoint = (p: PlaceRef): MapPoint | null =>
   p.sure >= 1 && p.lat !== undefined && p.lon !== undefined ? { id: p.id, lat: p.lat, lon: p.lon, sure: p.sure as 1 | 2 | 3, form: p.form, label: p.name } : null
-const listOf = (ui: string, head: string, ps: { p: PlaceRef; ref?: string; tag?: string }[]): PlaceList =>
-  ({ head, items: ps.map(({ p, ref, tag }) => ({ text: p.name, ...(tag || tagOf(PLT(ui), p) ? { tag: tag || tagOf(PLT(ui), p) } : {}), ...(p.note ? { note: p.note } : {}), ...(ref ? { ref } : {}) })) })
+const listOf = (ui: string, head: string, ps: { p: PlaceRef; ref?: string; tag?: string }[], geo = true): PlaceList =>
+  ({ head, items: ps.map(({ p, ref, tag }) => ({ text: p.name, ...(tag || tagOf(PLT(ui), p, geo) ? { tag: tag || tagOf(PLT(ui), p, geo) } : {}), ...(p.note ? { note: p.note } : {}), ...(ref ? { ref } : {}) })) })
 /** The map of these places, or none when no place has a point (§5.5: «sin mapa», the list and the text stay). */
 function mapOf(ui: string, pack: string, ps: PlaceRef[], summary: string, small?: boolean): MapBlock | undefined {
   const points = ps.map(mapPoint).filter((x): x is MapPoint => !!x)
@@ -2637,12 +2638,12 @@ async function placeAnswer(x: Ctx): Promise<Done> {
   if (kind === 'view') {
     const ref = sheet.ref ?? ''
     const at = (await placesAt(pack, ref).catch(() => [])).filter((p) => p.sure >= 1 && p.lat !== undefined)
-    const label = refLabelOf(ui, ref)
+    const label = ui === 'ar' ? isolate(refLabelOf(ui, ref)) : refLabelOf(ui, ref) // (Arabic: the reference is isolated in the sentence and in the summary)
     const names = at.map((p) => p.name)
-    const info = at.length ? `**${trimColon(t.listPassage.replace('{ref}', label))}**` : t.passageNone.replace('{ref}', label)
+    const info = at.length ? `**${colon(ui, trimColon(t.listPassage.replace('{ref}', label)))}**` : t.passageNone.replace('{ref}', label)
     const follow: Follow[] = at.slice(0, MAX_FOLLOW).map((p) => ({ label: p.name, sheet: placeSheet(sheet, ['card'], { concept: p.id, term: p.name }) }))
     const list = at.length ? listOf(ui, '', at.map((p) => ({ p, ref: verseRefOf(ui, p.verse).label }))) : undefined
-    return done({ info: [info, ...(at.length ? [placeCredit(ui, [], true)] : [])].join('\n\n'), follow,
+    return done({ info: [info, ...(at.length ? [placeCredit(ui, ['openbibleinfo/Bible-Geocoding-Data'], true)] : [])].join('\n\n'), follow,
       ...(at.length ? { map: mapOf(ui, pack, at, t.sumPassage.replace('{n}', String(at.length)).replace('{ref}', label) + (names.length <= 6 ? `: ${nameList(ui, names)}` : '')), list } : {}),
       meta: meta(`view ${ref}: ${at.map((p) => p.id).join(', ')}`) }, { ref, found: at.length })
   }
@@ -2665,7 +2666,7 @@ async function placeAnswer(x: Ctx): Promise<Done> {
     const verses = await placeVerseSteps(sheet, ui, pairs, plain)
     const labels = pairs.map((p) => verseRefOf(ui, p[0], p[1]).label)
     const map = geo ? mapOf(ui, pack, [pp.place], t.sumPlace.replace('{x}', pp.place.name), true) : undefined
-    const list = labels.length ? { head: trimColon(t.together), items: labels.map((l) => ({ text: '', ref: l })) } satisfies PlaceList : undefined
+    const list = labels.length ? { head: colon(ui, trimColon(t.together)), items: labels.map((l) => ({ text: '', ref: l })) } satisfies PlaceList : undefined
     const card: Follow = { label: withName(ui, t.card, pp.place.name), sheet: placeSheet(sheet, ['card'], { concept: pp.place.id, term: pp.place.name }) }
     return done({ info: [line, placeCredit(ui, [TIPNR_THEO, 'openbibleinfo/Bible-Geocoding-Data'], !!map)].join('\n\n'),
       follow: [...verses, card, personCard], ...(map ? { map } : {}), ...(list ? { list } : {}), meta: meta(`${kind} ${pp.person.id} in ${pp.place.id}`) }, { concept: pp.person.id })
@@ -2678,7 +2679,7 @@ async function placeAnswer(x: Ctx): Promise<Done> {
       const r = await placeNamed(pack, other.slice(1), ui as 'en', kind as 'distance', x.c.last?.ref ?? null)
       if (!r) throw new Error(`no place ${other}`)
       if ('choose' in r) {
-        const follow = r.choose.map((p) => ({ label: p.note ? `${p.name} — ${p.note}` : p.name, sheet: placeSheet(sheet, [kind, sheet.concept!, ...sheet.what.slice(2)], { concept: p.id, term: other.slice(1) }) }))
+        const follow = r.choose.map((p) => ({ label: p.note ? `${p.name} — ${p.note}` : p.name, sheet: placeSheet(sheet, [kind, sheet.concept!, ...(sheet.what[2] === '2' ? [] : ['2'])], { concept: p.id, term: other.slice(1) }) }))
         return done({ intro: t.choosePlace.replace('{x}', other.slice(1)), follow, meta: meta(`choose the other of ${sheet.concept}`) }, { answered: 'choose', found: follow.length })
       }
       other = r.win.id
@@ -2692,7 +2693,7 @@ async function placeAnswer(x: Ctx): Promise<Done> {
     const main = geo ? distanceLine(ui, a, b, tr) : `${a.name}, ${b.name}. ${t.noGeo}`
     const days = daysLine(ui, tr)
     const map = geo ? mapOf(ui, pack, [a, b], t.sumMany.replace('{x}', nameList(ui, [a.name, b.name]))) : undefined
-    const list = listOf(ui, t.listHead, [{ p: a }, { p: b }])
+    const list = listOf(ui, t.listHead, [{ p: a }, { p: b }], geo)
     const sources = (await placeData(pack, a.id).catch(() => null))?.sources ?? []
     const follow: Follow[] = [a, b].map((p) => ({ label: withName(ui, t.card, p.name), sheet: placeSheet(sheet, ['card'], { concept: p.id, term: p.name }) }))
     return done({ info: [main, days, placeCredit(ui, sources, !!map)].filter(Boolean).join('\n\n'), follow, ...(map ? { map } : {}), list,
@@ -2738,7 +2739,7 @@ async function placeAnswer(x: Ctx): Promise<Done> {
       }
     }
     const more = events.length > shown.length ? eventsBtn(events.length).map((b) => ({ ...b, label: t.allEvents.replace('{n}', String(events.length)) })) : []
-    const info = [`**${trimColon(withName(ui, t.eventsHead, name).replace('{n}', String(events.length)))}:**`, placeCredit(ui, [...sources, 'robertrouse/theographic-bible-metadata'], false)].join('\n\n')
+    const info = [`**${colon(ui, trimColon(withName(ui, t.eventsHead, name).replace('{n}', String(events.length))))}**`, placeCredit(ui, [...sources, 'robertrouse/theographic-bible-metadata'], false)].join('\n\n')
     return done({ info, list: { head: '', items: rows }, follow: [...others, ...more, ...buttons, ...appears, ...(tw ? [tw] : []), ...cardBtn], meta: meta(`${kind} ${place.id}: ${events.length} events`) }, { concept: place.id, found: events.length })
   }
 
@@ -2762,7 +2763,7 @@ async function placeAnswer(x: Ctx): Promise<Done> {
   if (events.length) lines.push(`**${t.happenedHere}** ${events.slice(0, 3).map(evLabel).join('; ')}${events.length > 3 ? ' …' : ''}`)
   const map = geo ? mapOf(ui, pack, [place, ...(ref ? [ref] : [])], t.sumPlace.replace('{x}', place.name)) : undefined
   const first = await placeVerseSteps(sheet, ui, verses.slice(0, 1).map((v) => [v, v] as [number, number]), plain)
-  const list = listOf(ui, t.listHead, [{ p: place, ...(verses[0] ? { ref: verseRefOf(ui, verses[0]).label } : {}) }, ...(ref ? [{ p: ref, tag: t.tagRef }] : [])])
+  const list = listOf(ui, t.listHead, [{ p: place, ...(verses[0] ? { ref: verseRefOf(ui, verses[0]).label } : {}) }, ...(ref ? [{ p: ref, tag: t.tagRef }] : [])], geo)
   const follow: Follow[] = [...others, ...first, ...appears, ...(tw ? [tw] : []), ...eventsBtn(events.length), ...cardBtn]
   const info = [...lines, plain.length ? plain.join(', ') : '', placeCredit(ui, sources, !!map)].filter(Boolean).join('\n\n')
   return done({ info, follow, ...(map ? { map } : {}), list, meta: meta(`${kind} ${place.id}${ref ? ` near ${ref.id}` : ''}${tr ? `: ${Math.round(tr.km)} km` : ''}`) }, { concept: place.id })

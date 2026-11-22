@@ -12,6 +12,8 @@ import { setPlaceReader, type PlaceReader } from '../src/places'
 import { placeSheet, type ConvState, type Reply } from '../src/pipeline'
 import { mapSvg } from '../src/mapview'
 import { md } from '../src/md'
+import { buildContext } from '../src/context'
+import { resizeMaps, sweepMaps } from '../src/placeview'
 import { placeBlock } from '../src/placeview'
 
 const ask = async (q: string, ui = 'es', c: ConvState = { last: null }) => turn(c, { q, slots: null }, ui)
@@ -292,7 +294,7 @@ describe('on a hand-made reader (verses, events with passages)', () => {
   test('«¿Dónde nació Pablo?»: «aparecen juntos en» the verses of both, as a list and as buttons; the card of the place', async () => {
     const r = await ask('¿Dónde nació Paul?')
     expect(r.reply.info).toMatch(/^Según Theographic, Paul nació en Tarso\./)
-    expect(r.reply.list).toEqual({ head: 'Aparecen juntos en', items: [{ text: '', ref: 'Hechos 9:11' }, { text: '', ref: 'Hechos 11:25' }, { text: '', ref: 'Hechos 21:39' }] })
+    expect(r.reply.list).toEqual({ head: 'Aparecen juntos en:', items: [{ text: '', ref: 'Hechos 9:11' }, { text: '', ref: 'Hechos 11:25' }, { text: '', ref: 'Hechos 21:39' }] })
     expect(labels(r)).toEqual(['Hechos 9:11', 'Hechos 11:25', 'Hechos 21:39', 'Ficha de Tarso', 'Paul'])
     expect(r.reply.map).toMatchObject({ small: true })
   })
@@ -301,10 +303,10 @@ describe('on a hand-made reader (verses, events with passages)', () => {
     const r = await turn({ last: null }, { q: '', sheet: placeSheet(base0, ['view'], { ref: 'gen 12:1-13:3' }) }, 'es')
     expect(r.reply.list!.items).toEqual([{ text: 'Betel', ref: 'Génesis 12:8' }])
     expect(r.reply.map!.summary).toBe('Mapa: 1 lugares en Génesis 12:1-13:3: Betel')
-    expect(r.reply.info).toMatch(/^\*\*Lugares en Génesis 12:1-13:3\*\*/)
+    expect(r.reply.info).toMatch(/^\*\*Lugares en Génesis 12:1-13:3:\*\*/)
     const f = await turn({ last: null }, { q: '', sheet: placeSheet(base0, ['view'], { ref: 'obs 5:9' }) }, 'es')
     expect(f.reply.list!.items.map((i) => i.text)).toEqual(['Betel'])
-    expect(f.reply.info).toMatch(/^\*\*Lugares en .*5:9\*\*/)
+    expect(f.reply.info).toMatch(/^\*\*Lugares en .*5:9:\*\*/)
     const none = await turn({ last: null }, { q: '', sheet: placeSheet(base0, ['view'], { ref: 'gen 5:5' }) }, 'es')
     expect(none.reply.map).toBeUndefined()
     expect(none.reply.info).toMatch(/no muestran lugares con ubicación en Génesis 5:5/)
@@ -328,7 +330,7 @@ describe('on a hand-made reader (verses, events with passages)', () => {
 
 // ----------------------------------------------------------------------------------------------------------------- Arabic and the DOM
 class El {
-  tagName: string; className = ''; dir = ''; text = ''; children: El[] = []; isConnected = false
+  style: Record<string, string> = {}; tagName: string; className = ''; dir = ''; text = ''; children: El[] = []; isConnected = false
   constructor(tag: string) { this.tagName = tag.toUpperCase() }
   appendChild(c: El) { this.children.push(c); return c }
   set textContent(t: string) { this.text = t }
@@ -459,5 +461,170 @@ describe('«Ver en el mapa» under a passage and a frame of Open Bible Stories',
     const r = await turn({ last: null }, { q: '', sheet: { ...sheetOf('gen 12:8'), lang: 'ar' } }, 'ar')
     const f = (r.reply.follow ?? []).find((x) => x.sheet?.intent === 'place')
     if (f) expect(f.label).toBe('عرض على الخريطة')
+  })
+})
+
+// ------------------------------------------------------------------------------------------------------------ corrección 1
+describe('corrección 1', () => {
+  const twin = (id: string): [string, ReturnType<typeof place>] => [id, place(id)]
+  const H: World = {
+    topics: [twin('lug:alfa-n'), twin('lug:alfa-s'), twin('lug:beta-n'), twin('lug:beta-s'), ['lug:jerusalem', place('Jerusalem')]],
+    geo: { 'lug:alfa-n': P(32, 35), 'lug:alfa-s': P(30, 35), 'lug:beta-n': P(32.5, 36), 'lug:beta-s': P(29.5, 36), 'lug:jerusalem': P(31.78, 35.23) },
+    verses: {},
+    places: {
+      names: { 'lug:alfa-n': 'Alfa', 'lug:alfa-s': 'Alfa', 'lug:beta-n': 'Beta', 'lug:beta-s': 'Beta', 'lug:jerusalem': 'Jerusalén' },
+      notes: { 'lug:alfa-n': 'del norte', 'lug:alfa-s': 'del sur', 'lug:beta-n': 'del norte', 'lug:beta-s': 'del sur' }, aliases: {},
+    },
+    names: {},
+  }
+  const pick = async (q: string, notes: string[]) => {
+    const c: ConvState = { last: null }
+    let r = await ask(q, 'es', c)
+    for (const n of notes) {
+      expect(r.answered).toBe('choose')
+      r = await tap(c, r, new RegExp(`— ${n}$`))
+    }
+    return r
+  }
+  const viewSheet = (ref: string) => placeSheet({ id: '', intent: 'place', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'es-419' } as never, ['view'], { ref })
+  afterAll(() => { setPlaceReader(); setKinReader(); delete (globalThis as any).document })
+
+  test('3. two ambiguous names: after both choices the sentence is about the first name, in both orders', async () => {
+    base = await fixture.open()
+    useWorld(H)
+    // Alfa (32, 35) and Beta (29.5, 36): Alfa is north of Beta
+    const a = await pick('¿Qué distancia hay entre Alfa y Beta?', ['del norte', 'del sur'])
+    expect(a.reply.info).toMatch(/^Unos \d+ km en línea recta; Alfa está al norte de Beta\./)
+    expect(a.reply.map!.points.map((p) => p.id)).toEqual(['lug:alfa-n', 'lug:beta-s'])
+    const b = await pick('¿Qué distancia hay entre Beta y Alfa?', ['del sur', 'del norte'])
+    expect(b.reply.info).toMatch(/^Unos \d+ km en línea recta; Beta está al sur de Alfa\./)
+    expect(b.reply.map!.points.map((p) => p.id)).toEqual(['lug:beta-s', 'lug:alfa-n'])
+    // the same name written twice: the index tells the two apart, the first choice is the first name
+    const c = await pick('¿Qué distancia hay entre Alfa y Alfa?', ['del norte', 'del sur'])
+    expect(c.reply.info).toMatch(/Alfa está al norte de Alfa\./)
+    expect(c.reply.map!.points.map((p) => p.id)).toEqual(['lug:alfa-n', 'lug:alfa-s'])
+    const d = await pick('¿Qué distancia hay entre Alfa y Alfa?', ['del sur', 'del norte'])
+    expect(d.reply.info).toMatch(/Alfa está al sur de Alfa\./)
+  })
+  test('3. one ambiguous name, in either place of the question: the direction follows the question', async () => {
+    const a = await pick('¿Qué distancia hay entre Alfa y Jerusalén?', ['del norte'])
+    expect(a.reply.info).toMatch(/Alfa está al noroeste de Jerusalén\./)
+    const b = await pick('¿Qué distancia hay entre Jerusalén y Alfa?', ['del norte'])
+    expect(b.reply.info).toMatch(/Jerusalén está al sureste de Alfa\./)
+  })
+
+  test('4. Arabic: the passage reference is isolated in the sentence and in the map summary', async () => {
+    useWorld(W)
+    const r = await turn({ last: null }, { q: '', sheet: viewSheet('gen 12:1-13:3') }, 'ar')
+    expect(r.reply.info).toMatch(/⁨[^⁩]*12:1-13:3⁩/)
+    expect(r.reply.map!.summary).toMatch(/⁨[^⁩]*12:1-13:3⁩/)
+    const none = await turn({ last: null }, { q: '', sheet: viewSheet('gen 5:5') }, 'ar')
+    expect(none.reply.info).toMatch(/⁨[^⁩]*5:5⁩/)
+  })
+  test('7. the credit of a passage map names OpenBible.info, as NOTICE does', async () => {
+    const r = await turn({ last: null }, { q: '', sheet: viewSheet('gen 12:1-13:3') }, 'es')
+    expect(lastPara(r)).toBe('*Lugares: OpenBible.info, TIPNR, ACAI · mapa: Natural Earth.*')
+  })
+  test('8. French keeps the space before the colon in its headings', async () => {
+    const r = await turn({ last: null }, { q: '', sheet: viewSheet('gen 12:1-13:3') }, 'fr')
+    expect(r.reply.info).toMatch(/^\*\*Lieux dans Genesis 12:1-13:3 :\*\*/)
+    const e = await ask('Que s’est-il passé à Bethel ?', 'fr')
+    expect(e.route).toBe('place')
+    expect(e.reply.info).toMatch(/^\*\*[^*]* \(2\) :\*\*/)
+  })
+  test('6. without `geo` no line of the list says «ubicación desconocida»; with `geo` a place with no point does', async () => {
+    useWorld({ ...W, geo: undefined })
+    const r = await ask('¿Dónde queda Betel?')
+    expect(r.reply.list!.items.every((i) => !i.tag)).toBe(true)
+    const d = await ask('¿Qué distancia hay entre Betel y Jerusalén?')
+    expect(d.reply.list!.items.every((i) => !i.tag)).toBe(true)
+    useWorld(W)
+    expect((await ask('¿Dónde queda Perdida?')).reply.list!.items[0]!.tag).toBe('ubicación desconocida')
+  })
+  test('9. only the exact credit line is a credit line', () => {
+    expect(isCreditLine('Lugares: OpenBible.info, TIPNR, ACAI · mapa: Natural Earth.')).toBe(true)
+    expect(isCreditLine('Places: Theographic, TIPNR, ACAI.')).toBe(true)
+    expect(isCreditLine('Lugares: Jerusalén, Betel y Jericó.')).toBe(false)
+    expect(isCreditLine('Places: a list of cities')).toBe(false)
+  })
+  test('5. online AI is given the location sentence: the phone answer (`info`) is what buildContext sends', async () => {
+    const c: ConvState = { last: null }
+    const r = await ask('¿Dónde queda Betel?', 'es', c)
+    const m = { who: 'bot', ...r.reply, node: c.graph!.cur } as never
+    const b = await buildContext({ question: '¿Dónde queda Betel?', m, msgs: [m], graph: c.graph, node: c.graph!.cur, lang: 'es-419' })
+    expect(b.helps).toContain('Betel estaba a unos 20 km al norte de Jerusalén')
+  })
+  test('10. without places data, «Where was Jesus born?» is not caught: the search answers as before, never «It is in»', async () => {
+    useWorld({ ...W, noXtopics: true })
+    const none = await ask('Where was Jesus born?', 'en')
+    expect(none.route).toBe('search')
+    expect(none.reply.info ?? '').not.toMatch(/^(It is in|Está en)/)
+    // (xtopics but no person «Jesus»: not a birth question the data can answer; and `places` absent)
+    useWorld({ ...W, places: undefined, names: {} })
+    expect((await ask('Where was Jesus born?', 'en')).route).toBe('search')
+  })
+
+  // ------------------------------------------------------------------------------ the page: the map is mounted when seen
+  class FakeIO {
+    static all: FakeIO[] = []
+    disconnected = false
+    constructor(public cb: (es: { isIntersecting: boolean }[]) => void) { FakeIO.all.push(this) }
+    observe() {}
+    disconnect() { this.disconnected = true }
+  }
+  const dom = () => {
+    ;(globalThis as any).document = { createElement: (t: string) => new El(t), createTextNode: (t: string) => Object.assign(new El('#text'), { text: t }) }
+    ;(globalThis as any).IntersectionObserver = FakeIO
+    FakeIO.all = []
+  }
+  type Host = El & { style: Record<string, string> }
+  const hostOf = (b: unknown) => (b as El).children[0] as Host
+  const block = { map: { pack: 'es-419', points: [], summary: 's' }, list: { head: '', items: [] } }
+  const tick = () => new Promise((r) => setTimeout(r, 10))
+  test('1. the host keeps a height while it waits, is mounted when it intersects and not before, and is hidden only after a failed mount', async () => {
+    dom()
+    const calls: unknown[] = []
+    const blk = placeBlock(block, 'es', async (el) => { calls.push(el); return { redraw() {}, destroy() {} } })
+    const host = hostOf(blk)
+    expect(host.className).toBe('place-map')
+    expect(host.style.minHeight).toBe('240px') // (a host with no height is never seen come into view)
+    await tick()
+    expect(calls.length).toBe(0)
+    FakeIO.all[0]!.cb([{ isIntersecting: false }])
+    expect(calls.length).toBe(0)
+    FakeIO.all[0]!.cb([{ isIntersecting: true }])
+    expect(calls.length).toBe(1)
+    expect(FakeIO.all[0]!.disconnected).toBe(true)
+    await tick()
+    expect(host.style.minHeight).toBe('')
+    const bad = placeBlock(block, 'es', async () => { throw new Error('no') })
+    FakeIO.all[1]!.cb([{ isIntersecting: true }])
+    await tick()
+    expect(hostOf(bad).className).toBe('place-map failed')
+    delete (globalThis as any).IntersectionObserver
+  })
+  test('2. resize draws the connected maps again; a host that left is destroyed, even if a destroy throws; an unseen host lets its observer go', async () => {
+    dom()
+    const log: string[] = []
+    const mk = (name: string, throws = false) => placeBlock(block, 'es', async () => ({ redraw() { log.push(`redraw ${name}`) }, destroy() { log.push(`destroy ${name}`); if (throws) throw new Error('x') } }))
+    const [a, b, c] = [mk('a'), mk('b', true), mk('c')]
+    FakeIO.all.forEach((io) => io.cb([{ isIntersecting: true }]))
+    await tick()
+    for (const x of [a, b, c]) hostOf(x).isConnected = true
+    resizeMaps()
+    expect(log).toEqual(['redraw a', 'redraw b', 'redraw c'])
+    log.length = 0
+    hostOf(a).isConnected = false
+    hostOf(b).isConnected = false
+    resizeMaps()
+    expect(log).toEqual(['destroy a', 'destroy b', 'redraw c'])
+    hostOf(c).isConnected = false
+    sweepMaps()
+    expect(log.at(-1)).toBe('destroy c')
+    FakeIO.all = []
+    mk('lone')
+    sweepMaps()
+    expect(FakeIO.all[0]!.disconnected).toBe(true)
+    delete (globalThis as any).IntersectionObserver
   })
 })

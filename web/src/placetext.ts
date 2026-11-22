@@ -80,8 +80,9 @@ export const PLT = (ui: string): PlaceText => PLACE_T[((ui || '').slice(0, 2).to
 
 /** Whether a line is the credit of a place answer (any language): main.ts draws it small, as a source label. */
 export function isPlaceCredit(t: string): boolean {
+  // (the line placeCredit writes: its head, TIPNR and ACAI always among the sources, and its end mark)
   const s = t.trim()
-  return Object.values(PLACE_T).some((x) => s.startsWith(x.credit.split('{src}')[0]!.trim()))
+  return Object.values(PLACE_T).some((x) => s.startsWith(x.credit.split('{src}')[0]!.trim())) && s.includes('TIPNR') && s.includes('ACAI') && /[.।]$/.test(s)
 }
 
 /** The sources of a place answer as its credit line names them (the place data's own keys, plus TIPNR and ACAI that name the places). */

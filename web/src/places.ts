@@ -24,7 +24,7 @@ export type PlaceAsk = {
   places: PlaceRef[]
   person?: { id: string; name: string }
   /** a name with several places (or, for born / died, several people: their `id` is then `per:…`, with a point-less ref) and no winner: ask */
-  choose?: { name: string; options: PlaceRef[] }
+  choose?: { name: string; options: PlaceRef[]; /** which name of the question it is (0 or 1): two names written alike are told apart */ index?: number }
   /** the other places of a name that had a winner ("¿Otra Betel?") */
   other?: PlaceRef[]
 }
@@ -397,7 +397,7 @@ export async function placeQuestion(q: string, nav: string, last: string | null)
     for (let i = 0; !failed && i < found.length; i++) {
       const r = await pickPlace(ix, found[i]!, s.kind, last)
       if ('choose' in r) {
-        ask.choose = { name: s.names[i]!, options: r.choose }
+        ask.choose = { name: s.names[i]!, options: r.choose, index: i }
         ask.places = []
         return ask
       }
