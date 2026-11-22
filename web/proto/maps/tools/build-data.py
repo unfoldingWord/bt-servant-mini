@@ -53,7 +53,9 @@ def build(tol, scale, minarea):
         if p.area < minarea: continue
         s = p.simplify(tol, preserve_topology=True)
         for q in polys(s):
-            paths.append((1, list(q.exterior.coords)[:-1]))   # holes of land (inland seas) skipped; lakes layer covers
+            paths.append((1, list(q.exterior.coords)[:-1]))
+            for h in q.interiors:   # holes = inland seas (Caspian) and lakes: written as layer 2 (water) so they are not painted as land
+                if Polygon(h).area >= minarea: paths.append((2, list(h.coords)[:-1]))
     for g in read('ne_10m_lakes', LAKES):
         for p in polys(g):
             s = p.simplify(tol, preserve_topology=True)

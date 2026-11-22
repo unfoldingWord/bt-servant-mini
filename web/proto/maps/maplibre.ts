@@ -2,7 +2,7 @@
 // basemap, an image source for the relief, native circle/line layers. No glyphs/sprite: labels are HTML (see notes).
 import maplibregl from 'maplibre-gl/dist/maplibre-gl.js'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { type Api, type Cand, type Ctx, type Dot, type Path, BBOX, LabelLayer, css, fit, mount, placeLabels } from './common'
+import { type Api, type Box, type Cand, type Ctx, type Dot, type Path, BBOX, LabelLayer, css, fit, mount, placeLabels } from './common'
 
 const ring = (p: Path) => { const r: number[][] = []; for (let i = 0; i < p.lon.length; i++) r.push([p.lon[i], p.lat[i]]); if (p.layer < 3) r.push(r[0]); return r }
 const fc = (features: any[]) => ({ type: 'FeatureCollection', features })
@@ -71,7 +71,7 @@ mount('maplibre', async (c: Ctx): Promise<Api> => {
       const { x, y } = map.project([p.lon, p.lat])
       dots.push({ x, y, num: p.n, hollow: p.hollow }); cand.push({ x, y, text: p[c.lang], v: p.main ? 1e9 : p.v, main: p.main, r: p.n ? 11 : p.main ? 7 : 5 })
     }
-    labels.set(dots, placeLabels(cand, side, c.w, c.h)); labels.offset(0, 0); labels.root.style.opacity = '1'
+    labels.set(dots, placeLabels(cand, side, c.w, c.h, dots.map(d => { const r = (d.cluster ? 14 : d.num ? 9 : 5) + 1; return [d.x - r, d.y - r, d.x + r, d.y + r] as Box }))); labels.offset(0, 0); labels.root.style.opacity = '1'
   }
   await new Promise(r => map.once('load', r))
   const idle = () => new Promise<void>(r => { map.once('idle', () => r()); map.triggerRepaint() })

@@ -24,9 +24,9 @@ async function run(url, rate, shot) {
 }
 for (const rate of th.split(',').map(Number)) for (const v of variants) for (const s of scenes) {
   const r = await run(`${base}/${v}.html?scene=${s}&bench=1`, rate)
-  const o = { ...(r.res || {}), throttle: rate, errs: r.errs, external: r.external }
+  const o = { ...(r.res || {}), run: +(process.env.RUN || 1), throttle: rate, errs: r.errs, external: r.external }
   appendFileSync(out, JSON.stringify(o) + '\n'); console.log(v, s, rate, JSON.stringify(o).slice(0, 300))
 }
-for (const v of variants) for (const s of scenes) for (const lang of ['es', 'ar']) await run(`${base}/${v}.html?scene=${s}&lang=${lang}`, 1, `${shots}/${v}-${s}-${lang}.png`)
-for (const v of variants) await run(`${base}/${v}.html?scene=paul&lang=es&dark=1`, 1, `${shots}/${v}-paul-es-dark.png`)
+if (!process.env.NOSHOTS) for (const v of variants) for (const s of scenes) for (const lang of ['es', 'ar']) await run(`${base}/${v}.html?scene=${s}&lang=${lang}`, 1, `${shots}/${v}-${s}-${lang}.png`)
+if (!process.env.NOSHOTS) for (const v of variants) await run(`${base}/${v}.html?scene=paul&lang=es&dark=1`, 1, `${shots}/${v}-paul-es-dark.png`)
 await browser.close()

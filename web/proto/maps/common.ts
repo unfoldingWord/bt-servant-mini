@@ -103,14 +103,16 @@ export function textW(t: string, bold = false) {
   _ctx.font = (bold ? '600 ' : '') + '12px system-ui, sans-serif'
   return _ctx.measureText(t).width
 }
+export type Box = [number, number, number, number]
+export const esc = (s: string | number) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 export type Cand = { x: number; y: number; text: string; v: number; main?: boolean; r: number }
-export function placeLabels(cand: Cand[], side: 1 | -1, W: number, H: number): Label[] {
+export function placeLabels(cand: Cand[], side: 1 | -1, W: number, H: number, obstacles: Box[] = [], margin = 0): Label[] {
   cand.sort((a, b) => b.v - a.v)
-  const placed: [number, number, number, number][] = [], labels: Label[] = []
+  const placed: Box[] = [...obstacles], labels: Label[] = []
   for (const c of cand) {
     const wt = textW(c.text, c.main), x0 = side === 1 ? c.x + c.r + 3 : c.x - c.r - 3 - wt
     const box: [number, number, number, number] = [x0, c.y - 8, x0 + wt, c.y + 8]
-    if (box[0] < 2 || box[2] > W - 2 || box[1] < 2 || box[3] > H - 2) continue
+    if (box[0] < 2 - margin || box[2] > W - 2 + margin || box[1] < 2 - margin || box[3] > H - 2 + margin) continue
     if (placed.some(b => !(b[2] < box[0] || b[0] > box[2] || b[3] < box[1] || b[1] > box[3]))) continue
     placed.push(box); labels.push({ x: side === 1 ? x0 : x0 + wt, y: c.y, text: c.text, side, main: c.main })
   }
@@ -142,7 +144,8 @@ export function layout(scene: Scene, v: View, lang: Lang, margin = 0): { dots: D
       cand.push({ x, y, text: p[lang], v: p.main ? 1e9 : p.v, main: p.main, r: p.n ? 11 : p.main ? 7 : 5 })
     }
   }
-  const labels = placeLabels(cand, side, v.w, v.h)
+  const obstacles = dots.map(d => { const r = (d.cluster ? 14 : d.num ? 9 : d.main ? 7 : 5) + 1; return [d.x - r, d.y - r, d.x + r, d.y + r] as Box })
+  const labels = placeLabels(cand, side, v.w, v.h, obstacles, margin)
   return { dots, labels, line }
 }
 
@@ -175,10 +178,10 @@ export class LabelLayer {
   constructor(parent: HTMLElement) { this.root.className = 'lbls'; parent.appendChild(this.root) }
   set(dots: Dot[], labels: Label[]) {
     let h = ''
-    for (const l of labels) h += `<span class="lb${l.main ? ' m' : ''}" style="transform:translate(${l.x.toFixed(1)}px,${(l.y - 8).toFixed(1)}px)${l.side === -1 ? ' translateX(-100%)' : ''}">${l.text}</span>`
+    for (const l of labels) h += `<span class="lb${l.main ? ' m' : ''}" style="transform:translate(${l.x.toFixed(1)}px,${(l.y - 8).toFixed(1)}px)${l.side === -1 ? ' translateX(-100%)' : ''}">${esc(l.text)}</span>`
     for (const d of dots) {
-      if (d.cluster) h += `<span class="cn" style="transform:translate(${d.x.toFixed(1)}px,${(d.y - 8).toFixed(1)}px) translateX(-50%)">${d.cluster}</span>`
-      else if (d.num) h += `<span class="cn st${d.hollow ? ' h' : ''}" style="transform:translate(${d.x.toFixed(1)}px,${(d.y - 8).toFixed(1)}px) translateX(-50%)">${d.num}</span>`
+      if (d.cluster) h += `<span class="cn" style="transform:translate(${d.x.toFixed(1)}px,${(d.y - 8).toFixed(1)}px) translateX(-50%)">${esc(d.cluster)}</span>`
+      else if (d.num) h += `<span class="cn st${d.hollow ? ' h' : ''}" style="transform:translate(${d.x.toFixed(1)}px,${(d.y - 8).toFixed(1)}px) translateX(-50%)">${esc(d.num)}</span>`
     }
     this.root.innerHTML = h
   }
