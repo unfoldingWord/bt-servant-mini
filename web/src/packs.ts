@@ -519,7 +519,18 @@ export const setBasemapFetchMs = (ms = 4000) => { BASEMAP_FETCH_MS = ms }
 // The copy kept for the next time lives in a database of its own: client.prune() deletes what its catalogs do not name, in the client's store.
 let keptDb: Promise<BlobStore> | null = null
 /** The store of the kept basemap copy (outside the client's store, so a prune or a removed language leaves it). */
-export const basemapStore = (): Promise<BlobStore> => (keptDb ??= indexedDbStore({ name: 'btsm-maps' }))
+export function basemapStore(): Promise<BlobStore> {
+  // a database that cannot be opened (private mode) is not kept: the next try opens it again
+  const p = (keptDb ??= (async () => (keptStoreMaker ?? (() => indexedDbStore({ name: 'btsm-maps' })))())())
+  p.catch(() => { if (keptDb === p) keptDb = null })
+  return p
+}
+let keptStoreMaker: (() => Promise<BlobStore>) | null = null
+/** Tests: make the kept-copy store from this (no argument puts the IndexedDB one back). */
+export function setBasemapStore(f?: () => Promise<BlobStore>) {
+  keptStoreMaker = f ?? null
+  keptDb = null
+}
 // The catalog entry of a pack is read once until the packs change (a backoff or a pack with no basemap does not read catalogs again).
 const basemapEntries = new Map<string, Promise<{ id: string; size: number } | null>>()
 async function fetchIn(url: string, ms: number): Promise<Response> {
@@ -542,7 +553,7 @@ function basemapEntry(pack: string): Promise<{ id: string; size: number } | null
   return p
 }
 async function readBasemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
-  const store = (await addedLangs()).includes(pack) ? await added() : (await shipped()).includes(pack) ? assetStore(pack) : null
+  const store = (await addedLangs().catch(() => [] as string[])).includes(pack) ? await added() : (await shipped()).includes(pack) ? assetStore(pack) : null
   if (!store) return null
   const state = await store.getState()
   const entry = state?.published[state.aliases?.[pack] ?? pack]
@@ -571,7 +582,8 @@ export async function basemapBytes(pack: string): Promise<Uint8Array | null> {
     const e = await basemapEntry(pack)
     if (!e || !ID_RE.test(e.id) || e.size > BASEMAP_MAX) return null
     const right = async (b: Uint8Array | undefined) => (b && b.length === e.size && (await sha256hex(b)) === e.id ? b : null)
-    const kept = await right(await (await basemapStore()).get(e.id).catch(() => undefined))
+    let kept: Uint8Array | null = null
+    try { kept = await right(await (await basemapStore()).get(e.id)) } catch { /* no kept copy readable: the other places */ }
     if (kept) return kept
     const last = basemapMiss.get(e.id)
     if (last !== undefined && Date.now() - last < BASEMAP_RETRY_MS) return null
@@ -582,7 +594,7 @@ export async function basemapBytes(pack: string): Promise<Uint8Array | null> {
         const r = await fetchIn(url, BASEMAP_FETCH_MS)
         const ok = r.ok ? await right(new Uint8Array(await r.arrayBuffer())) : null
         if (!ok) continue
-        await (await basemapStore()).put(e.id, ok).catch(() => {}) // kept so the next time needs no network
+        try { await (await basemapStore()).put(e.id, ok) } catch { /* not kept: the bytes are good all the same */ } // kept so the next time needs no network
         return ok
       } catch { /* the next place */ }
     }

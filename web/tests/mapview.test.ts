@@ -9,7 +9,7 @@ import { MAX_SCALE, minScale, project, type MapPoint } from '@bt-synergy/languag
 import { BTS_DIR } from './bts-dir'
 import { mapsFixture } from './maps-fixture'
 import { MAP_DARK, MAP_LIGHT, MAP_T, mapSvg, mountMap, readTheme, resetMapCache, setBasemapSource } from '../src/mapview'
-import { addedClient, basemapStore, basemapBytes, reloadPacks, setBasemapFetchMs, resetAddedStore, setPacksServers, setTrustedKeys } from '../src/packs'
+import { addedClient, basemapStore, setBasemapStore, basemapBytes, reloadPacks, setBasemapFetchMs, resetAddedStore, setPacksServers, setTrustedKeys } from '../src/packs'
 
 const FAKE_IDB = join(BTS_DIR, 'packages', 'language-pack-client', 'node_modules', 'fake-indexeddb', 'build', 'esm', 'index.js')
 
@@ -361,27 +361,59 @@ describe('mountMap', () => {
     expect(hint.text).toBe(MAP_T.es.hint)
     expect(box.style.cssText).toContain('touch-action:pan-x pan-y')
     expect(hint.style.opacity).toBe('0')
-    const t = { pointerType: 'touch' }
-    box.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, ...t })
-    box.fire('pointermove', { pointerId: 1, clientX: 100, clientY: 160, ...t })
+    const T = (id: number, x: number, y: number) => ({ identifier: id, clientX: x, clientY: y })
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    box.fire('touchmove', { touches: [T(1, 100, 160)] })
     expect(layerOf(el).style.transform).toBe(flat)
     expect(hint.style.opacity).toBe('1')
-    box.fire('pointerup', { pointerId: 1, clientX: 100, clientY: 160, ...t })
-    // two fingers: moving both pans, spreading them zooms
+    box.fire('touchend', { touches: [] })
+    // two fingers: moving both pans, spreading them zooms (the browser cancels the first pointer when it starts to scroll: no matter)
     const x0 = dots(layerOf(el).html)[0]![0], g0 = gap(el)
-    box.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, ...t })
-    box.fire('pointerdown', { pointerId: 2, clientX: 200, clientY: 100, ...t })
-    box.fire('pointermove', { pointerId: 1, clientX: 120, clientY: 100, ...t })
+    box.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, pointerType: 'touch' })
+    box.fire('pointercancel', { pointerId: 1, pointerType: 'touch' })
+    box.fire('touchstart', { touches: [T(1, 100, 100), T(2, 200, 100)] })
+    const mv = box.fire('touchmove', { touches: [T(1, 120, 100), T(2, 200, 100)] })
+    expect(mv.prevented).toBe(true)
     expect(layerOf(el).style.transform).not.toBe(flat)
-    box.fire('pointermove', { pointerId: 2, clientX: 320, clientY: 100, ...t })
-    box.fire('pointerup', { pointerId: 2, clientX: 320, clientY: 100, ...t })
-    box.fire('pointerup', { pointerId: 1, clientX: 120, clientY: 100, ...t })
+    box.fire('touchmove', { touches: [T(1, 120, 100), T(2, 320, 100)] })
+    box.fire('touchend', { touches: [T(1, 120, 100)] })
+    box.fire('touchend', { touches: [] })
     expect(dots(layerOf(el).html)[0]![0]).not.toBeCloseTo(x0, 0)
     expect(gap(el)).toBeGreaterThan(g0 * 1.3)
-    // the page must not scroll under two fingers
-    expect(box.fire('touchmove', { touches: [{}, {}] }).prevented).toBe(true)
-    expect(box.fire('touchmove', { touches: [{}] }).prevented).toBeFalsy()
+    // a one-finger move is not prevented (the page scrolls)
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    expect(box.fire('touchmove', { touches: [T(1, 100, 140)] }).prevented).toBeFalsy()
+    box.fire('touchend', { touches: [] })
+    // double tap with a finger goes back to the first view
+    for (let i = 0; i < 2; i++) { box.fire('touchstart', { touches: [T(1, 50, 50)] }); box.fire('touchend', { touches: [] }) }
+    expect(gap(el)).toBeCloseTo(g0, 0)
     m.destroy()
+  })
+
+  test('the late basemap re-clamps the view: a fitted frame keeps its place with the scale clamped; a moved one is clamped too', async () => {
+    let give!: (b: Uint8Array) => void
+    setBasemapSource(() => new Promise<Uint8Array | null>((r) => { give = r }))
+    const wide: MapPoint[] = [{ ...bethel[0]!, id: 'a', lat: 31.5 }, { ...bethel[1]!, id: 'b', lat: 34.5 }] // 3 degrees apart: fits below the small basemap's minimum
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, points: wide })
+    const lo = minScale(SMALL.bbox, 320, 240)
+    expect(gap(el, 3)).toBeLessThan(lo) // the default limits let it fit
+    give(SMALL_BYTES)
+    await m.ready
+    expect(gap(el, 3)).toBeGreaterThanOrEqual(lo - 1)
+    m.destroy()
+    // a view the person had moved (zoomed out as far as it goes before the basemap came) is clamped as well
+    let give2!: (b: Uint8Array) => void
+    setBasemapSource(() => new Promise<Uint8Array | null>((r) => { give2 = r }))
+    const el2 = new FakeEl('div')
+    const m2 = await mountMap(el2 as any, { ...BASE, points: wide })
+    const out = el2.find((e) => e.tagName === 'BUTTON' && e.getAttribute('aria-label') === MAP_T.es.zout)[0]!
+    for (let i = 0; i < 20; i++) out.click()
+    expect(gap(el2, 3)).toBeLessThan(lo)
+    give2(SMALL_BYTES)
+    await m2.ready
+    expect(gap(el2, 3)).toBeGreaterThanOrEqual(lo - 1)
+    m2.destroy()
   })
 
   test('the theme changing in the middle of a gesture commits it and draws again', async () => {
@@ -549,6 +581,30 @@ describe('basemapBytes', () => {
       expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
       expect(Date.now() - t).toBeLessThan(2000)
     } finally { globalThis.fetch = real; setBasemapFetchMs() }
+  })
+  test('IndexedDB that fails (private mode) does not stop the other places or discard a good download', async () => {
+    const bytes = f.basemap.bytes
+    const ok = { get: async () => undefined, put: async () => {} } as any
+    const cases: [string, () => Promise<any>][] = [
+      ['the store cannot be opened', async () => { throw new Error('no idb') }],
+      ['the store opens but get throws', async () => ({ ...ok, get: async () => { throw new Error('get') } })],
+      ['the store opens but put throws', async () => ({ ...ok, put: async () => { throw new Error('put') } })],
+    ]
+    for (const [, make] of cases) {
+      phone(); serve.app = null; serve.server = bytes
+      setBasemapStore(make)
+      try {
+        expect((await basemapBytes(f.lang))?.length).toBe(bytes.length)
+        serve.server = null; serve.app = bytes // another place, and the next time asks again: the copy was not kept
+        reloadPacks()
+        expect((await basemapBytes(f.lang))?.length).toBe(bytes.length)
+      } finally { setBasemapStore() }
+    }
+    // and with no IndexedDB at all
+    phone(); serve.app = bytes
+    ;(globalThis as any).indexedDB = undefined
+    resetAddedStore()
+    expect((await basemapBytes(f.lang))?.length).toBe(bytes.length)
   })
   test('a language that is not installed, or an unknown one, gives null', async () => {
     phone(); serve.app = f.basemap.bytes

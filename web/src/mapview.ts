@@ -193,6 +193,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
 
   let view: Frame = home() // the screen's own frame (w x h); the picture is drawn on this frame grown by m on each side
   let tx = -m, ty = -m, s = 1, dead = false
+  let userMoved = false // the view is no longer the fitted one
   let pending: ReturnType<typeof setTimeout> | undefined
   const bigFrame = (): Frame => ({ ...view, width: w + 2 * m, height: h + 2 * m })
   const put = () => { layer.style.transform = `translate(${tx}px,${ty}px) scale(${s})` }
@@ -214,6 +215,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     if (dead || (s === 1 && tx === -m && ty === -m)) return
     const c = unproject(bigFrame(), (w / 2 - tx) / s, (h / 2 - ty) / s)
     view = { ...view, lat: c.lat, lon: c.lon, scale: Math.max(lo, Math.min(MAX_SCALE, view.scale * s)) }
+    userMoved = true
     draw('map:redraw', extra)
   }
   function zoomAt(f: number, x: number, y: number) {
@@ -224,7 +226,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     s *= f
     put()
   }
-  const frameAll = () => { view = home(); draw('map:redraw') }
+  const frameAll = () => { view = home(); userMoved = false; draw('map:redraw') }
 
   draw('map:first-draw')
   // The basemap is read after the first drawing, never waited for: when it arrives the map is drawn again (a gesture in progress is committed).
@@ -233,8 +235,11 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     basemap = b
     bbox = b.bbox
     lo = minScale(bbox, w, h)
-    if (s === 1 && tx === -m && ty === -m) draw('map:redraw', { basemap: true })
-    else commit({ basemap: true })
+    if (s === 1 && tx === -m && ty === -m) {
+      // the limits changed: the fitted frame keeps its place with its scale clamped; a view the person moved is clamped too
+      view = userMoved ? { ...view, scale: Math.max(lo, Math.min(MAX_SCALE, view.scale)) } : home()
+      draw('map:redraw', { basemap: true })
+    } else commit({ basemap: true })
   })
 
   on(bIn, 'click', () => { zoomAt(STEP, w / 2, h / 2); commit() })
@@ -243,27 +248,24 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
 
   // pointers: one drags, two pinch; a quick second tap goes back to the first view
   const ptr = new Map<number, [number, number]>()
-  const touch = new Set<number>() // the pointers that are fingers
   let down: { t: number; x: number; y: number; moved: boolean } | null = null
   let lastTap: { t: number; x: number; y: number } | null = null
   const rel = (e: PointerEvent | WheelEvent): [number, number] => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] }
   on(box, 'pointerdown', (e: PointerEvent) => {
+    if (e.pointerType === 'touch') return // fingers are read from the touch events (the browser may cancel the pointers)
     try { box.setPointerCapture(e.pointerId) } catch { /* not captured */ }
     const p = rel(e)
-    if (e.pointerType === 'touch') touch.add(e.pointerId)
     if (ptr.size === 0) down = { t: Date.now(), x: p[0], y: p[1], moved: false }
     else if (down) down.moved = true
     ptr.set(e.pointerId, p)
   })
   on(box, 'pointermove', (e: PointerEvent) => {
+    if (e.pointerType === 'touch') return
     const p = ptr.get(e.pointerId)
     if (!p) return
     const n = rel(e)
     if (down && Math.hypot(n[0] - down.x, n[1] - down.y) > 8) down.moved = true
-    if (ptr.size === 1) {
-      if (touch.has(e.pointerId)) { if (down?.moved) showHint() } // one finger scrolls the page, not the map
-      else { tx += n[0] - p[0]; ty += n[1] - p[1]; put() }
-    }
+    if (ptr.size === 1) { tx += n[0] - p[0]; ty += n[1] - p[1]; put() }
     else if (ptr.size === 2) {
       const o2 = [...ptr.entries()].find(([id]) => id !== e.pointerId)![1]
       const d1 = Math.hypot(n[0] - o2[0], n[1] - o2[1]), d0 = Math.hypot(p[0] - o2[0], p[1] - o2[1])
@@ -273,16 +275,20 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     }
     ptr.set(e.pointerId, n)
   })
+  // the end of a touch that did not move is a tap: a second one soon after goes back to the first view. True when it did.
+  function tapEnd(d: { t: number; x: number; y: number; moved: boolean } | null): boolean {
+    if (!d || d.moved || Date.now() - d.t >= 300) return false
+    const now = Date.now()
+    if (lastTap && now - lastTap.t < 350 && Math.hypot(d.x - lastTap.x, d.y - lastTap.y) < 30) { lastTap = null; frameAll(); return true }
+    lastTap = { t: now, x: d.x, y: d.y }
+    return false
+  }
   const up = (e: PointerEvent) => {
-    touch.delete(e.pointerId)
+    if (e.pointerType === 'touch') return
     if (!ptr.delete(e.pointerId) || ptr.size) return
     const d = down
     down = null
-    if (d && !d.moved && Date.now() - d.t < 300) {
-      const now = Date.now()
-      if (lastTap && now - lastTap.t < 350 && Math.hypot(d.x - lastTap.x, d.y - lastTap.y) < 30) { lastTap = null; frameAll(); return }
-      lastTap = { t: now, x: d.x, y: d.y }
-    }
+    if (tapEnd(d)) return
     commit()
   }
   on(box, 'pointerup', up)
@@ -295,8 +301,51 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     clearTimeout(pending)
     pending = setTimeout(commit, 150)
   }, { passive: false })
-  // two fingers must not also scroll the page
-  on(box, 'touchmove', (e: TouchEvent) => { if (e.touches.length >= 2) e.preventDefault() }, { passive: false })
+  // Fingers, from the touch events: one finger scrolls the page (the hint is shown), two pan and pinch the map. The browser may cancel the
+  // first pointer when the scroll starts, so the pointer events are not used for fingers.
+  let tpos = new Map<number, [number, number]>()
+  const fingers = (e: TouchEvent) => {
+    const r = box.getBoundingClientRect()
+    return Array.from(e.touches as ArrayLike<Touch>).map((t) => ({ id: t.identifier, p: [t.clientX - r.left, t.clientY - r.top] as [number, number] }))
+  }
+  on(box, 'touchstart', (e: TouchEvent) => {
+    const ts = fingers(e)
+    if (ts.length === 1 && !down) down = { t: Date.now(), x: ts[0]!.p[0], y: ts[0]!.p[1], moved: false }
+    else if (down) down.moved = true
+    tpos = new Map(ts.map((f) => [f.id, f.p]))
+  }, { passive: true })
+  on(box, 'touchmove', (e: TouchEvent) => {
+    const ts = fingers(e)
+    if (ts.length >= 2) {
+      e.preventDefault() // two fingers must not also scroll the page
+      const [a, b] = ts as [typeof ts[0], typeof ts[0]]
+      const pa = tpos.get(a.id), pb = tpos.get(b.id)
+      if (pa && pb) {
+        const d0 = Math.hypot(pa[0] - pb[0], pa[1] - pb[1]), d1 = Math.hypot(a.p[0] - b.p[0], a.p[1] - b.p[1])
+        tx += (a.p[0] - pa[0] + b.p[0] - pb[0]) / 2
+        ty += (a.p[1] - pa[1] + b.p[1] - pb[1]) / 2
+        if (d0 > 0) zoomAt(d1 / d0, (a.p[0] + b.p[0]) / 2, (a.p[1] + b.p[1]) / 2)
+        else put()
+      }
+      if (down) down.moved = true
+    } else if (ts.length === 1 && down) {
+      if (Math.hypot(ts[0]!.p[0] - down.x, ts[0]!.p[1] - down.y) > 8) { down.moved = true; showHint() }
+    }
+    tpos = new Map(ts.map((f) => [f.id, f.p]))
+  }, { passive: false })
+  const touchEnd = (e: TouchEvent, cancelled: boolean) => {
+    const ts = fingers(e)
+    tpos = new Map(ts.map((f) => [f.id, f.p]))
+    if (ts.length >= 2) return
+    if (ts.length === 0) {
+      const d = down
+      down = null
+      if (!cancelled && tapEnd(d)) return
+    }
+    commit() // no-op when nothing was dragged or scaled
+  }
+  on(box, 'touchend', (e: TouchEvent) => touchEnd(e, false), { passive: true })
+  on(box, 'touchcancel', (e: TouchEvent) => touchEnd(e, true), { passive: true })
   // the system switches between light and dark: the next drawing takes the new colors
   const mq = globalThis.matchMedia?.('(prefers-color-scheme: dark)')
   if (mq) on(mq, 'change', () => api.redraw())
