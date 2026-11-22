@@ -69,6 +69,7 @@ const CSS = `
 .tv-box { flex: 1 1 140px; min-width: 140px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--card); }
 .tv-box.focus { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; margin: 0 0 6px; }
 .tv-small { font-size: 12px; color: var(--muted); }
+.tv-mother { margin-inline-start: 6px; }
 .tv-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 4px 0; }
 .tv-lab { font-size: 13px; color: var(--muted); }
 .tv-name { font: 14px/1.25 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 8px;
@@ -87,7 +88,7 @@ const CSS = `
 .tv-tog.cap { width: auto; padding: 0 6px; }
 .tv-bar { display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px; align-items: center; margin: 2px 0 6px; padding: 4px 6px;
   border: 1px dashed var(--line); border-radius: 8px; background: var(--card); color: var(--muted); }
-.tv-bar button { font: 13px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px; min-height: 36px; }
+.tv-bar button, .tv-top button { font: 13px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px; min-height: 36px; }
 .tv-up { margin: 4px 0; padding-inline-start: 8px; border-inline-start: 1px solid var(--line); }
 .tv-end { font-size: 13px; color: var(--muted); font-style: italic; margin: 6px 0; }
 `
@@ -205,7 +206,7 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
         const small = el('div', 'tv-small')
         if (a) small.append(a)
         p.up.forEach((u, k) => {
-          if (k) small.append(', ')
+          if (k) small.append(rtl ? '، ' : ', ')
           small.appendChild(name(u, () => boxes, p.id, 'sm'))
         })
         if (b) small.append(b)
@@ -326,16 +327,16 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
         main.appendChild(withName(ofWord(child), name(r.p, () => row, from), 'tv-lab'))
         row.appendChild(main)
         if (r.mother) {
-          const m = el('div', 'tv-small')
+          const m = el('span', 'tv-small tv-mother')
           m.appendChild(withName(w.and, name(r.mother, () => row, from), 'tv-small'))
-          row.appendChild(m)
+          main.appendChild(m)
         }
         if (r.others?.length) {
           const os = el('div', 'tv-small')
           const [a, b = ''] = w.alsoSays.split('{x}')
           if (a) os.append(a)
           r.others.forEach((z, k) => {
-            if (k) os.append(', ')
+            if (k) os.append(rtl ? '، ' : ', ')
             os.appendChild(name(z, () => row, from))
           })
           if (b) os.append(b)
