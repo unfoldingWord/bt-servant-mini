@@ -379,11 +379,11 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     pageAnswer(box, m.ui ?? nav)
     if (m.treeOf) {
       const of = m.treeOf
-      void buildTree(of.pack, of.id, of.mode, m.ui ?? nav, of.open).then((v) => {
+      void buildTree(of.pack, of.id, of.mode, m.ui ?? nav, of.open, of.down).then((v) => {
         if (!v.focus.name || v.focus.name === v.focus.id) return
         m.tree = v
         if (box.isConnected) box.replaceWith(treeBlock(m, v))
-      }, () => {})
+      }).catch((e) => { console.warn('tree: kept as text', e) })
     }
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))

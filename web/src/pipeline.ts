@@ -2364,7 +2364,9 @@ export const treeStep = (base: Sheet, ui: string, kind: 'tree' | 'up', id: strin
  */
 export async function treeBar(base: Sheet, ui: string, id: string, fromId: string | null, view: TreeMode, focus: string): Promise<Followup[]> {
   const p = await personOf(base.lang, id).catch(() => null)
-  const name = await shownAs(base.lang, id, p?.name ?? id).catch(() => p?.name ?? id)
+  const raw = p?.name ?? ''
+  // (a person the data names no real name for, «Unnamed#9», `a_wife_of_Lot`: «(sin nombre)», as the tree shows it)
+  const name = !raw || /^Unnamed#/i.test(raw) || raw.includes('_') ? KT(ui).unnamed : await shownAs(base.lang, id, raw).catch(() => raw)
   const out: Followup[] = [await personStep(base, id, name)]
   out.push(treeStep(base, ui, view === 'tree' && id === focus ? 'up' : 'tree', id, name))
   if (fromId) {
@@ -2432,7 +2434,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
       ...(f.verses > 0 ? [{ label: withName(ui, t.whereNamed, f.name), sheet: kinSheet(sheet, 'verses', { concept: f.id, term: sheet.term }) }] : [])]
     const info = [treeText(view), creditLine(ui, f.sources)].join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel + 1,
-      reply: { ui, info, tree: view, treeOf: { pack: sheet.lang, id: f.id, mode, open: view.open }, follow, lang: sheet.lang, meta: meta(`${kind} ${f.id}`) } }
+      reply: { ui, info, tree: view, treeOf: { pack: sheet.lang, id: f.id, mode, open: view.open, ...(view.down ? { down: true as const } : {}) }, follow, lang: sheet.lang, meta: meta(`${kind} ${f.id}`) } }
   }
   if (kind === 'who') {
     // who a person is (Abel, Nov 18): one line of how they are tied to someone known ("hijo de Isaí, padre de David",

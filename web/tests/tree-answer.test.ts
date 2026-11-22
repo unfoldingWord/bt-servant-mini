@@ -1,3 +1,4 @@
+import { buildTree } from '../src/tree'
 // The family tree as an answer (pipeline.ts kinAnswer, treeBar, pointLabel; diseno-arboles.md §4.1, §4.5, §4.6, §6, piece C): a phrase
 // gives `reply.tree` and `treeOf`; «Árbol familiar» is in sight under the person's answers; the bar of a tapped name; the save drops `tree`.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
@@ -36,6 +37,12 @@ describe('the tree phrases answer with the view', () => {
     expect(down.reply.tree!.mode).toBe('tree')
     expect(down.reply.tree!.open).toBeGreaterThanOrEqual(1)
     expect(down.reply.treeOf!.open).toBe(down.reply.tree!.open)
+    // (reopened from what a saved conversation keeps: still «descendants», whatever generations were open)
+    expect(down.reply.treeOf!.down).toBe(true)
+    const of = down.reply.treeOf!
+    const again = await buildTree(of.pack, of.id, of.mode, 'es', of.open, of.down)
+    expect(again.down).toBe(true)
+    expect(again.open).toBe(down.reply.tree!.open)
   })
   test('the steps under the view: the other view, more family; the point is named', async () => {
     const c: ConvState = { last: null }

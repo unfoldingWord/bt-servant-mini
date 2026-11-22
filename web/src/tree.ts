@@ -7,7 +7,7 @@ export type TP = { id: string; name: string; g?: 1 | 2; unnamed?: true; half?: t
 /** The two views: the tree (parents, the person, spouses, siblings, descendants) and the line of ancestors. */
 export type TreeMode = 'tree' | 'up'
 /** How a tree is built again (all a saved conversation keeps of it): `open`, the generations open when it is drawn. */
-export type TreeOf = { pack: string; id: string; mode: TreeMode; open: 1 | 2 | 3 }
+export type TreeOf = { pack: string; id: string; mode: TreeMode; open: 1 | 2 | 3; down?: true }
 export type TreeView = {
   mode: TreeMode
   /** generations of descendants open when drawn (tree: 1 or 2; «descendants»: up to 3), §4.2.5 */
@@ -66,11 +66,11 @@ function openFor(sizes: number[], limit: number, max: 1 | 2 | 3): 1 | 2 | 3 {
  * here (children, and grandchildren when both are 40 rows or fewer); 1 or 2, as given; 3, «descendants»: up to three generations while
  * they are 60 rows or fewer (the saved `TreeOf` keeps what was chosen, so a rebuild is the same).
  */
-export async function buildTree(pack: string, id: string, mode: TreeMode, ui: string, open?: 1 | 2 | 3): Promise<TreeView> {
+export async function buildTree(pack: string, id: string, mode: TreeMode, ui: string, open?: 1 | 2 | 3, down?: boolean): Promise<TreeView> {
   const t = KT(ui)
   const people = await peopleById(pack)
   const sh = await shownAsMaker(pack)
-  const view: TreeView = { mode, open: open === 2 ? 2 : 1, ui, pack, focus: { id, name: id, n: 0 }, parents: [], partners: [], siblings: [], groups: [], nodes: [], cut: false, ...(mode === 'tree' && open === 3 ? { down: true as const } : {}) }
+  const view: TreeView = { mode, open: open === 2 ? 2 : 1, ui, pack, focus: { id, name: id, n: 0 }, parents: [], partners: [], siblings: [], groups: [], nodes: [], cut: false, ...(mode === 'tree' && (open === 3 || down) ? { down: true as const } : {}) }
   if (!people || !sh || !id.startsWith('per:')) return view
   const core = sh.core
   const ties = tiesOf(core)

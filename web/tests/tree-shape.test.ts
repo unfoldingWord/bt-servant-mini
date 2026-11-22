@@ -1,6 +1,6 @@
 // The phrases that ask for a family tree (diseno-arboles.md §4.1, piece A): syntax only, six languages. No packs.
 import { describe, expect, test } from 'bun:test'
-import { kinKnown, kinShape } from '../src/kin'
+import { kinKnown, kinShape, resetKin } from '../src/kin'
 
 const shape = (q: string) => {
   const s = kinShape(q)
@@ -90,6 +90,8 @@ describe('what does not change', () => {
     expect(kinShape('árbol de la vida que da frutos cada mes del año')).toBeNull()
   })
   test('kinKnown has no index yet: false, and never throws on the new kinds', () => {
+    // (other test files may have built the indexes before: start without them)
+    resetKin()
     expect(kinKnown('árbol de Isaac', 'es')).toBe(false)
   })
 })
