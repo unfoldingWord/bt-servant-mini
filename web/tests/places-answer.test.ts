@@ -7,7 +7,7 @@ import { LIGHT_THEME } from '@bt-synergy/language-pack-client'
 import { peopleQuery } from '@lpc/query/family'
 import { fullPhone, turn } from './harness'
 import { mapsFixture } from './maps-fixture'
-import { setKinReader, isCreditLine } from '../src/kin'
+import { setKinReader, isCreditLine, kinQuestion } from '../src/kin'
 import { setPlaceReader, type PlaceReader } from '../src/places'
 import { placeSheet, type ConvState, type Reply } from '../src/pipeline'
 import { mapSvg } from '../src/mapview'
@@ -215,7 +215,7 @@ const W: World = {
     notes: {}, aliases: { 'بيت إيل': ['lug:bethel'], 'أورشليم': ['lug:jerusalem'] },
   },
   names: {},
-  obsFrames: { '5:9': [[v(1, 12, 8), v(1, 12, 8)]] },
+  obsFrames: { '5:9': [[v(1, 12, 8), v(1, 12, 8)]], '1:1': [[v(1, 12, 8), v(1, 12, 8)]] },
 }
 
 describe('on a hand-made reader (verses, events with passages)', () => {
@@ -411,5 +411,53 @@ describe('what the data lacks (§5.5)', () => {
     expect(where.concept).toBe('lug:israel')
     const who = await ask('¿Quién era Israel?')
     expect(who.route).not.toBe('place')
+  })
+})
+
+// ------------------------------------------------------------------------------------------------------ «Ver en el mapa» under a passage
+describe('«Ver en el mapa» under a passage and a frame of Open Bible Stories', () => {
+  const sheetOf = (ref: string) => ({ id: 's', intent: 'passage', ref, what: ['text', 'notes'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'en' }) as never
+  const open = (ref: string, c: ConvState = { last: null }) => turn(c, { q: '', sheet: sheetOf(ref) }, 'en')
+  beforeAll(async () => {
+    base = await fixture.open()
+    // (the people index of the pack, built at idle in the app: the buttons that read the data wait for it)
+    useWorld(W)
+    const { kinQuestion } = await import('../src/kin')
+    await kinQuestion('sons of Isaac', 'en', null)
+  })
+  afterAll(() => { setPlaceReader(); setKinReader() })
+
+  test('a verse that names a place with a point: the button, and it opens the map of that verse with its list', async () => {
+    const c: ConvState = { last: null }
+    const r = await open('gen 12:8', c)
+    const f = (r.reply.follow ?? []).find((x) => x.label === 'See on the map')
+    expect(f?.sheet).toMatchObject({ intent: 'place', ref: 'gen 12:8', what: ['view'] })
+    const m = await turn(c, { q: '', sheet: f!.sheet! }, 'en')
+    expect(m.answered).toBe('place')
+    expect(m.reply.map!.points.map((p) => p.id)).toEqual(['lug:bethel'])
+    expect(m.reply.list!.items).toEqual([{ text: 'Betel', ref: 'Genesis 12:8' }])
+    expect(c.graph!.nodes.at(-1)!.label).toBe('Genesis 12:8 · Map')
+  })
+  test('a range of verses and a chapter', async () => {
+    expect(labels(await open('gen 12:1-9'))).toContain('See on the map')
+    expect(labels(await open('gen 13'))).toContain('See on the map')
+  })
+  test('no place with a point there (or no place at all): no button, and the answer is the same as before', async () => {
+    expect(labels(await open('gen 5:5'))).not.toContain('See on the map') // «Perdida»: sure 0
+    expect(labels(await open('gen 1:2'))).not.toContain('See on the map')
+    useWorld({ ...W, geo: undefined })
+    await kinQuestion('sons of Isaac', 'en', null)
+    expect(labels(await open('gen 12:8'))).not.toContain('See on the map')
+    useWorld(W)
+    await kinQuestion('sons of Isaac', 'en', null) // (a new reader forgets the index: built again)
+  })
+  test('a frame of Open Bible Stories that tells such a verse', async () => {
+    const r = await open('obs 1:1')
+    expect(labels(r)).toContain('See on the map')
+  })
+  test('the same button in Arabic and Spanish words', async () => {
+    const r = await turn({ last: null }, { q: '', sheet: { ...sheetOf('gen 12:8'), lang: 'ar' } }, 'ar')
+    const f = (r.reply.follow ?? []).find((x) => x.sheet?.intent === 'place')
+    if (f) expect(f.label).toBe('عرض على الخريطة')
   })
 })

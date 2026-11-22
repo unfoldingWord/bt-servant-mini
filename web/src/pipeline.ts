@@ -2768,6 +2768,16 @@ async function placeAnswer(x: Ctx): Promise<Done> {
   return done({ info, follow, ...(map ? { map } : {}), list, meta: meta(`${kind} ${place.id}${ref ? ` near ${ref.id}` : ''}${tr ? `: ${Math.round(tr.km)} km` : ''}`) }, { concept: place.id })
 }
 
+/** Under a passage or a frame of Open Bible Stories: «Ver en el mapa», when the data names places in it that have a point (the same room as hereStep). */
+async function mapStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | null> {
+  if (!/^(?:[0-9a-z]{3} \d+(?::\d+(?:-(?:\d+:)?\d+)?)?|obs \d+:\d+)$/.test(ref)) return null
+  const pack = await kinPack(sheet.lang)
+  if (!pack) return null
+  const at = await placesAt(pack, ref)
+  if (!at.some((p) => p.sure >= 1 && p.lat !== undefined)) return null
+  return { label: PLT(ui).seeMap, sheet: placeSheet({ ...sheet, lang: pack }, ['view'], { ref }) }
+}
+
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
   {
@@ -3228,6 +3238,8 @@ ${x.meta}` },
       if (f.f && f.state === 'ok' && dropShown([...x.others, ...follow], null, new Set(), x.r?.answer ?? '').length < MAX_FOLLOW) {
         const here = await hereStep(sheet, sheet.ref!, ui).catch(() => null)
         if (here) follow.push(here)
+        const onMap = await mapStep(sheet, sheet.ref!, ui).catch(() => null)
+        if (onMap && dropShown([...x.others, ...follow], null, new Set(), x.r?.answer ?? '').length < MAX_FOLLOW) follow.push(onMap)
       }
       if (!follow.length) follow.push(browseStep(ui))
       const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
@@ -3388,6 +3400,8 @@ ${x.meta}` },
       if (sheet.intent === 'passage' && pack && !none && follow.length && sheet.ref && room() > 0) {
         const here = await hereStep(sheet, sheet.ref, ui).catch(() => null)
         if (here) follow.push(here)
+        const onMap = room() > 0 ? await mapStep(sheet, sheet.ref, ui).catch(() => null) : null
+        if (onMap) follow.push(onMap)
       }
       if (sheet.intent === 'article' && sheet.concept?.startsWith('tw:names/') && r) {
         const fam = await articleFamily(sheet, ui).catch(() => null)
