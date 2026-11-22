@@ -357,6 +357,7 @@ export async function openAdded(name: string): Promise<PackReader> {
 /** Tests: forget the store opened (the next use opens the page's IndexedDB again) and every reader. */
 export function resetAddedStore() {
   idb = null
+  keptDb = null
   changed()
 }
 
@@ -497,6 +498,7 @@ export function onPacksChanged(f: () => void) {
 function changed() {
   open.clear()
   basemapMiss.clear()
+  basemapEntries.clear()
   for (const f of listeners) f()
 }
 // ------------------------------------------------------------------------------------------------------------ basemap
@@ -510,10 +512,36 @@ const BASEMAP_MAX = 1024 * 1024 // the real one is about 6 KB; a bigger file is 
 /** After a miss, the network is not asked again for this long (a changed pack list clears it sooner). */
 const BASEMAP_RETRY_MS = 10 * 60 * 1000
 const basemapMiss = new Map<string, number>()
+/** One try at one place may take this long (the file is about 6 KB): the map is already on the screen without it. */
+let BASEMAP_FETCH_MS = 4000
+/** Tests: how long one try at one place may take (no argument puts 4 s back). */
+export const setBasemapFetchMs = (ms = 4000) => { BASEMAP_FETCH_MS = ms }
+// The copy kept for the next time lives in a database of its own: client.prune() deletes what its catalogs do not name, in the client's store.
+let keptDb: Promise<BlobStore> | null = null
+/** The store of the kept basemap copy (outside the client's store, so a prune or a removed language leaves it). */
+export const basemapStore = (): Promise<BlobStore> => (keptDb ??= indexedDbStore({ name: 'btsm-maps' }))
+// The catalog entry of a pack is read once until the packs change (a backoff or a pack with no basemap does not read catalogs again).
+const basemapEntries = new Map<string, Promise<{ id: string; size: number } | null>>()
+async function fetchIn(url: string, ms: number): Promise<Response> {
+  const ac = new AbortController()
+  let t: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([fetch(url, { signal: ac.signal }), new Promise<never>((_, no) => { t = setTimeout(() => { ac.abort(); no(new Error('timeout')) }, ms) })])
+  } finally { clearTimeout(t) }
+}
 const sha256hex = async (b: Uint8Array): Promise<string> => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)))
 
 /** The `basemap` complement the installed common catalog lists for this pack's language: its sha256 (hex) and size; null when none (or two, or another version). */
-async function basemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
+function basemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
+  let p = basemapEntries.get(pack)
+  if (!p) {
+    p = readBasemapEntry(pack)
+    basemapEntries.set(pack, p)
+    p.catch(() => { if (basemapEntries.get(pack) === p) basemapEntries.delete(pack) })
+  }
+  return p
+}
+async function readBasemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
   const store = (await addedLangs()).includes(pack) ? await added() : (await shipped()).includes(pack) ? assetStore(pack) : null
   if (!store) return null
   const state = await store.getState()
@@ -535,15 +563,15 @@ async function basemapEntry(pack: string): Promise<{ id: string; size: number } 
 /**
  * The bytes of the map background (the `basemap` complement) for a pack, checked against the sha256 the catalog lists, or null: the common
  * catalog lists none, it is not on the phone or any server, or the bytes are not the ones listed (the map is then drawn without a background).
- * Looked for in the phone's own store (where it is kept after the first time), then the app's packs folder (the APK carries it), then the
- * packs servers; a copy found outside the store is kept there. Never throws.
+ * Looked for in the kept copy (where it is kept after the first time), then the app's packs folder (the APK carries it), then the
+ * packs servers; a copy found outside the store is kept there, in a store of its own. Never throws.
  */
 export async function basemapBytes(pack: string): Promise<Uint8Array | null> {
   try {
     const e = await basemapEntry(pack)
     if (!e || !ID_RE.test(e.id) || e.size > BASEMAP_MAX) return null
     const right = async (b: Uint8Array | undefined) => (b && b.length === e.size && (await sha256hex(b)) === e.id ? b : null)
-    const kept = await right(await (await added()).get(e.id).catch(() => undefined))
+    const kept = await right(await (await basemapStore()).get(e.id).catch(() => undefined))
     if (kept) return kept
     const last = basemapMiss.get(e.id)
     if (last !== undefined && Date.now() - last < BASEMAP_RETRY_MS) return null
@@ -551,10 +579,10 @@ export async function basemapBytes(pack: string): Promise<Uint8Array | null> {
     const urls = [`${BASE}/${file}`, ...servers.map((b) => `${b.replace(/\/+$/, '')}/${file}`)]
     for (const url of urls) {
       try {
-        const r = await fetch(url, { signal: AbortSignal.timeout(CATALOG_MS) })
+        const r = await fetchIn(url, BASEMAP_FETCH_MS)
         const ok = r.ok ? await right(new Uint8Array(await r.arrayBuffer())) : null
         if (!ok) continue
-        await (await added()).put(e.id, ok).catch(() => {}) // kept so the next time needs no network
+        await (await basemapStore()).put(e.id, ok).catch(() => {}) // kept so the next time needs no network
         return ok
       } catch { /* the next place */ }
     }

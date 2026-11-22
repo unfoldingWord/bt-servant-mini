@@ -5,11 +5,11 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { encodeBasemap, type Basemap } from '@bt-synergy/language-pack-v3'
-import { MAX_SCALE, minScale, type MapPoint } from '@bt-synergy/language-pack-client'
+import { MAX_SCALE, minScale, project, type MapPoint } from '@bt-synergy/language-pack-client'
 import { BTS_DIR } from './bts-dir'
 import { mapsFixture } from './maps-fixture'
 import { MAP_DARK, MAP_LIGHT, MAP_T, mapSvg, mountMap, readTheme, resetMapCache, setBasemapSource } from '../src/mapview'
-import { addedStore, basemapBytes, reloadPacks, resetAddedStore, setPacksServers, setTrustedKeys } from '../src/packs'
+import { addedClient, basemapStore, basemapBytes, reloadPacks, setBasemapFetchMs, resetAddedStore, setPacksServers, setTrustedKeys } from '../src/packs'
 
 const FAKE_IDB = join(BTS_DIR, 'packages', 'language-pack-client', 'node_modules', 'fake-indexeddb', 'build', 'esm', 'index.js')
 
@@ -34,7 +34,8 @@ const SVG_DIR = join(import.meta.dir, 'fixtures', 'mapview')
 /** The text saved for a known answer (made on the first run; delete the file to make it again after a deliberate change). */
 function golden(name: string, text: string) {
   const f = join(SVG_DIR, name)
-  if (!existsSync(f)) { mkdirSync(SVG_DIR, { recursive: true }); writeFileSync(f, text) }
+  if (process.env.UPDATE_GOLDEN === '1') { mkdirSync(SVG_DIR, { recursive: true }); writeFileSync(f, text) }
+  if (!existsSync(f)) throw new Error(`the saved text ${f} is missing (UPDATE_GOLDEN=1 makes it)`)
   return readFileSync(f, 'utf8')
 }
 
@@ -50,6 +51,21 @@ describe('mapSvg', () => {
     expect(svg).toContain('aria-label="Mapa: Betel, unos 15 km al norte de Jerusalén"')
     expect(svg).toContain('map-land')
     expect(svg).toContain('Betel')
+  })
+  test('structure, independent of the saved text: the point is at its projected pixel, with its label, role and summary', () => {
+    const frame = { lat: 31.93, lon: 35.22, scale: 400, width: 320, height: 240 }
+    const svg = mapSvg({ ...BASE, basemap: base, theme: MAP_LIGHT, frame })
+    const [x, y] = project(frame, 31.93, 35.22)
+    const c = /<circle class="map-dot"[^>]*data-id="place:bethel"[^>]*cx="([-\d.]+)" cy="([-\d.]+)"/.exec(svg)!
+    expect(Number(c[1])).toBeCloseTo(x, 0)
+    expect(Number(c[2])).toBeCloseTo(y, 0)
+    const [x2, y2] = project(frame, 31.78, 35.23)
+    const j = /<circle class="map-dot"[^>]*data-id="place:jerusalem"[^>]*cx="([-\d.]+)" cy="([-\d.]+)"/.exec(svg)!
+    expect(Number(j[1])).toBeCloseTo(x2, 0)
+    expect(Number(j[2])).toBeCloseTo(y2, 0)
+    expect(svg).toMatch(/<text class="map-label"[^>]*>Betel<\/text>/)
+    expect(svg).toContain('role="img"')
+    expect(svg).toContain('aria-label="Mapa: Betel, unos 15 km al norte de Jerusalén"')
   })
   test('the dark theme gives other literal colors, and no var() in either', () => {
     const light = mapSvg({ ...BASE, basemap: base, theme: MAP_LIGHT })
@@ -128,7 +144,7 @@ class FakeEl {
     o?.signal?.addEventListener('abort', () => this.handlers.set(t, (this.handlers.get(t) ?? []).filter((x) => x !== f)))
   }
   fire(t: string, e: Record<string, unknown> = {}) {
-    const ev = { target: this, stopPropagation() { (this as any).stopped = true }, preventDefault() {}, ...e }
+    const ev: any = { target: this, stopPropagation() { ev.stopped = true }, preventDefault() { ev.prevented = true }, ...e }
     for (const f of this.handlers.get(t) ?? []) f(ev)
     return ev
   }
@@ -172,13 +188,29 @@ describe('mountMap', () => {
     const el = new FakeEl('div')
     const before = sizes('map:first-draw')
     const m = await mountMap(el as any, BASE)
+    // at once, without a background; the basemap comes after
+    expect(layerOf(el).html).not.toContain('map-land')
+    expect(layerOf(el).html).toContain('map-dot')
+    const re0 = sizes('map:redraw')
+    await m.ready
     const svg = layerOf(el).html
     expect(svg).toContain('map-land')
     expect(svg).toContain('role="img"')
     expect(svg).toContain('aria-label="Mapa: Betel')
     expect(sizes('map:first-draw')).toBe(before + 1)
+    expect(sizes('map:redraw')).toBe(re0 + 1)
+    expect((performance.getEntriesByName('map:redraw').at(-1) as any).detail).toMatchObject({ basemap: true })
     m.destroy()
     expect(el.children.length).toBe(0)
+  })
+
+  test('a basemap that never arrives does not hold the map back', async () => {
+    setBasemapSource(() => new Promise<Uint8Array | null>(() => {}))
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, BASE)
+    expect(layerOf(el).html).toContain('map-dot')
+    expect(layerOf(el).html).not.toContain('map-land')
+    m.destroy()
   })
 
   test('with no basemap (none found), or one the reader rejects, it draws without one and shows no error', async () => {
@@ -186,6 +218,7 @@ describe('mountMap', () => {
       setBasemapSource(src as any)
       const el = new FakeEl('div')
       const m = await mountMap(el as any, BASE)
+      await m.ready
       const svg = layerOf(el).html
       expect(svg).toContain('map-dot')
       expect(svg).not.toContain('map-land')
@@ -196,19 +229,20 @@ describe('mountMap', () => {
   test('the basemap is read once per pack, and again after resetMapCache or for another pack', async () => {
     let n = 0
     setBasemapSource(async () => { n++; return SMALL_BYTES })
-    for (let i = 0; i < 3; i++) (await mountMap(new FakeEl('div') as any, BASE)).destroy()
+    const go = async (o: typeof BASE) => { const m = await mountMap(new FakeEl('div') as any, o); await m.ready; m.destroy() }
+    for (let i = 0; i < 3; i++) await go(BASE)
     expect(n).toBe(1)
     resetMapCache()
-    ;(await mountMap(new FakeEl('div') as any, BASE)).destroy()
+    await go(BASE)
     expect(n).toBe(2)
-    ;(await mountMap(new FakeEl('div') as any, { ...BASE, pack: 'hi' })).destroy()
+    await go({ ...BASE, pack: 'hi' })
     expect(n).toBe(3)
   })
 
   test('a missing basemap is asked for again by the next map (the miss is not kept)', async () => {
     let n = 0
     setBasemapSource(async () => { n++; return null })
-    for (let i = 0; i < 2; i++) (await mountMap(new FakeEl('div') as any, BASE)).destroy()
+    for (let i = 0; i < 2; i++) { const m = await mountMap(new FakeEl('div') as any, BASE); await m.ready; m.destroy() }
     expect(n).toBe(2)
   })
 
@@ -225,6 +259,7 @@ describe('mountMap', () => {
     const el = new FakeEl('div')
     vars.set('--bg', '#262624')
     const m = await mountMap(el as any, BASE)
+    await m.ready
     expect(layerOf(el).html).toContain(MAP_DARK.land)
     expect(layerOf(el).html).not.toContain('var(')
     vars.set('--bg', '#f5f5f0')
@@ -238,6 +273,7 @@ describe('mountMap', () => {
     const near: MapPoint[] = [{ ...bethel[0]!, id: 'a', lat: 31.93 }, { ...bethel[1]!, id: 'b', lat: 31.925 }] // 0.005 degrees apart
     const el = new FakeEl('div')
     const m = await mountMap(el as any, { ...BASE, points: near })
+    await m.ready
     const btn = (label: string) => el.find((e) => e.tagName === 'BUTTON' && e.getAttribute('aria-label') === label)[0]!
     const g0 = gap(el, 0.005)
     btn(MAP_T.es.zin).click()
@@ -255,6 +291,7 @@ describe('mountMap', () => {
     const far: MapPoint[] = [{ ...bethel[0]!, id: 'a', lat: 31.5 }, { ...bethel[1]!, id: 'b', lat: 32.5 }]
     const el2 = new FakeEl('div')
     const m2 = await mountMap(el2 as any, { ...BASE, points: far })
+    await m2.ready
     const btn2 = (label: string) => el2.find((e) => e.tagName === 'BUTTON' && e.getAttribute('aria-label') === label)[0]!
     for (let i = 0; i < 30; i++) btn2(MAP_T.es.zout).click()
     expect(gap(el2, 1)).toBeCloseTo(minScale(SMALL.bbox, 320, 240), 0)
@@ -294,9 +331,73 @@ describe('mountMap', () => {
     // double tap
     for (let i = 0; i < 2; i++) { box.fire('pointerdown', { pointerId: 1, clientX: 50, clientY: 50 }); box.fire('pointerup', { pointerId: 1, clientX: 50, clientY: 50 }) }
     expect(gap(el)).toBeCloseTo(g0, 0)
-    // a wheel turn zooms and draws again after a moment
-    box.fire('wheel', { clientX: 160, clientY: 120, deltaY: -300 })
-    expect(layerOf(el).style.transform).toContain('scale(')
+    m.destroy()
+  })
+
+  test('wheel: a plain turn does nothing (the page scrolls); with ctrl or meta it zooms', async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, BASE)
+    const box = el.children[0]!
+    const flat = layerOf(el).style.transform
+    const plain = box.fire('wheel', { clientX: 160, clientY: 120, deltaY: -300 })
+    expect(layerOf(el).style.transform).toBe(flat)
+    expect(plain.prevented).toBeFalsy()
+    const z = box.fire('wheel', { clientX: 160, clientY: 120, deltaY: -300, ctrlKey: true })
+    expect(z.prevented).toBe(true)
+    expect(layerOf(el).style.transform).toContain('scale(1.')
+    box.fire('wheel', { clientX: 160, clientY: 120, deltaY: 300, metaKey: true })
+    expect(layerOf(el).style.transform).not.toBe(flat)
+    m.destroy()
+  })
+
+  test('touch: one finger does not move the map (the page scrolls) and shows the hint; two fingers pan and pinch', async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, BASE)
+    const box = el.children[0]!
+    const flat = layerOf(el).style.transform
+    const hint = el.find((e) => e.getAttribute('aria-hidden') === 'true' && e.text.length > 0)[0]!
+    expect(hint.text).toBe(MAP_T.es.hint)
+    expect(box.style.cssText).toContain('touch-action:pan-x pan-y')
+    expect(hint.style.opacity).toBe('0')
+    const t = { pointerType: 'touch' }
+    box.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, ...t })
+    box.fire('pointermove', { pointerId: 1, clientX: 100, clientY: 160, ...t })
+    expect(layerOf(el).style.transform).toBe(flat)
+    expect(hint.style.opacity).toBe('1')
+    box.fire('pointerup', { pointerId: 1, clientX: 100, clientY: 160, ...t })
+    // two fingers: moving both pans, spreading them zooms
+    const x0 = dots(layerOf(el).html)[0]![0], g0 = gap(el)
+    box.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100, ...t })
+    box.fire('pointerdown', { pointerId: 2, clientX: 200, clientY: 100, ...t })
+    box.fire('pointermove', { pointerId: 1, clientX: 120, clientY: 100, ...t })
+    expect(layerOf(el).style.transform).not.toBe(flat)
+    box.fire('pointermove', { pointerId: 2, clientX: 320, clientY: 100, ...t })
+    box.fire('pointerup', { pointerId: 2, clientX: 320, clientY: 100, ...t })
+    box.fire('pointerup', { pointerId: 1, clientX: 120, clientY: 100, ...t })
+    expect(dots(layerOf(el).html)[0]![0]).not.toBeCloseTo(x0, 0)
+    expect(gap(el)).toBeGreaterThan(g0 * 1.3)
+    // the page must not scroll under two fingers
+    expect(box.fire('touchmove', { touches: [{}, {}] }).prevented).toBe(true)
+    expect(box.fire('touchmove', { touches: [{}] }).prevented).toBeFalsy()
+    m.destroy()
+  })
+
+  test('the theme changing in the middle of a gesture commits it and draws again', async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    let fire: (() => void) | undefined
+    ;(globalThis as any).matchMedia = () => ({ matches: false, addEventListener: (_: string, f: () => void) => { fire = f } })
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, BASE)
+    const box = el.children[0]!
+    box.fire('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 })
+    box.fire('pointermove', { pointerId: 1, clientX: 140, clientY: 100 })
+    const before = sizes('map:redraw')
+    fire!()
+    expect(layerOf(el).style.transform).toBe('translate(-96px,-96px) scale(1)')
+    expect(sizes('map:redraw')).toBe(before + 1)
+    ;(globalThis as any).matchMedia = undefined
     m.destroy()
   })
 
@@ -308,6 +409,7 @@ describe('mountMap', () => {
       const m = await mountMap(el as any, { ...BASE, ui, dir: ui === 'ar' ? 'rtl' : 'ltr' })
       const labels = el.find((e) => e.tagName === 'BUTTON').map((b) => b.getAttribute('aria-label')!)
       expect(labels.length).toBe(3)
+      await m.ready
       for (const l of labels) { expect(l.length).toBeGreaterThan(0); words.add(ui + l) }
       const sym = el.find((e) => e.tagName === 'BUTTON').slice(0, 2).map((b) => b.textContent)
       expect(sym).toEqual(['+', '−'])
@@ -387,7 +489,7 @@ describe('basemapBytes', () => {
     const got = await basemapBytes(f.lang)
     expect(got && [...got]).toEqual([...f.basemap.bytes])
     expect(fetched().length).toBe(1)
-    expect([...(await (await addedStore()).get(f.basemap.id))!]).toEqual([...f.basemap.bytes])
+    expect([...(await (await basemapStore()).get(f.basemap.id))!]).toEqual([...f.basemap.bytes])
     serve.app = null
     asked.length = 0
     expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
@@ -415,10 +517,38 @@ describe('basemapBytes', () => {
     const other = new Uint8Array(f.basemap.bytes); other[other.length - 1] ^= 1
     serve.app = other; serve.server = new Uint8Array(f.basemap.bytes.length + 3)
     expect(await basemapBytes(f.lang)).toBeNull()
-    expect(await (await addedStore()).get(f.basemap.id)).toBeUndefined()
+    expect(await (await basemapStore()).get(f.basemap.id)).toBeUndefined()
     // the right bytes on the server are taken after the wrong ones in the app
     phone(); serve.server = f.basemap.bytes
     expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
+  })
+  test('the kept copy survives client.prune() (it is outside the client\'s store)', async () => {
+    phone(); serve.app = f.basemap.bytes
+    await basemapBytes(f.lang)
+    await (await addedClient()).prune()
+    serve.app = null; asked.length = 0
+    expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
+    expect(fetched().length).toBe(0)
+  })
+  test('the catalogs are read once per pack until the packs change, even when the basemap is missing', async () => {
+    phone(); serve.app = null; serve.server = null
+    const states = () => asked.filter((u) => u.endsWith('/state.json')).length
+    await basemapBytes(f.lang); await basemapBytes(f.lang); await basemapBytes(f.lang)
+    expect(states()).toBe(1)
+    reloadPacks()
+    await basemapBytes(f.lang)
+    expect(states()).toBe(2)
+  })
+  test('a place that never answers is given up after its own short time, then the next one is tried', async () => {
+    phone(); serve.app = null; serve.server = f.basemap.bytes
+    const real = globalThis.fetch
+    globalThis.fetch = ((u: any, i: any) => String(u).startsWith('./packs/common/') ? new Promise(() => {}) : (stub as any)(u, i)) as any
+    setBasemapFetchMs(50)
+    try {
+      const t = Date.now()
+      expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
+      expect(Date.now() - t).toBeLessThan(2000)
+    } finally { globalThis.fetch = real; setBasemapFetchMs() }
   })
   test('a language that is not installed, or an unknown one, gives null', async () => {
     phone(); serve.app = f.basemap.bytes
@@ -430,6 +560,7 @@ describe('basemapBytes', () => {
     const el = new FakeEl('div')
     installDom()
     const m = await mountMap(el as any, { ...BASE, pack: f.lang })
+    await m.ready
     expect(layerOf(el).html).toContain('map-land')
     m.destroy()
     setBasemapSource()

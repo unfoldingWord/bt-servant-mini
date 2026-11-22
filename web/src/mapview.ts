@@ -59,14 +59,14 @@ export function readTheme(): Theme {
 // ------------------------------------------------------------------------------------------------------------------ words
 
 type L = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
-export const MAP_T: Record<L, { group: string; zin: string; zout: string; frame: string }> = {
-  en: { group: 'Map controls', zin: 'Zoom in', zout: 'Zoom out', frame: 'Show all the places' },
-  es: { group: 'Controles del mapa', zin: 'Acercar', zout: 'Alejar', frame: 'Ver todos los lugares' },
-  fr: { group: 'Commandes de la carte', zin: 'Zoom avant', zout: 'Zoom arrière', frame: 'Voir tous les lieux' },
-  id: { group: 'Kontrol peta', zin: 'Perbesar', zout: 'Perkecil', frame: 'Tampilkan semua tempat' },
+export const MAP_T: Record<L, { group: string; zin: string; zout: string; frame: string; hint: string }> = {
+  en: { group: 'Map controls', zin: 'Zoom in', zout: 'Zoom out', frame: 'Show all the places', hint: 'Use two fingers to move the map' },
+  es: { group: 'Controles del mapa', zin: 'Acercar', zout: 'Alejar', frame: 'Ver todos los lugares', hint: 'Usa dos dedos para mover el mapa' },
+  fr: { group: 'Commandes de la carte', zin: 'Zoom avant', zout: 'Zoom arrière', frame: 'Voir tous les lieux', hint: 'Utilisez deux doigts pour déplacer la carte' },
+  id: { group: 'Kontrol peta', zin: 'Perbesar', zout: 'Perkecil', frame: 'Tampilkan semua tempat', hint: 'Gunakan dua jari untuk menggeser peta' },
   // hi, ar: pending native review
-  hi: { group: 'नक्शे के बटन', zin: 'ज़ूम इन', zout: 'ज़ूम आउट', frame: 'सभी स्थान दिखाएँ' },
-  ar: { group: 'أزرار الخريطة', zin: 'تكبير', zout: 'تصغير', frame: 'إعادة الإطار' },
+  hi: { group: 'नक्शे के बटन', zin: 'ज़ूम इन', zout: 'ज़ूम आउट', frame: 'सभी स्थान दिखाएँ', hint: 'नक्शा हिलाने के लिए दो उंगलियों का उपयोग करें' },
+  ar: { group: 'أزرار الخريطة', zin: 'تكبير', zout: 'تصغير', frame: 'إعادة الإطار', hint: 'استخدم إصبعين لتحريك الخريطة' },
 }
 const wordsFor = (ui: string) => MAP_T[ui.split('-')[0]!.toLowerCase() as L] ?? MAP_T.en
 
@@ -129,8 +129,8 @@ function textMeasure(fontSize: number): ((t: string) => number) | undefined {
     return (t) => ctx.measureText(t).width + 3 // + the halo
   } catch { return undefined }
 }
-function mark(name: string, start: number, points: number) {
-  try { performance.measure(name, { start, end: performance.now(), detail: { points } }) } catch { /* no timing */ }
+function mark(name: string, start: number, detail: Record<string, unknown>) {
+  try { performance.measure(name, { start, end: performance.now(), detail }) } catch { /* no timing */ }
 }
 const FRAME_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>'
 
@@ -139,7 +139,7 @@ const FRAME_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden=
  * fingers lift), a quick double tap back to the first view, and the buttons + / - / fit that need no gesture. The picture is drawn larger
  * than the screen, so a drag shows more map before the next drawing. `redraw()` draws again with the current theme; `destroy()` removes it.
  */
-export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw(): void; destroy(): void }> {
+export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw(): void; destroy(): void; ready: Promise<void> }> {
   const w = Math.max(120, Math.round(o.width ?? (el.clientWidth || 320)))
   const h = Math.max(120, Math.round(o.height ?? Math.min(360, Math.max(200, w * 0.75))))
   const m = Math.round(0.4 * Math.min(w, h)) // margin drawn around the screen
@@ -147,16 +147,16 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   const ac = new AbortController()
   const on = (t: EventTarget, type: string, f: (e: any) => void, opt: AddEventListenerOptions = {}) => t.addEventListener(type, f, { ...opt, signal: ac.signal })
 
-  const basemap = await basemapOfPack(o.pack)
+  let basemap: Basemap | undefined // arrives later: the map is on the screen before it
   let theme = readTheme()
   const measure = textMeasure(12)
-  const bbox = basemap?.bbox ?? DEFAULT_BBOX
-  const lo = minScale(bbox, w, h)
+  let bbox = DEFAULT_BBOX
+  let lo = minScale(bbox, w, h)
   const home = (): Frame => { const f = fit(o.points, w, h, HOME_MARGIN); return { ...f, scale: clampScale(f.scale, bbox, w, h) } }
 
   const box = document.createElement('div')
   box.setAttribute('class', 'map-box')
-  box.style.cssText = `position:relative;overflow:hidden;width:100%;height:${h}px;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:12px;border:1px solid var(--line, #0002);background:${theme.sea}`
+  box.style.cssText = `position:relative;overflow:hidden;width:100%;height:${h}px;touch-action:pan-x pan-y;user-select:none;-webkit-user-select:none;border-radius:12px;border:1px solid var(--line, #0002);background:${theme.sea}`
   const layer = document.createElement('div')
   layer.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform'
   box.appendChild(layer)
@@ -180,6 +180,15 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   const bFit = button(FRAME_ICON, words.frame, true)
   on(ctl, 'pointerdown', (e) => e.stopPropagation()) // a button press is not the start of a drag
   box.appendChild(ctl)
+  // "Use two fingers": shown for a moment when one finger moves over the map (it scrolls the page); it takes no room and is not read out
+  const hint = document.createElement('div')
+  hint.setAttribute('aria-hidden', 'true')
+  hint.textContent = words.hint
+  hint.style.cssText = 'position:absolute;left:0;right:0;bottom:0;padding:8px 12px;text-align:center;font:14px/1.3 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.6);pointer-events:none;opacity:0;transition:opacity .2s'
+  hint.style.opacity = '0'
+  box.appendChild(hint)
+  let hintTimer: ReturnType<typeof setTimeout> | undefined
+  const showHint = () => { hint.style.opacity = '1'; clearTimeout(hintTimer); hintTimer = setTimeout(() => { hint.style.opacity = '0' }, 1500) }
   el.appendChild(box)
 
   let view: Frame = home() // the screen's own frame (w x h); the picture is drawn on this frame grown by m on each side
@@ -188,7 +197,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   const bigFrame = (): Frame => ({ ...view, width: w + 2 * m, height: h + 2 * m })
   const put = () => { layer.style.transform = `translate(${tx}px,${ty}px) scale(${s})` }
 
-  function draw(name: 'map:first-draw' | 'map:redraw') {
+  function draw(name: 'map:first-draw' | 'map:redraw', extra: Record<string, unknown> = {}) {
     if (dead) return
     const t0 = performance.now()
     theme = readTheme()
@@ -198,14 +207,14 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     tx = -m; ty = -m; s = 1
     put()
     void (layer as HTMLElement).offsetHeight // layout now, so the time counts it
-    mark(name, t0, o.points.length)
+    mark(name, t0, { points: o.points.length, ...extra })
   }
   // The gesture ends: the view moves to where the picture was dragged and scaled to, and the picture is drawn again there.
-  function commit() {
+  function commit(extra: Record<string, unknown> = {}) {
     if (dead || (s === 1 && tx === -m && ty === -m)) return
     const c = unproject(bigFrame(), (w / 2 - tx) / s, (h / 2 - ty) / s)
     view = { ...view, lat: c.lat, lon: c.lon, scale: Math.max(lo, Math.min(MAX_SCALE, view.scale * s)) }
-    draw('map:redraw')
+    draw('map:redraw', extra)
   }
   function zoomAt(f: number, x: number, y: number) {
     const now = view.scale * s
@@ -218,6 +227,15 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   const frameAll = () => { view = home(); draw('map:redraw') }
 
   draw('map:first-draw')
+  // The basemap is read after the first drawing, never waited for: when it arrives the map is drawn again (a gesture in progress is committed).
+  const ready = basemapOfPack(o.pack).then((b) => {
+    if (dead || !b) return
+    basemap = b
+    bbox = b.bbox
+    lo = minScale(bbox, w, h)
+    if (s === 1 && tx === -m && ty === -m) draw('map:redraw', { basemap: true })
+    else commit({ basemap: true })
+  })
 
   on(bIn, 'click', () => { zoomAt(STEP, w / 2, h / 2); commit() })
   on(bOut, 'click', () => { zoomAt(1 / STEP, w / 2, h / 2); commit() })
@@ -225,12 +243,14 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
 
   // pointers: one drags, two pinch; a quick second tap goes back to the first view
   const ptr = new Map<number, [number, number]>()
+  const touch = new Set<number>() // the pointers that are fingers
   let down: { t: number; x: number; y: number; moved: boolean } | null = null
   let lastTap: { t: number; x: number; y: number } | null = null
   const rel = (e: PointerEvent | WheelEvent): [number, number] => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] }
   on(box, 'pointerdown', (e: PointerEvent) => {
     try { box.setPointerCapture(e.pointerId) } catch { /* not captured */ }
     const p = rel(e)
+    if (e.pointerType === 'touch') touch.add(e.pointerId)
     if (ptr.size === 0) down = { t: Date.now(), x: p[0], y: p[1], moved: false }
     else if (down) down.moved = true
     ptr.set(e.pointerId, p)
@@ -240,7 +260,10 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     if (!p) return
     const n = rel(e)
     if (down && Math.hypot(n[0] - down.x, n[1] - down.y) > 8) down.moved = true
-    if (ptr.size === 1) { tx += n[0] - p[0]; ty += n[1] - p[1]; put() }
+    if (ptr.size === 1) {
+      if (touch.has(e.pointerId)) { if (down?.moved) showHint() } // one finger scrolls the page, not the map
+      else { tx += n[0] - p[0]; ty += n[1] - p[1]; put() }
+    }
     else if (ptr.size === 2) {
       const o2 = [...ptr.entries()].find(([id]) => id !== e.pointerId)![1]
       const d1 = Math.hypot(n[0] - o2[0], n[1] - o2[1]), d0 = Math.hypot(p[0] - o2[0], p[1] - o2[1])
@@ -251,6 +274,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     ptr.set(e.pointerId, n)
   })
   const up = (e: PointerEvent) => {
+    touch.delete(e.pointerId)
     if (!ptr.delete(e.pointerId) || ptr.size) return
     const d = down
     down = null
@@ -264,18 +288,23 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   on(box, 'pointerup', up)
   on(box, 'pointercancel', up)
   on(box, 'wheel', (e: WheelEvent) => {
+    if (!e.ctrlKey && !e.metaKey) return // a plain wheel scrolls the page
     e.preventDefault()
     const [x, y] = rel(e)
     zoomAt(Math.exp(-e.deltaY * 0.0015), x, y)
     clearTimeout(pending)
     pending = setTimeout(commit, 150)
   }, { passive: false })
+  // two fingers must not also scroll the page
+  on(box, 'touchmove', (e: TouchEvent) => { if (e.touches.length >= 2) e.preventDefault() }, { passive: false })
   // the system switches between light and dark: the next drawing takes the new colors
   const mq = globalThis.matchMedia?.('(prefers-color-scheme: dark)')
-  if (mq) on(mq, 'change', () => draw('map:redraw'))
+  if (mq) on(mq, 'change', () => api.redraw())
 
-  return {
+  const api = {
+    ready,
     redraw() { clearTimeout(pending); if (!dead) { if (s === 1 && tx === -m && ty === -m) draw('map:redraw'); else commit() } },
-    destroy() { dead = true; clearTimeout(pending); ac.abort(); box.remove() },
+    destroy() { dead = true; clearTimeout(pending); clearTimeout(hintTimer); ac.abort(); box.remove() },
   }
+  return api
 }
