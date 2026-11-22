@@ -307,7 +307,7 @@ function placeholder(fig: HTMLElement, ui: string, redo: () => void) {
   say.textContent = IW(ui).missing
   box.append(say)
   box.lang = ui
-  box.dir = ui === 'ar' ? 'rtl' : 'ltr'
+  box.dir = ui.split('-')[0] === 'ar' ? 'rtl' : 'ltr'
   fig.prepend(box)
   ask(box, ui, 'none', redo)
 }
@@ -327,7 +327,7 @@ function netNote(img: HTMLElement, ui: string, redo: () => void) {
   const note = document.createElement('div')
   note.className = 'obs-pic-note'
   note.lang = ui
-  note.dir = ui === 'ar' ? 'rtl' : 'ltr'
+  note.dir = ui.split('-')[0] === 'ar' ? 'rtl' : 'ltr'
   img.after(note)
   ask(note, ui, 'cdn', redo)
 }
@@ -441,7 +441,7 @@ export async function addVersePicture(
   cap.className = 'obs-pic-cap'
   cap.textContent = `OBS ${at.n}:${at.f} · ${IW(ui).credit}`
   cap.lang = ui
-  cap.dir = ui === 'ar' ? 'rtl' : 'ltr'
+  cap.dir = ui.split('-')[0] === 'ar' ? 'rtl' : 'ltr'
   fig.append(img, cap)
   box.prepend(fig)
   return at

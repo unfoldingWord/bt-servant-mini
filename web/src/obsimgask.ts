@@ -5,7 +5,7 @@
 // Loaded by obsimg.ts only when a frame needs it (it reaches resources.ts, which reaches obsimg.ts).
 import { importedLine, IW } from './obsimg'
 import { onPacksChanged } from './packs'
-import { deps, downloads, imagesHint, isNetError, onDownloads, pair, requestImages, RT } from './resources'
+import { deps, downloads, forgetImagesQuestion, imagesHint, isNetError, onDownloads, pair, requestImages, RT } from './resources'
 
 const rtl = (ui: string) => ui.split('-')[0] === 'ar'
 /** The frames waiting for the pictures: redrawn when they are on the phone. */
@@ -51,6 +51,8 @@ export function addAsk(host: HTMLElement, ui: string, kind: 'none' | 'cdn', redo
   const me = { host, redo }
   waiting.add(me)
   let partial = false
+  // nothing is drawn until the phone has said whether the pictures are there (no flash of buttons, no wrong word)
+  let ready = false
   let said = ''
   // the button's new words after a tap (the mobile-data question, no internet): this frame's own, not what an older tap left
   let hint: string | undefined
@@ -80,9 +82,10 @@ export function addAsk(host: HTMLElement, ui: string, kind: 'none' | 'cdn', redo
     paint()
   }
 
-  const start = () => { said = ''; void requestImages(ui, () => { hint = imagesHint(); paint() }) }
+  const start = () => { said = ''; if (!hint) forgetImagesQuestion(); void requestImages(ui, () => { hint = imagesHint(); paint() }) }
   function paint() {
     if (host.isConnected === false) { off(); waiting.delete(me); return }
+    if (!ready) return
     const d = downloads().find((x) => x.key === 'images')
     const parts: HTMLElement[] = []
     if (kind === 'cdn') parts.push(el('span', 'obs-pic-line', t.net))
@@ -99,11 +102,11 @@ export function addAsk(host: HTMLElement, ui: string, kind: 'none' | 'cdn', redo
     out.replaceChildren(...parts, file)
   }
   const off = onDownloads(paint)
-  paint()
   // the pictures are there already: nothing to ask (a frame the pack lacks is not drawn again: that would ask again). A cut download says Continue.
   void deps.imagesInstalled().then((i) => {
     if (i && 'bytes' in i) { off(); waiting.delete(me); out.remove(); return }
     partial = !!i
+    ready = true
     paint()
-  }, () => {})
+  }, () => { ready = true; paint() })
 }

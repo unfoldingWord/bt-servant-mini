@@ -533,6 +533,8 @@ function imagesBlock(p: Paint, have: ImagesState, row: boolean): HTMLElement {
   return box
 }
 /** What the pictures' button says now when it is not its usual word (the mobile-data question, no internet). */
+/** A frame that did not show the question itself forgets one an older tap left (else its first tap would pass as the confirming one). */
+export const forgetImagesQuestion = (): void => { confirmed.delete('images'); hints.delete('images') }
 export const imagesHint = (): string | undefined => hints.get('images')
 /**
  * A tap on [Download] of the pictures, from Resources or from a frame (obsimgask.ts): the questions first (`again` redraws the

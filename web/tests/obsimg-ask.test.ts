@@ -123,6 +123,26 @@ describe('the placeholder (no pictures, no internet)', () => {
     await sleep()
     expect(offered).toBeGreaterThan(0)
   })
+  test('the mobile-data question of one frame does not pass for the confirmation of another', async () => {
+    online(true)
+    deps.meteredNow = () => true
+    deps.imagesOffer = async () => ({ bytes: 21_000_000, segments: [], sizes: {} } as any)
+    let started = 0
+    deps.downloadImages = (async () => { started++; return { bytes: 1 } }) as any
+    const a = await frame('en', 1)
+    a.querySelector('img')!.onerror!()
+    await sleep()
+    a.querySelector('.obs-pic-none')!.button(/Download pictures/)!.onclick!()
+    await sleep()
+    expect(a.textContent).toContain('over mobile data')
+    const b = await frame('en', 2)
+    b.querySelector('img')!.onerror!()
+    await sleep()
+    b.querySelector('.obs-pic-none')!.button(/Download pictures/)!.onclick!()
+    await sleep()
+    expect(started).toBe(0)
+    expect(b.textContent).toContain('over mobile data')
+  })
   test('a file with the pictures: the frame is drawn again once they are on the phone', async () => {
     const fig = await frame('en')
     const box = fig.querySelector('.obs-pic-none')!
