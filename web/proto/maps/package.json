@@ -1,0 +1,2 @@
+{ "name": "bt-servant-mini-maps-proto", "private": true, "type": "module",
+  "dependencies": { "three": "0.170.0", "maplibre-gl": "4.7.1" } }
