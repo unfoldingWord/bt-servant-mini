@@ -411,10 +411,10 @@ const SKIP_TEXT = /\/arst$/
 const ENDINGS = ['aron', 'ando', 'ados', 'adas', 'ing', 'ado', 'ada', 'ent', 'ait', 'ed', 'es', 'ar', 'er', 'ir', 'os', 'as', 'ée', 'és', 's', 'ó', 'é', 'a', 'o', 'e']
 /** A word's beginning, for the languages written with endings (not Hindi or Arabic: their words match whole, or with a prefix). */
 export function stemOf(w: string, lang = ''): string | null {
-  // Indonesian has its own affixes (me-, -kan, -nya): the Spanish and English endings made pintar (smart) match pintu (door)
-  if (lang.split('-')[0] === 'id') return null
+  // Indonesian has its own affixes (me-, -kan, -nya): the Spanish and English endings made pintar (smart) and pintu (door) both «pint»
   const f = fold(w)
   if (f.length < 4 || /[^a-z]/.test(f)) return null
+  if (lang.split('-')[0] === 'id') return f // (the whole word as a prefix: Goliat still matches Goliath)
   for (const e of ENDINGS) if (f.endsWith(e) && f.length - e.length >= 4) return f.slice(0, -e.length)
   return f
 }
