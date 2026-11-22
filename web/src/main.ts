@@ -16,6 +16,8 @@ import { isCreditLine, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
+import { buildTree, saveReplacer, type TreeView } from './tree'
+import { renderTree } from './treeview'
 import { has } from './commands'
 import { resetSearch } from './search'
 import { md, mdDir } from './md'
@@ -27,7 +29,7 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, backNow, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { answer, backNow, treeBar, treeBase, treeStep, treeWords, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
@@ -185,7 +187,7 @@ function save() {
   // (an OBS story's helps too: a whole story's are a few KB, a Bible chapter's study tens of KB)
   for (const c of convs) c.msgs.slice(0, -8).forEach((m) => { delete m.study; delete m.obs })
   try {
-    if (keepHistory()) localStorage.setItem(KEY, JSON.stringify({ convs, current }))
+    if (keepHistory()) localStorage.setItem(KEY, JSON.stringify({ convs, current }, saveReplacer))
     else localStorage.removeItem(KEY)
   } catch {}
 }
@@ -351,6 +353,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   }
   // who is who, the sentence's structure (macula.ts): drawn, its text kept for sharing and reports
   else if (m.macula) host.appendChild(renderMacula(m.macula))
+  // a family tree (tree.ts): drawn in place of its text; a saved one is drawn from its text first and replaced when it is built again
+  else if (m.tree) host.appendChild(treeBlock(m, m.tree))
   else if (m.info) {
     const box = el('div', m.intro ? 'info' : 'plain md')
     box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
@@ -373,6 +377,14 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     if (m.obs) groupObsHelps(box)
     host.appendChild(box)
     pageAnswer(box, m.ui ?? nav)
+    if (m.treeOf) {
+      const of = m.treeOf
+      void buildTree(of.pack, of.id, of.mode, m.ui ?? nav, of.open, of.down).then((v) => {
+        if (!v.focus.name || v.focus.name === v.focus.id) return
+        m.tree = v
+        if (box.isConnected) box.replaceWith(treeBlock(m, v))
+      }).catch((e) => { console.warn('tree: kept as text', e) })
+    }
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   if (showsCards(m, pending)) {
@@ -514,6 +526,26 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTML
     f.appendChild(b)
   }
   return f
+}
+/** A family tree as the bubble shows it (treeview.ts), with the credit line of its text under it. */
+function treeBlock(m: Msg, v: TreeView): HTMLElement {
+  const ui = m.ui ?? nav
+  const base = treeBase(v.pack)
+  const wrap = el('div', 'tree-block')
+  wrap.appendChild(renderTree(v, {
+    bar: (id, from) => treeBar(base, v.ui, id, from, v.mode, v.focus.id),
+    button: (f) => followButton(m, f),
+    words: treeWords(v.ui, v),
+    ancestors: v.mode === 'tree' ? treeStep(base, v.ui, 'up', v.focus.id, v.focus.name) : undefined,
+    treeOf: (id) => treeStep(base, v.ui, 'tree', id, v.nodes.find((n) => n.id === id)?.name ?? ''),
+  }))
+  const last = (m.info ?? '').split('\n\n').pop() ?? ''
+  if (isCreditLine(last.replace(/^\*|\*$/g, ''))) {
+    const c = el('p', 'credit', last.replace(/^\*|\*$/g, ''))
+    c.dir = rtlLang(ui) ? 'rtl' : 'ltr'
+    wrap.appendChild(c)
+  }
+  return wrap
 }
 /** One next step's button. */
 function followButton(m: Msg, x: Followup): HTMLButtonElement {
