@@ -20,7 +20,7 @@ export function drawMap(paths: Path[], scene: Scene, v: View, lang: Lang, o: { m
     d[p.layer] += s + (p.layer < 3 ? 'Z' : '')
   }
   const L = layout(scene, v, lang, m)
-  let out = `<svg xmlns="http://www.w3.org/2000/svg" role="img" lang="${lang}" aria-label="${esc(scene.aria[lang])}" width="${W}" height="${H}" viewBox="${-m} ${-m} ${W} ${H}" direction="${lang === 'ar' ? 'rtl' : 'ltr'}" font-family="system-ui,sans-serif" font-size="12">`
+  let out = `<svg xmlns="http://www.w3.org/2000/svg" role="img" lang="${esc(lang)}" aria-label="${esc(scene.aria[lang])}" width="${W}" height="${H}" viewBox="${-m} ${-m} ${W} ${H}" direction="${lang === 'ar' ? 'rtl' : 'ltr'}" font-family="system-ui,sans-serif" font-size="12">`
   out += `<rect x="${-m}" y="${-m}" width="${W}" height="${H}" fill="var(--sea)"/>`
   if (d[1]) {
     out += `<path d="${d[1]}" fill="none" stroke="var(--shore)" stroke-width="6" stroke-linejoin="round" opacity=".55"/>` // soft glow on the sea side
@@ -45,16 +45,23 @@ export function drawMap(paths: Path[], scene: Scene, v: View, lang: Lang, o: { m
   return out + '</svg>'
 }
 
-const K_MIN = 25, K_MAX = 4000 // px per degree of latitude: whole basemap (~21 deg) down to ~city scale
+const K_MAX = 4000 // px per degree of latitude (about city scale); the minimum is the fit of the whole basemap, computed in mount
 mount('svg', async (c: Ctx): Promise<Api> => {
   const m = Math.round(c.w / 2) // margin: render 2x the viewport so panning is a pure CSS transform
   const wrap = document.createElement('div')
   wrap.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform'
   c.box.appendChild(wrap)
+  const K_MIN = fit([{ lon: BBOX.w, lat: BBOX.s }, { lon: BBOX.e, lat: BBOX.n }], c.w, c.h, 0).k // whole basemap fits the screen: about 10 px/deg at 375 px
   let v = fit(c.scene.pts, c.w, c.h), tx = -m, ty = -m, s = 1, tm: any
   if (c.relief) await new Promise(r => { const i = new Image(); i.onload = i.onerror = r as any; i.src = c.reliefUrl })
   const draw = () => { wrap.innerHTML = drawMap(c.paths, c.scene, v, c.lang, { margin: m, reliefUrl: c.relief ? c.reliefUrl : undefined }); tx = -m; ty = -m; s = 1; wrap.style.transform = `translate(${tx}px,${ty}px)` }
   draw()
+  ;(window as any).__extra = () => { // drawMap alone: string build, then innerHTML + forced layout; median of 15
+    const a: number[] = [], b: number[] = []
+    for (let i = 0; i < 15; i++) { const t0 = performance.now(); const t = drawMap(c.paths, c.scene, v, c.lang, { margin: m, reliefUrl: c.relief ? c.reliefUrl : undefined }); const t1 = performance.now(); wrap.innerHTML = t; void wrap.offsetHeight; a.push(t1 - t0); b.push(performance.now() - t1) }
+    const md = (x: number[]) => +x.sort((p, q) => p - q)[x.length >> 1].toFixed(1)
+    return { drawStrMs: md(a), drawDomMs: md(b) }
+  }
   const put = () => (wrap.style.transform = `translate(${tx}px,${ty}px) scale(${s})`)
   const commit = () => {
     if (s === 1 && tx === -m && ty === -m) return

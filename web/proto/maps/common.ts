@@ -71,7 +71,7 @@ export const SCENES: Record<string, Scene> = {
     title: { es: '¿Dónde queda Betel?', ar: 'أين تقع بيت إيل؟' },
     aria: { es: 'Mapa: Betel, unos 15 km al norte de Jerusalén', ar: 'خريطة: بيت إيل، على بعد 15 كم شمال أورشليم' } },
   paul: { id: 'paul', route: true, pts: paul,
-    title: { es: 'Primer viaje de Pablo (Hechos 13–14)', ar: 'رحلة بولس الأولى (أعمال 13–14)' },
+    title: { es: 'Primer viaje de Pablo (Hechos 13-14)', ar: 'رحلة بولس الأولى (أعمال 13-14)' },
     aria: { es: 'Mapa: 12 paradas del primer viaje de Pablo, de Antioquía a Antioquía', ar: 'خريطة: 12 محطة من رحلة بولس الأولى، من أنطاكية إلى أنطاكية' } },
   cluster: { id: 'cluster', route: false, pts: synth(),
     title: { es: '230 lugares agrupados', ar: '230 مكانا مجمعة' },
@@ -105,6 +105,8 @@ export function textW(t: string, bold = false) {
 }
 export type Box = [number, number, number, number]
 export const esc = (s: string | number) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+/** wrap digit ranges ("13-14") so they keep their order inside right-to-left text */
+export const bdiRange = (h: string) => h.replace(/[0-9]+-[0-9]+/g, m => '<bdi>' + m + '</bdi>')
 export type Cand = { x: number; y: number; text: string; v: number; main?: boolean; r: number }
 export function placeLabels(cand: Cand[], side: 1 | -1, W: number, H: number, obstacles: Box[] = [], margin = 0): Label[] {
   cand.sort((a, b) => b.v - a.v)
@@ -204,16 +206,17 @@ const raf = () => new Promise<number>(r => requestAnimationFrame(r))
 export async function mount(variant: string, create: (c: Ctx) => Promise<Api>) {
   const t_entry = performance.now()
   const q = new URLSearchParams(location.search)
-  const lang = (q.get('lang') || 'es') as Lang, sc = SCENES[q.get('scene') || 'bethel'], bench = q.has('bench')
+  const lang: Lang = q.get('lang') === 'ar' ? 'ar' : 'es', // only the two languages this prototype has strings for
+     sc = SCENES[q.get('scene') || ''] || SCENES.bethel, bench = q.has('bench')
   const data = q.get('data') === 'fine' ? 'basemap-fine' : 'basemap', relief = q.get('relief') !== '0'
   const rel = q.get('relief') === '2' ? 'relief-2' : 'relief-1'
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'; document.documentElement.lang = lang
   if (q.has('dark')) document.documentElement.dataset.theme = 'dark'
   const ui = UI[lang]
-  document.body.innerHTML = `<main><h1>${sc.title[lang]}</h1><div id="map" class="map"></div>
-    <div class="btns"><button id="zi" aria-label="${ui.zin}">+</button><button id="zo" aria-label="${ui.zout}">&minus;</button><button id="fr" aria-label="${ui.frame}">&#9635;</button></div>
-    ${sc.route ? `<p class="lg">${ui.legend}</p>` : ''}<p class="lg">&#9679; ${ui.solid} &nbsp; &#9675; ${ui.hollow} &nbsp; ${ui.credit}</p>
-    <ol class="list">${sc.pts.slice(0, 12).map(p => `<li>${p[lang]}</li>`).join('')}</ol></main>`
+  document.body.innerHTML = `<main><h1>${bdiRange(esc(sc.title[lang]))}</h1><div id="map" class="map"></div>
+    <div class="btns"><button id="zi" aria-label="${esc(ui.zin)}">+</button><button id="zo" aria-label="${esc(ui.zout)}">&minus;</button><button id="fr" aria-label="${esc(ui.frame)}">&#9635;</button></div>
+    ${sc.route ? `<p class="lg">${esc(ui.legend)}</p>` : ''}<p class="lg">&#9679; ${esc(ui.solid)} &nbsp; &#9675; ${esc(ui.hollow)} &nbsp; ${esc(ui.credit)}</p>
+    <ol class="list">${sc.pts.slice(0, 12).map(p => `<li>${esc(p[lang])}</li>`).join('')}</ol></main>`
   const box = document.getElementById('map')!
   const w = box.clientWidth, h = box.clientHeight
   const t0 = performance.now()
@@ -255,6 +258,7 @@ export async function mount(variant: string, create: (c: Ctx) => Promise<Api>) {
     res.requests = performance.getEntriesByType('resource').map(r => r.name.replace(location.origin, '')).filter(n => !n.startsWith('/result'))
     res.external = res.requests.filter((n: string) => /^https?:/.test(n))
     res.nodes = document.getElementsByTagName('*').length
+    if ((window as any).__extra) res.extra = (window as any).__extra()
     res.marks = (window as any).__marks
     fetch('result', { method: 'POST', body: JSON.stringify(res) }).catch(() => {})
   }

@@ -6,7 +6,7 @@ const [pw, base, out, shots, th = '1,6'] = process.argv.slice(2)
 const { chromium } = createRequire(pw + '/package.json')('playwright-core')
 mkdirSync(shots, { recursive: true })
 const browser = await chromium.launch({ channel: 'chrome', headless: false, args: ['--enable-precise-memory-info'] })
-const variants = ['svg', 'three', 'maplibre'], scenes = ['bethel', 'paul', 'cluster']
+const variants = (process.env.VARIANTS || 'svg,three,maplibre').split(','), scenes = ['bethel', 'paul', 'cluster']
 async function run(url, rate, shot) {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: false })
   const page = await ctx.newPage()
@@ -22,7 +22,7 @@ async function run(url, rate, shot) {
   await ctx.close()
   return { res, errs, external: reqs.filter(u => !u.startsWith(base) && !u.startsWith('data:') && !u.startsWith('blob:')) }
 }
-for (const rate of th.split(',').map(Number)) for (const v of variants) for (const s of scenes) {
+for (const rate of process.env.NOBENCH ? [] : th.split(',').map(Number)) for (const v of variants) for (const s of scenes) {
   const r = await run(`${base}/${v}.html?scene=${s}&bench=1`, rate)
   const o = { ...(r.res || {}), run: +(process.env.RUN || 1), throttle: rate, errs: r.errs, external: r.external }
   appendFileSync(out, JSON.stringify(o) + '\n'); console.log(v, s, rate, JSON.stringify(o).slice(0, 300))
