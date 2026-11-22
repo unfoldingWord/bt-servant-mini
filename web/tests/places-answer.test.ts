@@ -352,7 +352,7 @@ describe('the list next to the map in the page (placeview.ts) and Arabic', () =>
     const blk = placeBlock(r.reply, 'ar', async (el, o) => { mounted.push([el, o]); return { redraw() {}, destroy() {} } }) as unknown as El
     expect(blk.dir).toBe('rtl')
     expect(blk.all('bdi').map((b) => b.className)).toEqual(expect.arrayContaining(['place-name', 'place-ref']))
-    expect(blk.all('bdi').find((b) => b.className === 'place-ref')!.text).toBe(first.ref!)
+    expect(blk.all('bdi').find((b) => b.className === 'place-ref')!.textContent).toBe(first.ref!)
   })
   test('«ماذا حدث في بيت إيل؟»: an event\'s range of one chapter keeps ASCII digits and the hyphen, in a <bdi>', async () => {
     const r = await ask('ماذا حدث في بيت إيل؟', 'ar')
@@ -361,7 +361,11 @@ describe('the list next to the map in the page (placeview.ts) and Arabic', () =>
     expect(refs.some((x) => /12:1-9$/.test(x ?? ''))).toBe(true)
     expect(refs.join('')).not.toContain('–')
     const blk = placeBlock(r.reply, 'ar', async () => ({ redraw() {}, destroy() {} })) as unknown as El
-    expect(blk.all('bdi').filter((b) => b.className === 'place-ref').map((b) => b.text)).toEqual(refs as string[])
+    const shown = blk.all('bdi').filter((b) => b.className === 'place-ref')
+    expect(shown.map((b) => b.textContent)).toEqual(refs as string[])
+    // the whole range is one left-to-right run (after an Arabic word its digits would join over ":" but not over "-": «9-12:1»)
+    const range = shown.find((b) => /12:1-9$/.test(b.textContent))!
+    expect(range.children.filter((c) => c.className === 'place-num').map((c) => [c.textContent, c.dir])).toEqual([['12:1-9', 'ltr']])
   })
   test('the page puts every name in as text and mounts the map once: the host is empty and the mount gets the summary and the direction', async () => {
     const r = await ask('¿Dónde queda Betel?', 'es')
@@ -516,10 +520,20 @@ describe('corrección 1', () => {
   test('4. Arabic: the passage reference is isolated in the sentence and in the map summary', async () => {
     useWorld(W)
     const r = await turn({ last: null }, { q: '', sheet: viewSheet('gen 12:1-13:3') }, 'ar')
-    expect(r.reply.info).toMatch(/⁨[^⁩]*12:1-13:3⁩/)
-    expect(r.reply.map!.summary).toMatch(/⁨[^⁩]*12:1-13:3⁩/)
+    // the label is one isolate (FSI … PDI) and its whole number, a cross-chapter range, a left-to-right run inside it (LRI … PDI)
+    expect(r.reply.info).toMatch(/⁨[^⁩⁦]*⁦12:1-13:3⁩⁩/)
+    expect(r.reply.map!.summary).toMatch(/⁨[^⁩⁦]*⁦12:1-13:3⁩⁩/)
     const none = await turn({ last: null }, { q: '', sheet: viewSheet('gen 5:5') }, 'ar')
-    expect(none.reply.info).toMatch(/⁨[^⁩]*5:5⁩/)
+    expect(none.reply.info).toMatch(/⁨[^⁩⁦]*⁦5:5⁩⁩/)
+  })
+  test('4b. Arabic: a verse range, a cross-chapter range and an OBS frame each keep their number as one left-to-right run', async () => {
+    useWorld(W)
+    for (const [ref, num] of [['gen 12:1-9', '12:1-9'], ['gen 12:1-13:3', '12:1-13:3'], ['obs 5:9', '5:9']] as const) {
+      const r = await turn({ last: null }, { q: '', sheet: viewSheet(ref) }, 'ar')
+      // (the label's number is wrapped whole; nothing of the number is outside a ⁦ … ⁩ run)
+      expect(r.reply.info, ref).toContain(`⁦${num}⁩`)
+      expect(r.reply.info!.replace(/⁦[^⁩]*⁩/g, '').match(/[0-9]+[:\-][0-9]+/), ref).toBeNull()
+    }
   })
   test('7. the credit of a passage map names OpenBible.info, as NOTICE does', async () => {
     const r = await turn({ last: null }, { q: '', sheet: viewSheet('gen 12:1-13:3') }, 'es')

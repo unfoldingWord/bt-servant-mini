@@ -1,7 +1,7 @@
 // Right-to-left next to left-to-right (bidi.ts): the labels built in Arabic isolate their Latin runs, the English ones get no
 // marks, a block of text reads in the direction of its words, and nothing shared carries the marks.
 import { describe, expect, test } from 'bun:test'
-import { bidiLabel, dirOf, FSI, hasRtl, isolate, PDI, rtlLang, strip, textDir } from '../src/bidi'
+import { bidiLabel, dirOf, FSI, hasRtl, isolate, isolateRef, LRI, PDI, rtlLang, splitNumbers, strip, textDir } from '../src/bidi'
 import { followups, nextWords } from '../src/converse'
 import { buildReport } from '../src/feedback'
 import { md, mdDir } from '../src/md'
@@ -140,5 +140,21 @@ describe('link addresses do not decide a direction', () => {
     const src = 'انظر [الاستعارة](rc://*/ta/man/translate/figs-metaphor) و [[rc://*/ta/man/translate/figs-simile]] هنا في النص'
     expect(mdDir(src)).toBe('rtl')
     expect(md(['## راعوث', '', src].join(String.fromCodePoint(10)))).toContain('<p dir="rtl">')
+  })
+})
+
+describe('a reference after an Arabic book name (isolateRef, splitNumbers)', () => {
+  test('a range is one number: digits joined by : . , - –', () => {
+    expect(splitNumbers('التكوين 12:1-13:3')).toEqual([{ text: 'التكوين ', num: false }, { text: '12:1-13:3', num: true }])
+    expect(splitNumbers('التكوين 12:1-9')).toEqual([{ text: 'التكوين ', num: false }, { text: '12:1-9', num: true }])
+    expect(splitNumbers('OBS 5:9').map((p) => p.text)).toEqual(['OBS ', '5:9'])
+    expect(splitNumbers('بدون')).toEqual([{ text: 'بدون', num: false }])
+  })
+  test('the label is one isolate and each number a left-to-right run inside it; text without a number only gets the isolate; no double wrap', () => {
+    expect(isolateRef('التكوين 12:1-13:3')).toBe(`${FSI}التكوين ${LRI}12:1-13:3${PDI}${PDI}`)
+    expect(isolateRef('التكوين')).toBe(`${FSI}التكوين${PDI}`)
+    expect(isolateRef(isolateRef('التكوين 12:1'))).toBe(isolateRef('التكوين 12:1'))
+    expect(strip(isolateRef('التكوين 12:1-9'))).toBe('التكوين 12:1-9')
+    expect(isolateRef('')).toBe('')
   })
 })

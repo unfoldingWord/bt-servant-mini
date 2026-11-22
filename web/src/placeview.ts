@@ -2,6 +2,7 @@
 // conversation with many maps does not draw them all at once); the list is the whole alternative to it: every place with how sure it is,
 // references in <bdi> (in Arabic, "13:1-14:2" must not be reordered). All text goes in as text, never as markup.
 import { mountMap, MAP_MAX_H, MAP_MIN_H, MAP_RATIO, type MapOpts } from './mapview'
+import { splitNumbers } from './bidi'
 import type { MapBlock, PlaceList } from './pipeline'
 
 type Mount = (el: HTMLElement, o: MapOpts) => Promise<{ redraw(): void; destroy(): void }>
@@ -54,6 +55,18 @@ const reserved = (small?: boolean): Record<string, string> =>
   small ? { minHeight: '180px' } : { minHeight: `${MAP_MIN_H}px`, maxHeight: `${MAP_MAX_H}px`, aspectRatio: `1 / ${MAP_RATIO}` }
 const release = (host: HTMLElement) => { host.style.minHeight = ''; host.style.maxHeight = ''; host.style.aspectRatio = '' }
 
+/** A reference: <bdi> with each number (a verse, a range, a frame) in a left-to-right <bdi dir="ltr"> of its own, so "12:1-13:3" after an Arabic book name never splits. */
+export function refNode(ref: string): HTMLElement {
+  const bdi = make('bdi', 'place-ref')
+  for (const p of splitNumbers(ref)) {
+    if (!p.num) { bdi.appendChild(document.createTextNode(p.text)); continue }
+    const n = make('bdi', 'place-num', p.text)
+    n.dir = 'ltr'
+    bdi.appendChild(n)
+  }
+  return bdi
+}
+
 /** `ui`: the language of the answer (its direction). `mount`: the map's drawing (tests give their own). */
 export function placeBlock(m: { map?: MapBlock; list?: PlaceList }, ui: string, mount: Mount = mountMap): HTMLElement {
   const dir = /^ar(-|$)/i.test(ui) ? 'rtl' : 'ltr'
@@ -92,7 +105,7 @@ export function placeBlock(m: { map?: MapBlock; list?: PlaceList }, ui: string, 
       if (it.text) li.appendChild(make('bdi', 'place-name', it.text))
       if (it.note) li.appendChild(document.createTextNode(` (${it.note})`))
       if (it.tag) li.appendChild(make('span', 'place-tag', ` · ${it.tag}`))
-      if (it.ref) { if (it.text) li.appendChild(document.createTextNode(' — ')); li.appendChild(make('bdi', 'place-ref', it.ref)) }
+      if (it.ref) { if (it.text) li.appendChild(document.createTextNode(' — ')); li.appendChild(refNode(it.ref)) }
       ul.appendChild(li)
     }
     wrap.appendChild(ul)

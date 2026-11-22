@@ -27,7 +27,7 @@ import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, 
 import { kinVerses, trip as tripOf, type PlaceRef, type Relative } from '@bt-synergy/language-pack-client'
 import { hasGeo, personPlace, personVerses, placeData, placeNamed, placeQuestion, placeRefs, placeShape, placesAt, placeVerses, referenceFor, type PlaceAsk } from './places'
 import { PLACE_SOURCES, PLT } from './placetext'
-import { isolate } from './bidi'
+import { isolateRef } from './bidi'
 import type { MapPoint } from './mapview'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2638,7 +2638,7 @@ async function placeAnswer(x: Ctx): Promise<Done> {
   if (kind === 'view') {
     const ref = sheet.ref ?? ''
     const at = (await placesAt(pack, ref).catch(() => [])).filter((p) => p.sure >= 1 && p.lat !== undefined)
-    const label = ui === 'ar' ? isolate(refLabelOf(ui, ref)) : refLabelOf(ui, ref) // (Arabic: the reference is isolated in the sentence and in the summary)
+    const label = ui === 'ar' ? isolateRef(refLabelOf(ui, ref)) : refLabelOf(ui, ref) // (Arabic: the reference is isolated in the sentence and in the summary, its numbers a left-to-right run: bidi.ts isolateRef)
     const names = at.map((p) => p.name)
     const info = at.length ? `**${colon(ui, trimColon(t.listPassage.replace('{ref}', label)))}**` : t.passageNone.replace('{ref}', label)
     const follow: Follow[] = at.slice(0, MAX_FOLLOW).map((p) => ({ label: p.name, sheet: placeSheet(sheet, ['card'], { concept: p.id, term: p.name }) }))

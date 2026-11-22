@@ -123,6 +123,17 @@ function basemapOfPack(pack: string): Promise<Basemap | undefined> {
 const DEFAULT_BBOX: [number, number, number, number] = [800, 2200, 5200, 4300] // the rectangle of the E1 basemap: 8-52 E, 22-43 N
 const HOME_MARGIN = 40
 const STEP = 1.6
+const LABEL_GAP = 14 // the dot, its gap and a little air
+/**
+ * The margin the first view keeps around the points. The fixed 40 px cut a label that goes beyond it (a point near the right edge showed
+ * «Jerusa», and under the buttons): the margin takes in the longest label, as the page measures it (an estimate without `measure`), but no
+ * more than a third of the width. Many points (clusters) show few labels: the fixed margin.
+ */
+export function homeMargin(points: readonly { label: string }[], w: number, measure?: (t: string) => number): number {
+  if (points.length > 12) return HOME_MARGIN
+  const wide = Math.max(0, ...points.map((p) => (measure ? measure(p.label) : p.label.length * 12 * 0.6 + 3)))
+  return Math.round(Math.max(HOME_MARGIN, Math.min(w / 3, wide + LABEL_GAP)))
+}
 
 function textMeasure(fontSize: number): ((t: string) => number) | undefined {
   try {
@@ -156,7 +167,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   const measure = textMeasure(12)
   let bbox = DEFAULT_BBOX
   let lo = minScale(bbox, w, h)
-  const home = (): Frame => { const f = fit(o.points, w, h, HOME_MARGIN); return { ...f, scale: clampScale(f.scale, bbox, w, h) } }
+  const home = (): Frame => { const f = fit(o.points, w, h, homeMargin(o.points, w, measure)); return { ...f, scale: clampScale(f.scale, bbox, w, h) } }
 
   const box = document.createElement('div')
   box.setAttribute('class', 'map-box')
