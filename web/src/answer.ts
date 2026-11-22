@@ -1140,7 +1140,7 @@ type GeoText = {
   foot: string; horse: string; ship: string
   less: string; over: string; lessAll: string
   sep: string; end: string; approx: string; refDays: string
-  born: string; bornF: string; bornNone: string; died: string; diedF: string; diedNone: string
+  born: string; bornF: string; bornNone: string; bornNoneF?: string; died: string; diedF: string; diedNone: string; diedNoneF?: string
 }
 const geoText: Record<GeoLang, GeoText> = {
   en: {
@@ -1196,9 +1196,9 @@ const geoText: Record<GeoLang, GeoText> = {
     less: "moins d'un jour", over: 'plus de deux mois', lessAll: "moins d'un jour {foot}",
     sep: ' ; ', end: '.', approx: '(approx.)', refDays: '{pre}de {ref} à {name}, {foot} : {r} (approx.).',
     born: 'Selon Theographic, {name} est né à {place}.', bornF: 'Selon Theographic, {name} est née à {place}.',
-    bornNone: 'Les données que j’ai ne disent pas où {name} est né.',
+    bornNone: 'Les données que j’ai ne disent pas où {name} est né.', bornNoneF: 'Les données que j’ai ne disent pas où {name} est née.',
     died: 'Selon Theographic, {name} est mort à {place}.', diedF: 'Selon Theographic, {name} est morte à {place}.',
-    diedNone: 'Les données que j’ai ne disent pas où {name} est mort.',
+    diedNone: 'Les données que j’ai ne disent pas où {name} est mort.', diedNoneF: 'Les données que j’ai ne disent pas où {name} est morte.',
   },
   id: {
     dir: ['di sebelah utara {ref}', 'di sebelah timur laut {ref}', 'di sebelah timur {ref}', 'di sebelah tenggara {ref}', 'di sebelah selatan {ref}', 'di sebelah barat daya {ref}', 'di sebelah barat {ref}', 'di sebelah barat laut {ref}'],
@@ -1226,9 +1226,9 @@ const geoText: Record<GeoLang, GeoText> = {
     where: '{pre}{name} {loc} लगभग {n} किमी दूर है।', near: '{pre}{name} {ref} के बिलकुल पास है।', onMap: '{name} नक्शे पर दिखाया गया है।',
     uncertain: 'निश्चित रूप से नहीं पता कि {name} कहाँ था; कई जगहें सुझाई गई हैं।',
     uncertainRef: 'निश्चित रूप से नहीं पता कि {name} कहाँ था; {ref} के पास कई जगहें सुझाई गई हैं।',
-    region: '{name} एक क्षेत्र है; नक्शे पर इसका कोई ठीक बिंदु नहीं है।', water: '{name} एक जलाशय है।', waterRef: '{name}, {ref} के पास।',
+    region: '{name} एक क्षेत्र है; नक्शे पर इसका कोई ठीक बिंदु नहीं है।', water: '{name} एक जलराशि है।', waterRef: '{name}, {ref} के पास।',
     unknown: 'यह नहीं पता कि {name} कहाँ था।',
-    straight: '{pre}सीधी रेखा में लगभग {n} किमी; {a} {loc} है।', nearDist: '{pre}{a} {b} के बिलकुल पास था (3 किमी से कम)।',
+    straight: '{pre}सीधी रेखा में लगभग {n} किमी; {a} {loc} है।', nearDist: '{pre}{a} {b} के बिलकुल पास है (3 किमी से कम)।',
     regionDist: '{name} एक क्षेत्र है; इसमें नापने के लिए कोई बिंदु नहीं है।', waterDist: '{name} एक नदी या जलराशि है; इसमें नापने के लिए कोई बिंदु नहीं है।',
     uncertainDist: 'निश्चित रूप से नहीं पता कि {name} कहाँ था, इसलिए दूरी नहीं दी गई।',
     foot: 'पैदल, गधे या ऊँट से', horse: 'घोड़े से', ship: 'जहाज़ से, नौकायन के मौसम में (वसंत से पतझड़ तक)',
@@ -1247,16 +1247,16 @@ const geoText: Record<GeoLang, GeoText> = {
     uncertainRef: 'لا يُعرف بيقين أين كان موقع {name}؛ اقتُرحت عدة مواقع قرب {ref}.',
     region: '{name} منطقة؛ ليس لها نقطة محددة على الخريطة.', water: '{name} مسطح مائي.', waterRef: '{name}، قرب {ref}.',
     unknown: 'لا يُعرف أين كان موقع {name}.',
-    straight: '{pre}نحو {n} كم في خط مستقيم؛ {a} {loc}.', nearDist: '{pre}{a} كان قريبًا جدًا من {b} (أقل من 3 كم).',
+    straight: '{pre}نحو {n} كم في خط مستقيم؛ {a} {loc}.', nearDist: '{pre}{a} قريب جدًا من {b} (أقل من 3 كم).',
     regionDist: '{name} منطقة؛ ليس لها نقطة للقياس.', waterDist: '{name} نهر أو مسطح مائي؛ ليس له نقطة للقياس.',
     uncertainDist: 'لا يُعرف بيقين أين كان موقع {name}، فلا تُعطى مسافة.',
     foot: 'سيرًا على الأقدام أو على حمار أو جمل', horse: 'على الحصان', ship: 'بالسفينة، في موسم الإبحار (من الربيع إلى الخريف)',
     less: 'أقل من يوم', over: 'أكثر من شهرين', lessAll: 'أقل من يوم {foot}',
     sep: '؛ ', end: '.', approx: '(تقريبًا)', refDays: '{pre}من {ref} إلى {name}، {foot}: {r} (تقريبًا).',
     born: 'بحسب Theographic، وُلد {name} في {place}.', bornF: 'بحسب Theographic، وُلدت {name} في {place}.',
-    bornNone: 'البيانات التي لديّ لا تذكر أين وُلد {name}.',
+    bornNone: 'البيانات التي لديّ لا تذكر أين وُلد {name}.', bornNoneF: 'البيانات التي لديّ لا تذكر أين وُلدت {name}.',
     died: 'بحسب Theographic، مات {name} في {place}.', diedF: 'بحسب Theographic، ماتت {name} في {place}.',
-    diedNone: 'البيانات التي لديّ لا تذكر أين مات {name}.',
+    diedNone: 'البيانات التي لديّ لا تذكر أين مات {name}.', diedNoneF: 'البيانات التي لديّ لا تذكر أين ماتت {name}.',
   },
 }
 const geoLang = (ui: string): GeoLang => {
@@ -1330,7 +1330,7 @@ function geoRange(l: GeoLang, t: GeoText, d: { low: number; high: number }): str
     case 'hi': return same ? `लगभग ${a} दिन` : `लगभग ${a} से ${b} दिन`
     case 'ar': {
       // number agreement: 1 and 2 are words, 3 to 10 take the plural, 11 or more the accusative singular
-      const unit = (n: number) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومان' : n <= 10 ? `${n} أيام` : `${n} يومًا`)
+      const unit = (n: number) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n <= 10 ? `${n} أيام` : `${n} يومًا`)
       return same ? `نحو ${unit(d.low)}` : `نحو ${a} إلى ${unit(d.high)}`
     }
   }
@@ -1347,13 +1347,14 @@ export function daysLine(ui: string, trip: Trip | undefined): string {
   const { foot, horse, ship } = trip.days
   const lessFoot = foot.low === 0 && foot.high <= 1
   const lessHorse = horse.low === 0 && horse.high <= 1
+  const colon = l === 'fr' ? ' : ' : ': '
   const parts: string[] = []
   if (lessFoot && lessHorse) parts.push(geoFill(t.lessAll, { foot: t.foot }))
   else {
-    parts.push(`${t.foot}: ${geoRange(l, t, foot)}`)
-    parts.push(`${t.horse}: ${geoRange(l, t, horse)}`)
+    parts.push(`${t.foot}${colon}${geoRange(l, t, foot)}`)
+    parts.push(`${t.horse}${colon}${geoRange(l, t, horse)}`)
   }
-  if (ship) parts.push(`${t.ship}: ${geoRange(l, t, ship)}`)
+  if (ship) parts.push(`${t.ship}${colon}${geoRange(l, t, ship)}`)
   const pre = geoPre(t, trip.sure)
   const body = parts.join(t.sep)
   return (pre ? pre + body : geoUp(body)) + ` ${t.approx}${t.end}`
@@ -1372,10 +1373,10 @@ export function refDaysLine(ui: string, place: PlaceRef, ref: PlaceRef, trip: Tr
 /** "According to Theographic, Paul was born in Tarsus." `place` null: "The data I have do not say where X was born." `female` picks fr and ar agreement. */
 export function bornLine(ui: string, person: string, place: PlaceRef | null, female = false): string {
   const t = geoText[geoLang(ui)]
-  return place ? geoFill(female ? t.bornF : t.born, { name: person, place: place.name }) : geoFill(t.bornNone, { name: person })
+  return place ? geoFill(female ? t.bornF : t.born, { name: person, place: place.name }) : geoFill((female && t.bornNoneF) || t.bornNone, { name: person })
 }
 
 export function diedLine(ui: string, person: string, place: PlaceRef | null, female = false): string {
   const t = geoText[geoLang(ui)]
-  return place ? geoFill(female ? t.diedF : t.died, { name: person, place: place.name }) : geoFill(t.diedNone, { name: person })
+  return place ? geoFill(female ? t.diedF : t.died, { name: person, place: place.name }) : geoFill((female && t.diedNoneF) || t.diedNone, { name: person })
 }

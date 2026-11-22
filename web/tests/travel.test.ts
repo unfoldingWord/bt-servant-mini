@@ -217,12 +217,66 @@ describe('six languages, eight directions', () => {
   })
   test('Arabic number agreement: 2, 3 to 10 and 11 or more', () => {
     const f = (low: number, high: number) => daysLine('ar', fake(100, { days: { foot: { low, high }, horse: { low: 1, high: 1 } } }))
-    expect(f(2, 2)).toContain('نحو يومان')
+    expect(f(2, 2)).toContain('نحو يومين')
     expect(f(4, 6)).toContain('نحو 4 إلى 6 أيام')
     expect(f(8, 11)).toContain('نحو 8 إلى 11 يومًا')
   })
   test('a name with $ or braces is kept as is', () => {
     const odd = place('lug:odd', '$& {n} <b>', 31.9, 35.2)
     expect(whereLine('es', odd, jerusalem, fake(40))).toContain('$& {n} <b>')
+  })
+  test('the real direction phrase, N and SW, in each language (a is opposite to the bearing a to b)', () => {
+    const want: Record<string, [string, string]> = {
+      en: ['south of Jerusalén', 'northeast of Jerusalén'],
+      es: ['al sur de Jerusalén', 'al noreste de Jerusalén'],
+      fr: ['au sud de Jerusalén', 'au nord-est de Jerusalén'],
+      id: ['di sebelah selatan Jerusalén', 'di sebelah timur laut Jerusalén'],
+      hi: ['Jerusalén के दक्षिण में', 'Jerusalén के उत्तर-पूर्व में'],
+      ar: ['جنوب Jerusalén', 'شمال شرق Jerusalén'],
+    }
+    const j = place('lug:j', 'Jerusalén', 31.78, 35.22)
+    for (const l of LANGS) {
+      expect(whereLine(l, bethel, j, fake(40, { direction: 'N' }))).toContain(want[l]![0])
+      expect(whereLine(l, bethel, j, fake(40, { direction: 'SW' }))).toContain(want[l]![1])
+      expect(distanceLine(l, bethel, j, fake(40, { direction: 'N' }))).toContain(want[l]![0])
+    }
+  })
+})
+
+describe('corrections', () => {
+  const days = { foot: { low: 8, high: 11 }, horse: { low: 4, high: 6 }, ship: { low: 2, high: 3 } }
+  test('Arabic dual after نحو and إلى is genitive', () => {
+    const f = (low: number, high: number) => daysLine('ar', fake(100, { days: { foot: { low, high }, horse: { low: 1, high: 1 } } }))
+    expect(f(1, 2)).toContain('نحو 1 إلى يومين')
+    expect(f(2, 2)).not.toContain('يومان')
+  })
+  test('French puts a space before the colon in the days line, ship included', () => {
+    const s = daysLine('fr', fake(220, { days }))
+    expect(s).toBe("À pied, à dos d'âne ou de chameau : environ 8 à 11 jours ; à cheval : environ 4 à 6 jours ; en bateau, pendant la saison de navigation (du printemps à l’automne) : environ 2 à 3 jours (approx.).")
+  })
+  test('the ship line in Arabic', () => {
+    const s = daysLine('ar', fake(220, { days }))
+    expect(s).toContain('بالسفينة، في موسم الإبحار (من الربيع إلى الخريف): نحو 2 إلى 3 أيام')
+    expect(s).toContain('؛ ')
+  })
+  test('59 days is still a range, 60 is more than two months', () => {
+    const f = (low: number) => daysLine('es', fake(1800, { days: { foot: { low, high: low + 5 }, horse: { low: 30, high: 40 } } }))
+    expect(f(59)).toContain('unos 59 a 64 días')
+    expect(f(60)).toContain('más de dos meses')
+    expect(f(60)).not.toContain('unos 60')
+  })
+  test('female agreement also when the data say nothing, in fr and ar', () => {
+    expect(bornLine('fr', 'Marie', null, true)).toBe('Les données que j’ai ne disent pas où Marie est née.')
+    expect(diedLine('fr', 'Marie', null, true)).toBe('Les données que j’ai ne disent pas où Marie est morte.')
+    expect(bornLine('fr', 'Paul', null)).toContain('est né.')
+    expect(bornLine('ar', 'مريم', null, true)).toContain('وُلدت')
+    expect(diedLine('ar', 'مريم', null, true)).toContain('ماتت')
+    expect(bornLine('ar', 'مريم', place('lug:t', 'طرسوس', 1, 1), true)).toContain('وُلدت')
+  })
+  test('hindi and arabic use the present for where and near, as for the distance', () => {
+    expect(whereLine('hi', bethel, jerusalem, fake(1, { near: true }))).toContain('पास है')
+    expect(distanceLine('hi', bethel, jerusalem, fake(1, { near: true }))).toContain('पास है')
+    expect(distanceLine('ar', bethel, jerusalem, fake(1, { near: true }))).not.toContain('كان')
+    expect(whereLine('hi', place('lug:j', 'el Jordán', 32, 35.5, { form: 3 }), null, undefined)).toContain('जलराशि')
   })
 })
