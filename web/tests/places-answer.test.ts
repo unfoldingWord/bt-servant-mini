@@ -610,8 +610,7 @@ describe('corrección 1', () => {
     for (const k of ['minHeight', 'maxHeight', 'aspectRatio'] as const) expect(hostOf(bad).style[k]).toBe('') // a failed mount gives the reserved box back too
     const smallHost = hostOf(placeBlock({ ...block, map: { ...block.map, small: true } }, 'es', async () => ({ redraw() {}, destroy() {} })))
     expect(smallHost.style.minHeight).toBe('180px')
-    expect(smallHost.style.maxHeight).toBeUndefined()
-    expect(smallHost.style.aspectRatio).toBeUndefined()
+    for (const k of ['maxHeight', 'aspectRatio'] as const) expect([undefined, '']).toContain(smallHost.style[k]) // a real DOM gives ''
     FakeIO.all[2]!.cb([{ isIntersecting: true }])
     await tick()
     for (const k of ['minHeight', 'maxHeight', 'aspectRatio'] as const) expect(smallHost.style[k] ?? '').toBe('')

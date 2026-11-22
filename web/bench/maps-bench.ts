@@ -8,9 +8,9 @@ import { basemapBytes, scenes, stats, type Scene, type Stats } from './scenes'
 
 const N = Math.max(1, Number(new URLSearchParams(location.search).get('n')) || 10)
 const W = 375
-const bytes = basemapBytes()
-setBasemapSource(async () => bytes) // the real basemap, never fetched
-const stage = document.getElementById('stage')!
+// set up inside the guarded run (see run()), so that a throw there still leaves window.__mapBench resolved with {error}
+let bytes: Uint8Array
+let stage: HTMLElement
 /** Time from `t` to the second animation frame after it (the paint of what was just drawn); null on a page that has no frames (hidden). */
 const raf = (t = performance.now()) => new Promise<number | null>((res) => {
   let done = false
@@ -23,7 +23,7 @@ const marks = (name: string): Mark[] => performance.getEntriesByName(name, 'meas
 
 // first_draw: drawn WITHOUT the basemap (it arrives later); basemap_redraw: the redraw when it arrives; ready_total: mount start to the end of that
 // redraw (the map with its basemap, what the person sees); mount_to_first_draw: mount start to the end of the first-draw mark; *_paint: to the 2nd frame after
-const METRICS = ['mount_to_first_draw', 'first_draw', 'basemap_redraw', 'ready_total', 'paint_after_mount', 'zoom_redraw', 'zoom_paint', 'plain_redraw', 'plain_paint'] as const
+const METRICS = ['mount_to_first_draw', 'first_draw', 'basemap_redraw', 'ready_total', 'mount_to_paint', 'zoom_redraw', 'zoom_paint', 'plain_redraw', 'plain_paint'] as const
 type Run = Record<(typeof METRICS)[number], number | null>
 async function once(scene: Scene, cold: boolean): Promise<Run> {
   performance.clearMeasures()
@@ -52,7 +52,7 @@ async function once(scene: Scene, cold: boolean): Promise<Run> {
   const plain_paint = await raf(tp)
   api.destroy()
   host.remove()
-  return { mount_to_first_draw, first_draw: first?.duration ?? null, basemap_redraw: arrival?.duration ?? null, ready_total, paint_after_mount: paint, zoom_redraw: zoom?.duration ?? null, zoom_paint, plain_redraw: plain?.duration ?? null, plain_paint }
+  return { mount_to_first_draw, first_draw: first?.duration ?? null, basemap_redraw: arrival?.duration ?? null, ready_total, mount_to_paint: paint, zoom_redraw: zoom?.duration ?? null, zoom_paint, plain_redraw: plain?.duration ?? null, plain_paint }
 }
 async function series(scene: Scene, cold: boolean) {
   await once(scene, cold) // warm-up, dropped
@@ -116,13 +116,18 @@ async function main() {
 async function run() {
   await new Promise((r) => setTimeout(r, 300)) // the page settles first
   try {
+    bytes = basemapBytes()
+    setBasemapSource(async () => bytes) // the real basemap, never fetched
+    stage = document.getElementById('stage')!
     const res = await main()
-    show(res)
-    document.getElementById('status')!.textContent = 'done'
+    try { show(res) } catch (e) { res.renderError = String((e as any)?.stack ?? e) } // the results stay valid when the table cannot be drawn
+    const st = document.getElementById('status')
+    if (st) st.textContent = 'done'
     return res
   } catch (e) {
     const msg = String((e as any)?.stack ?? e)
-    document.getElementById('status')!.textContent = 'error: ' + msg
+    const st = document.getElementById('status')
+    if (st) st.textContent = 'error: ' + msg
     return { error: msg, userAgent: navigator.userAgent }
   } finally {
     document.body.setAttribute('data-done', '1')
