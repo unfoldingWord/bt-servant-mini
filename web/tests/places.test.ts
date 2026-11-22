@@ -331,6 +331,8 @@ describe('corrección 1', () => {
     expect(placeShape('أين تقع القدس؟')).not.toBeNull()
     expect(placeShape('أين قال أين تقع القدس')).toBeNull()
     expect(placeShape('أين مكتوب هذا؟')).toBeNull()
+    for (const w of ['وقال', 'فقال', 'ويقول', 'المكتوب']) expect(placeShape(`أين ${w} هذا؟`)).toBeNull()
+    expect(placeShape('أين تقع قالب؟')).not.toBeNull()
   })
 })
 

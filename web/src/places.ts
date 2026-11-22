@@ -125,7 +125,7 @@ const PATTERNS: Pat[] = [
 
 // Never a place question: where something is written or said ("¿dónde está escrito…?", "where is it written", "où est-il écrit"
 // has no space after «est»; "di mana tertulis"), and what is asked of a pronoun or of God ("¿dónde estás?", "¿dónde está Dios?").
-const WRITTEN = /\b(?:escrit[oa]s?|dice|dicen|dijo|written|says?|said|ecrit[es]*|dit|tertulis|dikatakan|berkata|firman)\b|(?<![ऀ-ॿ])(?:लिखा|कहा)(?![ऀ-ॿ])|(?<![ء-ي])(?:مكتوب|يقول|قال|يقال)(?![ء-ي])/
+const WRITTEN = /\b(?:escrit[oa]s?|dice|dicen|dijo|written|says?|said|ecrit[es]*|dit|tertulis|dikatakan|berkata|firman)\b|(?<![ऀ-ॿ])(?:लिखा|कहा)(?![ऀ-ॿ])|(?<![ء-ي])[وفب]?(?:ال)?(?:مكتوب|يقول|قال|يقال)(?![ء-ي])/
 const NOT_PLACE = new Set(['it', 'he', 'she', 'him', 'her', 'they', 'them', 'you', 'we', 'i', 'me', 'god', 'el', 'ella', 'ello', 'ti', 'usted', 'yo', 'dios', 'il', 'elle', 'ils',
   'tu', 'vous', 'toi', 'moi', 'dieu', 'dia', 'ia', 'anda', 'kamu', 'engkau', 'mereka', 'kita', 'kami', 'saya', 'aku', 'tuhan', 'allah', 'वह', 'यह', 'तुम', 'आप', 'परमेश्वर', 'ईश्वर',
   'هو', 'هي', 'انت', 'الله', 'ربنا'].map((n) => placeFold(n)))
@@ -297,7 +297,9 @@ const packOf = (l: string) => (l.startsWith('es') ? 'es-419' : l)
 /** The packs to read in, in order: the question's language, the app's, English, the others on the phone. */
 let haveCache: Promise<string[]> | null = null
 async function packsFor(lang: string, nav: string): Promise<string[]> {
-  const have = await (haveCache ??= installedLangs().catch(() => [] as string[]))
+  // (only a success is kept: a failed read is tried again)
+  let have: string[]
+  try { have = await (haveCache ??= installedLangs()) } catch { haveCache = null; have = [] }
   return [...new Set([packOf(lang), packOf(nav), 'en', ...have])].filter((l) => have.includes(l))
 }
 
