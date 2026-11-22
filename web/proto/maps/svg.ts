@@ -22,7 +22,7 @@ export function drawMap(paths: Path[], scene: Scene, v: View, lang: Lang, o: { m
     d[p.layer] += s + (p.layer < 3 ? 'Z' : '')
   }
   const L = layout(scene, v, lang, m)
-  let out = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${scene.aria[lang]}" width="${W}" height="${H}" viewBox="${-m} ${-m} ${W} ${H}" font-family="system-ui,sans-serif" font-size="12">`
+  let out = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${scene.aria[lang]}" width="${W}" height="${H}" viewBox="${-m} ${-m} ${W} ${H}" direction="${lang === 'ar' ? 'rtl' : 'ltr'}" font-family="system-ui,sans-serif" font-size="12">`
   out += `<rect x="${-m}" y="${-m}" width="${W}" height="${H}" fill="var(--sea)"/>`
   if (d[1]) {
     out += `<path d="${d[1]}" fill="none" stroke="var(--shore)" stroke-width="6" stroke-linejoin="round" opacity=".55"/>` // soft glow on the sea side
@@ -43,7 +43,7 @@ export function drawMap(paths: Path[], scene: Scene, v: View, lang: Lang, o: { m
     else if (k.hollow) out += `<circle cx="${x}" cy="${y}" r="5" fill="var(--land)" stroke="var(--dot)" stroke-width="2"/>`
     else out += `<circle cx="${x}" cy="${y}" r="${k.main ? 7 : 5}" fill="${k.ref ? 'var(--ref)' : 'var(--dot)'}" stroke="#fff" stroke-width="2"/>`
   }
-  for (const l of L.labels) out += `<text x="${l.x.toFixed(1)}" y="${(l.y + 4).toFixed(1)}" text-anchor="${l.side === 1 ? 'start' : 'end'}" fill="var(--label)" stroke="var(--halo)" stroke-width="3" paint-order="stroke" stroke-linejoin="round"${l.main ? ' font-weight="600"' : ''}>${l.text}</text>`
+  for (const l of L.labels) out += `<text x="${l.x.toFixed(1)}" y="${(l.y + 4).toFixed(1)}" text-anchor="start" fill="var(--label)" stroke="var(--halo)" stroke-width="3" paint-order="stroke" stroke-linejoin="round"${l.main ? ' font-weight="600"' : ''}>${l.text}</text>`
   return out + '</svg>'
 }
 
