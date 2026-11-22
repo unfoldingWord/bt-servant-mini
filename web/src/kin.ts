@@ -108,7 +108,7 @@ const SHAPES: { lang: KinLang; re: RegExp; word: 1 | 2; name: 1 | 2 }[] = [
 // keluarga X», «X का वंशवृक्ष», «شجرة عائلة X». The same name rules as «hijos de X», except the peoples («árbol de Israel» is the man).
 const TREE_SHAPES: { lang: KinLang; kind: 'tree' | 'up' | 'down'; re: RegExp }[] = [
   { lang: 'es', kind: 'tree', re: /^(?:el\s+)?[aá]rbol(?:\s+(?:geneal[oó]gico|familiar))?\s+de\s+(.+)$/i },
-  { lang: 'es', kind: 'up', re: /^(?:la\s+|el\s+|los\s+|las\s+)?(?:geneal[oó]g[ií]a|antepasados|ancestros|linaje)\s+de\s+(.+)$/i },
+  { lang: 'es', kind: 'up', re: /^(?:la\s+|el\s+|los\s+|las\s+)?(?:geneal[oó]g[ií]a|antepasados|ascendientes|ascendencia|ancestros|linaje)\s+de\s+(.+)$/i },
   { lang: 'es', kind: 'down', re: /^(?:los\s+|la\s+)?(?:descendientes|descendencia)\s+de\s+(.+)$/i },
   { lang: 'en', kind: 'tree', re: /^(?:the\s+)?(?:(?:family|genealogical)\s+)?tree\s+of\s+(.+)$/i },
   { lang: 'en', kind: 'tree', re: /^(.+?)['’]s?\s+(?:family|genealogical)\s+tree$/i },
@@ -117,7 +117,7 @@ const TREE_SHAPES: { lang: KinLang; kind: 'tree' | 'up' | 'down'; re: RegExp }[]
   { lang: 'en', kind: 'down', re: /^(?:the\s+)?descendants\s+of\s+(.+)$/i },
   { lang: 'en', kind: 'down', re: /^(.+?)['’]s?\s+descendants$/i },
   { lang: 'fr', kind: 'tree', re: /^(?:l['’]\s*|le\s+)?arbre(?:\s+(?:g[ée]n[ée]alogique|familial))?\s+(?:de\s+|d['’]\s*)(.+)$/i },
-  { lang: 'fr', kind: 'up', re: /^(?:la\s+|les\s+|l['’]\s*)?(?:g[ée]n[ée]alogie|anc[êe]tres|ascendance)\s+(?:de\s+|d['’]\s*)(.+)$/i },
+  { lang: 'fr', kind: 'up', re: /^(?:la\s+|les\s+|l['’]\s*)?(?:g[ée]n[ée]alogie|anc[êe]tres|ascendants|ascendance)\s+(?:de\s+|d['’]\s*)(.+)$/i },
   { lang: 'fr', kind: 'down', re: /^(?:les\s+|la\s+)?(?:descendants|descendance)\s+(?:de\s+|d['’]\s*)(.+)$/i },
   { lang: 'id', kind: 'tree', re: /^(?:pohon|silsilah)\s+keluarga\s+(?:dari\s+)?(.+)$/i },
   { lang: 'id', kind: 'up', re: /^(?:silsilah|leluhur|nenek\s+moyang)\s+(?:dari\s+)?(.+)$/i },
@@ -198,7 +198,8 @@ export function kinShape(q: string): KinShape | null {
     const m = s.re.exec(rest)
     if (!m) continue
     const { name, alts } = cleanName(m[1]!, s.lang)
-    if (!nameLike(name) || PRONOUNS.has(foldName(name))) continue
+    if (!nameLike(name)) continue
+    if (PRONOUNS.has(foldName(name))) return null
     return { kind: s.kind, name, alts, lang: s.lang }
   }
   for (const s of SHAPES) {
@@ -562,7 +563,7 @@ type KinText = {
   whereNamed: string
   // the family tree views (diseno-arboles.md §9); {x}: a name, {n}: a number
   treeBtn: string; tree: string; up: string; down: string
-  unnamed: string; gap: string; withP: string; noMother: string; noFather: string
+  unnamed: string; gap: string; withP: string; noMother: string; noFather: string; noParent: string
   wives: string; wife: string; husband: string; spouses: string
   parentsL: string; siblingsL: string; childrenL: string
   alsoSays: string; upEnd: string; treeNote: string
@@ -587,6 +588,7 @@ export const KIN_T: Record<KinLang, KinText> = {
     withP: 'With {x}',
     noMother: 'Mother not named in the data',
     noFather: 'Father not named in the data',
+    noParent: 'Other parent not named in the data',
     wives: 'Wives',
     wife: 'Wife',
     husband: 'Husband',
@@ -618,6 +620,7 @@ export const KIN_T: Record<KinLang, KinText> = {
     withP: 'Con {x}',
     noMother: 'Madre no nombrada en los datos',
     noFather: 'Padre no nombrado en los datos',
+    noParent: 'Otro progenitor no nombrado en los datos',
     wives: 'Esposas',
     wife: 'Esposa',
     husband: 'Esposo',
@@ -649,6 +652,7 @@ export const KIN_T: Record<KinLang, KinText> = {
     withP: 'Avec {x}',
     noMother: 'Mère non nommée dans les données',
     noFather: 'Père non nommé dans les données',
+    noParent: 'Autre parent non nommé dans les données',
     wives: 'Épouses',
     wife: 'Épouse',
     husband: 'Mari',
@@ -680,12 +684,13 @@ export const KIN_T: Record<KinLang, KinText> = {
     withP: 'Dengan {x}',
     noMother: 'Ibu tidak disebut namanya dalam data',
     noFather: 'Ayah tidak disebut namanya dalam data',
+    noParent: 'Orang tua lainnya tidak disebut namanya dalam data',
     wives: 'Istri-istri',
     wife: 'Istri',
     husband: 'Suami',
     spouses: 'Pasangan',
     parentsL: 'Orang tua',
-    siblingsL: 'Saudara-saudara',
+    siblingsL: 'Saudara kandung',
     childrenL: 'Anak-anak',
     alsoSays: '(data juga menyebut: {x})',
     upEnd: 'Data berhenti di sini.',
@@ -708,9 +713,10 @@ export const KIN_T: Record<KinLang, KinText> = {
     down: '{x} के वंशज',
     unnamed: '(बिना नाम)',
     gap: 'आँकड़ों में {n} पीढ़ियाँ बिना नाम की',
-    withP: '{x} से',
+    withP: '{x} से संतान',
     noMother: 'माता का नाम आँकड़ों में नहीं है',
     noFather: 'पिता का नाम आँकड़ों में नहीं है',
+    noParent: 'दूसरे माता-पिता का नाम आँकड़ों में नहीं है',
     wives: 'पत्नियाँ',
     wife: 'पत्नी',
     husband: 'पति',
@@ -738,14 +744,15 @@ export const KIN_T: Record<KinLang, KinText> = {
     up: 'أسلاف {x}',
     down: 'نسل {x}',
     unnamed: '(بلا اسم)',
-    gap: 'أجيال بلا اسم في البيانات: {n}',
+    gap: '{n} أجيال بلا اسم في البيانات',
     withP: 'مع {x}',
     noMother: 'الأم غير مذكورة في البيانات',
     noFather: 'الأب غير مذكور في البيانات',
+    noParent: 'الوالد الآخر غير مذكور في البيانات',
     wives: 'الزوجات',
     wife: 'الزوجة',
     husband: 'الزوج',
-    spouses: 'الأزواج',
+    spouses: 'الأزواج والزوجات',
     parentsL: 'الوالدان',
     siblingsL: 'الإخوة والأخوات',
     childrenL: 'الأولاد',

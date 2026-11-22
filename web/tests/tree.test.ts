@@ -23,7 +23,10 @@ const MORE: [string, string, 1 | 2, number][] = [
   ['per:u0', 'Ahab', 1, 1], ['per:unnamed1', 'Unnamed#1', 1, 1], ['per:unnamed2', 'Unnamed#2', 1, 1], ['per:unnamed3', 'Unnamed#3', 1, 1],
   ['per:unnamed4', 'Unnamed#4', 1, 1], ['per:top', 'Top', 1, 1],
   ['per:cyc1', 'Cyc1', 1, 1], ['per:cyc2', 'Cyc2', 1, 1],
-  ['per:son', 'Son', 1, 1], ['per:fa', 'Fa', 1, 3], ['per:fb', 'Fb', 1, 1], ['per:a_wife_of_Lot', 'a_wife_of_Lot', 2, 1],
+  ['per:son', 'Son', 1, 1], ['per:cy1', 'Cy1', 1, 1], ['per:cyA', 'CyA', 1, 3], ['per:cyB', 'CyB', 1, 1],
+  ['per:v0', 'Vic', 1, 1], ['per:unnamed5', 'Unnamed#5', 1, 1], ['per:unnamed6', 'Unnamed#6', 1, 1], ['per:top2', 'Top2', 1, 1],
+  ['per:dad', 'Dad', 1, 3], ['per:kidA', 'KidA', 1, 1], ['per:kidB', 'KidB', 1, 1], ['per:gk', 'Gk', 1, 1], ['per:mum', 'Mum', 2, 1],
+  ['per:ng1', 'Ng1', 1, 1], ['per:ng2', 'Ng2', 1, 1], ['per:fa', 'Fa', 1, 3], ['per:fb', 'Fb', 1, 1], ['per:a_wife_of_Lot', 'a_wife_of_Lot', 2, 1],
 ]
 function grown(): KinReader {
   const core: XtopicsCore = {
@@ -36,7 +39,15 @@ function grown(): KinReader {
       pair('per:esau', 'per:eliphaz'), pair('per:eliphaz', 'per:teman'), pair('per:teman', 'per:omar'), pair('per:omar', 'per:zepho'), pair('per:zepho', 'per:gatam'),
       pair('per:unnamed1', 'per:u0'), pair('per:unnamed2', 'per:unnamed1'), pair('per:unnamed3', 'per:unnamed2'), pair('per:unnamed4', 'per:unnamed3'), pair('per:top', 'per:unnamed4'),
       pair('per:cyc1', 'per:cyc2'), pair('per:cyc2', 'per:cyc1'),
-      pair('per:fa', 'per:son'), pair('per:fb', 'per:son'),
+      pair('per:fa', 'per:son'), pair('per:fb', 'per:son'), pair('per:fa', 'per:ghost'),
+      // the best candidate of a row is already in the line: the next one is taken
+      pair('per:cyA', 'per:cy1'), pair('per:cy1', 'per:cyA'), pair('per:cyB', 'per:cyA'),
+      // two unnamed in a row are not joined
+      pair('per:unnamed5', 'per:v0'), pair('per:unnamed6', 'per:unnamed5'), pair('per:top2', 'per:unnamed6'),
+      // a child with both parents in the tree
+      pair('per:dad', 'per:kidA'), pair('per:dad', 'per:kidB'), pair('per:kidA', 'per:gk'), pair('per:kidB', 'per:gk'), pair('per:mum', 'per:gk'),
+      // a focus with no gender: two groups of children
+      pair('per:ng', 'per:ng1'), pair('per:ngw', 'per:ng1'), pair('per:ng', 'per:ng2'),
       pair('per:isaac', 'per:a_wife_of_Lot'),
       pair('per:isaac', 'lug:tekoa'),
     ],
@@ -114,6 +125,46 @@ describe('the fixture family', () => {
     expect(s.line![0]!.p.id).toBe('per:fa')
     expect(s.line![0]!.others!.map((p) => p.id)).toEqual(['per:fb'])
   })
+  test('«up»: two unnamed in a row stay two rows; three are joined', async () => {
+    const two = await buildTree('es-419', 'per:v0', 'up', 'es')
+    expect(two.line!.map((r) => [r.p.name, r.gap])).toEqual([['(sin nombre)', undefined], ['(sin nombre)', undefined], ['Top2', undefined]])
+    const three = await buildTree('es-419', 'per:u0', 'up', 'es')
+    expect(three.line!.some((r) => r.gap === 4)).toBe(true)
+  })
+  test('«up»: when the best candidate is already in the line, the next one is taken', async () => {
+    const v = await buildTree('es-419', 'per:cy1', 'up', 'es')
+    expect(v.line!.map((r) => r.p.id)).toEqual(['per:cyA', 'per:cyB'])
+  })
+  test('a person missing from the people index shows as unnamed, not as its id', async () => {
+    const v = await buildTree('es-419', 'per:fa', 'tree', 'es')
+    const ghost = v.nodes.find((n) => n.id === 'per:ghost')!
+    expect(ghost).toMatchObject({ name: KIN_T.es.unnamed, unnamed: true })
+    expect(JSON.stringify(v)).not.toContain('"name":"per:')
+  })
+  test('«n» of a leaf counts only the children not placed in the tree (two parents in it, a cycle)', async () => {
+    const v = await buildTree('es-419', 'per:dad', 'tree', 'es')
+    const byId = (id: string) => v.nodes.find((n) => n.id === id)!
+    expect(byId('per:kidA').kids).toBeDefined()
+    expect(byId('per:kidB').kids).toBeUndefined()
+    expect(byId('per:kidB').n).toBe(0)
+    expect(byId('per:gk').n).toBe(0)
+    const c = await buildTree('es-419', 'per:cyc1', 'tree', 'es')
+    expect(c.nodes.map((n) => [n.id, n.n])).toEqual([['per:cyc2', 0]])
+    // at the cap the children are not placed: they count
+    expect((await buildTree('es-419', 'per:esau', 'tree', 'es')).nodes.at(-1)!.n).toBe(1)
+  })
+  test('«down» is set only when asked with open 3, and titles the text', async () => {
+    expect((await buildTree('es-419', 'per:isaac', 'tree', 'es')).down).toBeUndefined()
+    const d = await buildTree('es-419', 'per:isaac', 'tree', 'es', 3)
+    expect(d.down).toBe(true)
+    expect(treeText(d).split('\n')[0]).toBe('Descendientes de Isaac')
+  })
+  test('children with no other parent: neutral title when the focus has no gender, by gender otherwise', async () => {
+    const v = await buildTree('es-419', 'per:ng', 'tree', 'es')
+    expect(v.focus.g).toBeUndefined()
+    expect(treeText(v)).toContain(`${KIN_T.es.noParent} (1)`)
+    expect(treeText(await buildTree('es-419', 'per:isaac', 'tree', 'es'))).toContain(`${KIN_T.es.noMother} (1)`)
+  })
   test('a name with an underscore is unnamed', async () => {
     const v = await buildTree('es-419', 'per:isaac', 'tree', 'es')
     expect(v.nodes.find((x) => x.id === 'per:a_wife_of_Lot')).toMatchObject({ unnamed: true, name: KIN_T.es.unnamed })
@@ -140,10 +191,14 @@ describe('the fixture family', () => {
     expect(t).toContain('– Esaú')
     expect(t).toContain('– – Eliphaz')
     expect(treeText(await buildTree('es-419', 'per:isaac', 'tree', 'es', 1)).split('\n')).not.toContain('– – Eliphaz')
-    expect(treeText(await buildTree('es-419', 'per:isaac', 'up', 'es'))).toBe('Antepasados de Isaac: Abraham ← Terah.')
+    expect(treeText(await buildTree('es-419', 'per:isaac', 'up', 'es'))).toBe('Antepasados de Isaac: Abraham y Sara ← Terah. Los datos se cortan aquí.')
+    expect(treeText(await buildTree('es-419', 'per:son', 'up', 'es'))).toContain('Fa (los datos también dicen: Fb)')
+    expect(treeText(await buildTree('es-419', 'per:u0', 'up', 'es'))).toContain('4 generaciones sin nombre en los datos ← Top')
     const ar = treeText(await buildTree('es-419', 'per:isaac', 'up', 'ar'))
     expect(ar.startsWith('أسلاف')).toBe(true)
     expect(ar).toContain(' → ')
+    expect(ar).toContain(' وSara')
+    expect(ar.endsWith(KIN_T.ar.upEnd)).toBe(true)
     expect(treeText(await buildTree('es-419', 'per:isaac', 'tree', 'fr')).split('\n')[0]).toBe('Arbre d’Isaac')
   })
   test('the new phrases ask like relations: the code answers them and no article takes them', async () => {

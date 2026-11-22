@@ -2,7 +2,7 @@
 // `parent-of`, `partner-of`, `sibling-of` relations of the `xtopics` core; names and gender from the people index). No DOM here
 // (treeview.ts draws it), so it is tested under bun. Nothing is stored: a conversation keeps only `TreeOf` and builds it again.
 
-/** A person in a tree. `n`: how many children the data gives; `unnamed`: the data has no real name («Unnamed#9», `a_wife_of_Lot`). */
+/** A person in a tree. `n`: how many children the data gives (for a descendant without `kids`: only those not already placed in the tree); `unnamed`: the data has no real name («Unnamed#9», `a_wife_of_Lot`). */
 export type TP = { id: string; name: string; g?: 1 | 2; unnamed?: true; half?: true; n: number }
 /** The two views: the tree (parents, the person, spouses, siblings, descendants) and the line of ancestors. */
 export type TreeMode = 'tree' | 'up'
@@ -28,6 +28,8 @@ export type TreeView = {
   line?: { p: TP; mother?: TP; others?: TP[]; gap?: number }[]
   /** the descendants were cut at the cap (4 generations or 150 people) */
   cut: boolean
+  /** set when built with `open` 3 («descendants»): treeText then titles it with KIN_T `down`, not `tree` (the drawing's title is the caller's) */
+  down?: true
 }
 
 // ------------------------------------------------------------------------------------------------------------------ building
@@ -68,7 +70,7 @@ export async function buildTree(pack: string, id: string, mode: TreeMode, ui: st
   const t = KT(ui)
   const people = await peopleById(pack)
   const sh = await shownAsMaker(pack)
-  const view: TreeView = { mode, open: open === 2 ? 2 : 1, ui, pack, focus: { id, name: id, n: 0 }, parents: [], partners: [], siblings: [], groups: [], nodes: [], cut: false }
+  const view: TreeView = { mode, open: open === 2 ? 2 : 1, ui, pack, focus: { id, name: id, n: 0 }, parents: [], partners: [], siblings: [], groups: [], nodes: [], cut: false, ...(mode === 'tree' && open === 3 ? { down: true as const } : {}) }
   if (!people || !sh || !id.startsWith('per:')) return view
   const core = sh.core
   const ties = tiesOf(core)
@@ -77,7 +79,8 @@ export async function buildTree(pack: string, id: string, mode: TreeMode, ui: st
     const p = people.get(pid)
     const raw = p?.name ?? fallback ?? pid
     const out: TP = { id: pid, name: '', n: per(ties.children.get(pid)).length }
-    if (isUnnamed(raw)) { out.unnamed = true; out.name = t.unnamed } else out.name = sh.shown(pid, raw)
+    // a person missing from the people index shows as unnamed, never as the raw id
+    if (!p && fallback === undefined || isUnnamed(raw)) { out.unnamed = true; out.name = t.unnamed } else out.name = sh.shown(pid, raw)
     if (p?.gender) out.g = p.gender
     return out
   }
@@ -105,8 +108,10 @@ export async function buildTree(pack: string, id: string, mode: TreeMode, ui: st
       const mothers = ps.filter((x) => g(x) === 2)
       const pool = fathers.length ? fathers : neutral.length ? neutral : mothers
       if (!pool.length) break
-      const [next, ...rest] = best(pool)
-      if (!next || seen.has(next)) break
+      // the best candidate not yet in the line (one already seen, a cycle in the data, is skipped for the next one)
+      const cands = best(pool).filter((x) => !seen.has(x))
+      const [next, ...rest] = cands
+      if (!next) break
       seen.add(next)
       const row: NonNullable<TreeView['line']>[number] = { p: mk(next) }
       if (pool !== mothers && mothers.length) row.mother = mk(best(mothers)[0]!)
@@ -144,9 +149,10 @@ export async function buildTree(pack: string, id: string, mode: TreeMode, ui: st
 
   // descendants, a whole generation at a time
   const seen = new Set<string>([id, ...parentIds, ...childIds])
+  const placed = new Set<string>([id, ...parentIds, ...childIds])
   const gens: number[][] = []
   const gensIds: string[][] = []
-  const add = (ids: string[]): number[] => ids.map((c) => { view.nodes.push(mk(c)); return view.nodes.length - 1 })
+  const add = (ids: string[]): number[] => ids.map((c) => { view.nodes.push(mk(c)); placed.add(c); return view.nodes.length - 1 })
   gens.push(add(childIds))
   gensIds.push(childIds)
   for (let depth = 2; depth <= GENS + 1; depth++) {
@@ -168,6 +174,9 @@ export async function buildTree(pack: string, id: string, mode: TreeMode, ui: st
     gens.push(idx)
     gensIds.push(next)
   }
+
+  // a descendant without `kids` counts only the children not already placed in the tree (two parents in it, a cycle): the «▸ N» cap
+  for (const n of view.nodes) if (!n.kids) n.n = per(ties.children.get(n.id)).filter((c) => !placed.has(c)).length
 
   // the focus's children by their other parent (only these are grouped): two groups or more, else one without a title
   const byOther = new Map<string, number[]>()
@@ -198,10 +207,18 @@ export function treeText(view: TreeView): string {
   if (view.mode === 'up') {
     const head = withName(ui, t.up, f.name)
     const arrow = ui === 'ar' ? ' → ' : ' ← '
-    const names = (view.line ?? []).map((r) => (r.gap ? t.gap.replace('{n}', String(r.gap)) : r.p.name))
-    return names.length ? `${colon(ui, head)} ${names.join(arrow)}.` : `${colon(ui, head)} ${t.upEnd}`
+    const and = `${t.and}${ui === 'ar' && t.and.length === 1 ? '' : ' '}`
+    const names = (view.line ?? []).map((r) => {
+      if (r.gap) return t.gap.replace('{n}', String(r.gap))
+      let x = r.p.name
+      if (r.mother) x += ` ${and}${r.mother.name}`
+      if (r.others?.length) x += ` ${t.alsoSays.replace('{x}', r.others.map((o) => o.name).join(comma))}`
+      return x
+    })
+    const end = view.cut ? '' : ` ${t.upEnd}`
+    return names.length ? `${colon(ui, head)} ${names.join(arrow)}.${end}` : `${colon(ui, head)} ${t.upEnd}`
   }
-  const out: string[] = [withName(ui, t.tree, f.name)]
+  const out: string[] = [withName(ui, view.down ? t.down : t.tree, f.name)]
   if (view.parents.length) out.push(`${colon(ui, t.parentsL)} ${view.parents.map((p) => p.name).join(comma)}`)
   if (view.partners.length) {
     const ps = view.partners
@@ -224,11 +241,19 @@ export function treeText(view: TreeView): string {
     const several = view.groups.length > 1
     for (const g of view.groups) {
       if (several) {
-        const title = g.with ? t.withP.replace('{x}', g.with.name) : f.g === 2 ? t.noFather : t.noMother
+        const title = g.with ? t.withP.replace('{x}', g.with.name) : f.g === 2 ? t.noFather : f.g === 1 ? t.noMother : t.noParent
         out.push(`${title} (${g.kids.length})`)
       }
       walk(g.kids, 1)
     }
   }
   return out.join('\n')
+}
+
+/**
+ * The `replacer` of the conversations' JSON (main.ts save): a message's `tree` (the view) is not kept, only its `treeOf`, which builds it
+ * again (§6). The live message keeps its `tree`, so it still draws.
+ */
+export function saveReplacer(this: unknown, key: string, value: unknown): unknown {
+  return key === 'tree' && this && typeof this === 'object' && 'who' in this && 'treeOf' in this ? undefined : value
 }

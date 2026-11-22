@@ -15,6 +15,9 @@ describe('tree, up and down phrases in six languages', () => {
     ['genealogía de David', ['up', 'David', 'es']],
     ['los antepasados de Jesús', ['up', 'Jesús', 'es']],
     ['ancestros de Booz', ['up', 'Booz', 'es']],
+    ['ascendientes de Booz', ['up', 'Booz', 'es']],
+    ['la ascendencia de David', ['up', 'David', 'es']],
+    ['les ascendants de Jacob', ['up', 'Jacob', 'fr']],
     ['linaje de David', ['up', 'David', 'es']],
     ['descendientes de Abraham', ['down', 'Abraham', 'es']],
     ['la descendencia de Abraham', ['down', 'Abraham', 'es']],
@@ -82,6 +85,8 @@ describe('what does not change', () => {
   test('not a tree: no name, a pronoun, a sentence', () => {
     expect(kinShape('árbol de')).toBeNull()
     expect(kinShape('family tree of us')).toBeNull()
+    expect(kinShape('ancestros de nosotros')).toBeNull()
+    expect(kinShape('ascendientes de Dios')).toBeNull()
     expect(kinShape('árbol de la vida que da frutos cada mes del año')).toBeNull()
   })
   test('kinKnown has no index yet: false, and never throws on the new kinds', () => {

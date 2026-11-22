@@ -41,7 +41,7 @@ afterAll(() => { (globalThis as any).document = saved })
 const W: TreeWords = {
   title: 'Tree of Jacob', note: 'According to TIPNR.', parents: 'Parents:', wife: 'Wife:', wives: 'Wives:', husband: 'Husband:', spouses: 'Spouses:',
   siblings: 'Siblings:', children: 'Children:', withP: 'With {x}', noMother: 'Mother not named', noFather: 'Father not named', unnamed: '(unnamed)',
-  gap: '{n} unnamed generations', upEnd: 'The data ends here.', alsoSays: '(the data also says: {x})', childOf: 'son of {x}', daughterOf: 'daughter of {x}',
+  noParent: 'Other parent not named in the data', gap: '{n} unnamed generations', upEnd: 'The data ends here.', alsoSays: '(the data also says: {x})', childOf: 'son of {x}', daughterOf: 'daughter of {x}',
   and: 'and {x}', showKids: 'Show the children of {x}', hideKids: 'Hide the children of {x}', sonL: 'son', daughterL: 'daughter', more: '+{n}', half: '(half-brother)',
 }
 const tp = (id: string, name: string, g?: 1 | 2, n = 0, x: Partial<TP> = {}): TP => ({ id, name, ...(g ? { g } : {}), n, ...x })
@@ -83,7 +83,7 @@ describe('the tree', () => {
     expect(d.textContent).toContain('Wives:')
     expect(d.byClass('tv-box').length).toBe(3)
     expect(d.byClass('focus')[0]!.textContent).toContain('Jacob')
-    expect(d.byClass('tv-box').every((b) => b.getAttribute('aria-pressed') === null)).toBe(true)
+    expect(d.byClass('tv-box').every((b) => b.getAttribute('aria-expanded') === null)).toBe(true)
   })
   test('group headers only with two groups or more', () => {
     const d = draw(view())
@@ -98,10 +98,39 @@ describe('the tree', () => {
     expect(r.getAttribute('aria-label')).toBe('Reuben, son')
     expect(nameOf(d, 'Dinah').getAttribute('aria-label')).toBe('Dinah, daughter')
   })
+  test('the son/daughter word only for descendants; parents, spouses and siblings have none', () => {
+    const d = draw(view({ open: 2 }))
+    expect(nameOf(d, 'Isaac').getAttribute('aria-label')).toBe('Isaac')
+    expect(nameOf(d, 'Rebekah').getAttribute('aria-label')).toBe('Rebekah')
+    expect(nameOf(d, 'Abraham').getAttribute('aria-label')).toBe('Abraham')
+    expect(nameOf(d, 'Leah').getAttribute('aria-label')).toBe('Leah')
+    expect(nameOf(d, 'Esau').getAttribute('aria-label')).toBe('Esau')
+    expect(nameOf(d, 'Hanoch').getAttribute('aria-label')).toBe('Hanoch, son')
+  })
+  test('the cap only on descendant rows without kids and with n > 0', () => {
+    const d = draw(view({ parents: [{ ...tp('per:isaac', 'Isaac', 1, 4), up: [] }], partners: [tp('per:leah', 'Leah', 2, 3)], siblings: [tp('a', 'Esau', 1, 2)] }))
+    expect(d.byClass('cap').length).toBe(1)
+    expect(d.byClass('cap')[0]!.textContent).toBe('▸ 3')
+    const none = draw(view({ nodes: nodes.map((n) => (n.id === 'per:judah' ? { ...n, n: 0 } : n)) }))
+    expect(none.byClass('cap').length).toBe(0)
+  })
+  test('the focus mark is in a bdi; right to left comes only from the language', () => {
+    const d = draw(view())
+    expect(d.byClass('focus')[0]!.byTag('bdi')[0]!.textContent).toBe('♂')
+    const prev = (globalThis as any).document
+    ;(globalThis as any).document = { ...prev, documentElement: { dir: 'rtl' } }
+    try { expect(draw(view()).dir).toBe('ltr') } finally { (globalThis as any).document = prev }
+    expect(draw(view({ ui: 'ar' })).dir).toBe('rtl')
+  })
+  test('a focus with no gender: the group with no other parent says so neutrally', () => {
+    const d = draw(view({ focus: tp('per:jacob', 'Jacob', undefined, 5) }))
+    expect(d.byClass('tv-head').map((h) => h.textContent).pop()).toBe('Other parent not named in the data (1)')
+  })
   test('siblings: 4 shown, +N reveals the rest in the same line', () => {
     const d = draw(view())
     const more = d.byClass('tv-more')[0]!
     expect(more.textContent).toBe('+2')
+    expect(more.getAttribute('aria-label')).toBe('Siblings: +2')
     const line = more.parentElement!
     expect(line.byClass('tv-name').length).toBe(4)
     more.click()
@@ -152,7 +181,7 @@ describe('grandparents and the cap', () => {
     expect(g.parentElement!.textContent.replace(/[♂♀]/g, '')).toBe('son of Abraham')
     g.click()
     expect(calls).toEqual([['per:abraham', 'per:isaac']])
-    expect(g.getAttribute('aria-pressed')).toBe('true')
+    expect(g.getAttribute('aria-expanded')).toBe('true')
   })
   test('an up line cut at the cap does not say the data ends', () => {
     const v: TreeView = { mode: 'up', open: 1, ui: 'en', pack: 'en', focus: tp('x', 'X', 1), parents: [], partners: [], siblings: [], groups: [], nodes: [], cut: true, line: [{ p: tp('y', 'Y', 1) }] }
@@ -171,7 +200,7 @@ describe('selection', () => {
     const reuben = nameOf(d, 'Reuben')
     reuben.click()
     expect(calls).toEqual([['per:reuben', 'per:jacob']])
-    expect(reuben.getAttribute('aria-pressed')).toBe('true')
+    expect(reuben.getAttribute('aria-expanded')).toBe('true')
     expect(reuben.has('sel')).toBe(true)
     const row = rowOf(reuben)
     const bar = row.parentElement!.children[1]!
@@ -184,12 +213,12 @@ describe('selection', () => {
     expect(bar.byTag('button').length).toBe(2)
     // another name moves it
     nameOf(d, 'Dan').click()
-    expect(reuben.getAttribute('aria-pressed')).toBe('false')
+    expect(reuben.getAttribute('aria-expanded')).toBe('false')
     expect(d.byClass('tv-bar').length).toBe(1)
     // the same name again closes
     nameOf(d, 'Dan').click()
     expect(d.byClass('tv-bar').length).toBe(0)
-    expect(nameOf(d, 'Dan').getAttribute('aria-pressed')).toBe('false')
+    expect(nameOf(d, 'Dan').getAttribute('aria-expanded')).toBe('false')
   })
   test('a late answer does not land in a closed bar', async () => {
     let release!: (f: Followup[]) => void

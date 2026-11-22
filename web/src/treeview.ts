@@ -5,6 +5,7 @@
  * animation; no innerHTML: every text goes in with textContent.
  */
 import type { Followup } from './converse'
+import { KT } from './kin'
 import type { TP, TreeView } from './tree'
 
 /** The words of the tree in the answer's language. Templates hold `{x}` (a name) or `{n}` (a number). */
@@ -23,6 +24,8 @@ export type TreeWords = {
   withP: string
   noMother: string
   noFather: string
+  /** «Otro progenitor no nombrado en los datos»: the children's group with no other parent when the focus's gender is not known (absent: KIN_T's) */
+  noParent?: string
   unnamed: string
   /** «{n} generaciones sin nombre en los datos» */
   gap: string
@@ -70,7 +73,7 @@ const CSS = `
 .tv-lab { font-size: 13px; color: var(--muted); }
 .tv-name { font: 14px/1.25 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 8px;
   padding: 4px 8px; min-height: 36px; text-align: start; }
-.tv-name[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
+.tv-name[aria-expanded=true] { border-color: var(--accent); background: var(--accent-soft); }
 .tv-name.un, .tv-un { font-style: italic; color: var(--muted); }
 .tv-name.sm { font-size: 12px; min-height: 32px; padding: 2px 6px; color: var(--muted); }
 .tv-g { font-size: 12px; color: var(--muted); padding-inline-start: 4px; }
@@ -102,10 +105,8 @@ function el(tag: string, cls: string, text?: string): HTMLElement {
   return d
 }
 const fill = (tpl: string, k: string, v: string) => tpl.split(`{${k}}`).join(v)
-const isRtl = (ui: string): boolean => {
-  try { if (document.documentElement?.dir === 'rtl') return true } catch { /* no page */ }
-  return ui === 'ar'
-}
+/** right to left is decided by the answer's language only, never by the page */
+const isRtl = (ui: string): boolean => ui === 'ar'
 const MARK = ['', '♂', '♀']
 
 /** A family tree as the bubble shows it. */
@@ -122,26 +123,27 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
   const closeBar = () => {
     if (!cur) return
     cur.btn.classList.remove('sel')
-    cur.btn.setAttribute('aria-pressed', 'false')
+    cur.btn.setAttribute('aria-expanded', 'false')
     cur.bar.remove()
     cur = null
   }
   /** a name as a button; `anchor()` gives the element after which its bar goes; `from` the person it hangs from */
-  function name(p: TP, anchor: () => HTMLElement, from: string | null, extra = ''): HTMLButtonElement {
+  function name(p: TP, anchor: () => HTMLElement, from: string | null, extra = '', desc = false): HTMLButtonElement {
     const b = el('button', `tv-name${p.unnamed ? ' un' : ''}${extra ? ` ${extra}` : ''}`) as HTMLButtonElement
     b.type = 'button'
     b.appendChild(el('span', 'tv-n', p.unnamed ? w.unnamed : p.name))
     if (p.g) b.appendChild(el('bdi', 'tv-g', MARK[p.g]))
-    const word = p.g === 1 ? w.sonL : p.g === 2 ? w.daughterL : ''
+    // «hijo», «hija» only for a descendant's row; a parent, spouse or sibling gets no such word
+    const word = !desc ? '' : p.g === 1 ? w.sonL : p.g === 2 ? w.daughterL : ''
     b.setAttribute('aria-label', word ? `${p.unnamed ? w.unnamed : p.name}, ${word}` : p.unnamed ? w.unnamed : p.name)
-    b.setAttribute('aria-pressed', 'false')
+    b.setAttribute('aria-expanded', 'false')
     b.onclick = () => {
       const same = cur?.btn === b
       closeBar()
       if (same) return
       const bar = el('div', 'tv-bar', '…')
       b.classList.add('sel')
-      b.setAttribute('aria-pressed', 'true')
+      b.setAttribute('aria-expanded', 'true')
       anchor().after(bar)
       const mine = { btn: b as HTMLElement, bar }
       cur = mine
@@ -166,6 +168,13 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
     s.appendChild(btn)
     if (b) s.append(b)
     return s
+  }
+  /** the person's box: the gender mark in a <bdi>, like the buttons' */
+  const focusBox = (f: TP): HTMLElement => {
+    const b = el('div', 'tv-box focus')
+    b.appendChild(el('span', 'tv-n', f.name))
+    if (f.g) b.appendChild(el('bdi', 'tv-g', MARK[f.g]))
+    return b
   }
   const ofWord = (child: TP) => (child.g === 2 ? w.daughterOf : w.childOf)
 
@@ -207,7 +216,7 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
     root.appendChild(boxes)
   }
   // the person
-  root.appendChild(el('div', 'tv-box focus', v.focus.name + (v.focus.g ? ` ${MARK[v.focus.g]}` : '')))
+  root.appendChild(focusBox(v.focus))
   if (v.partners.length) {
     const line = el('div', 'tv-line')
     const gs = v.partners.map((p) => p.g)
@@ -233,6 +242,7 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
     if (rest.length) {
       const m = el('button', 'tv-more', fill(w.more, 'n', String(rest.length))) as HTMLButtonElement
       m.type = 'button'
+      m.setAttribute('aria-label', `${w.siblings} ${m.textContent}`)
       m.onclick = () => {
         for (const p of rest) add(p, m)
         m.remove()
@@ -247,7 +257,7 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
     const many = v.groups.length > 1
     for (const g of v.groups) {
       if (many) {
-        const label = g.with ? fill(w.withP, 'x', g.with.unnamed ? w.unnamed : g.with.name) : v.focus.g === 2 ? w.noFather : w.noMother
+        const label = g.with ? fill(w.withP, 'x', g.with.unnamed ? w.unnamed : g.with.name) : v.focus.g === 2 ? w.noFather : v.focus.g === 1 ? w.noMother : w.noParent ?? KT(v.ui).noParent
         root.appendChild(el('div', 'tv-head', `${label} (${g.kids.length})`))
       }
       list(root, g.kids, 1, v.focus.id)
@@ -286,25 +296,25 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
         tog.onclick = () => show(tog.getAttribute('aria-expanded') !== 'true')
         row.appendChild(tog)
         show(gen < v.open)
-      } else if (n.n > 0 && o.treeOf) {
+      } else if (n.n > 0 && !n.kids?.length && o.treeOf) {
         // at the cap: no children loaded; its button opens its own tree
         const t = o.button(o.treeOf(n.id))
         t.className = 'tv-tog cap'
         t.setAttribute('aria-label', t.textContent ?? '')
         t.textContent = `${OPEN} ${n.n}`
         row.appendChild(t)
-      } else if (n.n > 0) {
+      } else if (n.n > 0 && !n.kids?.length) {
         const t = el('span', 'tv-tog cap', `${OPEN} ${n.n}`)
         row.appendChild(t)
       }
-      row.appendChild(name(n, () => row, parentId))
+      row.appendChild(name(n, () => row, parentId, '', true))
       ul.appendChild(item)
     }
     host.appendChild(ul)
   }
 
   function drawUp(host: HTMLElement, view: TreeView) {
-    host.appendChild(el('div', 'tv-box focus', view.focus.name + (view.focus.g ? ` ${MARK[view.focus.g]}` : '')))
+    host.appendChild(focusBox(view.focus))
     let child: TP = view.focus
     let from: string | null = view.focus.id
     for (const r of view.line ?? []) {
