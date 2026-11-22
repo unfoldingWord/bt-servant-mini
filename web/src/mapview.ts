@@ -142,7 +142,8 @@ export function homeFrame(points: readonly { lat: number; lon: number; label: st
   const framed = (left: number, right: number): Frame => {
     if (left + right > cap) { const k = cap / (left + right); left *= k; right *= k }
     if (left + right <= 0) return plain
-    const f0 = { ...fit(points, w - left - right, h, HOME_MARGIN), width: w, height: h } // the points centred on the whole width...
+    // a single point has no width to fit: it keeps the plain scale, and the room comes from the centre shift alone
+    const f0 = { ...fit(points, points.length <= 1 ? w : w - left - right, h, HOME_MARGIN), width: w, height: h } // the points centred on the whole width...
     const c = unproject(f0, w - (w / 2 + (left - right) / 2), h / 2) // ...then the centre moved: the block sits between `left` and `right`
     return { ...f0, lat: c.lat, lon: c.lon }
   }
@@ -154,7 +155,11 @@ export function homeFrame(points: readonly { lat: number; lon: number; label: st
   })
   const room = Math.min(w / 4, Math.max(0, long + LABEL_AIR - HOME_MARGIN))
   const first = framed(rtl ? room : 0, rtl ? 0 : room)
-  return covered(first) ? framed(rtl ? room : 0, (rtl ? 0 : room) + BUTTON_ROOM) : first
+  if (!covered(first)) return first
+  // under the buttons: more room on the right, checked again; if still covered, one last step of the same size (then it is accepted: the room is capped,
+  // and the person can pan; a very long label in the top-right band can still touch the column)
+  const second = framed(rtl ? room : 0, (rtl ? 0 : room) + BUTTON_ROOM)
+  return covered(second) ? framed(rtl ? room : 0, (rtl ? 0 : room) + 2 * BUTTON_ROOM) : second
 }
 
 function textMeasure(fontSize: number): ((t: string) => number) | undefined {

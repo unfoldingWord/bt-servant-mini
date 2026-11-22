@@ -647,18 +647,21 @@ describe('the first view keeps room for the labels (homeFrame)', () => {
   const P = (label: string, lat: number, lon: number) => ({ lat, lon, label })
   const W = 343, H = 257
   const at = (f: ReturnType<typeof homeFrame>, p: { lat: number; lon: number }) => project(f, p.lat, p.lon)
-  test('a single point at normal size has the scale of the plain 40 px margin; the height keeps its margin', () => {
-    const one = [P('Jerusalén', 31.78, 35.23)]
-    for (const rtl of [false, true]) {
-      const f = homeFrame(one, W, H, measure, rtl)
-      expect(f.scale).toBeCloseTo(fit(one, W, H, 40).scale, 6)
-      expect(f.height).toBe(H)
-      expect(f.width).toBe(W)
+  test('a single point keeps the scale of the plain 40 px margin, at normal size and on a narrow one (w=240: the narrowed width used to be the limit)', () => {
+    const one = [P('Jerusalén (la ciudad santa)', 31.78, 35.23)]
+    for (const [w, h] of [[343, 257], [240, 240]] as const) {
+      for (const rtl of [false, true]) {
+        const f = homeFrame(one, w, h, measure, rtl)
+        expect(f.scale).toBeCloseTo(fit(one, w, h, 40).scale, 6)
+        expect([f.width, f.height]).toEqual([w, h])
+      }
     }
   })
-  test('a small map (180 px) with a long label keeps a sane zoom: the room is taken from the width only', () => {
+  test('a small map (180 px) with a long label keeps a sane zoom: not the whole-basemap view, and most of the plain scale', () => {
     const pts = [P('Antioquía de Pisidia, la ciudad', 38.3, 31.2), P('Iconio', 37.9, 32.5)]
     const f = homeFrame(pts, W, 180, measure)
+    const whole = minScale([800, 2200, 5200, 4300], W, 180) // the E1 basemap's rectangle: what a negative height would open at
+    expect(f.scale).toBeGreaterThan(whole * 4)
     expect(f.scale).toBeGreaterThan(fit(pts, W, 180, 40).scale * 0.6)
     expect(f.scale).toBeLessThanOrEqual(fit(pts, W, 180, 40).scale)
   })
@@ -683,6 +686,20 @@ describe('the first view keeps room for the labels (homeFrame)', () => {
     expect(hit(fit(pts, W, H, 40), false)).toBe(true) // (under the buttons before)
     expect(hit(homeFrame(pts, W, H, measure, false), false)).toBe(false)
     expect(hit(homeFrame(pts, W, H, measure, true), true)).toBe(false)
+  })
+  test('a long label near the top right: cleared when the capped room allows it, and a finite frame when it cannot (accepted, the person can pan)', () => {
+    const lbl = (name: string) => [P('Antioquía', 31.7, 35.0), P(name, 32.2, 35.5)]
+    const covered = (f: ReturnType<typeof homeFrame>, name: string, rtl: boolean) => {
+      const [x, y] = project(f, 32.2, 35.5), lw = measure(name)
+      const x0 = rtl ? x - 6 - lw : x - 6, x1 = rtl ? x + 6 : x + 6 + lw
+      return x1 >= W - 56 && x0 <= W && y + 9 >= 4 && y - 9 <= 156
+    }
+    for (const rtl of [false, true]) {
+      const f = homeFrame(lbl('Jerusalén vieja'), W, H, measure, rtl) // 108 px: the room (capped at 40% of the width) is enough
+      expect(covered(f, 'Jerusalén vieja', rtl)).toBe(false)
+      const long = homeFrame(lbl('Jerusalén (la ciudad santa)'), W, H, measure, rtl) // 196 px: more than the cap can clear
+      expect(Number.isFinite(long.scale) && long.scale > 0 && Number.isFinite(long.lon)).toBe(true)
+    }
   })
   test('many points: the plain fit', () => {
     const many = Array.from({ length: 13 }, (_, i) => P('Jerusalén', 31 + i / 50, 35))

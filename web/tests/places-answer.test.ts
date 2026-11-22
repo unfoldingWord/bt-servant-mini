@@ -522,8 +522,8 @@ describe('corrección 1', () => {
     useWorld(W)
     const r = await turn({ last: null }, { q: '', sheet: viewSheet('gen 12:1-13:3') }, 'ar')
     // the label is one isolate (FSI … PDI) and its whole number, a cross-chapter range, a left-to-right run inside it (LRI … PDI)
-    expect(r.reply.info).toMatch(/⁨[^⁩⁦]*⁦12:1-⁠13:3⁩⁩/)
-    expect(r.reply.map!.summary).toMatch(/⁨[^⁩⁦]*⁦12:1-⁠13:3⁩⁩/)
+    expect(r.reply.info).toMatch(/⁨[^⁩⁦]*⁦12:1-\u206013:3⁩⁩/)
+    expect(r.reply.map!.summary).toMatch(/⁨[^⁩⁦]*⁦12:1-\u206013:3⁩⁩/)
     const none = await turn({ last: null }, { q: '', sheet: viewSheet('gen 5:5') }, 'ar')
     expect(none.reply.info).toMatch(/⁨[^⁩⁦]*⁦5:5⁩⁩/)
   })
@@ -532,7 +532,7 @@ describe('corrección 1', () => {
     for (const [ref, num] of [['gen 12:1-9', '12:1-9'], ['gen 12:1-13:3', '12:1-13:3'], ['obs 5:9', '5:9']] as const) {
       const r = await turn({ last: null }, { q: '', sheet: viewSheet(ref) }, 'ar')
       // (the label's number is wrapped whole; nothing of the number is outside a ⁦ … ⁩ run)
-      const info = r.reply.info!.replace(/⁠/g, '')
+      const info = r.reply.info!.replace(/\u2060/g, '')
       expect(info, ref).toContain(`⁦${num}⁩`)
       expect(info.replace(/⁦[^⁩]*⁩/g, '').match(/[0-9]+[:\-][0-9]+/), ref).toBeNull()
     }
