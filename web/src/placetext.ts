@@ -22,7 +22,7 @@ export const PLACE_T: Record<'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar', PlaceText>
     listHead: 'Places on the map:', listPassage: 'Places in {ref}:', passageNone: 'The data I have shows no places with a location in {ref}.',
     tagUncertain: 'uncertain location', tagRegion: 'region', tagWater: 'water', tagUnknown: 'location unknown', tagRef: 'for reference',
     sumPlace: 'Map: {x}', sumMany: 'Map: {x}', sumPassage: 'Map: {n} places in {ref}',
-    noGeo: 'The data in this pack do not say where the places are.', named: 'Named in {n} verses.', named1: 'Named in 1 verse.',
+    noGeo: 'The data I have do not say where the places are.', named: 'Named in {n} verses.', named1: 'Named in 1 verse.',
     credit: 'Places: {src}.', creditMap: 'Places: {src} · map: Natural Earth.', mapWord: 'Map',
   },
   es: {
@@ -32,7 +32,7 @@ export const PLACE_T: Record<'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar', PlaceText>
     listHead: 'Lugares del mapa:', listPassage: 'Lugares en {ref}:', passageNone: 'Los datos que tengo no muestran lugares con ubicación en {ref}.',
     tagUncertain: 'ubicación incierta', tagRegion: 'región', tagWater: 'agua', tagUnknown: 'ubicación desconocida', tagRef: 'de referencia',
     sumPlace: 'Mapa: {x}', sumMany: 'Mapa: {x}', sumPassage: 'Mapa: {n} lugares en {ref}',
-    noGeo: 'Los datos de este paquete no dicen dónde están los lugares.', named: 'Se nombra en {n} versículos.', named1: 'Se nombra en 1 versículo.',
+    noGeo: 'Los datos que tengo no dicen dónde están los lugares.', named: 'Se nombra en {n} versículos.', named1: 'Se nombra en 1 versículo.',
     credit: 'Lugares: {src}.', creditMap: 'Lugares: {src} · mapa: Natural Earth.', mapWord: 'Mapa',
   },
   fr: {
@@ -42,7 +42,7 @@ export const PLACE_T: Record<'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar', PlaceText>
     listHead: 'Lieux de la carte :', listPassage: 'Lieux dans {ref} :', passageNone: 'Les données que j’ai ne montrent aucun lieu localisé dans {ref}.',
     tagUncertain: 'emplacement incertain', tagRegion: 'région', tagWater: 'eau', tagUnknown: 'emplacement inconnu', tagRef: 'repère',
     sumPlace: 'Carte : {x}', sumMany: 'Carte : {x}', sumPassage: 'Carte : {n} lieux dans {ref}',
-    noGeo: 'Les données de ce paquet ne disent pas où sont les lieux.', named: 'Nommé dans {n} versets.', named1: 'Nommé dans 1 verset.',
+    noGeo: 'Les données que j’ai ne disent pas où sont les lieux.', named: 'Nommé dans {n} versets.', named1: 'Nommé dans 1 verset.',
     credit: 'Lieux : {src}.', creditMap: 'Lieux : {src} · carte : Natural Earth.', mapWord: 'Carte',
   },
   id: {
@@ -52,7 +52,7 @@ export const PLACE_T: Record<'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar', PlaceText>
     listHead: 'Tempat di peta:', listPassage: 'Tempat di {ref}:', passageNone: 'Data yang saya punya tidak menunjukkan tempat berlokasi di {ref}.',
     tagUncertain: 'lokasi tidak pasti', tagRegion: 'wilayah', tagWater: 'perairan', tagUnknown: 'lokasi tidak diketahui', tagRef: 'sebagai acuan',
     sumPlace: 'Peta: {x}', sumMany: 'Peta: {x}', sumPassage: 'Peta: {n} tempat di {ref}',
-    noGeo: 'Data di paket ini tidak menyebut di mana tempat-tempat itu.', named: 'Disebut dalam {n} ayat.', named1: 'Disebut dalam 1 ayat.',
+    noGeo: 'Data yang saya punya tidak menyebut di mana tempat-tempat itu.', named: 'Disebut dalam {n} ayat.', named1: 'Disebut dalam 1 ayat.',
     credit: 'Tempat: {src}.', creditMap: 'Tempat: {src} · peta: Natural Earth.', mapWord: 'Peta',
   },
   hi: {
@@ -62,7 +62,7 @@ export const PLACE_T: Record<'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar', PlaceText>
     listHead: 'नक्शे के स्थान:', listPassage: '{ref} के स्थान:', passageNone: 'मेरे पास के आँकड़े {ref} में कोई स्थान नहीं दिखाते जिसका ठिकाना मालूम हो।',
     tagUncertain: 'ठिकाना अनिश्चित', tagRegion: 'क्षेत्र', tagWater: 'जल', tagUnknown: 'ठिकाना अज्ञात', tagRef: 'संदर्भ के लिए',
     sumPlace: 'नक्शा: {x}', sumMany: 'नक्शा: {x}', sumPassage: 'नक्शा: {ref} में {n} स्थान',
-    noGeo: 'इस पैकेज के आँकड़े नहीं बताते कि स्थान कहाँ हैं।', named: '{n} पदों में नाम आता है।', named1: '1 पद में नाम आता है।',
+    noGeo: 'मेरे पास के आँकड़े नहीं बताते कि स्थान कहाँ हैं।', named: '{n} पदों में नाम आता है।', named1: '1 पद में नाम आता है।',
     credit: 'स्थान: {src}।', creditMap: 'स्थान: {src} · नक्शा: Natural Earth।', mapWord: 'नक्शा',
   },
   ar: {
@@ -72,7 +72,7 @@ export const PLACE_T: Record<'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar', PlaceText>
     listHead: 'أماكن الخريطة:', listPassage: 'الأماكن في {ref}:', passageNone: 'البيانات التي لدي لا تُظهر أماكن لها موقع في {ref}.',
     tagUncertain: 'موقع غير مؤكد', tagRegion: 'منطقة', tagWater: 'ماء', tagUnknown: 'موقع غير معروف', tagRef: 'للمقارنة',
     sumPlace: 'خريطة: {x}', sumMany: 'خريطة: {x}', sumPassage: 'خريطة: {n} أماكن في {ref}',
-    noGeo: 'بيانات هذه الحزمة لا تقول أين تقع الأماكن.', named: 'يُذكر في {n} آية.', named1: 'يُذكر في آية واحدة.',
+    noGeo: 'البيانات التي لدي لا تقول أين تقع الأماكن.', named: 'يُذكر في {n} آية.', named1: 'يُذكر في آية واحدة.',
     credit: 'الأماكن: {src}.', creditMap: 'الأماكن: {src} · الخريطة: Natural Earth.', mapWord: 'خريطة',
   },
 }
