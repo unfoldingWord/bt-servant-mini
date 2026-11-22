@@ -322,7 +322,7 @@ function lookupPlaces(ix: PlaceIx, name: string, lang: PlaceLang): string[] {
   return []
 }
 
-type Picked = { win: PlaceRef; others: PlaceRef[] } | { choose: PlaceRef[] }
+export type Picked = { win: PlaceRef; others: PlaceRef[] } | { choose: PlaceRef[] }
 /**
  * One name with its candidates, to one place: the only one; the one of the passage read (exactly one is in that chapter); in «where» and
  * «distance» a city or port against regions (§5.2: the question asks for a point); the one named in ten times the verses of the next;
@@ -492,4 +492,33 @@ export async function referenceFor(pack: string, place: PlaceRef): Promise<Place
     if (!best || km < best.km) best = { ref, km }
   }
   return best?.ref ?? null
+}
+
+// ------------------------------------------------------------------------------------------------- what the answers of pipeline.ts need
+/** The places of these ids as the answers show them (`PlaceRef`, in the order asked; an id that is no place is left out). */
+export async function placeRefs(pack: string, ids: string[]): Promise<PlaceRef[]> {
+  const ix = await placeIx(pack)
+  return ix ? ids.map((id) => ix.byId.get(id)?.ref).filter((r): r is PlaceRef => !!r) : []
+}
+/** Whether the common of this pack has the `geo` table (§5.5: without it the answers have no distance, no map). */
+export async function hasGeo(pack: string): Promise<boolean> {
+  return !!(await placeIx(pack))?.core.geo
+}
+/**
+ * The birth or death place of a person, for a button that already chose the person (a question that named a homonym): the person's
+ * name and the place the data gives (`born-in` / `died-in`), or null for the place when the data has none. Null: not a person here.
+ */
+export async function personPlace(pack: string, id: string, kind: 'born' | 'died'): Promise<{ person: { id: string; name: string }; place: PlaceRef | null } | null> {
+  const [ix, pix] = await Promise.all([placeIx(pack), personIx(pack)])
+  const p = pix?.byId.get(id)
+  if (!ix || !p) return null
+  const at = placeOfPerson(ix.core, id, kind === 'born' ? 'born-in' : 'died-in')
+  return { person: { id, name: p.name }, place: (at && ix.byId.get(at)?.ref) || null }
+}
+/** One more name of a question ("distancia entre Betel y Jerusalén" after the person chose the first Betel): its place, or the options. */
+export async function placeNamed(pack: string, name: string, lang: PlaceLang, kind: PlaceKind, last: string | null): Promise<Picked | null> {
+  const ix = await placeIx(pack)
+  if (!ix) return null
+  const ids = lookupPlaces(ix, name, lang)
+  return ids.length ? pickPlace(ix, ids, kind, last) : null
 }

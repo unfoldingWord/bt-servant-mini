@@ -11,6 +11,7 @@ import type { FamilyData, PackReader, PersonEntry } from '@bt-synergy/language-p
 import { installedLangs, onPacksChanged, openLang } from './packs'
 import { articleForQuestion, asksAbout, keywords } from './search'
 import { bookExact } from './sheet'
+import { isPlaceCredit } from './placetext'
 
 export type KinKind = 'children' | 'sons' | 'daughters' | 'father' | 'mother' | 'parents' | 'partners' | 'wife' | 'husband'
   | 'siblings' | 'brothers' | 'sisters' | 'who'
@@ -776,7 +777,7 @@ export const withName = (ui: string, text: string, x: string): string =>
 /** Whether a line is the credit of a family answer (any language): main.ts draws it small, as a source label. */
 export function isCreditLine(t: string): boolean {
   const s = t.trim()
-  return Object.values(KIN_T).some((x) => s.startsWith(x.credit.split('{src}')[0]!.trim()))
+  return isPlaceCredit(s) || Object.values(KIN_T).some((x) => s.startsWith(x.credit.split('{src}')[0]!.trim()))
 }
 /** "12 versículos", "1 versículo" (the choice among people of one name) */
 export const versesCount = (ui: string, n: number): string => (n === 1 ? KT(ui).versesN1 : KT(ui).versesN.replace('{n}', String(n)))

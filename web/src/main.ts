@@ -18,6 +18,7 @@ import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollo
 import { renderMacula } from './syntaxview'
 import { buildTree, saveReplacer, type TreeView } from './tree'
 import { renderTree } from './treeview'
+import { placeBlock } from './placeview'
 import { has } from './commands'
 import { resetSearch } from './search'
 import { md, mdDir } from './md'
@@ -375,6 +376,12 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     if (m.obs) linkObsWords(box, m.obs)
     // its helps in three levels: all the notes, a frame's, each note (view.ts)
     if (m.obs) groupObsHelps(box)
+    // a place answer: the map with its list next to it (the list alone when no place has a point), before the source line
+    if (m.map || m.list) {
+      const blk = placeBlock(m, m.ui ?? nav)
+      if (last?.className === 'credit') box.insertBefore(blk, last)
+      else box.appendChild(blk)
+    }
     host.appendChild(box)
     pageAnswer(box, m.ui ?? nav)
     if (m.treeOf) {
