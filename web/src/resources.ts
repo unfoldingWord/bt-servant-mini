@@ -532,21 +532,29 @@ function imagesBlock(p: Paint, have: ImagesState, row: boolean): HTMLElement {
   }
   return box
 }
-async function startImages(p: Paint) {
-  const ui = p.ctx.ui
+/** What the pictures' button says now when it is not its usual word (the mobile-data question, no internet). */
+export const imagesHint = (): string | undefined => hints.get('images')
+/**
+ * A tap on [Download] of the pictures, from Resources or from a frame (obsimgask.ts): the questions first (`again` redraws the
+ * button's new words), then the download, which both screens follow. `after` runs when it ended well.
+ */
+export async function requestImages(ui: string, again: () => void, after?: () => void): Promise<void> {
   let offer = imgOffer ?? null
   const real = async () => {
     offer = await deps.imagesOffer()
     imgOffer = offer
     return offer?.bytes ?? null
   }
-  if (!(await gate(ui, 'images', imgOffer?.bytes ?? 0, real, p.repaint))) return void p.repaint()
+  if (!(await gate(ui, 'images', imgOffer?.bytes ?? 0, real, again))) return void again()
   startDownload('images', async (signal, progress) => {
     const o = offer ?? (await deps.imagesOffer())
     if (!o) throw new Error('offline')
     await deps.downloadImages((x) => progress(x.bytes, x.totalBytes), signal, o)
-    if (!p.dead()) p.ctx.refresh()
+    after?.()
   })
+}
+async function startImages(p: Paint) {
+  return requestImages(p.ctx.ui, p.repaint, () => { if (!p.dead()) p.ctx.refresh() })
 }
 
 /**

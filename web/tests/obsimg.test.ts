@@ -55,6 +55,7 @@ describe('which answers get pictures', () => {
       createElement: (tag: string) => {
         const e: any = { tagName: tag.toUpperCase(), className: '', textContent: '', children: [] as any[], parent: null,
           prepend(c: any) { c.parent = e; e.children.unshift(c) },
+          append(c: any) { c.parent = e; e.children.push(c) },
           remove() { if (e.parent) e.parent.children = e.parent.children.filter((x: any) => x !== e) },
           querySelector: (q: string) => e.children.find((c: any) => (q === 'img' ? c.tagName === 'IMG' : c.className === q.slice(1))) ?? null }
         made.push(e)
@@ -78,7 +79,7 @@ describe('which answers get pictures', () => {
     // the picture does not load (offline, Door43 down): the placeholder, in the words of the UI
     pic.onerror()
     expect(ps[0]!.inserted[0].children[0].className).toBe('obs-pic-none')
-    expect(ps[0]!.inserted[0].children[0].textContent).toBe(IW('en').missing)
+    expect(ps[0]!.inserted[0].children[0].children[0].textContent).toBe(IW('en').missing)
     // a Bible answer is left as it is
     const bible = [new P('2:3')]
     expect(addObsPictures({ querySelectorAll: () => bible } as any, JSON.stringify({ ref: 'rut 2:3' }), 'en')).toBe(0)
