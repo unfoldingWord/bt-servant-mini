@@ -63,7 +63,7 @@ const STOP = new Set(
 )
 // ar
 const AR_STOP = new Set('هم هن كانوا لا لم لن قد كل له لي به بها فيه فيها يا يوجد توجد أترجم نترجم ترجم بلادنا بلدنا عندنا لغتنا يذكر تذكر يذكره ذكر يحدث حدث حدثت وقع وقعت أسفار الأسفار يرد ترد في من على إلى عن ما ماذا من هو هي هل أين متى كيف لماذا أي التي الذي الذين هذا هذه ذلك تلك و أو ثم مع عند كان كانت يكون آية الآية آيات الكتاب المقدس سفر أصحاح الأصحاح يتحدث تتحدث يقول تقول قصة أرني أظهر ملاحظات ملاحظة الترجمة أسئلة نص'.split(' ').map((w) => fold(w)))
-const HI_STOP = new Set('किन पुस्तकों किताबों पुस्तकें किताबें टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते बताता हुआ हुई हुए होता होती गया गई वर्णन उल्लेख भी तो ही जो वो हो एक इस उस'.split(' '))
+const HI_STOP = new Set('किन पुस्तकों किताबों पुस्तकें किताबें टिप्पणी टिप्पणियाँ टिप्पणियां अनुवाद प्रश्न पाठ में का की के है हैं था थे कौन कौन-सा किस किसमें कहाँ कब क्या कैसे और या से पर को ने यह वह पद पदों बाइबल अध्याय बात बारे कहता कहते कहती कहतीं कही कहा कहना बताता बताती बताते बताया बताइए हुआ हुई हुए होता होती गया गई वर्णन उल्लेख भी तो ही जो वो हो एक इस उस'.split(' '))
 
 /** Words of how a question asks that are also names when capitalized: «¿quiénes eran…?», but Eran (Numbers 26:36); not first
  *  in the question («Eran muchos…»), nor in capitals. */
@@ -410,7 +410,9 @@ const SKIP_TEXT = /\/arst$/
 /** Endings dropped to match a word's other forms (swallowed ~ swallow, swallowing; tragado ~ tragar, tragó), longest first. */
 const ENDINGS = ['aron', 'ando', 'ados', 'adas', 'ing', 'ado', 'ada', 'ent', 'ait', 'ed', 'es', 'ar', 'er', 'ir', 'os', 'as', 'ée', 'és', 's', 'ó', 'é', 'a', 'o', 'e']
 /** A word's beginning, for the languages written with endings (not Hindi or Arabic: their words match whole, or with a prefix). */
-export function stemOf(w: string): string | null {
+export function stemOf(w: string, lang = ''): string | null {
+  // Indonesian has its own affixes (me-, -kan, -nya): the Spanish and English endings made pintar (smart) match pintu (door)
+  if (lang.split('-')[0] === 'id') return null
   const f = fold(w)
   if (f.length < 4 || /[^a-z]/.test(f)) return null
   for (const e of ENDINGS) if (f.endsWith(e) && f.length - e.length >= 4) return f.slice(0, -e.length)
@@ -452,7 +454,7 @@ function termsFor(kw: string[], phrases: string[][], pl: string, packLang: strin
     const term: Term = {
       words: forms,
       forms: ar ? forms.flatMap(arabicForms) : [],
-      prefixes: forms.map(stemOf).filter((s): s is string => !!s),
+      prefixes: forms.map((x) => stemOf(x, packLang)).filter((s): s is string => !!s),
       concepts: (conceptOf(w, m, true) ?? []).filter((id) => id.startsWith('tw:')),
     }
     out.push({ label: w, term })
