@@ -10,7 +10,7 @@ const N = Number(process.argv[2]) || 10
 const time = <T>(f: () => T): number => { const t = performance.now(); f(); return performance.now() - t }
 const bytes = basemapBytes()
 const runs = (f: () => number) => { f(); return stats(Array.from({ length: N }, f)) }
-const out: Record<string, unknown> = { runtime: `bun ${Bun.version}`, n: N, basemapBytes: bytes.length, decode: runs(() => time(() => decodeBasemap(bytes))) }
+const out: Record<string, unknown> = { runtime: `bun ${(globalThis as any).Bun.version}`, n: N, basemapBytes: bytes.length, decode: runs(() => time(() => decodeBasemap(bytes))) }
 const basemap = decodeBasemap(bytes)
 for (const s of scenes()) {
   const f = { ...fit(s.points, 375, 281, 40), width: 375 + 300, height: 281 + 300 } // the picture is drawn larger than the screen, as mountMap does
