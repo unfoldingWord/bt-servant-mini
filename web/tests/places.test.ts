@@ -309,6 +309,31 @@ describe('homonyms (§5.2)', () => {
   })
 })
 
+describe('corrección 1', () => {
+  test('two names: every name must be a place before a choice is asked', async () => {
+    setPlaceReader(async () => sample)
+    expect(await placeQuestion('¿Qué distancia hay entre Belén y Génesis?', 'es', null)).toBeNull()
+    expect(await placeQuestion('¿Qué distancia hay entre Génesis y Belén?', 'es', null)).toBeNull()
+    expect((await placeQuestion('¿Qué distancia hay entre Belén y Jerusalén?', 'es', null))!.choose).toMatchObject({ name: 'Belén' })
+    asWorld({ topics: [['lug:a', place('Bethel')], ['lug:b', place('Bethel')], ['lug:c', place('Ephraim')], ['lug:d', place('Ephraim')]], verses: {}, count: { 'lug:a': 3, 'lug:b': 3, 'lug:c': 3, 'lug:d': 3 } })
+    expect((await placeQuestion('how far is Bethel from Ephraim?', 'en', null))!.choose).toMatchObject({ name: 'Bethel' })
+  })
+  test('French: «Mer» of «Merom» is not a noun to strip; «mer de Galilée» still is', async () => {
+    asWorld({ topics: [['lug:om', place('Om')], ['lug:gal', place('Galilee')]], verses: {} })
+    expect(await placeQuestion('Où se trouve Merom ?', 'fr', null)).toBeNull()
+    expect((await placeQuestion('Où se trouve la mer de Galilée ?', 'fr', null))!.places[0]!.id).toBe('lug:gal')
+  })
+  test('«कहा» (said) and Arabic «قال» only as whole words', () => {
+    expect(placeShape('यरूशलेम कहाँ है?')).not.toBeNull()
+    expect(placeShape('उसने कहा यरूशलेम कहाँ है')).toBeNull()
+    expect(placeShape('यरूशलेम कहाँ लिखा है')).toBeNull()
+    expect(placeShape('أين تقع قالب؟')).not.toBeNull()
+    expect(placeShape('أين تقع القدس؟')).not.toBeNull()
+    expect(placeShape('أين قال أين تقع القدس')).toBeNull()
+    expect(placeShape('أين مكتوب هذا؟')).toBeNull()
+  })
+})
+
 describe('what the data lacks (§5.5)', () => {
   const lost = (extra: Partial<World> = {}): World => ({
     topics: [['lug:lost', place('Lost')], ['lug:jordan', place('Jordan')], ['lug:jerusalem', place('Jerusalem')], ['lug:emmaus', place('Emmaus')]],

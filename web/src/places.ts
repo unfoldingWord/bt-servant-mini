@@ -125,7 +125,7 @@ const PATTERNS: Pat[] = [
 
 // Never a place question: where something is written or said ("¿dónde está escrito…?", "where is it written", "où est-il écrit"
 // has no space after «est»; "di mana tertulis"), and what is asked of a pronoun or of God ("¿dónde estás?", "¿dónde está Dios?").
-const WRITTEN = /\b(?:escrit[oa]s?|dice|dicen|dijo|written|says?|said|ecrit[es]*|dit|tertulis|dikatakan|berkata|firman)\b|लिखा|कहा\b|مكتوب|يقول|قال|يقال/
+const WRITTEN = /\b(?:escrit[oa]s?|dice|dicen|dijo|written|says?|said|ecrit[es]*|dit|tertulis|dikatakan|berkata|firman)\b|(?<![ऀ-ॿ])(?:लिखा|कहा)(?![ऀ-ॿ])|(?<![ء-ي])(?:مكتوب|يقول|قال|يقال)(?![ء-ي])/
 const NOT_PLACE = new Set(['it', 'he', 'she', 'him', 'her', 'they', 'them', 'you', 'we', 'i', 'me', 'god', 'el', 'ella', 'ello', 'ti', 'usted', 'yo', 'dios', 'il', 'elle', 'ils',
   'tu', 'vous', 'toi', 'moi', 'dieu', 'dia', 'ia', 'anda', 'kamu', 'engkau', 'mereka', 'kita', 'kami', 'saya', 'aku', 'tuhan', 'allah', 'वह', 'यह', 'तुम', 'आप', 'परमेश्वर', 'ईश्वर',
   'هو', 'هي', 'انت', 'الله', 'ربنا'].map((n) => placeFold(n)))
@@ -162,7 +162,7 @@ export function placeShape(q: string): PlaceShape | null {
 const LEAD: Record<PlaceLang, RegExp[]> = {
   en: [/^(?:the|in|at|to)\s+/, /^(?:city|town|region|land|province|village|mount|mountain|river|sea|valley|island|port|desert)\s+of\s+/],
   es: [/^(?:el|la|los|las|del|de la|de los|de las|de|en|a)\s+/, /^(?:ciudad|region|pueblo|monte|tierra|provincia|aldea|villa|rio|valle|isla|puerto|desierto)(?:\s+(?:de la|de los|de las|del|de))?\s+/],
-  fr: [/^(?:le|la|les|du|des|de la|de|a la|au|aux|a|en)\s+/, /^(?:l|d)'\s*/, /^(?:ville|region|village|mont|montagne|pays|fleuve|riviere|mer|vallee|ile|port|desert|province)(?:\s+(?:de la|du|des|de|d'))?\s*/],
+  fr: [/^(?:le|la|les|du|des|de la|de|a la|au|aux|a|en)\s+/, /^(?:l|d)'\s*/, /^(?:ville|region|village|mont|montagne|pays|fleuve|riviere|mer|vallee|ile|port|desert|province)(?:\s+(?:de la|du|des|de)\s+|\s+d'\s*|\s+|$)/],
   id: [/^(?:di|ke|dari)\s+/, /^(?:kota|negeri|tanah|daerah|wilayah|provinsi|desa|gunung|bukit|sungai|laut|danau|lembah|pulau|pelabuhan)\s+/],
   hi: [/\s+(?:शहर|नगर|नदी|पर्वत|देश)$/],
   ar: [/^و(?=\S{2,})/, /^(?:مدينة|مدينه|منطقة|منطقه|جبل|نهر|بحر|بلدة|ارض)\s+/],
@@ -202,6 +202,7 @@ type PersonIx = { byName: Map<string, string[]>; byId: Map<string, { name: strin
 const ixs = new Map<string, Promise<PlaceIx | null>>()
 const pixs = new Map<string, Promise<PersonIx | null>>()
 export function resetPlaces() {
+  haveCache = null
   ixs.clear()
   pixs.clear()
 }
@@ -294,8 +295,9 @@ function personIx(lang: string): Promise<PersonIx | null> {
 /** The pack of a language code the app uses ("es" → "es-419"). */
 const packOf = (l: string) => (l.startsWith('es') ? 'es-419' : l)
 /** The packs to read in, in order: the question's language, the app's, English, the others on the phone. */
+let haveCache: Promise<string[]> | null = null
 async function packsFor(lang: string, nav: string): Promise<string[]> {
-  const have = await installedLangs().catch(() => [] as string[])
+  const have = await (haveCache ??= installedLangs().catch(() => [] as string[]))
   return [...new Set([packOf(lang), packOf(nav), 'en', ...have])].filter((l) => have.includes(l))
 }
 
@@ -382,13 +384,18 @@ export async function placeQuestion(q: string, nav: string, last: string | null)
       if (entry) ask.places = [entry.ref]
       return ask
     }
+    // every name is resolved first: a name that is no place fails this pack before any choice is asked
+    const found: string[][] = []
     let failed = false
     for (const name of s.names) {
       const ids = lookupPlaces(ix, name, s.lang)
       if (!ids.length) { failed = true; break }
-      const r = await pickPlace(ix, ids, s.kind, last)
+      found.push(ids)
+    }
+    for (let i = 0; !failed && i < found.length; i++) {
+      const r = await pickPlace(ix, found[i]!, s.kind, last)
       if ('choose' in r) {
-        ask.choose = { name, options: r.choose }
+        ask.choose = { name: s.names[i]!, options: r.choose }
         ask.places = []
         return ask
       }
