@@ -4,7 +4,7 @@
 // `map:first-draw` and `map:redraw` (performance.measure) that are read on a phone over CDP.
 import { decodeBasemap, type Basemap } from '@bt-synergy/language-pack-v3'
 import {
-  clampScale, drawMap, fit, MAX_SCALE, minScale, unproject,
+  clampScale, drawMap, fit, MAX_SCALE, minScale, project, unproject,
   type Frame, type MapPoint, type Theme,
 } from '@bt-synergy/language-pack-client'
 import { basemapBytes, onPacksChanged } from './packs'
@@ -123,16 +123,38 @@ function basemapOfPack(pack: string): Promise<Basemap | undefined> {
 const DEFAULT_BBOX: [number, number, number, number] = [800, 2200, 5200, 4300] // the rectangle of the E1 basemap: 8-52 E, 22-43 N
 const HOME_MARGIN = 40
 const STEP = 1.6
-const LABEL_GAP = 14 // the dot, its gap and a little air
+const LABEL_AIR = 10 // the dot, its gap (6) and a little air, beside the label
+const BUTTON_BOX = { x: 56, y: 4, bottom: 156 } // the buttons' column on the screen: from 56 px off the right edge (8 + 44 + 4), down to 8 + 3 x 44 + 2 x 6 + 4
+const BUTTON_ROOM = 60
 /**
- * The margin the first view keeps around the points. The fixed 40 px cut a label that goes beyond it (a point near the right edge showed
- * «Jerusa», and under the buttons): the margin takes in the longest label, as the page measures it (an estimate without `measure`), but no
- * more than a third of the width. Many points (clusters) show few labels: the fixed margin.
+ * The first view: the points fitted with the plain margin all round, then room taken on ONE side so the labels of up to 12 points are not
+ * cut by the box: the labels grow to the right (to the left in right-to-left pages), and the room is as wide as the longest label as the
+ * page measures it (an estimate without `measure`) needs beyond the margin. The height keeps the plain margin: the frame is fitted into
+ * a narrower width and its centre moved so the room falls on that side. If a point or its label then lies under the buttons' column (always
+ * on the right of the screen, in either direction) the room on the right grows by the column's width. The room never takes more than 40% of the width
+ * (a quarter for the labels). Many points (clusters) show few labels: the plain fit.
  */
-export function homeMargin(points: readonly { label: string }[], w: number, measure?: (t: string) => number): number {
-  if (points.length > 12) return HOME_MARGIN
-  const wide = Math.max(0, ...points.map((p) => (measure ? measure(p.label) : p.label.length * 12 * 0.6 + 3)))
-  return Math.round(Math.max(HOME_MARGIN, Math.min(w / 3, wide + LABEL_GAP)))
+export function homeFrame(points: readonly { lat: number; lon: number; label: string }[], w: number, h: number, measure?: (t: string) => number, rtl = false): Frame {
+  const plain = fit(points, w, h, HOME_MARGIN)
+  if (points.length > 12) return plain
+  const long = Math.max(0, ...points.map((p) => (!p.label ? 0 : measure ? measure(p.label) : p.label.length * 12 * 0.6 + 3)))
+  const cap = Math.max(0, Math.min(w * 0.4, w - 160)) // all the room, buttons included; the labels' share is at most a quarter of the width
+  const framed = (left: number, right: number): Frame => {
+    if (left + right > cap) { const k = cap / (left + right); left *= k; right *= k }
+    if (left + right <= 0) return plain
+    const f0 = { ...fit(points, w - left - right, h, HOME_MARGIN), width: w, height: h } // the points centred on the whole width...
+    const c = unproject(f0, w - (w / 2 + (left - right) / 2), h / 2) // ...then the centre moved: the block sits between `left` and `right`
+    return { ...f0, lat: c.lat, lon: c.lon }
+  }
+  const covered = (f: Frame): boolean => points.some((p) => {
+    const [x, y] = project(f, p.lat, p.lon)
+    const lw = p.label ? (measure ? measure(p.label) : p.label.length * 12 * 0.6 + 3) : 0
+    const x0 = rtl ? x - 6 - lw : x - 6, x1 = rtl ? x + 6 : x + 6 + lw
+    return x1 >= w - BUTTON_BOX.x && x0 <= w && y + 9 >= BUTTON_BOX.y && y - 9 <= BUTTON_BOX.bottom
+  })
+  const room = Math.min(w / 4, Math.max(0, long + LABEL_AIR - HOME_MARGIN))
+  const first = framed(rtl ? room : 0, rtl ? 0 : room)
+  return covered(first) ? framed(rtl ? room : 0, (rtl ? 0 : room) + BUTTON_ROOM) : first
 }
 
 function textMeasure(fontSize: number): ((t: string) => number) | undefined {
@@ -167,7 +189,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   const measure = textMeasure(12)
   let bbox = DEFAULT_BBOX
   let lo = minScale(bbox, w, h)
-  const home = (): Frame => { const f = fit(o.points, w, h, homeMargin(o.points, w, measure)); return { ...f, scale: clampScale(f.scale, bbox, w, h) } }
+  const home = (): Frame => { const f = homeFrame(o.points, w, h, measure, o.dir === 'rtl'); return { ...f, scale: clampScale(f.scale, bbox, w, h) } }
 
   const box = document.createElement('div')
   box.setAttribute('class', 'map-box')

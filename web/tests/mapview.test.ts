@@ -8,7 +8,7 @@ import { encodeBasemap, type Basemap } from '@bt-synergy/language-pack-v3'
 import { fit, MAX_SCALE, minScale, project, type MapPoint } from '@bt-synergy/language-pack-client'
 import { BTS_DIR } from './bts-dir'
 import { mapsFixture } from './maps-fixture'
-import { homeMargin, MAP_DARK, MAP_LIGHT, MAP_T, mapSvg, mountMap, readTheme, resetMapCache, setBasemapSource } from '../src/mapview'
+import { homeFrame, MAP_DARK, MAP_LIGHT, MAP_T, mapSvg, mountMap, readTheme, resetMapCache, setBasemapSource } from '../src/mapview'
 import { addedClient, basemapEntryReadCount, basemapStore, setBasemapStore, basemapBytes, reloadPacks, setBasemapFetchMs, resetAddedStore, setPacksServers, setTrustedKeys } from '../src/packs'
 
 const FAKE_IDB = join(BTS_DIR, 'packages', 'language-pack-client', 'node_modules', 'fake-indexeddb', 'build', 'esm', 'index.js')
@@ -271,7 +271,7 @@ describe('mountMap', () => {
 
   test('the buttons zoom within the limits: + and - change the scale, and it never passes the basemap or MAX_SCALE', async () => {
     setBasemapSource(async () => SMALL_BYTES)
-    const near: MapPoint[] = [{ ...bethel[0]!, id: 'a', lat: 31.93, label: '' }, { ...bethel[1]!, id: 'b', lat: 31.925, label: '' }] // 0.005 degrees apart (no labels: the first view keeps the plain margin, see homeMargin)
+    const near: MapPoint[] = [{ ...bethel[0]!, id: 'a', lat: 31.93 }, { ...bethel[1]!, id: 'b', lat: 31.925 }] // 0.005 degrees apart
     const el = new FakeEl('div')
     const m = await mountMap(el as any, { ...BASE, points: near })
     await m.ready
@@ -642,21 +642,50 @@ describe('basemapBytes', () => {
   })
 })
 
-describe('the first view keeps room for the labels (homeMargin)', () => {
+describe('the first view keeps room for the labels (homeFrame)', () => {
   const measure = (t: string) => t.length * 7 + 3
-  test('the margin takes in the longest label and its dot; at least 40 px; at most a third of the width; many points keep 40', () => {
-    expect(homeMargin([{ label: 'Jerusalén' }, { label: 'Emaús' }], 343, measure)).toBe(80) // 9 letters: 66 + 14
-    expect(homeMargin([{ label: 'Ai' }], 343, measure)).toBe(40)
-    expect(homeMargin([{ label: 'x'.repeat(60) }], 343, measure)).toBe(114) // a third of 343
-    expect(homeMargin(Array.from({ length: 13 }, () => ({ label: 'Jerusalén' })), 343, measure)).toBe(40)
-    expect(homeMargin([{ label: '' }], 343, measure)).toBe(40)
+  const P = (label: string, lat: number, lon: number) => ({ lat, lon, label })
+  const W = 343, H = 257
+  const at = (f: ReturnType<typeof homeFrame>, p: { lat: number; lon: number }) => project(f, p.lat, p.lon)
+  test('a single point at normal size has the scale of the plain 40 px margin; the height keeps its margin', () => {
+    const one = [P('Jerusalén', 31.78, 35.23)]
+    for (const rtl of [false, true]) {
+      const f = homeFrame(one, W, H, measure, rtl)
+      expect(f.scale).toBeCloseTo(fit(one, W, H, 40).scale, 6)
+      expect(f.height).toBe(H)
+      expect(f.width).toBe(W)
+    }
   })
-  test('a point at the far right of the first view keeps its whole label inside the box (the 40 px margin cut «Jerusa»)', () => {
-    const pts = [{ lat: 31.78, lon: 35.1, label: 'Emaús' }, { lat: 31.77, lon: 35.5, label: 'Jerusalén' }]
-    const w = 343, h = 257, gapPx = 6
-    const f = fit(pts, w, h, homeMargin(pts, w, measure))
-    for (const p of pts) expect(project(f, p.lat, p.lon)[0] + gapPx + measure(p.label)).toBeLessThanOrEqual(w)
-    const old = fit(pts, w, h, 40)
-    expect(project(old, 31.77, 35.5)[0] + gapPx + measure('Jerusalén')).toBeGreaterThan(w) // (what was drawn before)
+  test('a small map (180 px) with a long label keeps a sane zoom: the room is taken from the width only', () => {
+    const pts = [P('Antioquía de Pisidia, la ciudad', 38.3, 31.2), P('Iconio', 37.9, 32.5)]
+    const f = homeFrame(pts, W, 180, measure)
+    expect(f.scale).toBeGreaterThan(fit(pts, W, 180, 40).scale * 0.6)
+    expect(f.scale).toBeLessThanOrEqual(fit(pts, W, 180, 40).scale)
+  })
+  test('the label of a point at the far right stays inside the box in left-to-right, and at the far left in right-to-left (the 40 px margin cut «Jerusa»)', () => {
+    const pts = [P('Emaús', 31.78, 35.1), P('Jerusalén', 31.77, 35.5)]
+    for (const p of pts) {
+      const ltr = homeFrame(pts, W, H, measure, false)
+      expect(at(ltr, p)[0] + 6 + measure(p.label)).toBeLessThanOrEqual(W)
+      const rtl = homeFrame(pts, W, H, measure, true)
+      expect(at(rtl, p)[0] - 6 - measure(p.label)).toBeGreaterThanOrEqual(0)
+    }
+    const old = fit(pts, W, H, 40)
+    expect(project(old, 31.77, 35.5)[0] + 6 + measure('Jerusalén')).toBeGreaterThan(W) // (what was drawn before)
+  })
+  test('a point in the band of the zoom buttons (top right) is moved clear of them, with its label, in both directions', () => {
+    const pts = [P('Antioquía', 31.7, 35.0), P('Jerusalén', 32.2, 35.5)] // the second is up and to the right
+    const hit = (f: ReturnType<typeof homeFrame>, rtl: boolean) => pts.some((p) => {
+      const [x, y] = at(f, p), lw = measure(p.label)
+      const x0 = rtl ? x - 6 - lw : x - 6, x1 = rtl ? x + 6 : x + 6 + lw
+      return x1 >= W - 56 && x0 <= W && y + 9 >= 4 && y - 9 <= 156
+    })
+    expect(hit(fit(pts, W, H, 40), false)).toBe(true) // (under the buttons before)
+    expect(hit(homeFrame(pts, W, H, measure, false), false)).toBe(false)
+    expect(hit(homeFrame(pts, W, H, measure, true), true)).toBe(false)
+  })
+  test('many points: the plain fit', () => {
+    const many = Array.from({ length: 13 }, (_, i) => P('Jerusalén', 31 + i / 50, 35))
+    expect(homeFrame(many, W, H, measure)).toEqual(fit(many, W, H, 40))
   })
 })

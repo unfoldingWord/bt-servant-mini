@@ -62,6 +62,7 @@ export function refNode(ref: string): HTMLElement {
     if (!p.num) { bdi.appendChild(document.createTextNode(p.text)); continue }
     const n = make('bdi', 'place-num', p.text)
     n.dir = 'ltr'
+    n.style.whiteSpace = 'nowrap' // a range never breaks at its hyphen
     bdi.appendChild(n)
   }
   return bdi

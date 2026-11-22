@@ -372,7 +372,7 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     else if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isCreditLine(last.textContent ?? '')) {
       last.className = 'credit'
       // its words are mostly Latin names (OpenBible.info, TIPNR): md.ts gives the paragraph "ltr", and in an Arabic answer it sat on the left
-      if (rtlLang(m.ui ?? nav)) last.setAttribute('dir', 'rtl')
+      if (m.ui && rtlLang(m.ui)) last.setAttribute('dir', 'rtl')
     }
     // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
     addObsPictures(box, m.meta, m.ui ?? nav)

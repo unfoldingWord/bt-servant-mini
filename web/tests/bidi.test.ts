@@ -151,10 +151,12 @@ describe('a reference after an Arabic book name (isolateRef, splitNumbers)', () 
     expect(splitNumbers('بدون')).toEqual([{ text: 'بدون', num: false }])
   })
   test('the label is one isolate and each number a left-to-right run inside it; text without a number only gets the isolate; no double wrap', () => {
-    expect(isolateRef('التكوين 12:1-13:3')).toBe(`${FSI}التكوين ${LRI}12:1-13:3${PDI}${PDI}`)
+    expect(isolateRef('التكوين 12:1-13:3')).toBe(`${FSI}التكوين ${LRI}12:1-⁠13:3${PDI}${PDI}`) // a word joiner after the hyphen: no break there
     expect(isolateRef('التكوين')).toBe(`${FSI}التكوين${PDI}`)
     expect(isolateRef(isolateRef('التكوين 12:1'))).toBe(isolateRef('التكوين 12:1'))
     expect(strip(isolateRef('التكوين 12:1-9'))).toBe('التكوين 12:1-9')
     expect(isolateRef('')).toBe('')
+    expect(strip(isolateRef('التكوين 12:1-13:3'))).toBe('التكوين 12:1-13:3') // the joiner never reaches what is shared, saved or sent
+    expect(strip('a⁠b')).toBe('ab')
   })
 })

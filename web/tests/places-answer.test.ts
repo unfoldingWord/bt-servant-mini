@@ -366,6 +366,7 @@ describe('the list next to the map in the page (placeview.ts) and Arabic', () =>
     // the whole range is one left-to-right run (after an Arabic word its digits would join over ":" but not over "-": «9-12:1»)
     const range = shown.find((b) => /12:1-9$/.test(b.textContent))!
     expect(range.children.filter((c) => c.className === 'place-num').map((c) => [c.textContent, c.dir])).toEqual([['12:1-9', 'ltr']])
+    expect(range.children.find((c) => c.className === 'place-num')!.style.whiteSpace).toBe('nowrap')
   })
   test('the page puts every name in as text and mounts the map once: the host is empty and the mount gets the summary and the direction', async () => {
     const r = await ask('¿Dónde queda Betel?', 'es')
@@ -521,8 +522,8 @@ describe('corrección 1', () => {
     useWorld(W)
     const r = await turn({ last: null }, { q: '', sheet: viewSheet('gen 12:1-13:3') }, 'ar')
     // the label is one isolate (FSI … PDI) and its whole number, a cross-chapter range, a left-to-right run inside it (LRI … PDI)
-    expect(r.reply.info).toMatch(/⁨[^⁩⁦]*⁦12:1-13:3⁩⁩/)
-    expect(r.reply.map!.summary).toMatch(/⁨[^⁩⁦]*⁦12:1-13:3⁩⁩/)
+    expect(r.reply.info).toMatch(/⁨[^⁩⁦]*⁦12:1-⁠13:3⁩⁩/)
+    expect(r.reply.map!.summary).toMatch(/⁨[^⁩⁦]*⁦12:1-⁠13:3⁩⁩/)
     const none = await turn({ last: null }, { q: '', sheet: viewSheet('gen 5:5') }, 'ar')
     expect(none.reply.info).toMatch(/⁨[^⁩⁦]*⁦5:5⁩⁩/)
   })
@@ -531,8 +532,9 @@ describe('corrección 1', () => {
     for (const [ref, num] of [['gen 12:1-9', '12:1-9'], ['gen 12:1-13:3', '12:1-13:3'], ['obs 5:9', '5:9']] as const) {
       const r = await turn({ last: null }, { q: '', sheet: viewSheet(ref) }, 'ar')
       // (the label's number is wrapped whole; nothing of the number is outside a ⁦ … ⁩ run)
-      expect(r.reply.info, ref).toContain(`⁦${num}⁩`)
-      expect(r.reply.info!.replace(/⁦[^⁩]*⁩/g, '').match(/[0-9]+[:\-][0-9]+/), ref).toBeNull()
+      const info = r.reply.info!.replace(/⁠/g, '')
+      expect(info, ref).toContain(`⁦${num}⁩`)
+      expect(info.replace(/⁦[^⁩]*⁩/g, '').match(/[0-9]+[:\-][0-9]+/), ref).toBeNull()
     }
   })
   test('7. the credit of a passage map names OpenBible.info, as NOTICE does', async () => {
