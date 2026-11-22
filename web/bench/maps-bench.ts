@@ -11,8 +11,9 @@ const W = 375
 const bytes = basemapBytes()
 setBasemapSource(async () => bytes) // the real basemap, never fetched
 const stage = document.getElementById('stage')!
-const raf = () => new Promise<number | null>((res) => {
-  const t = performance.now(); let done = false
+/** Time from `t` to the second animation frame after it (the paint of what was just drawn); null on a page that has no frames (hidden). */
+const raf = (t = performance.now()) => new Promise<number | null>((res) => {
+  let done = false
   const fin = (v: number | null) => { if (!done) { done = true; res(v) } }
   requestAnimationFrame(() => requestAnimationFrame(() => fin(performance.now() - t))) // two frames: the paint of what was just drawn
   setTimeout(() => fin(null), 1000) // a hidden page has no frames
@@ -20,7 +21,9 @@ const raf = () => new Promise<number | null>((res) => {
 type Mark = { start: number; duration: number; detail: { basemap?: boolean } | null }
 const marks = (name: string): Mark[] => performance.getEntriesByName(name, 'measure').map((e: any) => ({ start: e.startTime, duration: e.duration, detail: e.detail ?? null }))
 
-const METRICS = ['mount_total', 'first_draw', 'basemap_arrives', 'ready_total', 'paint_after_mount', 'zoom_redraw', 'plain_redraw'] as const
+// first_draw: drawn WITHOUT the basemap (it arrives later); basemap_redraw: the redraw when it arrives; ready_total: mount start to the end of that
+// redraw (the map with its basemap, what the person sees); mount_to_first_draw: mount start to the end of the first-draw mark; *_paint: to the 2nd frame after
+const METRICS = ['mount_to_first_draw', 'first_draw', 'basemap_redraw', 'ready_total', 'paint_after_mount', 'zoom_redraw', 'zoom_paint', 'plain_redraw', 'plain_paint'] as const
 type Run = Record<(typeof METRICS)[number], number | null>
 async function once(scene: Scene, cold: boolean): Promise<Run> {
   performance.clearMeasures()
@@ -30,21 +33,26 @@ async function once(scene: Scene, cold: boolean): Promise<Run> {
   const opts = { pack: 'bench', points: scene.points, summary: scene.title, ui: 'en', dir: 'ltr' as const, width: W }
   const t0 = performance.now()
   const api = await mountMap(host, opts)
-  const mount_total = performance.now() - t0
   const first = marks('map:first-draw')[0]
+  // not `await mountMap` timed: the basemap decode (a microtask started inside mountMap) can run before the await continues
+  const mount_to_first_draw = first ? first.start + first.duration - t0 : null
   await api.ready
   const ready_total = performance.now() - t0
   const arrival = marks('map:redraw').find((m) => m.detail?.basemap)
-  const paint = await raf()
+  const paint = await raf(t0)
   performance.clearMeasures()
+  const tz = performance.now()
   ;(host.querySelector('button[aria-label="Zoom in"]') as HTMLButtonElement).click() // a zoom change: the real path (zoomAt, then commit -> redraw)
   const zoom = marks('map:redraw')[0]
+  const zoom_paint = await raf(tz)
   performance.clearMeasures()
+  const tp = performance.now()
   api.redraw()
   const plain = marks('map:redraw')[0]
+  const plain_paint = await raf(tp)
   api.destroy()
   host.remove()
-  return { mount_total, first_draw: first?.duration ?? null, basemap_arrives: arrival?.duration ?? null, ready_total, paint_after_mount: paint, zoom_redraw: zoom?.duration ?? null, plain_redraw: plain?.duration ?? null }
+  return { mount_to_first_draw, first_draw: first?.duration ?? null, basemap_redraw: arrival?.duration ?? null, ready_total, paint_after_mount: paint, zoom_redraw: zoom?.duration ?? null, zoom_paint, plain_redraw: plain?.duration ?? null, plain_paint }
 }
 async function series(scene: Scene, cold: boolean) {
   await once(scene, cold) // warm-up, dropped
@@ -64,29 +72,60 @@ function basemapPart() {
 
 const f = (s: Stats | null) => (s ? `${s.min}</td><td>${s.median}</td><td>${s.p90}</td><td>${s.max}` : '-</td><td>-</td><td>-</td><td>-')
 function show(res: any) {
-  const rows = (mode: 'cold' | 'warm') => res.scenes.map((s: any) => METRICS.map((k) => `<tr><td>${s.id} ${mode} ${k}</td><td>${f(s[mode][k])}</td></tr>`).join('')).join('')
+  const rows = (mode: 'decode_cold' | 'warm') => res.scenes.map((s: any) => METRICS.map((k) => `<tr><td>${s.id} ${mode} ${k}</td><td>${f(s[mode][k])}</td></tr>`).join('')).join('')
   const t = (title: string, body: string) => `<h2>${title}</h2><table><tr><th>metric (ms)</th><th>min</th><th>median</th><th>p90</th><th>max</th></tr>${body}</table>`
   const bm = res.basemap
   const tg = res.targets
   document.getElementById('out')!.innerHTML =
     `<p>${res.userAgent}<br>N=${res.n} after 1 warm-up, width ${W}px, dpr ${res.devicePixelRatio}, cores ${res.hardwareConcurrency}</p>` +
-    `<p>first draw (a, warm) median ${tg.firstDrawMedianMs} ms vs ${tg.firstDrawTargetMs}: <b class="${tg.firstDrawOk ? 'ok' : 'bad'}">${tg.firstDrawOk ? 'ok' : 'over'}</b>; ` +
-    `zoom redraw (c, warm) median ${tg.redrawMedianMs} ms vs ${tg.redrawTargetMs}: <b class="${tg.redrawOk ? 'ok' : 'bad'}">${tg.redrawOk ? 'ok' : 'over'}</b></p>` +
+    `<p>with basemap (a, ${tg.firstDrawJudgedOn}) ${tg.firstDrawMedianMs} ms vs ${tg.firstDrawTargetMs}: <b class="${tg.firstDrawOk ? 'ok' : 'bad'}">${tg.firstDrawOk ? 'ok' : 'over'}</b><br>` +
+    `redraw (${tg.redrawJudgedOn}) ${tg.redrawMedianMs} ms vs ${tg.redrawTargetMs}: <b class="${tg.redrawOk ? 'ok' : 'bad'}">${tg.redrawOk ? 'ok' : 'over'}</b></p>` +
+    `<p>${res.notes.join('<br>')}</p>` + (res.shortMetrics.length ? `<p class="bad">fewer than N samples: ${res.shortMetrics.join('; ')}</p>` : '') +
     t('basemap (' + bm.bytes + ' bytes)', ['decode', 'draw_smooth0_251pts', 'draw_smooth1_251pts'].map((k) => `<tr><td>${k}</td><td>${f(bm[k])}</td></tr>`).join('')) +
-    t('cold (cache reset before each run)', rows('cold')) + t('warm (basemap cached)', rows('warm')) +
+    t('decode_cold (cache reset before each run; bytes from memory, no storage read)', rows('decode_cold')) + t('warm (basemap cached)', rows('warm')) +
     `<pre id="json"></pre>`
   document.getElementById('json')!.textContent = JSON.stringify(res)
 }
 
+const worst = (...v: (number | null | undefined)[]) => (v.some((x) => x == null) ? null : Math.max(...(v as number[])))
 async function main() {
-  const res: any = { userAgent: navigator.userAgent, devicePixelRatio, hardwareConcurrency: navigator.hardwareConcurrency, deviceMemory: (navigator as any).deviceMemory ?? null, n: N, width: W, startedAt: new Date().toISOString(), basemap: basemapPart(), scenes: [] }
-  for (const s of scenes()) res.scenes.push({ id: s.id, title: s.title, points: s.points.length, cold: await series(s, true), warm: await series(s, false) })
-  const a = res.scenes[0].warm.first_draw?.median, c = res.scenes[2].warm.zoom_redraw?.median
-  res.targets = { firstDrawTargetMs: 50, firstDrawMedianMs: a, firstDrawOk: a != null && a < 50, redrawTargetMs: 300, redrawMedianMs: c, redrawOk: c != null && c < 300 }
+  const res: any = {
+    userAgent: navigator.userAgent, devicePixelRatio, hardwareConcurrency: navigator.hardwareConcurrency, deviceMemory: (navigator as any).deviceMemory ?? null,
+    n: N, width: W, startedAt: new Date().toISOString(),
+    notes: ['decode_cold = the basemap cache was reset before each run, but the bytes come from memory (base64 in the bundle): the time to read them from storage or the network is NOT included',
+      'first_draw is drawn without the basemap; the person sees ready_total (with it)', '*_paint = to the 2nd animation frame; null on a hidden page (no frames)'],
+    basemap: basemapPart(), scenes: [],
+  }
+  for (const s of scenes()) res.scenes.push({ id: s.id, title: s.title, points: s.points.length, decode_cold: await series(s, true), warm: await series(s, false) })
+  const med = (sc: any, mode: string, k: string): number | null => sc[mode][k]?.median ?? null
+  const a = res.scenes[0], c = res.scenes[2]
+  const first = worst(med(a, 'decode_cold', 'ready_total'), med(a, 'warm', 'ready_total'))
+  const withPaint = [med(c, 'warm', 'zoom_paint'), med(c, 'warm', 'plain_paint')]
+  const usePaint = withPaint.every((x) => x != null)
+  const redraw = usePaint ? worst(...withPaint) : worst(med(c, 'warm', 'zoom_redraw'), med(c, 'warm', 'plain_redraw'))
+  res.targets = {
+    firstDrawTargetMs: 50, firstDrawJudgedOn: 'scene a, ready_total (map with basemap), the larger of the decode_cold and warm medians', firstDrawMedianMs: first, firstDrawOk: first != null && first < 50,
+    redrawTargetMs: 300, redrawJudgedOn: usePaint ? 'scene c, warm, the larger of zoom_paint and plain_paint medians' : 'scene c, warm, the larger of zoom_redraw and plain_redraw medians: judged WITHOUT paint (no frames on this page)',
+    redrawJudgedWithPaint: usePaint, redrawMedianMs: redraw, redrawOk: redraw != null && redraw < 300,
+  }
+  // a metric with fewer than N samples (a mark missing, a hidden page's paint)
+  res.shortMetrics = res.scenes.flatMap((sc: any) => (['decode_cold', 'warm'] as const).flatMap((m) => METRICS.filter((k) => (sc[m][k]?.n ?? 0) < N).map((k) => `${sc.id} ${m} ${k}: ${sc[m][k]?.n ?? 0}/${N}`)))
   res.finishedAt = new Date().toISOString()
-  show(res)
-  document.getElementById('status')!.textContent = 'done'
-  document.body.setAttribute('data-done', '1')
   return res
 }
-;(window as any).__mapBench = new Promise((r) => setTimeout(r, 300)).then(main) // the page settles first
+async function run() {
+  await new Promise((r) => setTimeout(r, 300)) // the page settles first
+  try {
+    const res = await main()
+    show(res)
+    document.getElementById('status')!.textContent = 'done'
+    return res
+  } catch (e) {
+    const msg = String((e as any)?.stack ?? e)
+    document.getElementById('status')!.textContent = 'error: ' + msg
+    return { error: msg, userAgent: navigator.userAgent }
+  } finally {
+    document.body.setAttribute('data-done', '1')
+  }
+}
+;(window as any).__mapBench = run()

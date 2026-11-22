@@ -10,7 +10,7 @@ import { mapsFixture } from './maps-fixture'
 import { setKinReader, isCreditLine, kinQuestion } from '../src/kin'
 import { setPlaceReader, type PlaceReader } from '../src/places'
 import { placeSheet, type ConvState, type Reply } from '../src/pipeline'
-import { mapSvg } from '../src/mapview'
+import { mapSvg, mapHeight, MAP_MAX_H, MAP_MIN_H, MAP_RATIO } from '../src/mapview'
 import { md } from '../src/md'
 import { buildContext } from '../src/context'
 import { resizeMaps, sweepMaps } from '../src/placeview'
@@ -607,7 +607,29 @@ describe('corrección 1', () => {
     FakeIO.all[1]!.cb([{ isIntersecting: true }])
     await tick()
     expect(hostOf(bad).className).toBe('place-map failed')
-    expect(placeBlock({ ...block, map: { ...block.map, small: true } }, 'es', async () => ({ redraw() {}, destroy() {} })).children[0]!.style.minHeight).toBe('180px')
+    for (const k of ['minHeight', 'maxHeight', 'aspectRatio'] as const) expect(hostOf(bad).style[k]).toBe('') // a failed mount gives the reserved box back too
+    const smallHost = hostOf(placeBlock({ ...block, map: { ...block.map, small: true } }, 'es', async () => ({ redraw() {}, destroy() {} })))
+    expect(smallHost.style.minHeight).toBe('180px')
+    expect(smallHost.style.maxHeight).toBeUndefined()
+    expect(smallHost.style.aspectRatio).toBeUndefined()
+    FakeIO.all[2]!.cb([{ isIntersecting: true }])
+    await tick()
+    for (const k of ['minHeight', 'maxHeight', 'aspectRatio'] as const) expect(smallHost.style[k] ?? '').toBe('')
+    delete (globalThis as any).IntersectionObserver
+  })
+  test('1b. the reserved box is the height mapview gives the map: its limits are the exported ones, at a narrow, a middle and a wide width', () => {
+    dom()
+    const host = hostOf(placeBlock(block, 'es', async () => ({ redraw() {}, destroy() {} })))
+    expect(host.style.minHeight).toBe(`${MAP_MIN_H}px`)
+    expect(host.style.maxHeight).toBe(`${MAP_MAX_H}px`)
+    expect(host.style.aspectRatio).toBe(`1 / ${MAP_RATIO}`)
+    for (const w of [120, 280, 375, 480, 640, 1000]) {
+      // what CSS resolves from the reserved box (ratio, then min and max) is what mapview computes
+      const css = Math.min(MAP_MAX_H, Math.max(MAP_MIN_H, Math.round(w * MAP_RATIO)))
+      expect(mapHeight(w)).toBe(css)
+    }
+    expect([mapHeight(280), mapHeight(375), mapHeight(1000)]).toEqual([210, 281, 360])
+    expect(mapHeight(375, 180)).toBe(180)
     delete (globalThis as any).IntersectionObserver
   })
   test('2. resize draws the connected maps again; a host that left is destroyed, even if a destroy throws; an unseen host lets its observer go', async () => {
