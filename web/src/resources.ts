@@ -4,7 +4,7 @@
 // The words on screen are never "module", "package", "unit" or "catalog": each part is called by its name.
 import { bidiLabel, rtlLang } from './bidi'
 import { fiveLine, partsOfReader, partsOfUnits, type PartId, type PartLine } from './modules'
-import { covered5, on5m } from './five'
+import { covered5For, on5m } from './five'
 import { sizeText } from './obs'
 import {
   downloadImages, exportImages, fill, IMAGES_COUNT, imagesCredit, imagesInstalled, imagesOffer, importedLine, IW, PACK_FILE, removeImages,
@@ -407,7 +407,7 @@ function langCard(p: Paint, c: LangCard): HTMLElement {
     })())
   }
   // the 5M session rides with the Stories (no unit of its own)
-  const f = fiveLine(on5m(), covered5().length)
+  const f = fiveLine(on5m(), covered5For(c.lang).length)
   if (f && c.parts.some((x) => x.id === 'obs' && x.state === 'have')) card.appendChild(el('div', 'res-line note', text(t.five.replace('{c}', count(ui, 'story', f.n)), ui)))
   if (absent.length) card.appendChild(el('div', 'res-line note', text(t.noFor.replace('{parts}', list(ui, absent)), ui)))
   const row = el('div', 'row res-btns')

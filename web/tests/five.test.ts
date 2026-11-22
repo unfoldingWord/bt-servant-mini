@@ -1,6 +1,6 @@
 // 5M from the packs (five.ts): a pack's session (language-pack-client `obsSession`) as the tables the session reads; no source = no 5M.
 import { afterAll, describe, expect, test } from 'bun:test'
-import { covered5, fixtureNow5, fixtureOf5, fixtureOfSession, on5m, refresh5, setSource5 } from '../src/five'
+import { covered5, covered5For, fixtureNow5, fixtureOf5, fixtureOfSession, on5m, refresh5, setSource5 } from '../src/five'
 import { steps } from '../src/obs5m'
 import { fiveOn } from './five-on'
 
@@ -19,6 +19,18 @@ const session = {
 }
 
 afterAll(() => setSource5(null))
+
+describe('covered5For', () => {
+  test('the stories of one language own pack: Spanish has none when only English and Indonesian bring them', async () => {
+    setSource5({ coverage: async () => new Map([[1, ['en', 'id']], [3, ['en']], [7, ['id']]]), session: async () => null })
+    await refresh5(true)
+    expect(covered5For('en')).toEqual([1, 3])
+    expect(covered5For('id')).toEqual([1, 7])
+    expect(covered5For('es-419')).toEqual([])
+    expect(covered5().length).toBe(3)
+    setSource5(null)
+  })
+})
 
 describe('a pack session as the tables', () => {
   const fx = fixtureOfSession(session, 'en')
