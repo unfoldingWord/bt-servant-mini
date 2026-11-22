@@ -1,6 +1,7 @@
 // Language packs (format 3) in two layers: the ones shipped in the app (assets/www/packs, read-only; none in the light
 // build), and the ones the person adds — downloaded from the packs server or imported from a .tcpack file (SD card, phone
 // memory, another phone) — kept in the page's IndexedDB. A language lives in one layer: an added one wins.
+import { basemapOf } from '@bt-synergy/language-pack-v3'
 import {
   ClientError, createClient, patchedReader, emptyState, httpSource, indexedDbStore, planInstall, verifyCatalogFile,
   type BlobStore, type PackReader, type PackSource, type VerifiedCatalog,
@@ -495,8 +496,73 @@ export function onPacksChanged(f: () => void) {
 }
 function changed() {
   open.clear()
+  basemapMiss.clear()
   for (const f of listeners) f()
 }
+// ------------------------------------------------------------------------------------------------------------ basemap
+
+/**
+ * Where the `basemap` complement is looked for, relative to the packs folder of the app and to the base of a packs server:
+ * `<COMPLEMENTS_DIR>/<sha256 hex>.basemap`. The builder writes `<out>/complements/<sha256>.basemap`; no publisher uploads it yet.
+ */
+export const COMPLEMENTS_DIR = 'common/complements'
+const BASEMAP_MAX = 1024 * 1024 // the real one is about 6 KB; a bigger file is not one of ours
+/** After a miss, the network is not asked again for this long (a changed pack list clears it sooner). */
+const BASEMAP_RETRY_MS = 10 * 60 * 1000
+const basemapMiss = new Map<string, number>()
+const sha256hex = async (b: Uint8Array): Promise<string> => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)))
+
+/** The `basemap` complement the installed common catalog lists for this pack's language: its sha256 (hex) and size; null when none (or two, or another version). */
+async function basemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
+  const store = (await addedLangs()).includes(pack) ? await added() : (await shipped()).includes(pack) ? assetStore(pack) : null
+  if (!store) return null
+  const state = await store.getState()
+  const entry = state?.published[state.aliases?.[pack] ?? pack]
+  if (!state || !entry) return null
+  const read = async (id: string) => {
+    const bytes = await store.get(id)
+    return bytes ? verifyCatalogFile(bytes, trust, { from: 'store', expectedId: id }) : null
+  }
+  const lang = await read(entry.id)
+  for (const [, , rid] of lang?.catalog.requires ?? []) {
+    const common = await read(hex(rid)).catch(() => null)
+    const b = basemapOf(common?.catalog.complements)
+    if (b) return { id: hex(b.id), size: b.size }
+  }
+  return null
+}
+
+/**
+ * The bytes of the map background (the `basemap` complement) for a pack, checked against the sha256 the catalog lists, or null: the common
+ * catalog lists none, it is not on the phone or any server, or the bytes are not the ones listed (the map is then drawn without a background).
+ * Looked for in the phone's own store (where it is kept after the first time), then the app's packs folder (the APK carries it), then the
+ * packs servers; a copy found outside the store is kept there. Never throws.
+ */
+export async function basemapBytes(pack: string): Promise<Uint8Array | null> {
+  try {
+    const e = await basemapEntry(pack)
+    if (!e || !ID_RE.test(e.id) || e.size > BASEMAP_MAX) return null
+    const right = async (b: Uint8Array | undefined) => (b && b.length === e.size && (await sha256hex(b)) === e.id ? b : null)
+    const kept = await right(await (await added()).get(e.id).catch(() => undefined))
+    if (kept) return kept
+    const last = basemapMiss.get(e.id)
+    if (last !== undefined && Date.now() - last < BASEMAP_RETRY_MS) return null
+    const file = `${COMPLEMENTS_DIR}/${e.id}.basemap`
+    const urls = [`${BASE}/${file}`, ...servers.map((b) => `${b.replace(/\/+$/, '')}/${file}`)]
+    for (const url of urls) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(CATALOG_MS) })
+        const ok = r.ok ? await right(new Uint8Array(await r.arrayBuffer())) : null
+        if (!ok) continue
+        await (await added()).put(e.id, ok).catch(() => {}) // kept so the next time needs no network
+        return ok
+      } catch { /* the next place */ }
+    }
+    basemapMiss.set(e.id, Date.now())
+  } catch { /* no background */ }
+  return null
+}
+
 /** Tests: read the shipped list again and drop the open readers (web/tests/fs-packs.ts). */
 export function reloadPacks() {
   index = null
