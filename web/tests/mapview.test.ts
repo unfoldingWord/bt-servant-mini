@@ -9,7 +9,7 @@ import { MAX_SCALE, minScale, project, type MapPoint } from '@bt-synergy/languag
 import { BTS_DIR } from './bts-dir'
 import { mapsFixture } from './maps-fixture'
 import { MAP_DARK, MAP_LIGHT, MAP_T, mapSvg, mountMap, readTheme, resetMapCache, setBasemapSource } from '../src/mapview'
-import { addedClient, basemapStore, setBasemapStore, basemapBytes, reloadPacks, setBasemapFetchMs, resetAddedStore, setPacksServers, setTrustedKeys } from '../src/packs'
+import { addedClient, basemapEntryReadCount, basemapStore, setBasemapStore, basemapBytes, reloadPacks, setBasemapFetchMs, resetAddedStore, setPacksServers, setTrustedKeys } from '../src/packs'
 
 const FAKE_IDB = join(BTS_DIR, 'packages', 'language-pack-client', 'node_modules', 'fake-indexeddb', 'build', 'esm', 'index.js')
 
@@ -580,18 +580,14 @@ describe('basemapBytes', () => {
     expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
     expect(fetched().length).toBe(0)
   })
-  test('the catalogs are read once per pack until the packs change, even when the basemap is missing', async () => {
+  test('the catalog entry is computed once per pack until the packs change, even when the basemap is missing', async () => {
     phone(); serve.app = null; serve.server = null
-    // other modules react to a change of the packs (they open readers, which read state.json): let that finish, then count only ours
-    const settle = () => new Promise((r) => setTimeout(r, 100))
-    const states = () => asked.filter((u) => u.endsWith('/state.json')).length
-    await settle(); asked.length = 0
-    await basemapBytes(f.lang); await basemapBytes(f.lang); await basemapBytes(f.lang)
-    expect(states()).toBe(1)
+    const n0 = basemapEntryReadCount()
+    for (let i = 0; i < 3; i++) await basemapBytes(f.lang)
+    expect(basemapEntryReadCount() - n0).toBe(1)
     reloadPacks()
-    await settle(); asked.length = 0
-    await basemapBytes(f.lang)
-    expect(states()).toBeGreaterThanOrEqual(1) // read again after the change
+    for (let i = 0; i < 3; i++) await basemapBytes(f.lang)
+    expect(basemapEntryReadCount() - n0).toBe(2)
   })
   test('a place that never answers is given up after its own short time, then the next one is tried', async () => {
     phone(); serve.app = null; serve.server = f.basemap.bytes

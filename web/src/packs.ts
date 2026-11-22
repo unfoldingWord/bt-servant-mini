@@ -552,7 +552,11 @@ function basemapEntry(pack: string): Promise<{ id: string; size: number } | null
   }
   return p
 }
+let basemapEntryReads = 0
+/** Tests: how many times a basemap catalog entry was computed (not read from the cache). */
+export const basemapEntryReadCount = (): number => basemapEntryReads
 async function readBasemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
+  basemapEntryReads++
   const store = (await addedLangs().catch(() => [] as string[])).includes(pack) ? await added() : (await shipped()).includes(pack) ? assetStore(pack) : null
   if (!store) return null
   const state = await store.getState()
