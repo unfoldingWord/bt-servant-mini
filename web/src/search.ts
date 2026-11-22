@@ -441,7 +441,7 @@ export type Strength = {
 }
 type Looked = { label: string; term: Term }
 /** The terms of a question in a pack: each word with its other forms, its English (in the English pack), the article it names. */
-function termsFor(kw: string[], phrases: string[][], pl: string, packLang: string, m: Map<string, string[]>): Looked[] {
+export function termsFor(kw: string[], phrases: string[][], pl: string, packLang: string, m: Map<string, string[]>): Looked[] {
   const inPhrase = new Set(phrases.flat().map((w) => fold(w)))
   const out: Looked[] = phrases.map((p) => ({ label: p.join(' '), term: { phrases: [p] } }))
   for (const w of kw) {
@@ -454,7 +454,8 @@ function termsFor(kw: string[], phrases: string[][], pl: string, packLang: strin
     const term: Term = {
       words: forms,
       forms: ar ? forms.flatMap(arabicForms) : [],
-      prefixes: forms.map((x) => stemOf(x, packLang)).filter((s): s is string => !!s),
+      // (a translation is an English word: swallow ~ swallowing)
+      prefixes: forms.map((x) => stemOf(x, english.length ? 'en' : packLang)).filter((s): s is string => !!s),
       concepts: (conceptOf(w, m, true) ?? []).filter((id) => id.startsWith('tw:')),
     }
     out.push({ label: w, term })
