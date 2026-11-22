@@ -21,7 +21,7 @@ import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, type RelKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -2427,7 +2427,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
       line(t.siblings, f.siblings), namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`family ${f.id}`) } }
   }
-  const k = kind as Exclude<KinKind, 'who' | 'family'>
+  const k = kind as RelKind
   const list = await Promise.all(relativesOf(k, f).map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
   const head = withName(ui, t.head[headKind(k, list)], shownName)
   if (!list.length) {
@@ -3124,7 +3124,7 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
     const p = s.concept ? await personOf(s.lang, s.concept).catch(() => null) : null
     const name = askedName(s.term, p?.name ?? s.term ?? '…')
     if (kind === 'family') return withName(ui, KT(ui).family, name)
-    const h = KT(ui).head[kind as Exclude<KinKind, 'who' | 'family'>]
+    const h = KT(ui).head[kind as RelKind]
     return kind === 'who' || !h ? name : withName(ui, h, name)
   }
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')
