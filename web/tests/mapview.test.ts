@@ -528,6 +528,7 @@ describe('basemapBytes', () => {
     globalThis.fetch = savedG.fetch
     ;(globalThis as any).indexedDB = savedG.indexedDB
     setTrustedKeys(); setPacksServers(); resetAddedStore()
+    reloadPacks() // the shipped list read through the stub (only es-419) is not kept for the files that run after this one
   })
 
   test('the sample lists the basemap, and the file made for it is where Mini looks', () => {
