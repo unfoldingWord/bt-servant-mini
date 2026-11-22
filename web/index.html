@@ -403,8 +403,8 @@
   .nrow:active { background: var(--accent-soft); }
   /* focus (focus.ts): the source at the top, a chapter's summary, and the rest folded behind buttons that look like buttons */
   .info p.src, .study p.src { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: -6px 0 10px; }
-  .info p.credit, .plain p.credit { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: 6px 0 0; } /* a family answer's sources (main.ts) */
-  .info p.credit em, .plain p.credit em { font-style: normal; }
+  .info p.credit, .plain p.credit, .tree-block p.credit { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: 6px 0 0; } /* a family answer's sources (main.ts) */
+  .info p.credit em, .plain p.credit em, .tree-block p.credit em { font-style: normal; }
   .info :is(h3, h4) + p > em:only-child, .md :is(h3, h4) + p > em:only-child { font: 12px/1.4 system-ui, sans-serif; font-style: normal; }
   .aqtag { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); }
   .aqnotice { font: 12px/1.45 system-ui, sans-serif; color: var(--muted); margin: 10px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
@@ -596,6 +596,10 @@
   .obs-pic-cap { margin-top: 4px; font-size: 12px; color: var(--muted); }
   .obs-pic-none { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; background: var(--line);
     color: var(--muted); font: 12px/1.3 system-ui, sans-serif; text-align: center; padding: 0 12px; box-sizing: border-box; margin-bottom: 6px; }
+  .obs-pic-ask { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; justify-content: center; }
+  .obs-pic-note { margin-top: 4px; text-align: center; font-size: 12px; color: var(--muted); }
+  .obs-pic-line { flex-basis: 100%; }
+  .obs-pic-none .obs-pic-ask { margin-top: 8px; }
   .s5-md { margin: 0 0 8px; }
   .s5-md > :first-child { margin-top: 0; }
   .s5-md h3 { font: 600 14px/1.3 system-ui, sans-serif; margin: 12px 0 4px; }

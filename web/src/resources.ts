@@ -4,7 +4,7 @@
 // The words on screen are never "module", "package", "unit" or "catalog": each part is called by its name.
 import { bidiLabel, rtlLang } from './bidi'
 import { fiveLine, partsOfReader, partsOfUnits, type PartId, type PartLine } from './modules'
-import { covered5, on5m } from './five'
+import { covered5For, on5m } from './five'
 import { sizeText } from './obs'
 import {
   downloadImages, exportImages, fill, IMAGES_COUNT, imagesCredit, imagesInstalled, imagesOffer, importedLine, IW, PACK_FILE, removeImages,
@@ -407,7 +407,7 @@ function langCard(p: Paint, c: LangCard): HTMLElement {
     })())
   }
   // the 5M session rides with the Stories (no unit of its own)
-  const f = fiveLine(on5m(), covered5().length)
+  const f = fiveLine(on5m(), covered5For(c.lang).length)
   if (f && c.parts.some((x) => x.id === 'obs' && x.state === 'have')) card.appendChild(el('div', 'res-line note', text(t.five.replace('{c}', count(ui, 'story', f.n)), ui)))
   if (absent.length) card.appendChild(el('div', 'res-line note', text(t.noFor.replace('{parts}', list(ui, absent)), ui)))
   const row = el('div', 'row res-btns')
@@ -532,21 +532,31 @@ function imagesBlock(p: Paint, have: ImagesState, row: boolean): HTMLElement {
   }
   return box
 }
-async function startImages(p: Paint) {
-  const ui = p.ctx.ui
+/** What the pictures' button says now when it is not its usual word (the mobile-data question, no internet). */
+/** A frame that did not show the question itself forgets one an older tap left (else its first tap would pass as the confirming one). */
+export const forgetImagesQuestion = (): void => { confirmed.delete('images'); hints.delete('images') }
+export const imagesHint = (): string | undefined => hints.get('images')
+/**
+ * A tap on [Download] of the pictures, from Resources or from a frame (obsimgask.ts): the questions first (`again` redraws the
+ * button's new words), then the download, which both screens follow. `after` runs when it ended well.
+ */
+export async function requestImages(ui: string, again: () => void, after?: () => void): Promise<void> {
   let offer = imgOffer ?? null
   const real = async () => {
     offer = await deps.imagesOffer()
     imgOffer = offer
     return offer?.bytes ?? null
   }
-  if (!(await gate(ui, 'images', imgOffer?.bytes ?? 0, real, p.repaint))) return void p.repaint()
+  if (!(await gate(ui, 'images', imgOffer?.bytes ?? 0, real, again))) return void again()
   startDownload('images', async (signal, progress) => {
     const o = offer ?? (await deps.imagesOffer())
     if (!o) throw new Error('offline')
     await deps.downloadImages((x) => progress(x.bytes, x.totalBytes), signal, o)
-    if (!p.dead()) p.ctx.refresh()
+    after?.()
   })
+}
+async function startImages(p: Paint) {
+  return requestImages(p.ctx.ui, p.repaint, () => { if (!p.dead()) p.ctx.refresh() })
 }
 
 /**

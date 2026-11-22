@@ -24,6 +24,8 @@ type Words = {
   metered: string
   /** under a frame with no picture */
   missing: string
+  /** the frame's buttons: get the pictures (their size), load them from a file, and the line under a picture that came from the internet */
+  getPics: string; fromFile: string; net: string
 }
 const W: Record<string, Words> = {
   en: {
@@ -33,6 +35,7 @@ const W: Record<string, Words> = {
     share: 'Share', remove: 'Remove', metered: '{mb} over mobile data. Continue?',
     partial: 'Download not finished: no picture shows yet. With internet it continues here; or remove what arrived.',
     missing: 'Picture not on this phone',
+    getPics: 'Download pictures (~20 MB)', fromFile: 'Load from a file', net: 'From the internet: download the pictures to see them without a connection.',
   },
   es: {
     title: 'Imágenes de Open Bible Stories', have: '{n} imágenes · {mb} ✓',
@@ -41,6 +44,7 @@ const W: Record<string, Words> = {
     share: 'Compartir', remove: 'Quitar', metered: '{mb} por datos móviles. ¿Seguir?',
     partial: 'Bajada sin terminar: aún no se ve ninguna imagen. Con internet sigue aquí; o quita lo que llegó.',
     missing: 'La imagen no está en el teléfono',
+    getPics: 'Bajar las imágenes (~20 MB)', fromFile: 'Cargar desde un archivo', net: 'De internet: baja las imágenes para verlas sin conexión.',
   },
   pt: {
     title: 'Imagens das Open Bible Stories', have: '{n} imagens · {mb} ✓',
@@ -49,6 +53,7 @@ const W: Record<string, Words> = {
     share: 'Compartilhar', remove: 'Remover', metered: '{mb} pelos dados móveis. Continuar?',
     partial: 'Download não terminado: nenhuma imagem aparece ainda. Com internet, continue aqui; ou remova o que chegou.',
     missing: 'A imagem não está no telefone',
+    getPics: 'Baixar as imagens (~20 MB)', fromFile: 'Carregar de um arquivo', net: 'Da internet: baixe as imagens para vê-las sem conexão.',
   },
   fr: {
     title: 'Images des Open Bible Stories', have: '{n} images · {mb} ✓',
@@ -57,6 +62,7 @@ const W: Record<string, Words> = {
     share: 'Partager', remove: 'Retirer', metered: '{mb} par les données mobiles. Continuer ?',
     partial: 'Téléchargement inachevé : aucune image ne s’affiche encore. Avec internet, il continue ici ; ou retirez ce qui est arrivé.',
     missing: 'Image absente du téléphone',
+    getPics: 'Télécharger les images (~20 Mo)', fromFile: 'Charger depuis un fichier', net: 'Depuis internet : téléchargez les images pour les voir sans connexion.',
   },
   id: {
     title: 'Gambar Open Bible Stories', have: '{n} gambar · {mb} ✓',
@@ -65,6 +71,7 @@ const W: Record<string, Words> = {
     share: 'Bagikan', remove: 'Hapus', metered: '{mb} lewat data seluler. Lanjutkan?',
     partial: 'Unduhan belum selesai: belum ada gambar yang tampil. Dengan internet, lanjutkan di sini; atau hapus yang sudah masuk.',
     missing: 'Gambar tidak ada di ponsel',
+    getPics: 'Unduh gambar (~20 MB)', fromFile: 'Muat dari berkas', net: 'Dari internet: unduh gambar agar bisa dilihat tanpa koneksi.',
   },
   hi: {
     title: 'ओपन बाइबल स्टोरीज़ के चित्र', have: '{n} चित्र · {mb} ✓',
@@ -73,6 +80,7 @@ const W: Record<string, Words> = {
     share: 'साझा करें', remove: 'हटाएँ', metered: 'मोबाइल डेटा से {mb}। जारी रखें?',
     partial: 'डाउनलोड पूरा नहीं हुआ: अभी कोई चित्र नहीं दिखता। इंटरनेट हो तो यहीं जारी रखें; या जो आया है उसे हटाएँ।',
     missing: 'चित्र फ़ोन पर नहीं है',
+    getPics: 'चित्र डाउनलोड करें (~20 MB)', fromFile: 'फ़ाइल से लोड करें', net: 'इंटरनेट से: बिना कनेक्शन के देखने के लिए चित्र डाउनलोड करें।',
   },
   ar: {
     title: 'صور قصص الكتاب المقدس المفتوحة', have: '{n} صورة · {mb} ✓',
@@ -81,6 +89,7 @@ const W: Record<string, Words> = {
     share: 'مشاركة', remove: 'إزالة', metered: '{mb} عبر بيانات الجوال. متابعة؟',
     partial: 'لم يكتمل التنزيل: لا تظهر أي صورة بعد. مع الإنترنت يُتابَع من هنا؛ أو أزل ما وصل.',
     missing: 'الصورة ليست على الهاتف',
+    getPics: 'تنزيل الصور (~20 MB)', fromFile: 'تحميل من ملف', net: 'من الإنترنت: نزّل الصور لتراها دون اتصال.',
   },
 }
 /** The words for a UI language (pt-br and es-419 by their base; any other in English). */
@@ -288,16 +297,45 @@ const isOnline = (): boolean => (globalThis as any).navigator?.onLine !== false
 
 // ------------------------------------------------------------------------------------------------------------ drawing
 
-/** The quiet placeholder, in place of a picture there is no way to show. */
-function placeholder(fig: HTMLElement, ui: string) {
+/** The quiet placeholder, in place of a picture there is no way to show, with the buttons that get the pictures (obsimgask.ts). */
+function placeholder(fig: HTMLElement, ui: string, redo: () => void) {
   fig.querySelector('img')?.remove()
   if (fig.querySelector('.obs-pic-none')) return
   const box = document.createElement('div')
   box.className = 'obs-pic-none'
-  box.textContent = IW(ui).missing
+  const say = document.createElement('div')
+  say.textContent = IW(ui).missing
+  box.append(say)
   box.lang = ui
-  box.dir = ui === 'ar' ? 'rtl' : 'ltr'
+  box.dir = ui.split('-')[0] === 'ar' ? 'rtl' : 'ltr'
   fig.prepend(box)
+  ask(box, ui, 'none', redo)
+}
+
+/** The buttons that get the pictures, drawn in `host` (obsimgask.ts, loaded when first needed: it reaches Resources' downloads). */
+function ask(host: HTMLElement, ui: string, kind: 'none' | 'cdn', redo: () => void) {
+  void import('./obsimgask').then((m) => m.addAsk(host, ui, kind, redo)).catch(() => {})
+}
+
+/**
+ * The quiet line under a picture that came from the internet, with [Download]: on the first picture of a conversation only (the
+ * page has one such line at a time: a new conversation clears the page), and never once the pictures are on the phone.
+ */
+function netNote(img: HTMLElement, ui: string, redo: () => void) {
+  const g: any = globalThis
+  if (g.document?.querySelector?.('.obs-pic-note')) return
+  const note = document.createElement('div')
+  note.className = 'obs-pic-note'
+  note.lang = ui
+  note.dir = ui.split('-')[0] === 'ar' ? 'rtl' : 'ltr'
+  img.after(note)
+  ask(note, ui, 'cdn', redo)
+}
+
+/** Draws a frame again after the pictures arrived: what was there (picture, placeholder, line) goes, the phone's picture comes. */
+function redraw(fig: HTMLElement, n: number, f: number, label: string, ui: string, cls: string) {
+  for (const q of ['img', '.obs-pic-none', '.obs-pic-note']) fig.querySelector(q)?.remove()
+  fillPicture(fig, n, f, label, ui, cls)
 }
 
 /** A frame's picture in its own `<figure class="obs-pic">`, drawn at once and filled when the pack has been read. */
@@ -315,16 +353,18 @@ export function framePicture(n: number, f: number, label: string, ui: string): H
 export function fillPicture(fig: HTMLElement, n: number, f: number, label: string, ui: string, cls = ''): void {
   void localUrl(n, f).catch(() => null).then((local) => {
     const s = pickSource(local, isOnline(), n, f)
-    if (s.kind === 'none') return placeholder(fig, ui)
+    const redo = () => redraw(fig, n, f, label, ui, cls)
+    if (s.kind === 'none') return placeholder(fig, ui, redo)
     const img = document.createElement('img')
     if (cls) img.className = cls
     img.alt = label
     img.width = 640
     img.height = 360
     img.loading = 'lazy'
-    img.onerror = () => placeholder(fig, ui)
+    img.onerror = () => { fig.querySelector('.obs-pic-note')?.remove(); placeholder(fig, ui, redo) }
     img.src = s.src
     fig.prepend(img)
+    if (s.kind === 'cdn') netNote(img, ui, redo)
   }).catch(() => { /* a picture that cannot be drawn leaves the frame's text as it is */ })
 }
 
@@ -401,7 +441,7 @@ export async function addVersePicture(
   cap.className = 'obs-pic-cap'
   cap.textContent = `OBS ${at.n}:${at.f} · ${IW(ui).credit}`
   cap.lang = ui
-  cap.dir = ui === 'ar' ? 'rtl' : 'ltr'
+  cap.dir = ui.split('-')[0] === 'ar' ? 'rtl' : 'ltr'
   fig.append(img, cap)
   box.prepend(fig)
   return at

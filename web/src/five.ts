@@ -90,6 +90,8 @@ const pick = (n: number, prefer?: string | null): string => {
 export const on5m = (): boolean => covered.size > 0
 /** The stories that have a session, in order */
 export const covered5 = (): number[] => [...covered.keys()].sort((a, b) => a - b)
+/** The stories that have a session in this language's own pack (a language's Resources card: only English and Indonesian bring them) */
+export const covered5For = (lang: string): number[] => [...covered].filter(([, ls]) => ls.includes(lang)).map(([n]) => n).sort((a, b) => a - b)
 /**
  * Looks for the tables again (at the app's start, after a pack is added or removed); resolves to whether 5M is on. When the
  * stories and the packs that carry them are the same as before, what was read stays (nothing flickers; the manual's release is

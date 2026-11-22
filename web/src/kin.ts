@@ -16,6 +16,10 @@ export type KinKind = 'children' | 'sons' | 'daughters' | 'father' | 'mother' | 
   | 'siblings' | 'brothers' | 'sisters' | 'who'
   /** "familia de Abraham": the whole family (the «Más familia» view) */
   | 'family'
+  /** "árbol de Isaac", "antepasados de David", "descendientes de Abraham" (diseno-arboles.md §4.1): the family tree views */
+  | 'tree' | 'up' | 'down'
+/** A kind that asks for relatives of one kind (the ones with a head in KIN_T): not who, family or a tree view. */
+export type RelKind = Exclude<KinKind, 'who' | 'family' | 'tree' | 'up' | 'down'>
 export type KinLang = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 /**
  * A question shaped like a family question. `name`: the person as written (without an article); `alts`: other ways to read it
@@ -100,6 +104,32 @@ const SHAPES: { lang: KinLang; re: RegExp; word: 1 | 2; name: 1 | 2 }[] = [
   { lang: 'hi', re: new RegExp(`^(.+?)\\s+(?:के|की|का)\\s+(${alt(Object.keys(WORDS.hi))})$`), word: 2, name: 1 },
   { lang: 'ar', re: new RegExp(`^(${alt(Object.keys(WORDS.ar))})\\s+(.+)$`), word: 1, name: 2 },
 ]
+// The family tree views (§4.1), tried before the family words: «árbol genealógico de X», «family tree of X», «X's family tree», «pohon
+// keluarga X», «X का वंशवृक्ष», «شجرة عائلة X». The same name rules as «hijos de X», except the peoples («árbol de Israel» is the man).
+const TREE_SHAPES: { lang: KinLang; kind: 'tree' | 'up' | 'down'; re: RegExp }[] = [
+  { lang: 'es', kind: 'tree', re: /^(?:el\s+)?[aá]rbol(?:\s+(?:geneal[oó]gico|familiar))?\s+de\s+(.+)$/i },
+  { lang: 'es', kind: 'up', re: /^(?:la\s+|el\s+|los\s+|las\s+)?(?:geneal[oó]g[ií]a|antepasados|ascendientes|ascendencia|ancestros|linaje)\s+de\s+(.+)$/i },
+  { lang: 'es', kind: 'down', re: /^(?:los\s+|la\s+)?(?:descendientes|descendencia)\s+de\s+(.+)$/i },
+  { lang: 'en', kind: 'tree', re: /^(?:the\s+)?(?:(?:family|genealogical)\s+)?tree\s+of\s+(.+)$/i },
+  { lang: 'en', kind: 'tree', re: /^(.+?)['’]s?\s+(?:family|genealogical)\s+tree$/i },
+  { lang: 'en', kind: 'up', re: /^(?:the\s+)?(?:genealogy|ancestors|ancestry|lineage)\s+of\s+(.+)$/i },
+  { lang: 'en', kind: 'up', re: /^(.+?)['’]s?\s+(?:genealogy|ancestors|ancestry|lineage)$/i },
+  { lang: 'en', kind: 'down', re: /^(?:the\s+)?descendants\s+of\s+(.+)$/i },
+  { lang: 'en', kind: 'down', re: /^(.+?)['’]s?\s+descendants$/i },
+  { lang: 'fr', kind: 'tree', re: /^(?:l['’]\s*|le\s+)?arbre(?:\s+(?:g[ée]n[ée]alogique|familial))?\s+(?:de\s+|d['’]\s*)(.+)$/i },
+  { lang: 'fr', kind: 'up', re: /^(?:la\s+|les\s+|l['’]\s*)?(?:g[ée]n[ée]alogie|anc[êe]tres|ascendants|ascendance)\s+(?:de\s+|d['’]\s*)(.+)$/i },
+  { lang: 'fr', kind: 'down', re: /^(?:les\s+|la\s+)?(?:descendants|descendance)\s+(?:de\s+|d['’]\s*)(.+)$/i },
+  { lang: 'id', kind: 'tree', re: /^(?:pohon|silsilah)\s+keluarga\s+(?:dari\s+)?(.+)$/i },
+  { lang: 'id', kind: 'up', re: /^(?:silsilah|leluhur|nenek\s+moyang)\s+(?:dari\s+)?(.+)$/i },
+  { lang: 'id', kind: 'down', re: /^keturunan\s+(?:dari\s+)?(.+)$/i },
+  { lang: 'hi', kind: 'tree', re: /^(.+?)\s+(?:का|के|की)\s+(?:वंशवृक्ष|वंश\s?वृक्ष|परिवार[\s-]?वृक्ष)$/ },
+  { lang: 'hi', kind: 'up', re: /^(.+?)\s+(?:का|के|की)\s+(?:वंशावली|पूर्वज)$/ },
+  { lang: 'hi', kind: 'down', re: /^(.+?)\s+(?:का|के|की)\s+वंशज$/ },
+  { lang: 'ar', kind: 'tree', re: /^(?:شجرة|شجره)\s+(?:عائلة|عائله|نسب)\s+(.+)$/ },
+  { lang: 'ar', kind: 'up', re: /^(?:سلسلة\s+نسب|سلسله\s+نسب|نسب|أسلاف|اسلاف|أجداد|اجداد)\s+(.+)$/ },
+  { lang: 'ar', kind: 'down', re: /^(?:نسل|ذرية|ذريه)\s+(.+)$/ },
+]
+
 /** The accented spellings of a family word ("pere" → "père", "papa" → "papá"): the patterns take both. */
 function accented(w: string): string[] {
   const out: Record<string, string[]> = {
@@ -163,6 +193,14 @@ export function kinShape(q: string): KinShape | null {
       wrapped = who ? lang : null
       break
     }
+  }
+  for (const s of TREE_SHAPES) {
+    const m = s.re.exec(rest)
+    if (!m) continue
+    const { name, alts } = cleanName(m[1]!, s.lang)
+    if (!nameLike(name)) continue
+    if (PRONOUNS.has(foldName(name))) return null
+    return { kind: s.kind, name, alts, lang: s.lang }
   }
   for (const s of SHAPES) {
     const m = s.re.exec(rest)
@@ -388,7 +426,7 @@ export async function familyOf(pack: string, id: string) {
 export async function personOf(pack: string, id: string): Promise<PersonEntry | null> {
   return (await peopleIx(pack))?.byId.get(id) ?? null
 }
-async function coreOf(pack: string): Promise<XtopicsCore | null> {
+export async function coreOf(pack: string): Promise<XtopicsCore | null> {
   const m = (await (await readerOf(pack)).mapsOf(['xtopics'], { coreOnly: true })) as { xtopics?: { core: XtopicsCore } }
   return m.xtopics?.core ?? null
 }
@@ -497,7 +535,7 @@ export type { FamilyData }
 // ------------------------------------------------------------------------------------------------------------ the words
 type KinText = {
   /** the head of a family answer, per kind ("Hijos de {x}") */
-  head: Record<Exclude<KinKind, 'who' | 'family'>, string>
+  head: Record<RelKind, string>
   /** a card's lines; `credit`: the family data's sources under the answer, drawn small and grey like an article's source label
    *  (main.ts, isCreditLine; Abel, Nov 18: too big at first, then hidden in «detalles»: he wants to see it, small) */
   parents: string; partners: string; children: string; siblings: string
@@ -523,6 +561,15 @@ type KinText = {
   /** the person's Translation Words article as a button ({x}: its title) */
   article: string
   whereNamed: string
+  // the family tree views (diseno-arboles.md §9); {x}: a name, {n}: a number
+  treeBtn: string; tree: string; up: string; down: string
+  unnamed: string; gap: string; withP: string; noMother: string; noFather: string; noParent: string
+  wives: string; wife: string; husband: string; spouses: string
+  parentsL: string; siblingsL: string; childrenL: string
+  alsoSays: string; upEnd: string; treeNote: string
+  showKids: string; hideKids: string
+  /** the accessible word of a person in a tree: «Esaú, hijo» */
+  sonL: string; daughterL: string
 }
 export const KIN_T: Record<KinLang, KinText> = {
   en: {
@@ -532,6 +579,30 @@ export const KIN_T: Record<KinLang, KinText> = {
     named: 'Named in {n} verses.', named1: 'Named in 1 verse.', none: '{head}: the data I have names no one.', choose: 'Several people are called {x}. Which one?',
     other: 'Another {x}?', versesN: '{n} verses', versesN1: '1 verse', credit: 'Family data: {src}.', family: 'Family of {x}', here: 'People here: {names}',
     hereHead: 'People named in {ref}:', hereNone: 'The data I have names no one in {ref}.', getPeople: 'Download the verses of people and places', getBook: 'Download {book}', and: 'and', moreFamily: 'More family', whereNamed: 'Where {x} is named', article: 'Article: {x}',
+    treeBtn: 'Family tree',
+    tree: 'Family tree of {x}',
+    up: 'Ancestors of {x}',
+    down: 'Descendants of {x}',
+    unnamed: '(unnamed)',
+    gap: '{n} generations with no name in the data',
+    withP: 'With {x}',
+    noMother: 'Mother not named in the data',
+    noFather: 'Father not named in the data',
+    noParent: 'Other parent not named in the data',
+    wives: 'Wives',
+    wife: 'Wife',
+    husband: 'Husband',
+    spouses: 'Spouses',
+    parentsL: 'Parents',
+    siblingsL: 'Brothers and sisters',
+    childrenL: 'Children',
+    alsoSays: '(the data also says: {x})',
+    upEnd: 'The data ends here.',
+    treeNote: 'According to TIPNR: people may be missing, and biblical genealogies sometimes skip generations.',
+    showKids: 'Show the children of {x}',
+    hideKids: 'Hide the children of {x}',
+    sonL: 'son',
+    daughterL: 'daughter',
   },
   es: {
     head: { children: 'Hijos de {x}', sons: 'Hijos de {x}', daughters: 'Hijas de {x}', father: 'Padre de {x}', mother: 'Madre de {x}', parents: 'Padres de {x}',
@@ -540,6 +611,30 @@ export const KIN_T: Record<KinLang, KinText> = {
     named: 'Se nombra en {n} versículos.', named1: 'Se nombra en 1 versículo.', none: '{head}: los datos que tengo no nombran a nadie.', choose: 'Hay varias personas llamadas {x}. ¿Cuál?',
     other: '¿Otro {x}?', versesN: '{n} versículos', versesN1: '1 versículo', credit: 'Datos de familia: {src}.', family: 'Familia de {x}', here: 'Personas aquí: {names}',
     hereHead: 'Personas nombradas en {ref}:', hereNone: 'Los datos que tengo no nombran a nadie en {ref}.', getPeople: 'Descargar los versículos de personas y lugares', getBook: 'Descargar {book}', and: 'y', moreFamily: 'Más familia', whereNamed: 'Dónde se nombra a {x}', article: 'Artículo: {x}',
+    treeBtn: 'Árbol familiar',
+    tree: 'Árbol de {x}',
+    up: 'Antepasados de {x}',
+    down: 'Descendientes de {x}',
+    unnamed: '(sin nombre)',
+    gap: '{n} generaciones sin nombre en los datos',
+    withP: 'Con {x}',
+    noMother: 'Madre no nombrada en los datos',
+    noFather: 'Padre no nombrado en los datos',
+    noParent: 'Otro progenitor no nombrado en los datos',
+    wives: 'Esposas',
+    wife: 'Esposa',
+    husband: 'Esposo',
+    spouses: 'Cónyuges',
+    parentsL: 'Padres',
+    siblingsL: 'Hermanos',
+    childrenL: 'Hijos',
+    alsoSays: '(los datos también dicen: {x})',
+    upEnd: 'Los datos se cortan aquí.',
+    treeNote: 'Según TIPNR: pueden faltar personas, y las genealogías bíblicas a veces saltan generaciones.',
+    showKids: 'Mostrar los hijos de {x}',
+    hideKids: 'Ocultar los hijos de {x}',
+    sonL: 'hijo',
+    daughterL: 'hija',
   },
   fr: {
     head: { children: 'Enfants de {x}', sons: 'Fils de {x}', daughters: 'Filles de {x}', father: 'Père de {x}', mother: 'Mère de {x}', parents: 'Parents de {x}',
@@ -548,6 +643,30 @@ export const KIN_T: Record<KinLang, KinText> = {
     named: 'Nommé dans {n} versets.', named1: 'Nommé dans 1 verset.', none: '{head} : les données que j’ai ne nomment personne.', choose: 'Plusieurs personnes s’appellent {x}. Laquelle ?',
     other: 'Un autre {x} ?', versesN: '{n} versets', versesN1: '1 verset', credit: 'Données familiales : {src}.', family: 'Famille de {x}', here: 'Personnes ici : {names}',
     hereHead: 'Personnes nommées dans {ref} :', hereNone: 'Les données que j’ai ne nomment personne dans {ref}.', getPeople: 'Télécharger les versets des personnes et des lieux', getBook: 'Télécharger {book}', and: 'et', moreFamily: 'Plus de famille', whereNamed: 'Où {x} est nommé', article: 'Article : {x}',
+    treeBtn: 'Arbre généalogique',
+    tree: 'Arbre de {x}',
+    up: 'Ancêtres de {x}',
+    down: 'Descendants de {x}',
+    unnamed: '(sans nom)',
+    gap: '{n} générations sans nom dans les données',
+    withP: 'Avec {x}',
+    noMother: 'Mère non nommée dans les données',
+    noFather: 'Père non nommé dans les données',
+    noParent: 'Autre parent non nommé dans les données',
+    wives: 'Épouses',
+    wife: 'Épouse',
+    husband: 'Mari',
+    spouses: 'Conjoints',
+    parentsL: 'Parents',
+    siblingsL: 'Frères et sœurs',
+    childrenL: 'Enfants',
+    alsoSays: '(les données disent aussi : {x})',
+    upEnd: 'Les données s’arrêtent ici.',
+    treeNote: 'D’après TIPNR : il peut manquer des personnes, et les généalogies bibliques sautent parfois des générations.',
+    showKids: 'Afficher les enfants de {x}',
+    hideKids: 'Masquer les enfants de {x}',
+    sonL: 'fils',
+    daughterL: 'fille',
   },
   id: {
     head: { children: 'Anak-anak {x}', sons: 'Anak-anak laki-laki {x}', daughters: 'Anak-anak perempuan {x}', father: 'Ayah {x}', mother: 'Ibu {x}', parents: 'Orang tua {x}',
@@ -556,6 +675,30 @@ export const KIN_T: Record<KinLang, KinText> = {
     named: 'Disebut dalam {n} ayat.', named1: 'Disebut dalam 1 ayat.', none: '{head}: data yang saya punya tidak menyebut siapa pun.', choose: 'Ada beberapa orang bernama {x}. Yang mana?',
     other: '{x} yang lain?', versesN: '{n} ayat', versesN1: '1 ayat', credit: 'Data keluarga: {src}.', family: 'Keluarga {x}', here: 'Tokoh di sini: {names}',
     hereHead: 'Tokoh yang disebut dalam {ref}:', hereNone: 'Data yang saya punya tidak menyebut siapa pun dalam {ref}.', getPeople: 'Unduh ayat-ayat tokoh dan tempat', getBook: 'Unduh {book}', and: 'dan', moreFamily: 'Keluarga lainnya', whereNamed: 'Di mana {x} disebut', article: 'Artikel: {x}',
+    treeBtn: 'Pohon keluarga',
+    tree: 'Pohon keluarga {x}',
+    up: 'Leluhur {x}',
+    down: 'Keturunan {x}',
+    unnamed: '(tanpa nama)',
+    gap: '{n} generasi tanpa nama dalam data',
+    withP: 'Dengan {x}',
+    noMother: 'Ibu tidak disebut namanya dalam data',
+    noFather: 'Ayah tidak disebut namanya dalam data',
+    noParent: 'Orang tua lainnya tidak disebut namanya dalam data',
+    wives: 'Istri-istri',
+    wife: 'Istri',
+    husband: 'Suami',
+    spouses: 'Pasangan',
+    parentsL: 'Orang tua',
+    siblingsL: 'Saudara kandung',
+    childrenL: 'Anak-anak',
+    alsoSays: '(data juga menyebut: {x})',
+    upEnd: 'Data berhenti di sini.',
+    treeNote: 'Menurut TIPNR: mungkin ada orang yang tidak tercatat, dan silsilah Alkitab kadang melompati generasi.',
+    showKids: 'Tampilkan anak-anak {x}',
+    hideKids: 'Sembunyikan anak-anak {x}',
+    sonL: 'putra',
+    daughterL: 'putri',
   },
   hi: {
     head: { children: '{x} की संतान', sons: '{x} के पुत्र', daughters: '{x} की पुत्रियाँ', father: '{x} के पिता', mother: '{x} की माता', parents: '{x} के माता-पिता',
@@ -564,6 +707,30 @@ export const KIN_T: Record<KinLang, KinText> = {
     named: '{n} पदों में नाम आता है।', named1: '1 पद में नाम आता है।', none: '{head}: मेरे पास के आँकड़ों में किसी का नाम नहीं है।', choose: '{x} नाम के कई लोग हैं। कौन-सा?',
     other: 'कोई दूसरा {x}?', versesN: '{n} पद', versesN1: '1 पद', credit: 'परिवार के आँकड़े: {src}।', family: '{x} का परिवार', here: 'यहाँ के लोग: {names}',
     hereHead: '{ref} में जिनका नाम है:', hereNone: 'मेरे पास के आँकड़ों में {ref} में किसी का नाम नहीं है।', getPeople: 'लोगों और स्थानों के पद डाउनलोड करें', getBook: '{book} डाउनलोड करें', and: 'और', moreFamily: 'और परिवार', whereNamed: '{x} का नाम कहाँ आता है', article: 'लेख: {x}',
+    treeBtn: 'वंशवृक्ष',
+    tree: '{x} का वंशवृक्ष',
+    up: '{x} के पूर्वज',
+    down: '{x} के वंशज',
+    unnamed: '(बिना नाम)',
+    gap: 'आँकड़ों में {n} पीढ़ियाँ बिना नाम की',
+    withP: '{x} से संतान',
+    noMother: 'माता का नाम आँकड़ों में नहीं है',
+    noFather: 'पिता का नाम आँकड़ों में नहीं है',
+    noParent: 'दूसरे माता-पिता का नाम आँकड़ों में नहीं है',
+    wives: 'पत्नियाँ',
+    wife: 'पत्नी',
+    husband: 'पति',
+    spouses: 'जीवनसाथी',
+    parentsL: 'माता-पिता',
+    siblingsL: 'भाई-बहन',
+    childrenL: 'संतान',
+    alsoSays: '(आँकड़े यह भी कहते हैं: {x})',
+    upEnd: 'आँकड़े यहीं समाप्त हो जाते हैं।',
+    treeNote: 'TIPNR के अनुसार: कुछ लोग छूट सकते हैं, और बाइबल की वंशावलियाँ कभी-कभी पीढ़ियाँ छोड़ देती हैं।',
+    showKids: '{x} की संतान दिखाएँ',
+    hideKids: '{x} की संतान छिपाएँ',
+    sonL: 'पुत्र',
+    daughterL: 'पुत्री',
   },
   ar: {
     head: { children: 'أولاد {x}', sons: 'أبناء {x}', daughters: 'بنات {x}', father: 'والد {x}', mother: 'أم {x}', parents: 'والدا {x}',
@@ -572,6 +739,30 @@ export const KIN_T: Record<KinLang, KinText> = {
     named: 'يُذكر في {n} آية.', named1: 'يُذكر في آية واحدة.', none: '{head}: البيانات التي لدي لا تذكر أحدًا.', choose: 'هناك عدة أشخاص اسمهم {x}. أيهم تقصد؟',
     other: '{x} آخر؟', versesN: '{n} آية', versesN1: 'آية واحدة', credit: 'بيانات العائلة: {src}.', family: 'عائلة {x}', here: 'الأشخاص هنا: {names}',
     hereHead: 'الأشخاص المذكورون في {ref}:', hereNone: 'البيانات التي لدي لا تذكر أحدًا في {ref}.', getPeople: 'تنزيل آيات الأشخاص والأماكن', getBook: 'تنزيل {book}', and: 'و', moreFamily: 'المزيد من العائلة', whereNamed: 'أين يُذكر {x}', article: 'مقالة: {x}',
+    treeBtn: 'شجرة العائلة',
+    tree: 'شجرة عائلة {x}',
+    up: 'أسلاف {x}',
+    down: 'نسل {x}',
+    unnamed: '(بلا اسم)',
+    gap: '{n} أجيال بلا اسم في البيانات',
+    withP: 'مع {x}',
+    noMother: 'الأم غير مذكورة في البيانات',
+    noFather: 'الأب غير مذكور في البيانات',
+    noParent: 'الوالد الآخر غير مذكور في البيانات',
+    wives: 'الزوجات',
+    wife: 'الزوجة',
+    husband: 'الزوج',
+    spouses: 'الأزواج والزوجات',
+    parentsL: 'الوالدان',
+    siblingsL: 'الإخوة والأخوات',
+    childrenL: 'الأولاد',
+    alsoSays: '(تذكر البيانات أيضًا: {x})',
+    upEnd: 'تنتهي البيانات هنا.',
+    treeNote: 'حسب TIPNR: قد يكون بعض الأشخاص غير مذكورين، وسلاسل النسب في الكتاب المقدس تتخطى أحيانًا بعض الأجيال.',
+    showKids: 'إظهار أولاد {x}',
+    hideKids: 'إخفاء أولاد {x}',
+    sonL: 'ابن',
+    daughterL: 'ابنة',
   },
 }
 export const KT = (ui: string): KinText => KIN_T[ui as KinLang] ?? KIN_T.en
@@ -600,7 +791,7 @@ export function joinNames(ui: string, names: string[]): string {
 export const SOURCE_NAMES: Record<string, string> = { 'STEPBible/STEPBible-Data/TIPNR': 'TIPNR (STEPBible)', 'BibleAquifer/ACAI': 'ACAI (BiblioNexus)', 'robertrouse/theographic-bible-metadata': 'Theographic' }
 
 /** The relatives a kind asks for, by gender when the data has it (a relative with no gender stays in both). */
-export function relativesOf(kind: Exclude<KinKind, 'who' | 'family'>, f: FamilyData): FamilyData['children'] {
+export function relativesOf(kind: RelKind, f: FamilyData): FamilyData['children'] {
   const not = (g: 1 | 2) => (r: { gender?: 1 | 2 }) => r.gender !== g
   switch (kind) {
     case 'children': return f.children
@@ -618,7 +809,7 @@ export function relativesOf(kind: Exclude<KinKind, 'who' | 'family'>, f: FamilyD
   }
 }
 /** The kind said in the head: a father or mother asked with relatives of no gender is "parents" (§4.6). */
-export function headKind(kind: Exclude<KinKind, 'who' | 'family'>, shown: { gender?: 1 | 2 }[]): Exclude<KinKind, 'who' | 'family'> {
+export function headKind(kind: RelKind, shown: { gender?: 1 | 2 }[]): RelKind {
   if ((kind === 'father' || kind === 'mother') && shown.some((r) => r.gender === undefined)) return 'parents'
   return kind
 }
@@ -644,7 +835,7 @@ const UP = 6
 
 /** The relations of the core, by person, built once per core. */
 const tiesByCore = new WeakMap<XtopicsCore, { parents: Map<string, string[]>; children: Map<string, string[]>; partners: Map<string, string[]>; siblings: Map<string, string[]>; tribe: Map<string, string[]>; tw: Set<string> }>()
-function tiesOf(core: XtopicsCore) {
+export function tiesOf(core: XtopicsCore) {
   let t = tiesByCore.get(core)
   if (!t) {
     const add = (m: Map<string, string[]>, k: string, v: string) => { const l = m.get(k); if (!l) m.set(k, [v]); else if (!l.includes(v)) l.push(v) }
@@ -661,7 +852,7 @@ function tiesOf(core: XtopicsCore) {
   }
   return t
 }
-const versesIn = (core: XtopicsCore, id: string): number => [...(core.occurrences.get(id)?.values() ?? [])].reduce((n, [, v]) => n + v, 0)
+export const versesIn = (core: XtopicsCore, id: string): number => [...(core.occurrences.get(id)?.values() ?? [])].reduce((n, [, v]) => n + v, 0)
 
 /**
  * Who a person is, in at most two ties to known people (KNOWN_VERSES, a tW article), the nearest first: child of, parent of,
@@ -699,6 +890,48 @@ export async function tiesOfPerson(pack: string, id: string): Promise<Tie[]> {
     if (ids.length && out.length < TIES) out.push({ kind, ids })
   }
   return out
+}
+
+/** `per:` -> its first Translation Words article (`same-as`, the first by id), built once per core. */
+const twByCore = new WeakMap<XtopicsCore, Map<string, string>>()
+export function twOfPerson(core: XtopicsCore): Map<string, string> {
+  let m = twByCore.get(core)
+  if (!m) {
+    m = new Map()
+    for (const r of core.relations ?? []) {
+      if (r.type !== 'same-as' || !r.from.startsWith('tw:names/') || !r.to.startsWith('per:')) continue
+      const at = m.get(r.to)
+      if (at === undefined || r.from < at) m.set(r.to, r.from)
+    }
+    twByCore.set(core, m)
+  }
+  return m
+}
+/** Every person of a pack by id (the people index, built once per pack); null without xtopics. */
+export async function peopleById(pack: string): Promise<Map<string, PersonEntry> | null> {
+  return (await peopleIx(pack))?.byId ?? null
+}
+/**
+ * `shownAs` without a reader call per person: the same text («Jacob (Israel)»: the article's name first when it is another one),
+ * with the article from `twOfPerson` and its name from the `map` core, both read once. Null without xtopics.
+ */
+export async function shownAsMaker(pack: string): Promise<{ core: XtopicsCore; shown: (id: string, name: string) => string } | null> {
+  const core = await coreOf(pack)
+  if (!core) return null
+  const m = (await (await readerOf(pack)).mapsOf(['map'], { coreOnly: true })) as { map?: { core: { names: Record<string, string[]> } } }
+  const names = m.map?.core.names
+  const tw = twOfPerson(core)
+  const latin = (t: string) => /\p{Script=Latin}/u.test(t)
+  return {
+    core,
+    shown: (id, name) => {
+      const art = tw.get(id)
+      const twName = art ? names?.[art]?.[0] : undefined
+      if (!twName) return name
+      const [a, b] = [foldName(twName), foldName(name)]
+      return !a.includes(b) && !b.includes(a) && latin(twName) === latin(name) ? `${twName} (${name})` : name
+    },
+  }
 }
 
 /** Whether a person has a Translation Words article (`same-as`). */

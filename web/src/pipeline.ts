@@ -19,9 +19,11 @@ import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type 
 import { W5 } from './obs5mwords'
 import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
+import { buildTree, treeText, type TreeOf, type TreeView, type TreeMode } from './tree'
+import type { TreeWords } from './treeview'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, type RelKind, kinQuestion, KT, KIN_T, TIE_T, type KinLang, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import type { Relative } from '@bt-synergy/language-pack-client'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
@@ -1875,7 +1877,7 @@ async function noIntro(sheet: Sheet, ui: string, before: Sheet | null): Promise<
   return { said, follow }
 }
 /** Each button once (the same sheet or the same Browse), at most MAX_FOLLOW; Browse at a book opens the pack that has it. */
-export async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
+export async function tidy(follow: Follow[], l: string, max = MAX_FOLLOW): Promise<Follow[]> {
   const seen = new Set<string>()
   const out: Follow[] = []
   for (const f of follow) {
@@ -1888,7 +1890,7 @@ export async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
       out.push({ ...f, browse: { ...f.browse, lang: p } })
     } else out.push(f)
   }
-  return out.slice(0, MAX_FOLLOW)
+  return out.slice(0, max)
 }
 
 const clipTo = (s: string, n: number): string => (s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + ' …' : s)
@@ -1929,6 +1931,8 @@ export type Reply = {
   drift?: boolean
   /** who is who in a verse, or its sentence structure (macula.ts), drawn by syntaxview.ts */
   macula?: MacView
+  /** a family tree (tree.ts), drawn by treeview.ts; a saved conversation keeps only `treeOf` and builds it again */
+  tree?: TreeView; treeOf?: TreeOf
   /** a step of a 5M session (5M in the pack): where it is ("Movement 1 · observation · frame 5/16"), and its card (obs5m.ts) */
   sessionMark?: string; card?: Card5
   /** in a 5M session, any other answer: "← Back to the session: …", the way back to its current step (first on the row of the way back) */
@@ -2307,7 +2311,7 @@ async function articleFamily(sheet: Sheet, ui: string): Promise<{ line: string; 
   // (the family data's own sources: ACAI only when the packs have it)
   const sources = (await familyOf(pack, ids[0]!).catch(() => null))?.data?.sources ?? ['STEPBible/STEPBible-Data/TIPNR']
   // (its sources in a short parenthesis: inside the fold, not the answer's last line, so no source line of its own)
-  return { line: text ? `${colon(ui, label)} ${text} (${sources.map((x) => (SOURCE_NAMES[x] ?? x).replace(/ \(.*\)$/, '')).join(', ')}).` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }] }
+  return { line: text ? `${colon(ui, label)} ${text} (${sources.map((x) => (SOURCE_NAMES[x] ?? x).replace(/ \(.*\)$/, '')).join(', ')}).` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }, treeButton(base, ui, ids[0]!)] }
 }
 /** Under one verse (or verses of one chapter) or a frame of Open Bible Stories: "People here: Isaac, Esau…", when the data names any. */
 async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | null> {
@@ -2331,6 +2335,48 @@ async function personStep(base: Sheet, id: string, label: string): Promise<Follo
   // (the open too: a pack that does not open gives the card, never no button)
   const has = tw ? await (async () => !!(await (await openLang(base.lang)).article(tw)).data)().catch(() => false) : false
   return tw && has ? { label, sheet: articleSheet(base, tw, base.lang) } : { label, sheet: kinSheet(base, 'who', { concept: id }) }
+}
+
+/** «Árbol familiar»: the tree of a person, among the steps in sight (`key`). */
+const treeButton = (base: Sheet, ui: string, id: string, term?: string | null): Follow =>
+  ({ label: KT(ui).treeBtn, sheet: kinSheet(base, 'tree', { concept: id, term: term ?? null }), key: true })
+
+/** The base sheet a tree's buttons are made on (main.ts: a message has no sheet of its own). */
+export const treeBase = (pack: string): Sheet =>
+  ({ id: '', intent: 'kin', ref: null, what: ['tree'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: pack })
+/** The words of a tree (treeview.ts) in a language, from KIN_T; the title is the view's when given. */
+export function treeWords(ui: string, v?: TreeView): TreeWords {
+  const t = KT(ui)
+  const tie = (TIE_T[ui as KinLang] ?? TIE_T.en).childOf
+  const title = v ? withName(ui, v.mode === 'up' ? t.up : v.down ? t.down : t.tree, v.focus.name) : t.tree.replace('{x}', '')
+  return { title, note: t.treeNote, parents: colon(ui, t.parentsL), wife: colon(ui, t.wife), wives: colon(ui, t.wives), husband: colon(ui, t.husband), spouses: colon(ui, t.spouses),
+    siblings: colon(ui, t.siblingsL), children: colon(ui, t.childrenL), withP: t.withP, noMother: t.noMother, noFather: t.noFather, noParent: t.noParent, unnamed: t.unnamed, gap: t.gap, upEnd: t.upEnd,
+    alsoSays: t.alsoSays, childOf: tie[0], daughterOf: tie[1], and: `${t.and}${ui === 'ar' && t.and.length === 1 ? '' : ' '}{x}`, showKids: t.showKids, hideKids: t.hideKids,
+    sonL: t.sonL, daughterL: t.daughterL, more: '+{n}', half: `(${t.half[0]})` }
+}
+/** The «Antepasados de X» / «Árbol de X» button of a tree's top and of a person at its cap. */
+export const treeStep = (base: Sheet, ui: string, kind: 'tree' | 'up', id: string, name: string): Follow =>
+  ({ label: withName(ui, KT(ui)[kind], name), sheet: kinSheet(base, kind, { concept: id }) })
+
+/**
+ * The bar under a tapped name in a tree (diseno-arboles.md §4.5): the person (article or card), the other view of the tree, the verse of
+ * the tie with the person they hang from (`fromId`), and their first Open Bible Stories story. `focus`: the tree's centre.
+ */
+export async function treeBar(base: Sheet, ui: string, id: string, fromId: string | null, view: TreeMode, focus: string): Promise<Followup[]> {
+  const p = await personOf(base.lang, id).catch(() => null)
+  const raw = p?.name ?? ''
+  // (a person the data names no real name for, «Unnamed#9», `a_wife_of_Lot`: «(sin nombre)», as the tree shows it)
+  const name = !raw || /^Unnamed#/i.test(raw) || raw.includes('_') ? KT(ui).unnamed : await shownAs(base.lang, id, raw).catch(() => raw)
+  const out: Followup[] = [await personStep(base, id, name)]
+  out.push(treeStep(base, ui, view === 'tree' && id === focus ? 'up' : 'tree', id, name))
+  if (fromId) {
+    const fam = (await familyOf(base.lang, id).catch(() => null))?.data
+    const rel = fam ? [...fam.parents, ...fam.children, ...fam.partners, ...fam.siblings].find((r) => r.id === fromId) : null
+    const pair = rel?.verses[0]
+    if (pair) out.push(...(await pairSteps(base, ui, [pair], [], base)).slice(0, 1))
+  }
+  out.push(...(await storySteps(base, id, 1)))
+  return out
 }
 
 async function kinAnswer(x: Ctx): Promise<Done> {
@@ -2376,6 +2422,20 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const tw = tw0 ? { ...tw0, label: withName(ui, t.article, tw0.label) } : null
   const plain: string[] = []
   const person = (r: { id: string; name: string }) => personStep(sheet, r.id, r.name)
+  if (kind === 'tree' || kind === 'up' || kind === 'down') {
+    // the family tree (tree.ts, diseno-arboles.md §4.6): built from the family data on the phone; «descendants» is the tree with three generations open
+    const mode: TreeMode = kind === 'up' ? 'up' : 'tree'
+    const view = await buildTree(sheet.lang, f.id, mode, ui, kind === 'down' ? 3 : undefined)
+    const other = mode === 'up' ? 'tree' : 'up'
+    const rel = f.parents.length + f.partners.length + f.children.length + f.siblings.length
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []),
+      { label: withName(ui, t[other], shownName), sheet: kinSheet(sheet, other, { concept: f.id, term: sheet.term }) },
+      ...(rel ? [{ label: t.moreFamily, sheet: kinSheet(sheet, 'family', { concept: f.id, term: sheet.term }) }] : []),
+      ...(f.verses > 0 ? [{ label: withName(ui, t.whereNamed, f.name), sheet: kinSheet(sheet, 'verses', { concept: f.id, term: sheet.term }) }] : [])]
+    const info = [treeText(view), creditLine(ui, f.sources)].join('\n\n')
+    return { answered: 'family', ref: null, concept: f.id, found: rel + 1,
+      reply: { ui, info, tree: view, treeOf: { pack: sheet.lang, id: f.id, mode, open: view.open, ...(view.down ? { down: true as const } : {}) }, follow, lang: sheet.lang, meta: meta(`${kind} ${f.id}`) } }
+  }
   if (kind === 'who') {
     // who a person is (Abel, Nov 18): one line of how they are tied to someone known ("hijo de Isaí, padre de David",
     // "descendiente de Judá"), not every relation; the whole family behind "Más familia", the verses behind "Dónde se nombra"
@@ -2394,7 +2454,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const more: Follow[] = rel ? [{ label: t.moreFamily, sheet: kinSheet(sheet, 'family', { concept: f.id, term: sheet.term }) }] : []
     const where: Follow[] = f.verses > own.verses.length ? [{ label: withName(ui, t.whereNamed, f.name), sheet: kinSheet(sheet, 'verses', { concept: f.id, term: sheet.term }) }] : []
     // (MAX_FOLLOW: the other one of that name and the download first, the article, the family, the verses, a story)
-    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...more, ...verses, ...where, ...stories]
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...more, ...verses, ...where, ...stories]
     const head = [tieText, f.note].filter(Boolean).join('; ')
     const info = [`**${shownName}**${head ? ` — ${head}` : ''}`, namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}: ${ties.map((tt) => `${tt.kind} ${tt.ids.join('+')}`).join(', ') || 'no ties'}`) } }
@@ -2421,19 +2481,19 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const sources = stories.length ? [...f.sources, 'robertrouse/theographic-bible-metadata'] : f.sources
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
     // (MAX_FOLLOW: the other one of that name and the download first, the article, every relative that fits, then verses and a story)
-    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...(await Promise.all(rel.slice(0, MAX_FOLLOW).map(person))),
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...(await Promise.all(rel.slice(0, MAX_FOLLOW).map(person))),
       ...verses, ...stories]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
       line(t.siblings, f.siblings), namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`family ${f.id}`) } }
   }
-  const k = kind as Exclude<KinKind, 'who' | 'family'>
+  const k = kind as RelKind
   const list = await Promise.all(relativesOf(k, f).map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
   const head = withName(ui, t.head[headKind(k, list)], shownName)
   if (!list.length) {
     // never "X had no children": the data names none; the person's article and first verses
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
-    const follow = [...others, ...(tw ? [tw] : []), ...(await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)),
+    const follow = [...others, ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...(await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)),
       { label: f.name, sheet: kinSheet(sheet, 'who', { concept: f.id }) }, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0))]
     return { answered: 'family', ref: null, concept: f.id, found: 1,
       reply: { ui, info: [t.none.replace('{head}', head), creditLine(ui, f.sources)].join('\n\n'), follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: none`) } }
@@ -2443,7 +2503,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const info = [`**${colon(ui, head)}** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
   // (MAX_FOLLOW: the other one of that name and the download first, the person's article, then every relative that fits, the verses
   // last: Abel, Nov 18, missed Madián among Abraham's sons when only five relatives were buttons)
-  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), ...(await Promise.all(list.slice(0, MAX_FOLLOW).map(person))), ...verses.slice(0, others.length ? 1 : 2)]
+  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...(await Promise.all(list.slice(0, MAX_FOLLOW).map(person))), ...verses.slice(0, others.length ? 1 : 2)]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }
 }
 
@@ -3124,7 +3184,8 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
     const p = s.concept ? await personOf(s.lang, s.concept).catch(() => null) : null
     const name = askedName(s.term, p?.name ?? s.term ?? '…')
     if (kind === 'family') return withName(ui, KT(ui).family, name)
-    const h = KT(ui).head[kind as Exclude<KinKind, 'who' | 'family'>]
+    if (kind === 'tree' || kind === 'up' || kind === 'down') return withName(ui, KT(ui)[kind], name)
+    const h = KT(ui).head[kind as RelKind]
     return kind === 'who' || !h ? name : withName(ui, h, name)
   }
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')
@@ -3713,7 +3774,7 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     const reply = done.reply
     // ("Dímelo en francés" with no French helps here: said first)
     if (made.langNote) reply.intro = [made.langNote, reply.intro].filter(Boolean).join(' ')
-    reply.follow = await tidy(reply.follow ?? [], x.sheet.lang).catch(() => reply.follow ?? [])
+    reply.follow = await tidy(reply.follow ?? [], x.sheet.lang, x.sheet.intent === 'kin' ? MAX_FOLLOW + 1 : MAX_FOLLOW).catch(() => reply.follow ?? [])
     // (a language that is not on the phone: "Add languages" first, then these)
     if (!reply.follow.length) {
       const named = /^([0-9a-z]{3})/.exec(x.sheet.ref ?? '')?.[1] ?? null
