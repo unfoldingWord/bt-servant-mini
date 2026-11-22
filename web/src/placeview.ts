@@ -1,7 +1,7 @@
 // A place answer's map and its list (diseno-mapas.md 5.6), as the bubble shows them. The map is drawn when it comes into view (a
 // conversation with many maps does not draw them all at once); the list is the whole alternative to it: every place with how sure it is,
 // references in <bdi> (in Arabic, "13:1-14:2" must not be reordered). All text goes in as text, never as markup.
-import { mountMap, type MapOpts } from './mapview'
+import { mountMap, MAP_MAX_H, MAP_MIN_H, MAP_RATIO, type MapOpts } from './mapview'
 import type { MapBlock, PlaceList } from './pipeline'
 
 type Mount = (el: HTMLElement, o: MapOpts) => Promise<{ redraw(): void; destroy(): void }>
@@ -45,8 +45,14 @@ function make(tag: string, cls: string, text?: string): HTMLElement {
   return e
 }
 
-/** The height the host keeps while it waits: an empty host would have none, and nothing that has no height is ever seen come into view. */
-const reserved = (small?: boolean) => (small ? 180 : 240)
+/**
+ * The box the host keeps while it waits: an empty host would have none, and nothing that has no height is ever seen come into view. It is the
+ * height mapview.ts will give the map (`mapHeight`): a small map is 180 px; the others take 3/4 of the width, between 200 and 360 px. The
+ * width is not known before the host is on the page, so the box is a ratio the browser resolves (CSS aspect-ratio with min and max height).
+ */
+const reserved = (small?: boolean): Record<string, string> =>
+  small ? { minHeight: '180px' } : { minHeight: `${MAP_MIN_H}px`, maxHeight: `${MAP_MAX_H}px`, aspectRatio: `1 / ${MAP_RATIO}` }
+const release = (host: HTMLElement) => { host.style.minHeight = ''; host.style.maxHeight = ''; host.style.aspectRatio = '' }
 
 /** `ui`: the language of the answer (its direction). `mount`: the map's drawing (tests give their own). */
 export function placeBlock(m: { map?: MapBlock; list?: PlaceList }, ui: string, mount: Mount = mountMap): HTMLElement {
@@ -57,14 +63,14 @@ export function placeBlock(m: { map?: MapBlock; list?: PlaceList }, ui: string, 
   if (map) {
     listen()
     const host = make('div', 'place-map')
-    host.style.minHeight = `${reserved(map.small)}px`
+    Object.assign(host.style, reserved(map.small))
     wrap.appendChild(host)
     const opts: MapOpts = { pack: map.pack, points: map.points, summary: map.summary, ui, dir, ...(map.small ? { height: 180 } : {}) }
     const go = () => {
       sweepMaps()
-      mount(host, opts).then((api) => { host.style.minHeight = ''; live.add({ host, ...api }) })
+      mount(host, opts).then((api) => { release(host); live.add({ host, ...api }) })
         // (a map that cannot be drawn is hidden: the list stays, the whole alternative)
-        .catch((e) => { host.className = 'place-map failed'; host.style.minHeight = ''; console.warn('map: kept as its list', e) })
+        .catch((e) => { host.className = 'place-map failed'; release(host); console.warn('map: kept as its list', e) })
     }
     if (typeof IntersectionObserver === 'function') {
       const io = new IntersectionObserver((es) => {

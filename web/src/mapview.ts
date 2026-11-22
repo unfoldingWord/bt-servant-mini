@@ -12,6 +12,10 @@ import { basemapBytes, onPacksChanged } from './packs'
 export type { MapPoint }
 export type MapOpts = { pack: string; points: MapPoint[]; summary: string; ui: string; dir: 'ltr' | 'rtl'; width?: number; height?: number }
 
+/** The map's height rule: three quarters of its width, between 200 and 360 px; a given `height` wins (never below 120). placeview.ts reserves the same box. */
+export const MAP_RATIO = 0.75, MAP_MIN_H = 200, MAP_MAX_H = 360
+export const mapHeight = (w: number, height?: number): number => Math.max(120, Math.round(height ?? Math.min(MAP_MAX_H, Math.max(MAP_MIN_H, w * MAP_RATIO))))
+
 // ------------------------------------------------------------------------------------------------------------------ theme
 
 /**
@@ -141,7 +145,7 @@ const FRAME_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden=
  */
 export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw(): void; destroy(): void; ready: Promise<void> }> {
   const w = Math.max(120, Math.round(o.width ?? (el.clientWidth || 320)))
-  const h = Math.max(120, Math.round(o.height ?? Math.min(360, Math.max(200, w * 0.75))))
+  const h = mapHeight(w, o.height)
   const m = Math.round(0.4 * Math.min(w, h)) // margin drawn around the screen
   const words = wordsFor(o.ui)
   const ac = new AbortController()

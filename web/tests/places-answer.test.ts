@@ -587,7 +587,11 @@ describe('corrección 1', () => {
     const blk = placeBlock(block, 'es', async (el) => { calls.push(el); return { redraw() {}, destroy() {} } })
     const host = hostOf(blk)
     expect(host.className).toBe('place-map')
-    expect(host.style.minHeight).toBe('240px') // (a host with no height is never seen come into view)
+    // the box mapview will use (mapHeight: 3/4 of the width, 200-360 px), so the layout does not jump on mount
+    // (a host with no height is never seen come into view)
+    expect(host.style.minHeight).toBe('200px')
+    expect(host.style.maxHeight).toBe('360px')
+    expect(host.style.aspectRatio).toBe('1 / 0.75')
     await tick()
     expect(calls.length).toBe(0)
     FakeIO.all[0]!.cb([{ isIntersecting: false }])
@@ -597,10 +601,13 @@ describe('corrección 1', () => {
     expect(FakeIO.all[0]!.disconnected).toBe(true)
     await tick()
     expect(host.style.minHeight).toBe('')
+    expect(host.style.maxHeight).toBe('')
+    expect(host.style.aspectRatio).toBe('')
     const bad = placeBlock(block, 'es', async () => { throw new Error('no') })
     FakeIO.all[1]!.cb([{ isIntersecting: true }])
     await tick()
     expect(hostOf(bad).className).toBe('place-map failed')
+    expect(placeBlock({ ...block, map: { ...block.map, small: true } }, 'es', async () => ({ redraw() {}, destroy() {} })).children[0]!.style.minHeight).toBe('180px')
     delete (globalThis as any).IntersectionObserver
   })
   test('2. resize draws the connected maps again; a host that left is destroyed, even if a destroy throws; an unseen host lets its observer go', async () => {
