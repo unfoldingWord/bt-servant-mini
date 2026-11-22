@@ -148,7 +148,8 @@ class FakeEl {
     for (const f of this.handlers.get(t) ?? []) f(ev)
     return ev
   }
-  getBoundingClientRect() { return { left: 0, top: 0 } }
+  left = 0; top = 0
+  getBoundingClientRect() { return { left: this.left, top: this.top } }
   setPointerCapture() {}
   find(pred: (e: FakeEl) => boolean): FakeEl[] { return [...(pred(this) ? [this] : []), ...this.children.flatMap((c) => c.find(pred))] }
   click() { this.fire('click') }
@@ -384,6 +385,23 @@ describe('mountMap', () => {
     box.fire('touchstart', { touches: [T(1, 100, 100)] })
     expect(box.fire('touchmove', { touches: [T(1, 100, 140)] }).prevented).toBeFalsy()
     box.fire('touchend', { touches: [] })
+    // a flick that scrolls the page: the box moves with the finger, so its position in the box does not change
+    const zoomed = gap(el)
+    const flick = (withMove: boolean) => {
+      box.left = 0; box.top = 0
+      box.fire('touchstart', { touches: [T(1, 100, 100)] })
+      box.top = -40 // the page scrolled 40 px
+      if (withMove) box.fire('touchmove', { touches: [T(1, 100, 60)] })
+      box.fire('touchend', { touches: [], changedTouches: [T(1, 100, 60)] })
+      box.top = 0
+    }
+    hint.style.opacity = '0'
+    flick(true)
+    expect(hint.style.opacity).toBe('1')
+    hint.style.opacity = '0'
+    flick(false); flick(false) // no touchmove seen at all, ended 40 px away: two of them are not a double tap
+    flick(true); flick(true)
+    expect(gap(el)).toBeCloseTo(zoomed, 0)
     // double tap with a finger goes back to the first view
     for (let i = 0; i < 2; i++) { box.fire('touchstart', { touches: [T(1, 50, 50)] }); box.fire('touchend', { touches: [] }) }
     expect(gap(el)).toBeCloseTo(g0, 0)

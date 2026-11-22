@@ -248,14 +248,14 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
 
   // pointers: one drags, two pinch; a quick second tap goes back to the first view
   const ptr = new Map<number, [number, number]>()
-  let down: { t: number; x: number; y: number; moved: boolean } | null = null
+  let down: { t: number; x: number; y: number; cx: number; cy: number; moved: boolean } | null = null // x, y: in the box; cx, cy: on the screen
   let lastTap: { t: number; x: number; y: number } | null = null
   const rel = (e: PointerEvent | WheelEvent): [number, number] => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top] }
   on(box, 'pointerdown', (e: PointerEvent) => {
     if (e.pointerType === 'touch') return // fingers are read from the touch events (the browser may cancel the pointers)
     try { box.setPointerCapture(e.pointerId) } catch { /* not captured */ }
     const p = rel(e)
-    if (ptr.size === 0) down = { t: Date.now(), x: p[0], y: p[1], moved: false }
+    if (ptr.size === 0) down = { t: Date.now(), x: p[0], y: p[1], cx: e.clientX, cy: e.clientY, moved: false }
     else if (down) down.moved = true
     ptr.set(e.pointerId, p)
   })
@@ -276,7 +276,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     ptr.set(e.pointerId, n)
   })
   // the end of a touch that did not move is a tap: a second one soon after goes back to the first view. True when it did.
-  function tapEnd(d: { t: number; x: number; y: number; moved: boolean } | null): boolean {
+  function tapEnd(d: typeof down): boolean {
     if (!d || d.moved || Date.now() - d.t >= 300) return false
     const now = Date.now()
     if (lastTap && now - lastTap.t < 350 && Math.hypot(d.x - lastTap.x, d.y - lastTap.y) < 30) { lastTap = null; frameAll(); return true }
@@ -306,11 +306,11 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   let tpos = new Map<number, [number, number]>()
   const fingers = (e: TouchEvent) => {
     const r = box.getBoundingClientRect()
-    return Array.from(e.touches as ArrayLike<Touch>).map((t) => ({ id: t.identifier, p: [t.clientX - r.left, t.clientY - r.top] as [number, number] }))
+    return Array.from(e.touches as ArrayLike<Touch>).map((t) => ({ id: t.identifier, p: [t.clientX - r.left, t.clientY - r.top] as [number, number], c: [t.clientX, t.clientY] as [number, number] }))
   }
   on(box, 'touchstart', (e: TouchEvent) => {
     const ts = fingers(e)
-    if (ts.length === 1 && !down) down = { t: Date.now(), x: ts[0]!.p[0], y: ts[0]!.p[1], moved: false }
+    if (ts.length === 1 && !down) down = { t: Date.now(), x: ts[0]!.p[0], y: ts[0]!.p[1], cx: ts[0]!.c[0], cy: ts[0]!.c[1], moved: false }
     else if (down) down.moved = true
     tpos = new Map(ts.map((f) => [f.id, f.p]))
   }, { passive: true })
@@ -329,7 +329,8 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
       }
       if (down) down.moved = true
     } else if (ts.length === 1 && down) {
-      if (Math.hypot(ts[0]!.p[0] - down.x, ts[0]!.p[1] - down.y) > 8) { down.moved = true; showHint() }
+      // on the screen, not in the box: when the page scrolls under the finger the box moves with it
+      if (Math.hypot(ts[0]!.c[0] - down.cx, ts[0]!.c[1] - down.cy) > 8) { down.moved = true; showHint() }
     }
     tpos = new Map(ts.map((f) => [f.id, f.p]))
   }, { passive: false })
@@ -339,6 +340,8 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     if (ts.length >= 2) return
     if (ts.length === 0) {
       const d = down
+      const end = e.changedTouches?.[0] // a touch that ended away from where it began is not a tap, moves seen or not
+      if (d && end && Math.hypot(end.clientX - d.cx, end.clientY - d.cy) > 8) d.moved = true
       down = null
       if (!cancelled && tapEnd(d)) return
     }
