@@ -143,6 +143,24 @@ describe('the tree', () => {
   })
 })
 
+describe('grandparents and the cap', () => {
+  test('grandparents are small name buttons that hang from their parent', async () => {
+    const calls: [string, string | null][] = []
+    const d = draw(view(), { bar: async (id, from) => (calls.push([id, from]), []) })
+    const g = nameOf(d, 'Abraham')
+    expect(g.has('sm')).toBe(true)
+    expect(g.parentElement!.textContent.replace(/[♂♀]/g, '')).toBe('son of Abraham')
+    g.click()
+    expect(calls).toEqual([['per:abraham', 'per:isaac']])
+    expect(g.getAttribute('aria-pressed')).toBe('true')
+  })
+  test('an up line cut at the cap does not say the data ends', () => {
+    const v: TreeView = { mode: 'up', open: 1, ui: 'en', pack: 'en', focus: tp('x', 'X', 1), parents: [], partners: [], siblings: [], groups: [], nodes: [], cut: true, line: [{ p: tp('y', 'Y', 1) }] }
+    expect(draw(v).byClass('tv-end').length).toBe(0)
+    expect(draw({ ...v, cut: false }).byClass('tv-end').length).toBe(1)
+  })
+})
+
 describe('selection', () => {
   test('a tap marks the name, puts a bar with … under its row, then the buttons; the same tap closes; another moves it', async () => {
     const calls: [string, string | null][] = []

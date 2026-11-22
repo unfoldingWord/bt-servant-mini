@@ -72,6 +72,7 @@ const CSS = `
   padding: 4px 8px; min-height: 36px; text-align: start; }
 .tv-name[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
 .tv-name.un, .tv-un { font-style: italic; color: var(--muted); }
+.tv-name.sm { font-size: 12px; min-height: 32px; padding: 2px 6px; color: var(--muted); }
 .tv-g { font-size: 12px; color: var(--muted); padding-inline-start: 4px; }
 .tv-more { font: 13px/1.25 system-ui, sans-serif; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-height: 36px; }
 .tv-head { font-size: 13px; font-weight: 600; color: var(--muted); margin: 10px 0 2px; }
@@ -189,7 +190,18 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
     for (const p of v.parents) {
       const box = el('div', 'tv-box')
       box.appendChild(name(p, () => boxes, v.focus.id))
-      if (p.up.length) box.appendChild(el('div', 'tv-small', fill(ofWord(p), 'x', p.up.map((u) => (u.unnamed ? w.unnamed : u.name)).join(', '))))
+      if (p.up.length) {
+        // the grandparents: small name buttons, each hanging from this parent
+        const [a, b = ''] = ofWord(p).split('{x}')
+        const small = el('div', 'tv-small')
+        if (a) small.append(a)
+        p.up.forEach((u, k) => {
+          if (k) small.append(', ')
+          small.appendChild(name(u, () => boxes, p.id, 'sm'))
+        })
+        if (b) small.append(b)
+        box.appendChild(small)
+      }
       boxes.appendChild(box)
     }
     root.appendChild(boxes)
@@ -324,6 +336,6 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
       child = r.p
       from = r.p.id
     }
-    host.appendChild(el('p', 'tv-end', w.upEnd))
+    if (!view.cut) host.appendChild(el('p', 'tv-end', w.upEnd))
   }
 }
