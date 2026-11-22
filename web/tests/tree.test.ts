@@ -188,7 +188,7 @@ describe.skipIf(!existsSync(`${REAL}/es-419/state.json`))('the real packs (APK r
     expect(v.parents.map((p) => p.name).sort()).toEqual(['Abraham', 'Sara'])
     expect(v.parents.find((p) => p.id === 'per:abraham')!.up.map((u) => u.name)).toContain('Taré')
     expect(v.partners.map((p) => p.name)).toEqual(['Rebeca'])
-    expect(names(v, v.groups[0]!.kids).sort()).toEqual(['Esaú', 'Jacob'])
+    expect(names(v, v.groups[0]!.kids).sort()).toEqual(['Esaú', 'Jacob (Israel)'])
   })
   test('Jacob (per:israel): four groups, Lea 7, Raquel 2, Bilhá 2, Zilpa 2', async () => {
     const v = await buildTree('es-419', 'per:israel', 'tree', 'es')
