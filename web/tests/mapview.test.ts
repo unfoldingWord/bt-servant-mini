@@ -408,6 +408,79 @@ describe('mountMap', () => {
     m.destroy()
   })
 
+  test("gestures 'full': one finger moves the map without the hint; two pinch; double tap goes back; 'chat' keeps pan-x pan-y", async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, gestures: 'full' })
+    const box = el.children[0]!
+    expect(box.style.cssText).toContain('touch-action:none')
+    expect(box.style.cssText).not.toContain('pan-x')
+    expect(el.find((e) => e.getAttribute('aria-hidden') === 'true' && e.text.length > 0).length).toBe(0)
+    const T = (id: number, x: number, y: number) => ({ identifier: id, clientX: x, clientY: y })
+    const flat = layerOf(el).style.transform, g0 = gap(el)
+    box.fire('touchstart', { touches: [T(1, 100, 100), T(2, 200, 100)] })
+    box.fire('touchmove', { touches: [T(1, 60, 100), T(2, 240, 100)] })
+    box.fire('touchend', { touches: [T(1, 60, 100)] })
+    box.fire('touchend', { touches: [] })
+    expect(gap(el)).toBeGreaterThan(g0 * 1.3)
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    const mv = box.fire('touchmove', { touches: [T(1, 100, 160)] })
+    expect(mv.prevented).toBe(true)
+    expect(layerOf(el).style.transform).not.toBe(flat)
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 100, 160)] })
+    for (let i = 0; i < 2; i++) { box.fire('touchstart', { touches: [T(1, 50, 50)] }); box.fire('touchend', { touches: [] }) }
+    expect(gap(el)).toBeCloseTo(g0, 0)
+    m.destroy()
+    const el2 = new FakeEl('div')
+    const m2 = await mountMap(el2 as any, { ...BASE, gestures: 'chat' })
+    expect(el2.children[0]!.style.cssText).toContain('touch-action:pan-x pan-y')
+    m2.destroy()
+  })
+
+  test("gestures 'full': a tremor is a tap (no move, still a double tap); past 8 px it follows without losing px; two fingers down together, one lifts, the other moves", async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, gestures: 'full' })
+    const box = el.children[0]!
+    const T = (id: number, x: number, y: number) => ({ identifier: id, clientX: x, clientY: y })
+    const g0 = gap(el)
+    // pinch in first, so the double tap below has something to go back from
+    box.fire('touchstart', { touches: [T(1, 100, 100), T(2, 200, 100)] })
+    box.fire('touchmove', { touches: [T(1, 60, 100), T(2, 240, 100)] })
+    box.fire('touchend', { touches: [T(1, 60, 100)] })
+    box.fire('touchend', { touches: [] })
+    const zoomed = layerOf(el).style.transform
+    expect(gap(el)).toBeGreaterThan(g0 * 1.3)
+    // tremor of 3 px: the layer does not move
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    expect(box.fire('touchmove', { touches: [T(1, 103, 100)] }).prevented).toBe(true)
+    expect(layerOf(el).style.transform).toBe(zoomed)
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 103, 100)] })
+    expect(layerOf(el).style.transform).toBe(zoomed)
+    // ... and a second quick tap is a double tap
+    box.fire('touchstart', { touches: [T(1, 100, 100)] }); box.fire('touchend', { touches: [] })
+    expect(gap(el)).toBeCloseTo(g0, 0)
+    // past the threshold: the whole move is applied, none of it lost
+    const before = layerOf(el).style.transform
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    box.fire('touchmove', { touches: [T(1, 100, 106)] })
+    expect(layerOf(el).style.transform).toBe(before)
+    box.fire('touchmove', { touches: [T(1, 100, 120)] })
+    expect(layerOf(el).style.transform).not.toBe(before)
+    box.fire('touchmove', { touches: [T(1, 100, 130)] })
+    const ty = (s: string) => Number(/translate\([-\d.]+px,\s*([-\d.]+)px/.exec(s)![1])
+    expect(ty(layerOf(el).style.transform) - ty(before)).toBeCloseTo(30, 5)
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 100, 130)] })
+    // two fingers that land together: when one lifts the other keeps moving the map
+    const b2 = layerOf(el).style.transform
+    box.fire('touchstart', { touches: [T(1, 100, 100), T(2, 200, 100)] })
+    box.fire('touchend', { touches: [T(2, 200, 100)] })
+    box.fire('touchmove', { touches: [T(2, 200, 103)] })
+    expect(layerOf(el).style.transform).not.toBe(b2)
+    box.fire('touchend', { touches: [] })
+    m.destroy()
+  })
+
   test('the late basemap re-clamps the view: a fitted frame keeps its place with the scale clamped; a moved one is clamped too', async () => {
     let give!: (b: Uint8Array) => void
     setBasemapSource(() => new Promise<Uint8Array | null>((r) => { give = r }))
@@ -484,6 +557,88 @@ describe('mountMap', () => {
     expect(html).not.toContain('<b>')
     expect(html).toContain('&lt;b&gt;&amp;')
     expect(html).not.toContain('<img')
+    m.destroy()
+  })
+
+  // onPick: a tap on a point (the pick waits 300 ms for a second tap), a tap on a cluster zooms in
+  const margin = (el: FakeEl) => Number(/translate\((-?[\d.]+)px/.exec(layerOf(el).style.transform)![1]) // the layer rests at -m
+  /** where the n-th drawn dot is on the screen (box coordinates) */
+  const dotAt = (el: FakeEl, n: number) => { const d = dots(layerOf(el).html)[n]!, m = margin(el); return [d[0] + m, d[1] + m] as const }
+  const mouseTap = (box: FakeEl, x: number, y: number) => { box.fire('pointerdown', { pointerId: 1, clientX: x, clientY: y }); box.fire('pointerup', { pointerId: 1, clientX: x, clientY: y }) }
+  const spread = (el: FakeEl) => { const ys = dots(layerOf(el).html).map((d) => d[1]); return Math.max(...ys) - Math.min(...ys) }
+  const wait = () => new Promise((r) => setTimeout(r, 360))
+  const CLUSTER: MapPoint[] = [
+    { id: 'place:a', lat: 31.0, lon: 35.0, sure: 3, form: 1, label: 'A' },
+    { id: 'place:b', lat: 31.004, lon: 35.0, sure: 3, form: 1, label: 'B' }, // ~6 px from A at the first view
+    { id: 'place:c', lat: 33.0, lon: 35.5, sure: 3, form: 1, label: 'C' },
+  ]
+
+  test('onPick: a tap on a point picks it (after the wait for a second tap); a tap far from any does not; a drag does not; without onPick nothing happens', async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const picked: string[] = []
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, gestures: 'full', onPick: (id) => picked.push(id) })
+    const box = el.children[0]!
+    const [x, y] = dotAt(el, 0)
+    mouseTap(box, x + 5, y - 5)
+    expect(picked).toEqual([]) // not yet: a second tap could follow
+    await wait()
+    expect(picked.length).toBe(1)
+    expect(['place:bethel', 'place:jerusalem']).toContain(picked[0])
+    // the other point, by finger
+    const T = (id: number, a: number, b: number) => ({ identifier: id, clientX: a, clientY: b })
+    const [x1, y1] = dotAt(el, 1)
+    box.fire('touchstart', { touches: [T(1, x1, y1)] })
+    box.fire('touchend', { touches: [], changedTouches: [T(1, x1, y1)] })
+    await wait()
+    expect(picked.length).toBe(2)
+    expect(picked[1]).not.toBe(picked[0])
+    // far from both (30+ px from each dot)
+    mouseTap(box, 5, 5)
+    box.fire('touchstart', { touches: [T(1, 300, 230)] })
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 300, 230)] })
+    await wait()
+    expect(picked.length).toBe(2)
+    // a drag that ends on a point is not a tap
+    box.fire('pointerdown', { pointerId: 1, clientX: x + 40, clientY: y })
+    box.fire('pointermove', { pointerId: 1, clientX: x, clientY: y })
+    box.fire('pointerup', { pointerId: 1, clientX: x, clientY: y })
+    await wait()
+    expect(picked.length).toBe(2)
+    m.destroy()
+    // no onPick: the same tap leaves the view as it was
+    const el2 = new FakeEl('div')
+    const m2 = await mountMap(el2 as any, { ...BASE, gestures: 'full' })
+    const [x2, y2] = dotAt(el2, 0), t0 = layerOf(el2).style.transform, h0 = layerOf(el2).html
+    mouseTap(el2.children[0]!, x2, y2)
+    await wait()
+    expect(layerOf(el2).style.transform).toBe(t0)
+    expect(layerOf(el2).html).toBe(h0)
+    m2.destroy()
+  })
+
+  test('onPick: several points under the tap zoom in on them instead of picking; a double tap goes back to the first view and picks nothing', async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const picked: string[] = []
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, points: CLUSTER, gestures: 'full', onPick: (id) => picked.push(id) })
+    const box = el.children[0]!
+    const s0 = spread(el)
+    expect(dots(layerOf(el).html).length).toBe(3)
+    // (the drawing keeps the two labels apart, so the tap goes between the two dots of the pair)
+    const [x0, y0] = dotAt(el, 0), [x1, y1] = dotAt(el, 1)
+    const x = (x0 + x1) / 2, y = (y0 + y1) / 2
+    mouseTap(box, x, y)
+    await wait()
+    expect(picked).toEqual([])
+    expect(dots(layerOf(el).html).length).toBe(2) // zoomed in (x2.5, centered on the pair): the far point C is off the picture now
+    const [zx, zy] = dotAt(el, 0)
+    // a double tap: first view again, nothing picked
+    mouseTap(box, zx, zy); mouseTap(box, zx, zy)
+    await wait()
+    expect(picked).toEqual([])
+    expect(dots(layerOf(el).html).length).toBe(3)
+    expect(spread(el)).toBeCloseTo(s0, 0)
     m.destroy()
   })
 })

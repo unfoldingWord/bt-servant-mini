@@ -201,10 +201,16 @@ type PlaceIx = {
 type PersonIx = { byName: Map<string, string[]>; byId: Map<string, { name: string; verses: number; note?: string }> }
 const ixs = new Map<string, Promise<PlaceIx | null>>()
 const pixs = new Map<string, Promise<PersonIx | null>>()
+const allCache = new Map<string, Promise<PlaceRef[]>>()
+const bookCache = new Map<string, Promise<PlaceRef[]>>() // key: pack + NUL + book code
+const booksCache = new Map<string, Promise<{ code: string; places: number }[]>>()
 export function resetPlaces() {
   haveCache = null
   ixs.clear()
   pixs.clear()
+  allCache.clear()
+  bookCache.clear()
+  booksCache.clear()
 }
 onPacksChanged(resetPlaces)
 
@@ -504,6 +510,57 @@ export async function placeRefs(pack: string, ids: string[]): Promise<PlaceRef[]
   const ix = await placeIx(pack)
   return ix ? ids.map((id) => ix.byId.get(id)?.ref).filter((r): r is PlaceRef => !!r) : []
 }
+/**
+ * Every place of the pack (ids `lug:`), the most named first (ties by id: the same order on every phone), sorted once per pack.
+ * Not filtered by point: each ref carries `sure`, `lat`, `lon` and `form` for the caller to decide. [] when the pack has no `xtopics`.
+ */
+export function allPlaces(pack: string): Promise<PlaceRef[]> {
+  let p = allCache.get(pack)
+  if (!p) {
+    const made: Promise<PlaceRef[]> = placeIx(pack).then((ix) => {
+      if (!ix) { forget(allCache, pack, made); return [] } // (a failed read is not kept: tried again next time)
+      return [...ix.byId.values()].sort((a, b) => b.verses - a.verses || (a.ref.id < b.ref.id ? -1 : a.ref.id > b.ref.id ? 1 : 0)).map((e) => e.ref)
+    })
+    allCache.set(pack, (p = made))
+  }
+  return p
+}
+/** Drops a cached result made with no index, only if it is still the one cached. */
+function forget<T>(m: Map<string, Promise<T>>, key: string, p: Promise<T>) {
+  if (m.get(key) === p) m.delete(key)
+}
+/** The places named in a book (`code`: its 3-letter code in BOOKS, e.g. 'gen'), in the order of allPlaces; [] for an unknown book. */
+export function placesInBook(pack: string, code: string): Promise<PlaceRef[]> {
+  const key = `${pack} ${code}`
+  let p = bookCache.get(key)
+  if (!p) {
+    let made!: Promise<PlaceRef[]> // (read after the first await, when it is assigned)
+    made = (async () => {
+      const ix = await placeIx(pack)
+      if (!ix) { forget(bookCache, key, made); return [] }
+      if (!BOOKS.includes(code)) return []
+      return (await allPlaces(pack)).filter((r) => (ix.core.occurrences.get(r.id)?.get(code)?.[1] ?? 0) > 0)
+    })()
+    bookCache.set(key, (p = made))
+  }
+  return p
+}
+/** The books that name at least one place, in canonical order, with how many places each names (for the filter by book). */
+export function booksWithPlaces(pack: string): Promise<{ code: string; places: number }[]> {
+  let p = booksCache.get(pack)
+  if (!p) {
+    let made!: Promise<{ code: string; places: number }[]> // (read after the first await, when it is assigned)
+    made = (async () => {
+      const ix = await placeIx(pack)
+      if (!ix) { forget(booksCache, pack, made); return [] }
+      const n = new Map<string, number>()
+      for (const id of ix.byId.keys()) for (const [code, c] of ix.core.occurrences.get(id) ?? []) if (c[1] > 0 && BOOKS.includes(code)) n.set(code, (n.get(code) ?? 0) + 1)
+      return [...n].map(([code, places]) => ({ code, places })).sort((a, b) => BOOKS.indexOf(a.code) - BOOKS.indexOf(b.code))
+    })()
+    booksCache.set(pack, (p = made))
+  }
+  return p
+}
 /** Whether the common of this pack has the `geo` table (§5.5: without it the answers have no distance, no map). */
 export async function hasGeo(pack: string): Promise<boolean> {
   return !!(await placeIx(pack))?.core.geo
@@ -539,4 +596,50 @@ export async function placeNamed(pack: string, name: string, lang: PlaceLang, ki
   if (!ix) return null
   const ids = lookupPlaces(ix, name, lang)
   return ids.length ? pickPlace(ix, ids, kind, last) : null
+}
+
+/** The packs of the list (same order) that have the `geo` table and at least one place with a point; one that cannot be read is left out. */
+export async function placePacks(packs: string[]): Promise<string[]> {
+  const out: string[] = []
+  for (const pack of packs) {
+    try {
+      if (!(await hasGeo(pack))) continue
+      if ((await allPlaces(pack)).some((r) => r.sure >= 1 && r.lat !== undefined && r.lon !== undefined)) out.push(pack)
+    } catch { /* unreadable: left out */ }
+  }
+  return out
+}
+const foldedCache = new WeakMap<PlaceIx, Map<string, string[]>>() // id -> the folded names it is found by (byName turned around)
+function foldedNames(ix: PlaceIx): Map<string, string[]> {
+  let m = foldedCache.get(ix)
+  if (!m) {
+    foldedCache.set(ix, (m = new Map()))
+    for (const [k, ids] of ix.byName) for (const id of ids) { const l = m.get(id); if (l) l.push(k); else m.set(id, [k]) }
+  }
+  return m
+}
+/** Whether the folded name has a word (or, for a longer query, a run of words) that begins with the folded query. */
+function wordStarts(name: string, q: string): boolean {
+  if (name.startsWith(q)) return true
+  for (let i = 1; i < name.length; i++) if (/[\s\-'’]/.test(name[i - 1]!) && name.startsWith(q, i)) return true
+  return false
+}
+/**
+ * The places whose name, or any other name they are found by, has a word beginning with the query (folded like the names), in the order
+ * of allPlaces (the most named first), one row per id, up to `limit`; `more`: there were others. No query: the first `limit`. With
+ * `book` (3-letter code): only the places that book names. A pack that cannot be read gives none and keeps nothing.
+ */
+export async function searchPlaces(pack: string, q: string, limit = 30, book?: string): Promise<{ places: PlaceRef[]; more: boolean }> {
+  const ix = await placeIx(pack)
+  if (!ix) return { places: [], more: false }
+  const list = book ? await placesInBook(pack, book) : await allPlaces(pack)
+  const f = placeFold(q).trim()
+  const names = foldedNames(ix)
+  const places: PlaceRef[] = []
+  for (const r of list) {
+    if (f && !(names.get(r.id) ?? []).some((n) => wordStarts(n, f))) continue
+    if (places.length >= limit) return { places, more: true }
+    places.push(r)
+  }
+  return { places, more: false }
 }

@@ -10,7 +10,7 @@ import {
 import { basemapBytes, onPacksChanged } from './packs'
 
 export type { MapPoint }
-export type MapOpts = { pack: string; points: MapPoint[]; summary: string; ui: string; dir: 'ltr' | 'rtl'; width?: number; height?: number }
+export type MapOpts = { pack: string; points: MapPoint[]; summary: string; ui: string; dir: 'ltr' | 'rtl'; width?: number; height?: number; gestures?: 'chat' | 'full'; onPick?: (id: string) => void } // 'chat': one finger scrolls the page; 'full': one finger moves the map; onPick: a tap on a point (a tap on a cluster zooms in on it first)
 
 /** The map's height rule: three quarters of its width, between 200 and 360 px; a given `height` wins (never below 120). placeview.ts reserves the same box. */
 export const MAP_RATIO = 0.75, MAP_MIN_H = 200, MAP_MAX_H = 360
@@ -123,6 +123,9 @@ function basemapOfPack(pack: string): Promise<Basemap | undefined> {
 const DEFAULT_BBOX: [number, number, number, number] = [800, 2200, 5200, 4300] // the rectangle of the E1 basemap: 8-52 E, 22-43 N
 const HOME_MARGIN = 40
 const STEP = 1.6
+const PICK_R = 24 // px: a tap picks the point this close to it
+const PICK_ZOOM = 2.5 // a tap on several points at once zooms in this much, centered on the nearest
+const PICK_WAIT = 300 // ms: the pick waits for a second tap (a double tap goes back to the first view and picks nothing)
 const LABEL_AIR = 10 // the dot, its gap (6) and a little air, beside the label
 const BUTTON_BOX = { x: 56, y: 4, bottom: 156 } // the buttons' column on the screen: from 56 px off the right edge (8 + 44 + 4), down to 8 + 3 x 44 + 2 x 6 + 4
 const BUTTON_ROOM = 60
@@ -196,9 +199,10 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   let lo = minScale(bbox, w, h)
   const home = (): Frame => { const f = homeFrame(o.points, w, h, measure, o.dir === 'rtl'); return { ...f, scale: clampScale(f.scale, bbox, w, h) } }
 
+  const full = o.gestures === 'full'
   const box = document.createElement('div')
   box.setAttribute('class', 'map-box')
-  box.style.cssText = `position:relative;overflow:hidden;width:100%;height:${h}px;touch-action:pan-x pan-y;user-select:none;-webkit-user-select:none;border-radius:12px;border:1px solid var(--line, #0002);background:${theme.sea}`
+  box.style.cssText = `position:relative;overflow:hidden;width:100%;height:${h}px;touch-action:${full ? 'none' : 'pan-x pan-y'};user-select:none;-webkit-user-select:none;border-radius:12px;border:1px solid var(--line, #0002);background:${theme.sea}`
   const layer = document.createElement('div')
   layer.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform'
   box.appendChild(layer)
@@ -228,9 +232,9 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   hint.textContent = words.hint
   hint.style.cssText = 'position:absolute;left:0;right:0;bottom:0;padding:8px 12px;text-align:center;font:14px/1.3 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.6);pointer-events:none;opacity:0;transition:opacity .2s'
   hint.style.opacity = '0'
-  box.appendChild(hint)
+  if (!full) box.appendChild(hint) // the hint only makes sense when one finger scrolls the page
   let hintTimer: ReturnType<typeof setTimeout> | undefined
-  const showHint = () => { hint.style.opacity = '1'; clearTimeout(hintTimer); hintTimer = setTimeout(() => { hint.style.opacity = '0' }, 1500) }
+  const showHint = () => { if (full) return; hint.style.opacity = '1'; clearTimeout(hintTimer); hintTimer = setTimeout(() => { hint.style.opacity = '0' }, 1500) }
   el.appendChild(box)
 
   let view: Frame = home() // the screen's own frame (w x h); the picture is drawn on this frame grown by m on each side
@@ -269,6 +273,23 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     put()
   }
   const frameAll = () => { view = home(); userMoved = false; draw('map:redraw') }
+  // A tap at (x, y) of the box: the point under it is picked; several under it (a cluster) zoom in on the nearest instead, unless the map cannot zoom more.
+  let pickTimer: ReturnType<typeof setTimeout> | undefined
+  function pickAt(x: number, y: number) {
+    if (dead || !o.onPick) return
+    const f = bigFrame()
+    const near = o.points
+      .map((p) => { const [px, py] = project(f, p.lat, p.lon); const sx = px * s + tx, sy = py * s + ty; return { id: p.id, sx, sy, d: Math.hypot(sx - x, sy - y) } })
+      .filter((c) => c.d < PICK_R)
+      .sort((a, b) => a.d - b.d)
+    const n = near[0]
+    if (!n) return
+    if (near.length > 1 && view.scale * s < MAX_SCALE * 0.999) {
+      tx += w / 2 - n.sx; ty += h / 2 - n.sy
+      zoomAt(PICK_ZOOM, w / 2, h / 2)
+      commit()
+    } else o.onPick(n.id)
+  }
 
   draw('map:first-draw')
   // The basemap is read after the first drawing, never waited for: when it arrives the map is drawn again (a gesture in progress is committed).
@@ -300,6 +321,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
     if (ptr.size === 0) down = { t: Date.now(), x: p[0], y: p[1], cx: e.clientX, cy: e.clientY, moved: false }
     else if (down) down.moved = true
     ptr.set(e.pointerId, p)
+    clearTimeout(pickTimer)
   })
   on(box, 'pointermove', (e: PointerEvent) => {
     if (e.pointerType === 'touch') return
@@ -321,8 +343,9 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   function tapEnd(d: typeof down): boolean {
     if (!d || d.moved || Date.now() - d.t >= 300) return false
     const now = Date.now()
-    if (lastTap && now - lastTap.t < 350 && Math.hypot(d.x - lastTap.x, d.y - lastTap.y) < 30) { lastTap = null; frameAll(); return true }
+    if (lastTap && now - lastTap.t < 350 && Math.hypot(d.x - lastTap.x, d.y - lastTap.y) < 30) { lastTap = null; clearTimeout(pickTimer); frameAll(); return true }
     lastTap = { t: now, x: d.x, y: d.y }
+    if (o.onPick) { const { x, y } = d; clearTimeout(pickTimer); pickTimer = setTimeout(() => pickAt(x, y), PICK_WAIT) }
     return false
   }
   const up = (e: PointerEvent) => {
@@ -338,21 +361,27 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   on(box, 'wheel', (e: WheelEvent) => {
     if (!e.ctrlKey && !e.metaKey) return // a plain wheel scrolls the page
     e.preventDefault()
+    clearTimeout(pickTimer)
     const [x, y] = rel(e)
     zoomAt(Math.exp(-e.deltaY * 0.0015), x, y)
     clearTimeout(pending)
     pending = setTimeout(commit, 150)
   }, { passive: false })
-  // Fingers, from the touch events: one finger scrolls the page (the hint is shown), two pan and pinch the map. The browser may cancel the
+  // Fingers, from the touch events: one finger scrolls the page (the hint is shown; in 'full' it moves the map), two pan and pinch the map. The browser may cancel the
   // first pointer when the scroll starts, so the pointer events are not used for fingers.
   let tpos = new Map<number, [number, number]>()
+  let dragging = false // 'full': one finger has gone past the threshold (or two were down): it follows the finger
   const fingers = (e: TouchEvent) => {
     const r = box.getBoundingClientRect()
     return Array.from(e.touches as ArrayLike<Touch>).map((t) => ({ id: t.identifier, p: [t.clientX - r.left, t.clientY - r.top] as [number, number], c: [t.clientX, t.clientY] as [number, number] }))
   }
   on(box, 'touchstart', (e: TouchEvent) => {
+    clearTimeout(pickTimer)
     const ts = fingers(e)
-    if (ts.length === 1 && !down) down = { t: Date.now(), x: ts[0]!.p[0], y: ts[0]!.p[1], cx: ts[0]!.c[0], cy: ts[0]!.c[1], moved: false }
+    if (full && ts.length >= 2) dragging = true
+    else if (ts.length === 1) dragging = false
+    if (full && ts.length >= 2 && !down) down = { t: Date.now(), x: ts[0]!.p[0], y: ts[0]!.p[1], cx: ts[0]!.c[0], cy: ts[0]!.c[1], moved: true }
+    else if (ts.length === 1 && !down) down = { t: Date.now(), x: ts[0]!.p[0], y: ts[0]!.p[1], cx: ts[0]!.c[0], cy: ts[0]!.c[1], moved: false }
     else if (down) down.moved = true
     tpos = new Map(ts.map((f) => [f.id, f.p]))
   }, { passive: true })
@@ -370,7 +399,17 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
         else put()
       }
       if (down) down.moved = true
+      if (full) dragging = true
     } else if (ts.length === 1 && down) {
+      if (full) {
+        e.preventDefault()
+        const f = ts[0]!
+        // a tap with a tremor does not move the map: it follows the finger once it is 8 px from where it began (the px up to there are not lost)
+        if (!dragging && Math.hypot(f.c[0] - down.cx, f.c[1] - down.cy) <= 8) return
+        dragging = true
+        const p0 = tpos.get(f.id)
+        if (p0) { tx += f.p[0] - p0[0]; ty += f.p[1] - p0[1]; put() }
+      }
       // on the screen, not in the box: when the page scrolls under the finger the box moves with it
       if (Math.hypot(ts[0]!.c[0] - down.cx, ts[0]!.c[1] - down.cy) > 8) { down.moved = true; showHint() }
     }
@@ -398,7 +437,7 @@ export async function mountMap(el: HTMLElement, o: MapOpts): Promise<{ redraw():
   const api = {
     ready,
     redraw() { clearTimeout(pending); if (!dead) { if (s === 1 && tx === -m && ty === -m) draw('map:redraw'); else commit() } },
-    destroy() { dead = true; clearTimeout(pending); clearTimeout(hintTimer); ac.abort(); box.remove() },
+    destroy() { dead = true; clearTimeout(pending); clearTimeout(pickTimer); clearTimeout(hintTimer); ac.abort(); box.remove() },
   }
   return api
 }
