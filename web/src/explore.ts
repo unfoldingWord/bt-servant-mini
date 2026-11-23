@@ -12,6 +12,10 @@ import { bibleLabel, obsLabel, obsPack, OW, type StoryEntry, storyList } from '.
 import { bidiLabel, rtlLang } from './bidi'
 import { type Five, fiveOffered, fiveStories, fiveViewTitle, type ModeId, modeCount, modesFor, modeSub, modeTitle, MT, dataOf, noFive } from './modes'
 import { langName, loadFixture5 } from './pipeline'
+import { peoplePacks, warmKin } from './kin'
+import { renderPeopleTab, renderPerson, resetPeopleTab, stopPeopleTab, updatePeoplePacks } from './explorepeople'
+import type { TreeMode } from './tree'
+import type { Sheet } from './answer'
 import { type Saved5 } from './obs5mstore'
 import { stepPlace } from './obs5m'
 import { W5 } from './obs5mwords'
@@ -137,6 +141,8 @@ export function resetExplore() {
   planned.clear()
   stack.length = 0
   target = false
+  resetPeopleTab()
+  peopleShown = false
 }
 
 // ---------------------------------------------------------------------------------------------------------------- strings
@@ -146,6 +152,10 @@ type S = {
   bookIntro: string; chapter: string; chIntro: string; loading: string; none: string; addLang: string; back: string; close: string
   manuals: Record<Manual, [name: string, about: string]>; inLang: string
   busy: string; failed: string; inPack: string; inOther: string
+  /** the people tab's name, and its provisional text (X1 step 4 draws the list) */
+  people: string; pEmpty: string; pTreeFail: string
+  /** the people tab: the search box, nobody found, more than the rows shown */
+  pSearch: string; pNone: string; pMore: string; pFail: string
 }
 const STR: Record<string, S> = {
   en: {
@@ -155,6 +165,8 @@ const STR: Record<string, S> = {
     addLang: 'Add a language', back: 'Back', close: 'Close', inLang: 'in {lang}',
     busy: 'An answer is on its way: tap again when it is here.', failed: 'This book could not be read on this phone.',
     inPack: 'In {lang}', inOther: 'In {lang} (no {first} helps for these books yet)',
+    people: 'People', pEmpty: 'The data has no family for this person.', pTreeFail: 'The family tree could not be read on this phone.',
+    pSearch: 'Search a name', pNone: 'Nobody with that name.', pMore: 'Keep typing to narrow it down.', pFail: 'The people could not be read on this phone.',
     manuals: {
       intro: ['Introduction', 'What Translation Academy is and how to use it'],
       process: ['Process', 'How a translation project goes, step by step'],
@@ -169,6 +181,8 @@ const STR: Record<string, S> = {
     addLang: 'Agregar un idioma', back: 'Atrás', close: 'Cerrar', inLang: 'en {lang}',
     busy: 'Ya viene una respuesta: toca de nuevo cuando llegue.', failed: 'Este libro no se pudo leer en este teléfono.',
     inPack: 'En {lang}', inOther: 'En {lang} (todavía no hay ayudas en {first} para estos libros)',
+    people: 'Personas', pEmpty: 'Los datos no tienen familia de esta persona.', pTreeFail: 'No se pudo leer el árbol de familia en este teléfono.',
+    pSearch: 'Buscar un nombre', pNone: 'Nadie con ese nombre.', pMore: 'Sigue escribiendo para afinar.', pFail: 'No se pudo leer a las personas en este teléfono.',
     manuals: {
       intro: ['Introducción', 'Qué es Translation Academy y cómo usarla'],
       process: ['Proceso', 'Cómo avanza un proyecto de traducción, paso a paso'],
@@ -183,6 +197,8 @@ const STR: Record<string, S> = {
     addLang: 'Ajouter une langue', back: 'Retour', close: 'Fermer', inLang: 'en {lang}',
     busy: 'Une réponse arrive : touchez à nouveau quand elle sera là.', failed: "Ce livre n'a pas pu être lu sur ce téléphone.",
     inPack: 'En {lang}', inOther: "En {lang} (pas encore d'aides en {first} pour ces livres)",
+    people: 'Personnes', pEmpty: "Les données n'ont pas de famille pour cette personne.", pTreeFail: "L'arbre généalogique n'a pas pu être lu sur ce téléphone.",
+    pSearch: 'Chercher un nom', pNone: 'Personne ne porte ce nom.', pMore: 'Continuez à écrire pour affiner.', pFail: "Les personnes n'ont pas pu être lues sur ce téléphone.",
     manuals: {
       intro: ['Introduction', "Ce qu'est Translation Academy et comment l'utiliser"],
       process: ['Processus', "Comment se déroule un projet de traduction, étape par étape"],
@@ -197,6 +213,8 @@ const STR: Record<string, S> = {
     addLang: 'Tambah bahasa', back: 'Kembali', close: 'Tutup', inLang: 'dalam {lang}',
     busy: 'Jawaban sedang datang: ketuk lagi setelah jawaban muncul.', failed: 'Kitab ini tidak dapat dibaca di ponsel ini.',
     inPack: 'Dalam {lang}', inOther: 'Dalam {lang} (belum ada bahan bantu {first} untuk kitab-kitab ini)',
+    people: 'Orang', pEmpty: 'Data tidak memiliki keluarga untuk orang ini.', pTreeFail: 'Pohon keluarga tidak dapat dibaca di ponsel ini.',
+    pSearch: 'Cari nama', pNone: 'Tidak ada yang bernama itu.', pMore: 'Teruslah mengetik untuk mempersempit.', pFail: 'Daftar orang tidak dapat dibaca di ponsel ini.',
     manuals: {
       intro: ['Pengantar', 'Apa itu Translation Academy dan cara memakainya'],
       process: ['Proses', 'Jalannya proyek penerjemahan, langkah demi langkah'],
@@ -211,6 +229,8 @@ const STR: Record<string, S> = {
     addLang: 'भाषा जोड़ें', back: 'वापस', close: 'बंद करें', inLang: '{lang} में',
     busy: 'एक उत्तर आ रहा है: उसके आने पर फिर से टैप करें।', failed: 'यह पुस्तक इस फ़ोन पर पढ़ी नहीं जा सकी।',
     inPack: '{lang} में', inOther: '{lang} में (इन पुस्तकों के लिए अभी {first} सहायता नहीं है)',
+    people: 'लोग', pEmpty: 'इस व्यक्ति के लिए डेटा में परिवार नहीं है।', pTreeFail: 'इस फ़ोन पर वंश-वृक्ष पढ़ा नहीं जा सका।', // pending native review
+    pSearch: 'नाम खोजें', pNone: 'इस नाम का कोई व्यक्ति नहीं मिला।', pMore: 'सीमित करने के लिए लिखते रहें।', pFail: 'इस फ़ोन पर लोगों की सूची पढ़ी नहीं जा सकी।', // pending native review
     manuals: {
       intro: ['परिचय', 'Translation Academy क्या है और इसका उपयोग कैसे करें'],
       process: ['प्रक्रिया', 'अनुवाद परियोजना कैसे चलती है, कदम दर कदम'],
@@ -225,6 +245,8 @@ const STR: Record<string, S> = {
     addLang: 'إضافة لغة', back: 'رجوع', close: 'إغلاق', inLang: 'بـ{lang}',
     busy: 'هناك إجابة في الطريق: انقر مجددًا عندما تصل.', failed: 'تعذّرت قراءة هذا السفر على هذا الهاتف.',
     inPack: 'بـ{lang}', inOther: 'بـ{lang} (لا توجد بعد مساعدات بـ{first} لهذه الأسفار)',
+    people: 'أشخاص', pEmpty: 'لا تتضمن البيانات عائلة لهذا الشخص.', pTreeFail: 'تعذّرت قراءة شجرة العائلة على هذا الهاتف.', // pending native review
+    pSearch: 'ابحث عن اسم', pNone: 'لا أحد بهذا الاسم.', pMore: 'تابع الكتابة لتضييق النتائج.', pFail: 'تعذّرت قراءة قائمة الأشخاص على هذا الهاتف.', // pending native review
     manuals: {
       intro: ['مقدمة', 'ما هي Translation Academy وكيف تستخدمها'],
       process: ['العملية', 'كيف يسير مشروع الترجمة خطوة بخطوة'],
@@ -247,6 +269,8 @@ export type ExploreHooks = {
   packName: (lang: string) => string
   /** ask the chat for this (no typing, no model); false when it cannot now (an answer is on its way, the app is locked) */
   ask: (label: string, q: Ask) => boolean
+  /** run a sheet in the current conversation as a tap would (`runSheet`); false when it cannot now (an answer is on its way, the app is locked) and Browse stays open */
+  run: (label: string, sheet: Sheet) => boolean
   /** no language on the phone: to where one is added */
   addLang: () => void
   /** the Saved view (savedview.ts), over Browse */
@@ -267,7 +291,11 @@ export function setExploreHooks(h: ExploreHooks) {
 }
 
 type View =
-  | { k: 'home'; tab: 'bible' | 'academy' }
+  /** `sub`: the subtab of the people tab ('places' joins it in X2; with one of the two there is none) */
+  | { k: 'home'; tab: 'bible' | 'academy' | 'people'; sub?: 'people' | 'places' }
+  /** a person's tree, inside Browse (explorepeople.ts) */
+  /** `name`: the name the row showed (a person whose own name is raw is shown by an alias: the title until the tree says it) */
+  | { k: 'person'; pack: string; id: string; mode: TreeMode; name?: string }
   | { k: 'book'; code: string; lang: string }
   | { k: 'chapter'; code: string; lang: string; ch: number }
   | { k: 'manual'; m: Manual; lang: string }
@@ -354,6 +382,9 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer'): boolea
   const b = ensure()
   opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
   if (!stack.length) stack.push({ k: 'home', tab: 'bible' })
+  prunePeople() // closeExplore keeps the stack: a pack may have gone since
+  peopleShown = false // (a new opening counts the tab again; Back from a person does not)
+  warmFamily()
   b.root.classList.add('open')
   b.root.focus({ preventScroll: true })
   draw()
@@ -400,10 +431,53 @@ export function closeExplore(refocus = true) {
   opener = null
   if (refocus && to?.isConnected) to.focus({ preventScroll: true })
 }
-/** 5M came or went: Browse's home, its list of modes and the 5M view on screen are drawn again (the 5M view pops itself when the stories are gone). */
+/** Browse is open with nothing on its stack (a change of packs emptied it, resetExplore): the screen is the old one until it is drawn again. */
+export const exploreStale = (): boolean => exploreOpen() && !stack.length
+/** 5M came or went: Browse's home, its list of modes and the 5M view on screen are drawn again (the 5M view pops itself when the stories are gone); a person's view is not (only its pack going takes it off the stack). */
 export function redrawExplore(): void {
+  if (!exploreOpen()) return
+  if (!stack.length) stack.push({ k: 'home', tab: 'bible' }) // a change of packs empties it (resetExplore)
+  warmFamily()
+  const was = stack[stack.length - 1]
+  prunePeople()
   const v = stack[stack.length - 1]
-  if (exploreOpen() && v && (v.k === 'home' || v.k === 'modes' || v.k === 'obs5m')) void draw()
+  // (a person's view is drawn again only when what was on top of it went: its pack was removed)
+  if (v && (v.k === 'home' || v.k === 'modes' || v.k === 'obs5m' || (v.k === 'person' && v !== was))) void draw()
+}
+let peopleShown = false // the people tab is on screen (counted once when it opens, not at each redraw)
+let drawnPeople = '' // the packs with people the home was last drawn with
+let drawnTab = '' // the tab it shows
+/**
+ * An index of people was built (kin.ts onKinReady). Nothing on screen changes unless the packs with people are not the ones the home
+ * was drawn with (a null index, or one built under another view, draws nothing: no scroll lost). Then: on the people tab, the packs
+ * are added to the list in place (the box, its text and its focus stay); on Bible or Academy, the home is drawn again only when the
+ * people tab appears or goes (some packs with people, or none).
+ */
+export function kinReadyExplore(): void {
+  if (!exploreOpen() || !hooks) return
+  const v = stack[stack.length - 1]
+  if (v?.k !== 'home') return
+  const now = peoplePacks(hooks.packs())
+  if (now.join() === drawnPeople) return
+  const toggled = !drawnPeople !== !now.length
+  drawnPeople = now.join()
+  if (toggled) void draw()
+  else if (drawnTab === 'people') updatePeoplePacks(now)
+}
+/** The people index of the packs on the phone, at idle (kin.ts; built ones are kept, so repeating it costs nothing): the people tab shows when one is built (onKinReady → kinReadyExplore). */
+function warmFamily() {
+  const p = hooks?.packs() ?? []
+  if (p.length) warmKin(p)
+}
+/** The views of a person whose pack is no longer on the phone leave the stack (as the 5M view does); the home stays. True when something left. */
+function prunePeople(): boolean {
+  const have = hooks?.packs() ?? []
+  const keep = stack.filter((x) => x.k !== 'person' || have.includes(x.pack))
+  if (keep.length === stack.length) return false
+  stack.length = 0
+  stack.push(...keep)
+  if (!stack.length) stack.push({ k: 'home', tab: 'bible' })
+  return true
 }
 export const exploreOpen = () => !!box?.root.classList.contains('open')
 /** Android's back: one step back in Browse, or closes it. False when it is not open. */
@@ -432,6 +506,19 @@ function reachedHelp() {
     reached = true
     count('explore.session')
   }
+}
+/** Opens a person's view on top of Browse (the people tab's rows call it, X1 step 4); the stack keeps it, Back takes it off. */
+export function openPerson(pack: string, id: string, mode: TreeMode = 'tree', name?: string) {
+  count('explore.people.person')
+  stack.push({ k: 'person', pack, id, mode, ...(name ? { name } : {}) })
+  void draw()
+}
+/** A sheet run in the current conversation (the person view's buttons that leave Browse, X1 step 4): as `ask`, the hook says when it cannot now. */
+export function runInChat(label: string, sheet: Sheet) {
+  if (!hooks?.run(label, sheet)) return busyNote()
+  count('explore.people.toChat')
+  reachedHelp()
+  closeExplore()
 }
 function ask(label: string, q: Ask) {
   if (!hooks?.ask(label, q)) return busyNote()
@@ -528,6 +615,7 @@ async function draw() {
   const name = (lang: string) => hooks!.packName(lang)
 
   if (v.k !== 'chapter') picking = false
+  stopPeopleTab() // the people tab's debounce and late lines are void with any new drawing
   if (v.k === 'home') {
     b.title.textContent = s.browse
     // saved items and notes, one tap away (savedview.ts)
@@ -540,6 +628,8 @@ async function draw() {
     }
     if (!packs.length) {
       if (!done()) return
+      drawnPeople = ''
+      drawnTab = ''
       b.body.appendChild(el('p', 'ex-note', s.none))
       b.body.appendChild(button('ex-pill', s.addLang, () => { closeExplore(); hooks?.addLang() }))
       return
@@ -552,19 +642,41 @@ async function draw() {
       b.body.appendChild(el('h4', 'ex-sub', MT(ui).section))
       b.body.appendChild(modeRows(ui, modes, five))
     }
-    // the two halves as tabs; one alone needs none
-    if (books.length && manuals.length) {
+    // the tabs the phone has data for (people: only when a pack's people index is built already, kin.ts); one alone needs no bar.
+    // (X2: with places too, the people tab is "People and places" and gets its subtabs; with only the people it is "People" alone)
+    const avail: ('bible' | 'academy' | 'people')[] = []
+    if (books.length) avail.push('bible')
+    if (manuals.length) avail.push('academy')
+    drawnPeople = peoplePacks(packs).join()
+    if (drawnPeople) avail.push('people')
+    // the one chosen, else the first there is (the chosen one went: its pack was removed)
+    const tab = avail.includes(v.tab) ? v.tab : avail[0] ?? 'bible'
+    if (avail.length && tab !== v.tab) v.tab = tab // it stays there (it does not jump back to a tab that reappears alone)
+    drawnTab = tab
+    if (avail.length > 1) {
       const tabs = el('div', 'ex-tabs')
       tabs.setAttribute('role', 'tablist')
-      for (const [k, label] of [['bible', s.bible], ['academy', s.academy]] as const) {
-        const t = button(v.tab === k ? 'on' : '', label, () => { v.tab = k; draw() })
+      const names = { bible: s.bible, academy: s.academy, people: s.people }
+      for (const k of avail) {
+        const t = button(tab === k ? 'on' : '', names[k], () => { v.tab = k; draw() })
         t.setAttribute('role', 'tab')
-        t.setAttribute('aria-selected', String(v.tab === k))
+        t.setAttribute('aria-selected', String(tab === k))
         tabs.appendChild(t)
       }
       b.body.appendChild(tabs)
     }
-    const tab = !manuals.length ? 'bible' : !books.length ? 'academy' : v.tab
+    if (tab !== 'people') peopleShown = false
+    else {
+      if (!peopleShown) {
+        peopleShown = true
+        count('explore.people.open')
+      }
+      renderPeopleTab(b.body, {
+        ui, packs: peoplePacks(packs), name, chevron: () => chevron('ex-row-c'), onOpen: (pack, id, name) => openPerson(pack, id, 'tree', name),
+        text: { search: s.pSearch, none: s.pNone, more: s.pMore, fail: s.pFail, loading: s.loading, inLang: s.inLang },
+      })
+      return
+    }
     if (tab === 'bible') {
       // Open Bible Stories, when a pack on the phone has them: the 50 stories, one tap each (obs.ts)
       if (stories) {
@@ -601,6 +713,24 @@ async function draw() {
       }
       b.body.appendChild(list)
     }
+    return
+  }
+
+  if (v.k === 'person') {
+    // its pack went with this view still in the stack: back to what is behind it
+    if (!packs.includes(v.pack)) {
+      if (!prunePeople()) stack.pop()
+      return draw()
+    }
+    b.title.textContent = s.people
+    renderPerson(b.body, v, {
+      ui,
+      text: { loading: s.loading, fail: s.pTreeFail, empty: s.pEmpty },
+      hint: v.name,
+      setTitle: (n) => { if (mine === drawing) b.title.textContent = n },
+      onOpen: (pack, id, mode) => openPerson(pack, id, mode),
+      onChat: (label, sheet) => runInChat(label, sheet),
+    })
     return
   }
 
