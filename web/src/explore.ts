@@ -14,6 +14,9 @@ import { type Five, fiveOffered, fiveStories, fiveViewTitle, type ModeId, modeCo
 import { langName, loadFixture5 } from './pipeline'
 import { peoplePacks, warmKin } from './kin'
 import { renderPeopleTab, renderPerson, resetPeopleTab, stopPeopleTab, updatePeoplePacks } from './explorepeople'
+import { placePacks } from './places'
+import { sweepMaps } from './placeview'
+import { lugaresBusy, renderLugaresTab, renderPlace, resetLugaresTab, stopLugaresTab } from './explorelugares'
 import type { TreeMode } from './tree'
 import type { Sheet } from './answer'
 import { type Saved5 } from './obs5mstore'
@@ -142,7 +145,13 @@ export function resetExplore() {
   stack.length = 0
   target = false
   resetPeopleTab()
+  resetLugaresTab()
   peopleShown = false
+  placesShown = false
+  placesGen++
+  pendingTabs = false
+  placesKey = ''
+  placesNow = []
 }
 
 // ---------------------------------------------------------------------------------------------------------------- strings
@@ -156,6 +165,14 @@ type S = {
   people: string; pEmpty: string; pTreeFail: string
   /** the people tab: the search box, nobody found, more than the rows shown */
   pSearch: string; pNone: string; pMore: string; pFail: string
+  /** the places tab alone ("Places"), and with the people ("People and places": its subtabs are `people` and `places`) */
+  places: string; peoplePlaces: string
+  /** the places tab: the search box, no place found, more than the rows shown, all books, the book filter's label, the places could not be read, the map's text ({n} places) */
+  lSearch: string; lNone: string; lMore: string; lAll: string; lBook: string; lFail: string; lMap: string
+  /** the place view: the card could not be read; the data is sure of where the place is */
+  lCardFail: string; lSure: string
+  /** said to the screen reader after a search or a filter ({n} places) */
+  lCount: string
 }
 const STR: Record<string, S> = {
   en: {
@@ -167,6 +184,9 @@ const STR: Record<string, S> = {
     inPack: 'In {lang}', inOther: 'In {lang} (no {first} helps for these books yet)',
     people: 'People', pEmpty: 'The data has no family for this person.', pTreeFail: 'The family tree could not be read on this phone.',
     pSearch: 'Search a name', pNone: 'Nobody with that name.', pMore: 'Keep typing to narrow it down.', pFail: 'The people could not be read on this phone.',
+    places: 'Places', peoplePlaces: 'People and places', lSearch: 'Search a place', lNone: 'No place with that name.', lMore: 'Keep typing to narrow it down.',
+    lAll: 'All books', lBook: 'Book', lFail: 'The places could not be read on this phone.', lMap: 'Map of places ({n})',
+    lCardFail: 'This place could not be read on this phone.', lSure: 'Known location', lCount: 'Places found: {n}',
     manuals: {
       intro: ['Introduction', 'What Translation Academy is and how to use it'],
       process: ['Process', 'How a translation project goes, step by step'],
@@ -183,6 +203,9 @@ const STR: Record<string, S> = {
     inPack: 'En {lang}', inOther: 'En {lang} (todavía no hay ayudas en {first} para estos libros)',
     people: 'Personas', pEmpty: 'Los datos no tienen familia de esta persona.', pTreeFail: 'No se pudo leer el árbol de familia en este teléfono.',
     pSearch: 'Buscar un nombre', pNone: 'Nadie con ese nombre.', pMore: 'Sigue escribiendo para afinar.', pFail: 'No se pudo leer a las personas en este teléfono.',
+    places: 'Lugares', peoplePlaces: 'Personas y lugares', lSearch: 'Buscar un lugar', lNone: 'Ningún lugar con ese nombre.', lMore: 'Sigue escribiendo para afinar.',
+    lAll: 'Todos los libros', lBook: 'Libro', lFail: 'No se pudieron leer los lugares en este teléfono.', lMap: 'Mapa de lugares ({n})',
+    lCardFail: 'No se pudo leer este lugar en este teléfono.', lSure: 'Ubicación conocida', lCount: 'Lugares encontrados: {n}',
     manuals: {
       intro: ['Introducción', 'Qué es Translation Academy y cómo usarla'],
       process: ['Proceso', 'Cómo avanza un proyecto de traducción, paso a paso'],
@@ -199,6 +222,9 @@ const STR: Record<string, S> = {
     inPack: 'En {lang}', inOther: "En {lang} (pas encore d'aides en {first} pour ces livres)",
     people: 'Personnes', pEmpty: "Les données n'ont pas de famille pour cette personne.", pTreeFail: "L'arbre généalogique n'a pas pu être lu sur ce téléphone.",
     pSearch: 'Chercher un nom', pNone: 'Personne ne porte ce nom.', pMore: 'Continuez à écrire pour affiner.', pFail: "Les personnes n'ont pas pu être lues sur ce téléphone.",
+    places: 'Lieux', peoplePlaces: 'Personnes et lieux', lSearch: 'Chercher un lieu', lNone: 'Aucun lieu ne porte ce nom.', lMore: 'Continuez à écrire pour affiner.',
+    lAll: 'Tous les livres', lBook: 'Livre', lFail: "Les lieux n'ont pas pu être lus sur ce téléphone.", lMap: 'Carte des lieux ({n})',
+    lCardFail: "Ce lieu n'a pas pu être lu sur ce téléphone.", lSure: 'Emplacement connu', lCount: 'Lieux trouvés : {n}',
     manuals: {
       intro: ['Introduction', "Ce qu'est Translation Academy et comment l'utiliser"],
       process: ['Processus', "Comment se déroule un projet de traduction, étape par étape"],
@@ -215,6 +241,9 @@ const STR: Record<string, S> = {
     inPack: 'Dalam {lang}', inOther: 'Dalam {lang} (belum ada bahan bantu {first} untuk kitab-kitab ini)',
     people: 'Orang', pEmpty: 'Data tidak memiliki keluarga untuk orang ini.', pTreeFail: 'Pohon keluarga tidak dapat dibaca di ponsel ini.',
     pSearch: 'Cari nama', pNone: 'Tidak ada yang bernama itu.', pMore: 'Teruslah mengetik untuk mempersempit.', pFail: 'Daftar orang tidak dapat dibaca di ponsel ini.',
+    places: 'Tempat', peoplePlaces: 'Orang dan tempat', lSearch: 'Cari tempat', lNone: 'Tidak ada tempat dengan nama itu.', lMore: 'Teruslah mengetik untuk mempersempit.',
+    lAll: 'Semua kitab', lBook: 'Kitab', lFail: 'Daftar tempat tidak dapat dibaca di ponsel ini.', lMap: 'Peta tempat ({n})',
+    lCardFail: 'Tempat ini tidak dapat dibaca di ponsel ini.', lSure: 'Lokasi diketahui', lCount: 'Tempat ditemukan: {n}',
     manuals: {
       intro: ['Pengantar', 'Apa itu Translation Academy dan cara memakainya'],
       process: ['Proses', 'Jalannya proyek penerjemahan, langkah demi langkah'],
@@ -231,6 +260,9 @@ const STR: Record<string, S> = {
     inPack: '{lang} में', inOther: '{lang} में (इन पुस्तकों के लिए अभी {first} सहायता नहीं है)',
     people: 'लोग', pEmpty: 'इस व्यक्ति के लिए डेटा में परिवार नहीं है।', pTreeFail: 'इस फ़ोन पर वंश-वृक्ष पढ़ा नहीं जा सका।', // pending native review
     pSearch: 'नाम खोजें', pNone: 'इस नाम का कोई व्यक्ति नहीं मिला।', pMore: 'सीमित करने के लिए लिखते रहें।', pFail: 'इस फ़ोन पर लोगों की सूची पढ़ी नहीं जा सकी।', // pending native review
+    places: 'स्थान', peoplePlaces: 'लोग और स्थान', lSearch: 'स्थान खोजें', lNone: 'इस नाम का कोई स्थान नहीं मिला।', lMore: 'सीमित करने के लिए लिखते रहें।', // pending native review
+    lAll: 'सभी पुस्तकें', lBook: 'पुस्तक', lFail: 'इस फ़ोन पर स्थानों की सूची पढ़ी नहीं जा सकी।', lMap: 'स्थानों का नक्शा ({n})', // pending native review
+    lCardFail: 'इस फ़ोन पर यह स्थान पढ़ा नहीं जा सका।', lSure: 'ठिकाना ज्ञात', lCount: 'मिले स्थान: {n}', // pending native review
     manuals: {
       intro: ['परिचय', 'Translation Academy क्या है और इसका उपयोग कैसे करें'],
       process: ['प्रक्रिया', 'अनुवाद परियोजना कैसे चलती है, कदम दर कदम'],
@@ -247,6 +279,9 @@ const STR: Record<string, S> = {
     inPack: 'بـ{lang}', inOther: 'بـ{lang} (لا توجد بعد مساعدات بـ{first} لهذه الأسفار)',
     people: 'أشخاص', pEmpty: 'لا تتضمن البيانات عائلة لهذا الشخص.', pTreeFail: 'تعذّرت قراءة شجرة العائلة على هذا الهاتف.', // pending native review
     pSearch: 'ابحث عن اسم', pNone: 'لا أحد بهذا الاسم.', pMore: 'تابع الكتابة لتضييق النتائج.', pFail: 'تعذّرت قراءة قائمة الأشخاص على هذا الهاتف.', // pending native review
+    places: 'أماكن', peoplePlaces: 'أشخاص وأماكن', lSearch: 'ابحث عن مكان', lNone: 'لا مكان بهذا الاسم.', lMore: 'تابع الكتابة لتضييق النتائج.', // pending native review
+    lAll: 'كل الأسفار', lBook: 'السفر', lFail: 'تعذّرت قراءة قائمة الأماكن على هذا الهاتف.', lMap: 'خريطة الأماكن ({n})', // pending native review
+    lCardFail: 'تعذّرت قراءة هذا المكان على هذا الهاتف.', lSure: 'موقع معروف', lCount: 'عدد الأماكن: {n}', // pending native review
     manuals: {
       intro: ['مقدمة', 'ما هي Translation Academy وكيف تستخدمها'],
       process: ['العملية', 'كيف يسير مشروع الترجمة خطوة بخطوة'],
@@ -291,11 +326,13 @@ export function setExploreHooks(h: ExploreHooks) {
 }
 
 type View =
-  /** `sub`: the subtab of the people tab ('places' joins it in X2; with one of the two there is none) */
-  | { k: 'home'; tab: 'bible' | 'academy' | 'people'; sub?: 'people' | 'places' }
+  /** `sub`: the subtab of the people tab (with people and places both there is "People and places" with its two subtabs; with one of them there are none) */
+  | { k: 'home'; tab: 'bible' | 'academy' | 'people'; sub?: 'people' | 'places'; scroll?: number }
   /** a person's tree, inside Browse (explorepeople.ts) */
   /** `name`: the name the row showed (a person whose own name is raw is shown by an alias: the title until the tree says it) */
   | { k: 'person'; pack: string; id: string; mode: TreeMode; name?: string }
+  /** a place's card, inside Browse (explorelugares.ts); `name`: the name the row (or the map point) showed */
+  | { k: 'place'; pack: string; id: string; name?: string }
   | { k: 'book'; code: string; lang: string }
   | { k: 'chapter'; code: string; lang: string; ch: number }
   | { k: 'manual'; m: Manual; lang: string }
@@ -384,6 +421,7 @@ export function openExplore(from: 'bar' | 'menu' | 'welcome' | 'answer'): boolea
   if (!stack.length) stack.push({ k: 'home', tab: 'bible' })
   prunePeople() // closeExplore keeps the stack: a pack may have gone since
   peopleShown = false // (a new opening counts the tab again; Back from a person does not)
+  placesShown = false
   warmFamily()
   b.root.classList.add('open')
   b.root.focus({ preventScroll: true })
@@ -427,6 +465,13 @@ export function closeExplore(refocus = true) {
   if (target && (top?.k === 'modes' || top?.k === 'obs5m')) stack.length = 0
   target = false
   box.root.classList.remove('open')
+  drawing++ // a drawing still waiting for its reads does not paint, mount or time anything on a closed Browse
+  pendingTabs = false // (opening draws the home again with what is known)
+  // nothing of the people or places tab or of a card's small map stays alive behind a closed Browse (its maps, its debounce, its resize); opening draws again
+  stopPeopleTab()
+  stopLugaresTab()
+  box.body.replaceChildren()
+  sweepMaps()
   const to = opener
   opener = null
   if (refocus && to?.isConnected) to.focus({ preventScroll: true })
@@ -441,12 +486,72 @@ export function redrawExplore(): void {
   const was = stack[stack.length - 1]
   prunePeople()
   const v = stack[stack.length - 1]
-  // (a person's view is drawn again only when what was on top of it went: its pack was removed)
-  if (v && (v.k === 'home' || v.k === 'modes' || v.k === 'obs5m' || (v.k === 'person' && v !== was))) void draw()
+  // (a person's or a place's view is drawn again only when what was on top of it went: its pack was removed)
+  if (v && (v.k === 'home' || v.k === 'modes' || v.k === 'obs5m' || ((v.k === 'person' || v.k === 'place') && v !== was))) void draw()
 }
 let peopleShown = false // the people tab is on screen (counted once when it opens, not at each redraw)
+let placesShown = false // the places subtab (or tab) is on screen (counted once when it opens)
+let drawnPlaces = '' // the packs with places the home was last drawn with (placePacks; read at each drawing of the home, kept per set of packs by places.ts)
 let drawnPeople = '' // the packs with people the home was last drawn with
 let drawnTab = '' // the tab it shows
+let drawnSub = '' // and, on the people tab, its subtab
+// The first pack with places (placePacks reads one pack at a time and stops at the first that has any), found in the background: the home is drawn
+// with what is known (nothing, for packs not read yet) and drawn again when the answer changes what the tab shows. Kept for the list of packs it
+// was read for; a new reading starts at each opening and at each change of packs, and the old answer is shown meanwhile.
+/**
+ * A box or a select of the home has the focus, or its places tab has a search going. A background answer that only adds or renames a tab (the
+ * places read, the people indexed) does not draw the home again then (that would empty the box, take its focus away and drop the map): it is
+ * left in `pendingTabs` and the next drawing of the home, which reads what is known, shows it. (A page that is only scrolled is drawn again.)
+ */
+function homeBlocked(): boolean {
+  const body = box?.body
+  if (!body) return false
+  if (drawnTab === 'people' && drawnSub === 'places' && lugaresBusy()) return true
+  const a = document.activeElement as HTMLElement | null
+  return !!a && body.contains(a) && (a.tagName === 'INPUT' || a.tagName === 'SELECT')
+}
+let pendingTabs = false // a change of tabs was held back by homeBlocked: the next drawing has it (no timer, nothing to retry on its own)
+/** The home drawn again by a background answer: the page keeps the place it was scrolled to (the bar of tabs that joins it adds height above). */
+function redrawHome() {
+  const body = box?.body
+  const top = body?.scrollTop ?? 0
+  const p = draw()
+  const mine = drawing // (draw counts itself before its first wait)
+  void p.then(() => { if (top > 0 && body && exploreOpen() && drawing === mine && stack[stack.length - 1]?.k === 'home') body.scrollTop = top })
+}
+/** A background answer changed what the tabs show: drawn again now, or held until the next drawing when the home is being used. */
+function tabsChanged() {
+  if (homeBlocked()) pendingTabs = true
+  else redrawHome()
+}
+let placesKey = ''
+let placesNow: string[] = []
+let placesGen = 0
+/** The packs with places for this list of packs: the answer when it has come, else (a change of packs, being read) the last one for the packs still there. */
+const placesOf = (packs: string[]): string[] => (placesKey === packs.join() ? placesNow : placesNow.filter((p) => packs.includes(p)))
+/** The reading of the places for this list of packs has come (a tab or subtab chosen is not moved away while it is pending). */
+const placesKnown = (packs: string[]): boolean => placesKey === packs.join()
+function warmPlaces() {
+  const packs = hooks?.packs() ?? []
+  if (!packs.length) return
+  const key = packs.join()
+  const mine = ++placesGen
+  const run = async () => {
+    let found: string[] = []
+    for (const p of packs) {
+      found = await placePacks([p]).catch(() => [] as string[])
+      if (found.length) break
+    }
+    if (mine !== placesGen) return
+    placesKey = key
+    placesNow = found
+    if (!exploreOpen() || stack[stack.length - 1]?.k !== 'home' || found.join() === drawnPlaces) return
+    tabsChanged() // (drawnPlaces is the home's own: it changes only when the home is drawn)
+  }
+  const idle = (globalThis as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback
+  if (typeof idle === 'function') idle(() => void run(), { timeout: 1500 })
+  else setTimeout(() => void run(), 0)
+}
 /**
  * An index of people was built (kin.ts onKinReady). Nothing on screen changes unless the packs with people are not the ones the home
  * was drawn with (a null index, or one built under another view, draws nothing: no scroll lost). Then: on the people tab, the packs
@@ -460,19 +565,21 @@ export function kinReadyExplore(): void {
   const now = peoplePacks(hooks.packs())
   if (now.join() === drawnPeople) return
   const toggled = !drawnPeople !== !now.length
+  // (drawnPeople is the home's own: a drawing sets it; held back, it stays as it was so the next answer finds the change still to show)
+  if (toggled) return tabsChanged()
   drawnPeople = now.join()
-  if (toggled) void draw()
-  else if (drawnTab === 'people') updatePeoplePacks(now)
+  if (drawnTab === 'people') updatePeoplePacks(now)
 }
 /** The people index of the packs on the phone, at idle (kin.ts; built ones are kept, so repeating it costs nothing): the people tab shows when one is built (onKinReady → kinReadyExplore). */
 function warmFamily() {
   const p = hooks?.packs() ?? []
   if (p.length) warmKin(p)
+  warmPlaces()
 }
-/** The views of a person whose pack is no longer on the phone leave the stack (as the 5M view does); the home stays. True when something left. */
+/** The views of a person or a place whose pack is no longer on the phone leave the stack (as the 5M view does); the home stays. True when something left. */
 function prunePeople(): boolean {
   const have = hooks?.packs() ?? []
-  const keep = stack.filter((x) => x.k !== 'person' || have.includes(x.pack))
+  const keep = stack.filter((x) => (x.k !== 'person' && x.k !== 'place') || have.includes(x.pack))
   if (keep.length === stack.length) return false
   stack.length = 0
   stack.push(...keep)
@@ -513,10 +620,23 @@ export function openPerson(pack: string, id: string, mode: TreeMode = 'tree', na
   stack.push({ k: 'person', pack, id, mode, ...(name ? { name } : {}) })
   void draw()
 }
-/** A sheet run in the current conversation (the person view's buttons that leave Browse, X1 step 4): as `ask`, the hook says when it cannot now. */
-export function runInChat(label: string, sheet: Sheet) {
+/** Tests: the maps of the places tab and of a place's card are drawn by this (the page's own drawing when none). */
+let mapMount: Parameters<typeof renderLugaresTab>[1]['mount']
+export function setExploreMapMount(f?: typeof mapMount) {
+  mapMount = f
+}
+/** Opens a place's card on top of Browse (a row or a point of the places tab); the stack keeps it, Back takes it off. */
+export function openPlace(pack: string, id: string, name?: string) {
+  count('explore.places.place')
+  const top = stack[stack.length - 1]
+  if (top?.k === 'home') top.scroll = ensure().body.scrollTop // Back finds the list where it was
+  stack.push({ k: 'place', pack, id, ...(name ? { name } : {}) })
+  void draw()
+}
+/** A sheet run in the current conversation (the person and place views' buttons that leave Browse): as `ask`, the hook says when it cannot now. `from`: whose view counts it. */
+export function runInChat(label: string, sheet: Sheet, from: 'people' | 'places' = 'people') {
   if (!hooks?.run(label, sheet)) return busyNote()
-  count('explore.people.toChat')
+  count(`explore.${from}.toChat`)
   reachedHelp()
   closeExplore()
 }
@@ -615,7 +735,9 @@ async function draw() {
   const name = (lang: string) => hooks!.packName(lang)
 
   if (v.k !== 'chapter') picking = false
+  pendingTabs = false // (this drawing reads everything known: a change held back shows now)
   stopPeopleTab() // the people tab's debounce and late lines are void with any new drawing
+  stopLugaresTab() // and the places tab's (its map is destroyed)
   if (v.k === 'home') {
     b.title.textContent = s.browse
     // saved items and notes, one tap away (savedview.ts)
@@ -629,12 +751,14 @@ async function draw() {
     if (!packs.length) {
       if (!done()) return
       drawnPeople = ''
+      drawnPlaces = ''
       drawnTab = ''
       b.body.appendChild(el('p', 'ex-note', s.none))
       b.body.appendChild(button('ex-pill', s.addLang, () => { closeExplore(); hooks?.addLang() }))
       return
     }
     const [books, manuals, stories, five] = await Promise.all([bibleBooks(packs), academyManuals(packs), obsPack(packs[0]!).catch(() => null), fiveStories(packs).catch(noFive)])
+    const withPlaces = placesOf(packs)
     if (!done()) return
     // the guided modes the phone can run, before the tabs so they show with either tab (modes.ts: a mode that lacks what it needs is not there)
     const modes = modesFor(dataOf(books.length, manuals.length, five))
@@ -648,15 +772,17 @@ async function draw() {
     if (books.length) avail.push('bible')
     if (manuals.length) avail.push('academy')
     drawnPeople = peoplePacks(packs).join()
-    if (drawnPeople) avail.push('people')
+    drawnPlaces = withPlaces.join()
+    const peopleOn = !!drawnPeople, placesOn = !!drawnPlaces
+    if (peopleOn || placesOn) avail.push('people')
     // the one chosen, else the first there is (the chosen one went: its pack was removed)
     const tab = avail.includes(v.tab) ? v.tab : avail[0] ?? 'bible'
-    if (avail.length && tab !== v.tab) v.tab = tab // it stays there (it does not jump back to a tab that reappears alone)
+    if (avail.length && tab !== v.tab && placesKnown(packs)) v.tab = tab // it stays there (it does not jump back to a tab that reappears alone)
     drawnTab = tab
     if (avail.length > 1) {
       const tabs = el('div', 'ex-tabs')
       tabs.setAttribute('role', 'tablist')
-      const names = { bible: s.bible, academy: s.academy, people: s.people }
+      const names = { bible: s.bible, academy: s.academy, people: peopleOn && placesOn ? s.peoplePlaces : placesOn ? s.places : s.people }
       for (const k of avail) {
         const t = button(tab === k ? 'on' : '', names[k], () => { v.tab = k; draw() })
         t.setAttribute('role', 'tab')
@@ -665,8 +791,38 @@ async function draw() {
       }
       b.body.appendChild(tabs)
     }
-    if (tab !== 'people') peopleShown = false
-    else {
+    // the people tab's subtab: with both there are two (the one chosen, else People); with one of them, that one and no bar
+    const both = peopleOn && placesOn
+    const sub: 'people' | 'places' = both ? (v.sub === 'places' ? 'places' : 'people') : placesOn ? 'places' : 'people'
+    drawnSub = tab === 'people' ? sub : ''
+    if (v.sub && !both && v.sub !== sub && placesKnown(packs)) v.sub = sub // (the one chosen went: it stays on what is there, as the tab does)
+    if (tab === 'people' && both) {
+      const bar = el('div', 'ex-subtabs')
+      bar.setAttribute('role', 'tablist')
+      for (const k of ['people', 'places'] as const) {
+        const t = button(sub === k ? 'on' : '', k === 'people' ? s.people : s.places, () => { v.sub = k; draw() })
+        t.setAttribute('role', 'tab')
+        t.setAttribute('aria-selected', String(sub === k))
+        bar.appendChild(t)
+      }
+      b.body.appendChild(bar)
+    }
+    if (tab !== 'people' || sub !== 'people') peopleShown = false
+    if (tab !== 'people' || sub !== 'places') placesShown = false
+    if (tab === 'people') {
+      if (sub === 'places') {
+        if (!placesShown) {
+          placesShown = true
+          count('explore.places.open')
+        }
+        const scroll = v.scroll
+        v.scroll = undefined
+        renderLugaresTab(b.body, {
+          scroll, ui, packs: withPlaces, chevron: () => chevron('ex-row-c'), onOpen: (pack, id, name) => openPlace(pack, id, name), mount: mapMount,
+          text: { search: s.lSearch, none: s.lNone, more: s.lMore, fail: s.lFail, loading: s.loading, book: s.lBook, allBooks: s.lAll, mapSum: s.lMap, count: s.lCount },
+        })
+        return
+      }
       if (!peopleShown) {
         peopleShown = true
         count('explore.people.open')
@@ -717,6 +873,7 @@ async function draw() {
   }
 
   if (v.k === 'person') {
+    done() // (nothing here waits: no "Opening…" of this drawing comes after the view is painted)
     // its pack went with this view still in the stack: back to what is behind it
     if (!packs.includes(v.pack)) {
       if (!prunePeople()) stack.pop()
@@ -730,6 +887,24 @@ async function draw() {
       setTitle: (n) => { if (mine === drawing) b.title.textContent = n },
       onOpen: (pack, id, mode) => openPerson(pack, id, mode),
       onChat: (label, sheet) => runInChat(label, sheet),
+    })
+    return
+  }
+
+  if (v.k === 'place') {
+    done() // (as the person's view)
+    // its pack went with this view still in the stack: back to what is behind it
+    if (!packs.includes(v.pack)) {
+      if (!prunePeople()) stack.pop()
+      return draw()
+    }
+    b.title.textContent = s.places
+    renderPlace(b.body, v, {
+      ui,
+      text: { loading: s.loading, fail: s.lCardFail, sure: s.lSure },
+      hint: v.name,
+      setTitle: (n) => { if (mine === drawing) b.title.textContent = n },
+      onChat: (label, sheet) => runInChat(label, sheet, 'places'), mount: mapMount,
     })
     return
   }

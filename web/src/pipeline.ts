@@ -2571,8 +2571,8 @@ export function placeSheetOf(ask: PlaceAsk, names: string[]): Sheet {
 }
 
 /** What a place answer shows next to its map, and the tags that say how sure a place is (a color alone never says it). */
-const tagOf = (t: ReturnType<typeof PLT>, p: PlaceRef, geo: boolean): string => (p.sure === 0 ? (geo ? t.tagUnknown : '') : p.form === 2 ? t.tagRegion : p.form === 3 ? t.tagWater : p.sure === 1 ? t.tagUncertain : '')
-const mapPoint = (p: PlaceRef): MapPoint | null =>
+export const tagOf = (t: ReturnType<typeof PLT>, p: PlaceRef, geo: boolean): string => (p.sure === 0 ? (geo ? t.tagUnknown : '') : p.form === 2 ? t.tagRegion : p.form === 3 ? t.tagWater : p.sure === 1 ? t.tagUncertain : '')
+export const mapPoint = (p: PlaceRef): MapPoint | null =>
   p.sure >= 1 && p.lat !== undefined && p.lon !== undefined ? { id: p.id, lat: p.lat, lon: p.lon, sure: p.sure as 1 | 2 | 3, form: p.form, label: p.name } : null
 const listOf = (ui: string, head: string, ps: { p: PlaceRef; ref?: string; tag?: string }[], geo = true): PlaceList =>
   ({ head, items: ps.map(({ p, ref, tag }) => ({ text: p.name, ...(tag || tagOf(PLT(ui), p, geo) ? { tag: tag || tagOf(PLT(ui), p, geo) } : {}), ...(p.note ? { note: p.note } : {}), ...(ref ? { ref } : {}) })) })
@@ -2782,6 +2782,60 @@ async function placeAnswer(x: Ctx): Promise<Done> {
   const follow: Follow[] = [...others, ...first, ...appears, ...(tw ? [tw] : []), ...eventsBtn(events.length), ...cardBtn]
   const info = [...lines, plain.length ? plain.join(', ') : '', placeCredit(ui, sources, !!map)].filter(Boolean).join('\n\n')
   return done({ info, follow, ...(map ? { map } : {}), list, meta: meta(`${kind} ${place.id}${ref ? ` near ${ref.id}` : ''}${tr ? `: ${Math.round(tr.km)} km` : ''}`) }, { concept: place.id })
+}
+
+/** What a place's card in Browse shows (explorelugares.ts): the data and the sheets of the place answer, read once. A passage with no pack for its book has no `sheet`. */
+export type PlaceCard = {
+  place: PlaceRef
+  /** the name with its note, as the title */
+  title: string
+  /** how sure the place is, in words (empty when it is sure) */
+  tag: string
+  /** the mini map (none without a point) */
+  map?: MapBlock
+  count: number
+  verses: { label: string; sheet?: Sheet }[]
+  events: { title: string; label?: string; sheet?: Sheet }[]
+  eventCount: number
+  /** the buttons that answer in the chat */
+  buttons: { kind: 'card' | 'happened' | 'verses' | 'article'; label: string; sheet: Sheet }[]
+  /** the credit line of the data, plain text */
+  credit: string
+}
+/** The card of one place for Browse (placeAnswer's data: the first 8 verses, the first 5 events, the chat buttons); null when it is no place. */
+export async function placeCard(pack: string, ui: string, id: string): Promise<PlaceCard | null> {
+  const place = (await placeRefs(pack, [id]))[0]
+  if (!place) return null
+  const t = PLT(ui)
+  const geo = await hasGeo(pack)
+  const [data, vs] = await Promise.all([placeData(pack, id).catch(() => null), placeVerses(pack, id).catch(() => [] as number[])])
+  const base = { id: '', intent: 'place', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: pack } as Sheet
+  const passage = async (r: { ref: string; book: string }): Promise<Sheet | undefined> => {
+    const pk = r.book ? await packWithBook(r.book, pack).catch(() => null) : null
+    return pk ? passageSheet(base, r.ref, ['text', 'notes'], pk) : undefined
+  }
+  const count = Math.max(data?.verses ?? 0, vs.length)
+  const verses: PlaceCard['verses'] = []
+  for (const v of vs.slice(0, 8)) {
+    const r = verseRefOf(ui, v)
+    verses.push({ label: r.label, sheet: await passage(r) })
+  }
+  const evs = data?.events ?? []
+  const events: PlaceCard['events'] = []
+  for (const e of evs.slice(0, 5)) {
+    const p = await eventPassage(pack, ui, e.id)
+    events.push({ title: e.title || e.id, ...(p ? { label: p.label, sheet: await passage(p) } : {}) })
+  }
+  const map = geo ? mapOf(ui, pack, [place], t.sumPlace.replace('{x}', place.name), true) : undefined
+  const buttons: PlaceCard['buttons'] = [{ kind: 'card', label: withName(ui, t.card, place.name), sheet: placeSheet(base, ['card'], { concept: id, term: place.name }) }]
+  if (evs.length) buttons.push({ kind: 'happened', label: t.happenedQ, sheet: placeSheet(base, ['happened'], { concept: id, term: place.name }) })
+  if (count > 1) buttons.push({ kind: 'verses', label: t.appears.replace('{n}', String(count)), sheet: placeSheet(base, ['verses'], { concept: id, term: place.name }) })
+  const tw = data?.tw.length ? await twStep(base, data.tw[0]!).catch(() => null) : null
+  if (tw) buttons.push({ kind: 'article', label: withName(ui, KT(ui).article, tw.label), sheet: tw.sheet! })
+  return {
+    place, title: place.note ? `${place.name} (${place.note})` : place.name, tag: tagOf(t, place, geo), ...(map ? { map } : {}), count, verses, events, eventCount: evs.length, buttons,
+    credit: placeCredit(ui, data?.sources ?? [], !!map).replace(/^\*|\*$/g, ''),
+  }
 }
 
 /** Under a passage or a frame of Open Bible Stories: «Ver en el mapa», when the data names places in it that have a point (the same room as hereStep). */

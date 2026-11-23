@@ -534,7 +534,8 @@ export function placesInBook(pack: string, code: string): Promise<PlaceRef[]> {
   const key = `${pack} ${code}`
   let p = bookCache.get(key)
   if (!p) {
-    const made: Promise<PlaceRef[]> = (async () => {
+    let made!: Promise<PlaceRef[]> // (read after the first await, when it is assigned)
+    made = (async () => {
       const ix = await placeIx(pack)
       if (!ix) { forget(bookCache, key, made); return [] }
       if (!BOOKS.includes(code)) return []
@@ -548,7 +549,8 @@ export function placesInBook(pack: string, code: string): Promise<PlaceRef[]> {
 export function booksWithPlaces(pack: string): Promise<{ code: string; places: number }[]> {
   let p = booksCache.get(pack)
   if (!p) {
-    const made: Promise<{ code: string; places: number }[]> = (async () => {
+    let made!: Promise<{ code: string; places: number }[]> // (read after the first await, when it is assigned)
+    made = (async () => {
       const ix = await placeIx(pack)
       if (!ix) { forget(booksCache, pack, made); return [] }
       const n = new Map<string, number>()

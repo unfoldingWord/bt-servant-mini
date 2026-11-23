@@ -499,11 +499,24 @@
   .ex-body { flex: 1; overflow-y: auto; padding: 8px 16px 24px; max-width: 760px; width: 100%; margin: 0 auto; font: 15px/1.4 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
   .ex-body h3 { font: 600 12px/1.3 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 18px 0 8px; }
   .ex-note { color: var(--muted); margin: 16px 0; }
-  .ex-psearch { display: block; width: 100%; box-sizing: border-box; min-height: 48px; padding: 8px 14px; margin: 6px 0 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); font: 16px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", "Noto Naskh Arabic", sans-serif; }
-  .ex-psearch:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ex-psearch, .ex-lsearch { display: block; width: 100%; box-sizing: border-box; min-height: 48px; padding: 8px 14px; margin: 6px 0 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); font: 16px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", "Noto Naskh Arabic", sans-serif; }
+  .ex-psearch:focus, .ex-lsearch:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .ex-tabs { display: flex; gap: 6px; margin: 4px 0 6px; position: sticky; top: -8px; background: var(--bg); padding: 8px 0; z-index: 1; }
   .ex-tabs button { flex: 1; min-height: 44px; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; font: 600 14.5px/1.2 system-ui, sans-serif; padding: 8px 10px; cursor: pointer; }
   .ex-tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ex-subtabs { display: flex; gap: 6px; margin: 2px 0 6px; }
+  .ex-lstatus { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .ex-subtabs button { flex: 1; min-height: 44px; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; font: 600 14px/1.2 system-ui, sans-serif; padding: 6px 10px; cursor: pointer; }
+  .ex-subtabs button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+  .ex-lbookrow { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; font: 600 14px/1.2 system-ui, sans-serif; color: var(--muted); }
+  .ex-lbook { flex: 1; min-height: 44px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); font: 16px/1.3 system-ui, sans-serif; }
+  .ex-lmap { margin: 4px 0 10px; }
+  .ex-ptag { margin: 6px 0; font-weight: 600; color: var(--muted); }
+  .ex-pevent { margin: 8px 0; }
+  .ex-plink { border: 0; background: transparent; color: var(--accent); font: inherit; text-decoration: underline; padding: 8px 4px; min-height: 44px; cursor: pointer; }
+  .ex-row-plain { padding: 10px 4px; margin: 0; color: var(--muted); }
+  .ex-pbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 6px; }
+  .ex-place-card p.credit { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: 10px 0 0; }
   .ex-books { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
   .ex-books button { text-align: start; min-height: 48px; padding: 8px 12px;
     border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); font: inherit; font-weight: 500; cursor: pointer; }
