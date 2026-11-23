@@ -15,8 +15,24 @@
 <body>
 <h1 style="font-size:17px">Map bench (dev APK only)</h1>
 <div id="status">running...</div>
+<div id="hold" hidden>
+  <p><a href="../index.html">Volver al chat</a></p>
+  <p><b>Prueba de gestos.</b> Un dedo desplaza la página. Dos dedos mueven el mapa; separar o juntar los dos dedos hace zoom.</p>
+  <div id="readout" style="position:sticky;top:0;z-index:5;background:#ffe;border:1px solid #cc9;padding:4px;font:12px monospace">...</div>
+  <div id="fill1"></div>
+</div>
 <div id="stage"></div>
+<div id="fill2" hidden></div>
 <div id="out"></div>
+<script>
+// hold mode: filler so the page really scrolls (the map sits right after the first block, near the first screen)
+if (new URLSearchParams(location.search).get('hold') === '1') {
+  var f = function (n) { var h = ''; for (var i = 1; i <= n; i++) h += '<p>Texto de relleno ' + i + ': el desplazamiento de la página debe seguir funcionando con un dedo.</p>'; return h }
+  document.getElementById('hold').hidden = false
+  document.getElementById('fill1').innerHTML = f(3)
+  var b = document.getElementById('fill2'); b.hidden = false; b.innerHTML = f(60)
+}
+</script>
 <script src="./maps-bench.js"></script>
 </body>
 </html>

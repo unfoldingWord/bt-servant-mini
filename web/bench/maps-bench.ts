@@ -133,4 +133,26 @@ async function run() {
     document.body.setAttribute('data-done', '1')
   }
 }
-;(window as any).__mapBench = run()
+;// ?hold=1: a manual gesture view, no speed run and no window.__mapBench. The real mountMap stays on screen (200-point scene) between filler
+// text, so a person can check on a phone that one finger scrolls the page and two fingers move and zoom the map.
+async function hold() {
+  bytes = basemapBytes()
+  setBasemapSource(async () => bytes)
+  const stage = document.getElementById('stage')!
+  document.getElementById('status')!.textContent = ''
+  const scene = scenes().find((x) => x.points.length === 200) ?? scenes()[1]!
+  const width = Math.min(W, Math.max(200, document.documentElement.clientWidth - 16))
+  const host = document.createElement('div')
+  stage.style.width = width + 'px'
+  stage.appendChild(host)
+  await mountMap(host, { pack: 'bench', points: scene.points, summary: scene.title, ui: 'es', dir: 'ltr' as const, width })
+  const out = document.getElementById('readout')!
+  const tick = () => {
+    const layer = host.querySelector('div[style*="will-change"]') as HTMLElement | null // mapview's picture layer: translate(..) scale(..)
+    out.textContent = `scrollY ${Math.round(window.scrollY)} | mapa ${layer?.style.transform || '(sin transform)'} | puntos ${scene.points.length}`
+  }
+  tick()
+  setInterval(tick, 150)
+}
+if (new URLSearchParams(location.search).get('hold') === '1') void hold().catch((e) => { document.getElementById('status')!.textContent = 'error: ' + String((e as any)?.stack ?? e) })
+else (window as any).__mapBench = run()
