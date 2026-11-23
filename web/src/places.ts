@@ -4,7 +4,7 @@
 // `born-in`, `place` relations, the verses of each topic; the language's `places` names). Built like kin.ts:
 //   - placeShape: the syntax only, and the phrases that are never a place question ("¿dónde está escrito…?", "¿dónde está Dios?").
 //   - placeQuestion: resolves the names. The route is taken only if every name is what the question asks (a place; for born / died,
-//     a person). Homonyms: the passage read, region against city, the ten-times rule, else a choice.
+//     a person with a `born-in` / `died-in` place: without one the question goes on to the verse search). Homonyms: the passage read, region against city, the ten-times rule, else a choice.
 //   - placesAt (verse → places), placeVerses, personVerses, placeData, referenceFor: the data of an answer, for pipeline.ts.
 // Nothing new is stored: the index of all places and the birth / death place of a person are built here, in memory. E1 of tc-study
 // gives the client no index of places and no person → place query; they may move there later (decided in E2, see the encargo).
@@ -20,7 +20,7 @@ export type PlaceLang = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 export type PlaceShape = { kind: PlaceKind; names: string[]; lang: PlaceLang }
 export type PlaceAsk = {
   kind: PlaceKind; ui: PlaceLang; pack: string
-  /** the places resolved, in the order of the question (born / died: the place, if the data has one); [] when `choose` is set */
+  /** the places resolved, in the order of the question (born / died: always the place the data gives); [] when `choose` is set */
   places: PlaceRef[]
   person?: { id: string; name: string }
   /** a name with several places (or, for born / died, several people: their `id` is then `per:…`, with a point-less ref) and no winner: ask */
@@ -354,7 +354,8 @@ function placeOfPerson(core: XtopicsCore, person: string, type: 'born-in' | 'die
 }
 
 /**
- * A place question, resolved (§5.2): null when it has not the shape, or a name is no place (for born / died: no person), or there is
+ * A place question, resolved (§5.2): null when it has not the shape, or a name is no place (for born / died: no person, or no person
+ * of the name with a `born-in` / `died-in` place: the verse search answers; the first pack that knows the name as a person decides), or there is
  * no `xtopics` (§5.5): the question goes on as today. `last`: the passage the conversation is on ("gen 25:26"), for a name several
  * places have. Without `geo` the route is taken just the same (the places have `sure` 0).
  */
@@ -372,7 +373,12 @@ export async function placeQuestion(q: string, nav: string, last: string | null)
       let ids: string[] = []
       for (const k of variants(s.names[0]!, s.lang)) if ((ids = pix.byName.get(k) ?? []).length) break
       if (!ids.length) continue
-      const sorted = [...ids].sort((a, b) => pix.byId.get(b)!.verses - pix.byId.get(a)!.verses || (a < b ? -1 : 1))
+      // (born / died: only the people the data gives a place for count; none: not a place question, and no later pack answers for
+      // another person of the name; several: the ten-times rule and the choice among those alone)
+      const key = s.kind === 'born' ? 'born-in' : 'died-in'
+      const withPlace = ids.filter((id) => { const at = placeOfPerson(ix.core, id, key); return !!(at && ix.byId.get(at)) })
+      if (!withPlace.length) return null
+      const sorted = [...withPlace].sort((a, b) => pix.byId.get(b)!.verses - pix.byId.get(a)!.verses || (a < b ? -1 : 1))
       const [a, b] = [pix.byId.get(sorted[0]!)!.verses, pix.byId.get(sorted[1] ?? '')?.verses ?? 0]
       if (sorted.length > 1 && !(a > 0 && a >= 10 * b)) {
         // (several people of the name, none far more named: ask; their refs carry no point)
@@ -381,11 +387,7 @@ export async function placeQuestion(q: string, nav: string, last: string | null)
       }
       const id = sorted[0]!
       ask.person = { id, name: pix.byId.get(id)!.name }
-      const at = placeOfPerson(ix.core, id, s.kind === 'born' ? 'born-in' : 'died-in')
-      const entry = at ? ix.byId.get(at) : undefined
-      // (the data has no born-in / died-in for this person: not a place question, it goes on to the verse search)
-      if (!entry) continue
-      ask.places = [entry.ref]
+      ask.places = [ix.byId.get(placeOfPerson(ix.core, id, key)!)!.ref]
       return ask
     }
     // every name is resolved first: a name that is no place fails this pack before any choice is asked

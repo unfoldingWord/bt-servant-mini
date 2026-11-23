@@ -587,6 +587,21 @@ describe('corrección 1', () => {
     expect((await ask('Where was Jesus born?', 'en')).route).toBe('search')
   })
 
+  test('11. «Where did Paul die?»: with a `died-in` relation the place answer; «Where did Saul die?»: with none, the verse search, with content', async () => {
+    try {
+      useWorld({ ...W, relations: [...(W.relations ?? []), { from: 'per:paul', to: 'lug:jerusalem', type: 'died-in' }] })
+      const yes = await ask('Where did Paul die?', 'en')
+      expect(yes.route).toBe('place')
+      expect(yes.reply.info).toMatch(/died in Jerus/)
+      const no = await ask('Where did Saul die?', 'en')
+      expect(no.route).toBe('search')
+      expect(no.answered).not.toBe('place')
+      expect(no.reply.info ?? '').not.toMatch(/do not say where/)
+      // (not an empty reply: the search offers passages to read)
+      expect((no.reply.follow ?? []).some((f) => f.sheet?.intent === 'passage')).toBe(true)
+    } finally { useWorld(W) }
+  }, 60000)
+
   // ------------------------------------------------------------------------------ the page: the map is mounted when seen
   class FakeIO {
     static all: FakeIO[] = []

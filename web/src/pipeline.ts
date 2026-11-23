@@ -2656,6 +2656,7 @@ async function placeAnswer(x: Ctx): Promise<Done> {
     const name = askedName(sheet.term, pp.person.name)
     const line = (kind === 'born' ? bornLine : diedLine)(ui, name, pp.place, female)
     const personCard: Follow = { label: name, sheet: kinSheet({ ...sheet, lang: pack }, 'who', { concept: pp.person.id }) }
+    // (placeQuestion no longer takes born / died without a place; this is only for a button made earlier, or a data change since)
     if (!pp.place) {
       return done({ info: [line, placeCredit(ui, [TIPNR_THEO], false)].join('\n\n'), follow: [personCard], meta: meta(`${kind} ${pp.person.id}: no place in the data`) },
         { concept: pp.person.id })
