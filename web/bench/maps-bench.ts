@@ -140,16 +140,25 @@ async function hold() {
   setBasemapSource(async () => bytes)
   const stage = document.getElementById('stage')!
   document.getElementById('status')!.textContent = ''
-  const scene = scenes().find((x) => x.points.length === 200) ?? scenes()[1]!
+  const scene = scenes().find((x) => x.id === 'c-cluster') // the heavy scene the bench judges redraw on; no fallback
+  if (!scene) throw new Error('scene c-cluster not found in bench/scenes.ts')
   const width = Math.min(W, Math.max(200, document.documentElement.clientWidth - 16))
   const host = document.createElement('div')
   stage.style.width = width + 'px'
   stage.appendChild(host)
   await mountMap(host, { pack: 'bench', points: scene.points, summary: scene.title, ui: 'es', dir: 'ltr' as const, width })
   const out = document.getElementById('readout')!
+  document.getElementById('npoints')!.textContent = String(scene.points.length)
+  const layer = host.querySelector('div[style*="will-change"]') as HTMLElement | null // mapview's picture layer: translate(..) scale(..)
+  const rest = layer?.style.transform ?? '' // the transform at mount = rest; it returns to it when the fingers lift
+  let moved = 0, maxScale = 1, last = '-'
+  const scaleOf = (t: string) => Number(/scale\(([-\d.e]+)/.exec(t)?.[1]) || 1
+  if (layer) new MutationObserver(() => { // every change, so a short pinch is not missed between polls
+    const t = layer.style.transform
+    if (t !== rest) { moved++; last = t; maxScale = Math.max(maxScale, scaleOf(t)) }
+  }).observe(layer, { attributes: true, attributeFilter: ['style'] })
   const tick = () => {
-    const layer = host.querySelector('div[style*="will-change"]') as HTMLElement | null // mapview's picture layer: translate(..) scale(..)
-    out.textContent = `scrollY ${Math.round(window.scrollY)} | mapa ${layer?.style.transform || '(sin transform)'} | puntos ${scene.points.length}`
+    out.textContent = `scrollY ${Math.round(window.scrollY)} | puntos ${scene.points.length} | mapa ahora ${layer?.style.transform || '(sin capa)'} | cambios ${moved} | escala max ${maxScale.toFixed(2)} | ultimo ${last}`
   }
   tick()
   setInterval(tick, 150)
