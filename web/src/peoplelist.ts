@@ -84,7 +84,7 @@ export async function findPeople(packs: string[], query: string): Promise<People
 }
 
 /** The line under a person's name when it is not enough (the same name as another row): how they are tied to someone known ("hijo de Isaac"), else how many verses name them. */
-export async function tieLine(ui: string, row: Pick<PersonRow, 'pack' | 'id' | 'gender' | 'verses'>): Promise<string> {
+export async function tieLine(ui: string, row: Pick<PersonRow, 'id' | 'gender' | 'verses'> & { pack: string }): Promise<string> {
   const ties = await tiesOfPerson(row.pack, row.id).catch(() => [] as Tie[])
   const names = new Map<string, string>()
   for (const x of ties.flatMap((t) => t.ids)) {
