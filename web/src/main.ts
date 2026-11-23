@@ -12,7 +12,7 @@ import { resetMacula } from './macula'
 import { addUnits, aquiferOn, installedLangs, onPacksChanged, openLang, patchedKinds, setAquifer, setPacksServers, setYaapi, updateLangs, yaapiOn, type PatchKind } from './packs'
 import { aquiferMenu, yaapiMenu } from './aquifer'
 import { PREVIEW_SERVER } from './shared'
-import { isCreditLine, warmKin } from './kin'
+import { isCreditLine, onKinReady, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
 import { renderMacula } from './syntaxview'
@@ -35,7 +35,7 @@ import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './grap
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
 import { FU, languagePicker, packFor, emptyLine, quickSpec, quickTap } from './firstuse'
-import { backExplore, closeExplore, modesOn, openExplore, openExploreAt, redrawExplore, resetExplore, setExploreHooks, XT } from './explore'
+import { backExplore, closeExplore, exploreStale, kinReadyExplore, modesOn, openExplore, openExploreAt, redrawExplore, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
 import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHooks } from './howto'
@@ -1554,6 +1554,11 @@ setExploreHooks({
     runSheet(label, { ...bare(q.lang), intent: q.intent, ref: q.ref ?? null, what: q.what ?? [], concept: q.concept ?? null }, nav)
     return true
   },
+  run: (label, sheet) => {
+    if (busy || locked()) return false
+    runSheet(label, sheet, nav)
+    return true
+  },
   addLang: () => {
     panelView = 'resources'
     panel.classList.add('show')
@@ -2121,7 +2126,10 @@ function refreshInstalled() {
   void patchedKinds().then((p) => { PATCHED = p })
   return installedLangs().then((ls) => {
     const had = packsKnown ? INSTALLED.length > 0 : null
+    const same = ls.join() === INSTALLED.join()
     INSTALLED = ls
+    // Browse follows a new list; the same list draws nothing (the scroll stays), unless a change of packs emptied its stack (resetExplore): then its home
+    if (!same || exploreStale()) redrawExplore()
     packsKnown = true
     $('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · ')
     // from no language to one (a download here or in the menu, a .tcpack file): the light build without a model offers it once
@@ -2146,6 +2154,8 @@ onPacksChanged(() => {
   resetMacula()
   refreshInstalled().then(() => cmp.reset())
 })
+// Browse's people tab: drawn again when the packs with people change (kin.ts tells when an index is built). The packs changing is drawn again from refreshInstalled, once INSTALLED is the new list (resetExplore above emptied the stack)
+onKinReady(kinReadyExplore)
 setReady()
 // usage counts (only if turned on): this opening, and the days that ended go out when there is internet
 setSnapshot(() => ({

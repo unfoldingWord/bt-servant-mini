@@ -2281,7 +2281,12 @@ async function storySteps(base: Sheet, id: string, n = 2): Promise<Follow[]> {
 const personLabel = (p: { name: string; note?: string }) => (p.note ? `${p.name} — ${p.note}` : p.name)
 const halfOf = (ui: string, r: Relative) => (r.half ? ` (${KT(ui).half[r.gender === 2 ? 1 : 0]})` : '')
 /** The credit line under a family answer: TIPNR, and ACAI when the packs have it. */
-const creditLine = (ui: string, sources: string[]) => `*${KT(ui).credit.replace('{src}', sources.map((s) => SOURCE_NAMES[s] ?? s).join(ui === 'ar' ? '، ' : ', '))}*`
+export const creditLine = (ui: string, sources: string[]) => `*${KT(ui).credit.replace('{src}', sources.map((s) => SOURCE_NAMES[s] ?? s).join(ui === 'ar' ? '، ' : ', '))}*`
+/** The credit line of a person's family data as a tree answer has it (the sources the data names, else TIPNR), without the italics: Browse's person view. */
+export async function familyCredit(pack: string, ui: string, id: string): Promise<string> {
+  const sources = (await familyOf(pack, id).catch(() => null))?.data?.sources ?? ['STEPBible/STEPBible-Data/TIPNR']
+  return creditLine(ui, sources).replace(/^\*|\*$/g, '')
+}
 /** The family can be shown without its verses: the parts were not read. In a language the person added, the way to download them. */
 async function partsStep(base: Sheet, ui: string, missing: boolean): Promise<Follow[]> {
   if (!missing || (await origin(base.lang).catch(() => null)) !== 'added') return []
@@ -2376,25 +2381,34 @@ export function treeWords(ui: string, v?: TreeView): TreeWords {
 export const treeStep = (base: Sheet, ui: string, kind: 'tree' | 'up', id: string, name: string): Follow =>
   ({ label: withName(ui, KT(ui)[kind], name), sheet: kinSheet(base, kind, { concept: id }) })
 
+/** One button of the bar under a name in a tree, with what it is (Explore stacks a person view for `person`, `tree` and `up`, with `id`). */
+export type TreeBarItem = { kind: 'person' | 'tree' | 'up' | 'verse' | 'story'; id?: string; follow: Followup }
+
 /**
  * The bar under a tapped name in a tree (diseno-arboles.md §4.5): the person (article or card), the other view of the tree, the verse of
  * the tie with the person they hang from (`fromId`), and their first Open Bible Stories story. `focus`: the tree's centre.
+ * `treeBarItems` says what each button is (`kind`; `id` is the person it is about, none for a verse or a story); `treeBar` gives the chat the buttons alone.
  */
-export async function treeBar(base: Sheet, ui: string, id: string, fromId: string | null, view: TreeMode, focus: string): Promise<Followup[]> {
+export async function treeBarItems(base: Sheet, ui: string, id: string, fromId: string | null, view: TreeMode, focus: string): Promise<TreeBarItem[]> {
   const p = await personOf(base.lang, id).catch(() => null)
   const raw = p?.name ?? ''
   // (a person the data names no real name for, «Unnamed#9», `a_wife_of_Lot`: «(sin nombre)», as the tree shows it)
   const name = !raw || /^Unnamed#/i.test(raw) || raw.includes('_') ? KT(ui).unnamed : await shownAs(base.lang, id, raw).catch(() => raw)
-  const out: Followup[] = [await personStep(base, id, name)]
-  out.push(treeStep(base, ui, view === 'tree' && id === focus ? 'up' : 'tree', id, name))
+  const out: TreeBarItem[] = [{ kind: 'person', id, follow: await personStep(base, id, name) }]
+  const other = view === 'tree' && id === focus ? 'up' : 'tree'
+  out.push({ kind: other, id, follow: treeStep(base, ui, other, id, name) })
   if (fromId) {
     const fam = (await familyOf(base.lang, id).catch(() => null))?.data
     const rel = fam ? [...fam.parents, ...fam.children, ...fam.partners, ...fam.siblings].find((r) => r.id === fromId) : null
     const pair = rel?.verses[0]
-    if (pair) out.push(...(await pairSteps(base, ui, [pair], [], base)).slice(0, 1))
+    if (pair) out.push(...(await pairSteps(base, ui, [pair], [], base)).slice(0, 1).map((follow): TreeBarItem => ({ kind: 'verse', follow })))
   }
-  out.push(...(await storySteps(base, id, 1)))
+  out.push(...(await storySteps(base, id, 1)).map((follow): TreeBarItem => ({ kind: 'story', follow })))
   return out
+}
+
+export async function treeBar(base: Sheet, ui: string, id: string, fromId: string | null, view: TreeMode, focus: string): Promise<Followup[]> {
+  return (await treeBarItems(base, ui, id, fromId, view, focus)).map((i) => i.follow)
 }
 
 async function kinAnswer(x: Ctx): Promise<Done> {

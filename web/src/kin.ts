@@ -248,6 +248,12 @@ type PeopleIx = { byName: Map<string, string[]>; byId: Map<string, PersonEntry> 
 const ixs = new Map<string, Promise<PeopleIx | null>>()
 /** The indexes already built, for the synchronous kinKnown. */
 const ready = new Map<string, PeopleIx | null>()
+/** Who is told when an index is built (once per index built, null included; resetKin empties `ready`, so a rebuilt one tells again). Browse draws its people tab from it; kin.ts never imports explore. */
+const readyHooks = new Set<() => void>()
+export function onKinReady(f: () => void): () => void {
+  readyHooks.add(f)
+  return () => { readyHooks.delete(f) }
+}
 export function resetKin() {
   ixs.clear()
   ready.clear()
@@ -281,7 +287,11 @@ function peopleIx(lang: string): Promise<PeopleIx | null> {
       return null
     })
     ixs.set(lang, made)
-    void made.then((ix) => { if (ixs.get(lang) === made) ready.set(lang, ix) })
+    void made.then((ix) => {
+      if (ixs.get(lang) !== made) return
+      ready.set(lang, ix)
+      for (const f of [...readyHooks]) f()
+    })
     p = made
   }
   return p
@@ -410,6 +420,8 @@ export function kinKnown(q: string, nav: string): boolean {
 
 /** Whether the people index of a pack is built already (a button that names people waits for it rather than build it during an answer). */
 export const kinReady = (pack: string): boolean => !!ready.get(pack)
+/** The packs, in the order given, whose people index is built already and has people (no read: Browse's people tab shows only what is there). */
+export const peoplePacks = (packs: string[]): string[] => packs.filter((l) => !!ready.get(l)?.byId.size)
 /** Builds the people index of these packs at idle (the app's start, after a change of packs): a family question then skips the readers. */
 export function warmKin(langs: string[]) {
   const ric = (globalThis as any).requestIdleCallback as ((f: () => void, o?: { timeout: number }) => void) | undefined
