@@ -23,7 +23,7 @@ try {
   const client = createClient({ store, source: httpSource({ base: server.url }), trust })
   // as a download from the menu: the map units (xtopics, topics), the books there are, the shared units
   await client.install(LANG, installWant(['tit'], false))
-  rmSync(OUT, { recursive: true, force: true })
+  rmSync(join(OUT, LANG), { recursive: true, force: true }) // not OUT: family.ts lives beside
   const dir = join(OUT, LANG)
   for (const id of await store.ids()) {
     mkdirSync(join(dir, 'seg', id.slice(0, 2)), { recursive: true })

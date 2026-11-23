@@ -18,6 +18,7 @@ import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollo
 import { renderMacula } from './syntaxview'
 import { buildTree, saveReplacer, type TreeView } from './tree'
 import { renderTree } from './treeview'
+import { placeBlock } from './placeview'
 import { has } from './commands'
 import { resetSearch } from './search'
 import { md, mdDir } from './md'
@@ -368,13 +369,23 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     }
     // a family answer's sources ("Datos de familia: TIPNR (STEPBible), ACAI (BiblioNexus)", kin.ts): in sight, small and grey like an
     // article's source label (Abel, Nov 18: not big, not hidden in «detalles»)
-    else if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isCreditLine(last.textContent ?? '')) last.className = 'credit'
+    else if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isCreditLine(last.textContent ?? '')) {
+      last.className = 'credit'
+      // its words are mostly Latin names (OpenBible.info, TIPNR): md.ts gives the paragraph "ltr", and in an Arabic answer it sat on the left
+      if (m.ui && rtlLang(m.ui)) last.setAttribute('dir', 'rtl')
+    }
     // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
     addObsPictures(box, m.meta, m.ui ?? nav)
     // an OBS story or frame: the words its notes and key terms quote, tappable as a passage's (obswords.ts)
     if (m.obs) linkObsWords(box, m.obs)
     // its helps in three levels: all the notes, a frame's, each note (view.ts)
     if (m.obs) groupObsHelps(box)
+    // a place answer: the map with its list next to it (the list alone when no place has a point), before the source line
+    if (m.map || m.list) {
+      const blk = placeBlock(m, m.ui ?? nav)
+      if (last?.className === 'credit') box.insertBefore(blk, last)
+      else box.appendChild(blk)
+    }
     host.appendChild(box)
     pageAnswer(box, m.ui ?? nav)
     if (m.treeOf) {

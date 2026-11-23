@@ -405,6 +405,13 @@
   .info p.src, .study p.src { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: -6px 0 10px; }
   .info p.credit, .plain p.credit, .tree-block p.credit { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); margin: 6px 0 0; } /* a family answer's sources (main.ts) */
   .info p.credit em, .plain p.credit em, .tree-block p.credit em { font-style: normal; }
+  /* a place answer: the map (mapview.ts) and the list next to it (main.ts placeBlock) */
+  .place-block { margin: 10px 0 4px; }
+  .place-map.failed { display: none; }
+  .place-head { font-weight: 600; margin: 8px 0 2px; }
+  .place-list { margin: 6px 0 0; padding-inline-start: 20px; }
+  .place-list li { margin: 2px 0; }
+  .place-tag { color: var(--muted); font-size: 13px; }
   .info :is(h3, h4) + p > em:only-child, .md :is(h3, h4) + p > em:only-child { font: 12px/1.4 system-ui, sans-serif; font-style: normal; }
   .aqtag { font: 12px/1.4 system-ui, sans-serif; color: var(--muted); }
   .aqnotice { font: 12px/1.45 system-ui, sans-serif; color: var(--muted); margin: 10px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
