@@ -408,6 +408,79 @@ describe('mountMap', () => {
     m.destroy()
   })
 
+  test("gestures 'full': one finger moves the map without the hint; two pinch; double tap goes back; 'chat' keeps pan-x pan-y", async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, gestures: 'full' })
+    const box = el.children[0]!
+    expect(box.style.cssText).toContain('touch-action:none')
+    expect(box.style.cssText).not.toContain('pan-x')
+    expect(el.find((e) => e.getAttribute('aria-hidden') === 'true' && e.text.length > 0).length).toBe(0)
+    const T = (id: number, x: number, y: number) => ({ identifier: id, clientX: x, clientY: y })
+    const flat = layerOf(el).style.transform, g0 = gap(el)
+    box.fire('touchstart', { touches: [T(1, 100, 100), T(2, 200, 100)] })
+    box.fire('touchmove', { touches: [T(1, 60, 100), T(2, 240, 100)] })
+    box.fire('touchend', { touches: [T(1, 60, 100)] })
+    box.fire('touchend', { touches: [] })
+    expect(gap(el)).toBeGreaterThan(g0 * 1.3)
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    const mv = box.fire('touchmove', { touches: [T(1, 100, 160)] })
+    expect(mv.prevented).toBe(true)
+    expect(layerOf(el).style.transform).not.toBe(flat)
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 100, 160)] })
+    for (let i = 0; i < 2; i++) { box.fire('touchstart', { touches: [T(1, 50, 50)] }); box.fire('touchend', { touches: [] }) }
+    expect(gap(el)).toBeCloseTo(g0, 0)
+    m.destroy()
+    const el2 = new FakeEl('div')
+    const m2 = await mountMap(el2 as any, { ...BASE, gestures: 'chat' })
+    expect(el2.children[0]!.style.cssText).toContain('touch-action:pan-x pan-y')
+    m2.destroy()
+  })
+
+  test("gestures 'full': a tremor is a tap (no move, still a double tap); past 8 px it follows without losing px; two fingers down together, one lifts, the other moves", async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, gestures: 'full' })
+    const box = el.children[0]!
+    const T = (id: number, x: number, y: number) => ({ identifier: id, clientX: x, clientY: y })
+    const g0 = gap(el)
+    // pinch in first, so the double tap below has something to go back from
+    box.fire('touchstart', { touches: [T(1, 100, 100), T(2, 200, 100)] })
+    box.fire('touchmove', { touches: [T(1, 60, 100), T(2, 240, 100)] })
+    box.fire('touchend', { touches: [T(1, 60, 100)] })
+    box.fire('touchend', { touches: [] })
+    const zoomed = layerOf(el).style.transform
+    expect(gap(el)).toBeGreaterThan(g0 * 1.3)
+    // tremor of 3 px: the layer does not move
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    expect(box.fire('touchmove', { touches: [T(1, 103, 100)] }).prevented).toBe(true)
+    expect(layerOf(el).style.transform).toBe(zoomed)
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 103, 100)] })
+    expect(layerOf(el).style.transform).toBe(zoomed)
+    // ... and a second quick tap is a double tap
+    box.fire('touchstart', { touches: [T(1, 100, 100)] }); box.fire('touchend', { touches: [] })
+    expect(gap(el)).toBeCloseTo(g0, 0)
+    // past the threshold: the whole move is applied, none of it lost
+    const before = layerOf(el).style.transform
+    box.fire('touchstart', { touches: [T(1, 100, 100)] })
+    box.fire('touchmove', { touches: [T(1, 100, 106)] })
+    expect(layerOf(el).style.transform).toBe(before)
+    box.fire('touchmove', { touches: [T(1, 100, 120)] })
+    expect(layerOf(el).style.transform).not.toBe(before)
+    box.fire('touchmove', { touches: [T(1, 100, 130)] })
+    const ty = (s: string) => Number(/translate\([-\d.]+px,\s*([-\d.]+)px/.exec(s)![1])
+    expect(ty(layerOf(el).style.transform) - ty(before)).toBeCloseTo(30, 5)
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 100, 130)] })
+    // two fingers that land together: when one lifts the other keeps moving the map
+    const b2 = layerOf(el).style.transform
+    box.fire('touchstart', { touches: [T(1, 100, 100), T(2, 200, 100)] })
+    box.fire('touchend', { touches: [T(2, 200, 100)] })
+    box.fire('touchmove', { touches: [T(2, 200, 103)] })
+    expect(layerOf(el).style.transform).not.toBe(b2)
+    box.fire('touchend', { touches: [] })
+    m.destroy()
+  })
+
   test('the late basemap re-clamps the view: a fitted frame keeps its place with the scale clamped; a moved one is clamped too', async () => {
     let give!: (b: Uint8Array) => void
     setBasemapSource(() => new Promise<Uint8Array | null>((r) => { give = r }))

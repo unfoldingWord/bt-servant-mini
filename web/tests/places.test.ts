@@ -7,7 +7,7 @@ import type { Topic, TopicsCore, XtopicsCore, XtopicsPart } from '@bt-synergy/la
 import { peopleQuery } from '@lpc/query/family'
 import { fullPhone } from './harness'
 import { mapsFixture } from './maps-fixture'
-import { personVerses, placeData, placeQuestion, placeShape, placesAt, placeVerses, referenceFor, REFERENCE_PLACES, setPlaceReader, type PlaceReader } from '../src/places'
+import { allPlaces, booksWithPlaces, personVerses, placeData, placeQuestion, placesInBook, placeShape, placesAt, placeVerses, referenceFor, REFERENCE_PLACES, resetPlaces, setPlaceReader, type PlaceReader } from '../src/places'
 
 // ------------------------------------------------------------------------------------------------------------------- the shapes
 type Row = [q: string, kind: string, names: string[], lang: string]
@@ -499,5 +499,81 @@ describe('referenceFor and REFERENCE_PLACES', () => {
   test('no point, no reference', async () => {
     const lost = (await placeQuestion('where is Lost?', 'en', null))!.places[0]!
     expect(await referenceFor('en', lost)).toBeNull()
+  })
+})
+
+describe('the list of places (allPlaces, placesInBook, booksWithPlaces)', () => {
+  const list = () => asWorld({
+    topics: [['lug:b', place('Bravo')], ['lug:a', place('Alpha')], ['lug:c', place('Charlie')], ['lug:d', place('Delta')], ['per:p', person('Pete')]],
+    geo: { 'lug:a': JER },
+    // a and b are named 3 times each (tie: by id), c twice, d once; Pete is no place
+    verses: {
+      'lug:a': [v(1, 1, 1), v(1, 1, 2), v(40, 1, 1)], 'lug:b': [v(1, 1, 3), v(2, 1, 1), v(2, 1, 2)], 'lug:c': [v(40, 2, 1), v(40, 2, 2)],
+      'lug:d': [v(43, 1, 1)], 'per:p': [v(1, 5, 1)],
+    },
+  })
+  test('every place, the most named first, ties by id; no person; the points are not filtered', async () => {
+    list()
+    const all = await allPlaces('es-419')
+    expect(all.map((p) => p.id)).toEqual(['lug:a', 'lug:b', 'lug:c', 'lug:d'])
+    expect(all[0]!.sure).toBe(3)
+    expect(all[1]!.lat).toBeUndefined()
+  })
+  test('cached per pack: the second call gives the same array; resetPlaces (and a new reader) empties it', async () => {
+    list()
+    const first = await allPlaces('es-419')
+    expect(await allPlaces('es-419')).toBe(first)
+    expect(await placesInBook('es-419', 'gen')).toBe(await placesInBook('es-419', 'gen'))
+    expect(await booksWithPlaces('es-419')).toBe(await booksWithPlaces('es-419'))
+    resetPlaces()
+    const again = await allPlaces('es-419')
+    expect(again).not.toBe(first)
+    expect(again.map((p) => p.id)).toEqual(first.map((p) => p.id))
+  })
+  test('placesInBook: the places named in that book, in the order of fame; none for a book with no places or an unknown one', async () => {
+    list()
+    expect((await placesInBook('es-419', 'gen')).map((p) => p.id)).toEqual(['lug:a', 'lug:b'])
+    expect((await placesInBook('es-419', 'mat')).map((p) => p.id)).toEqual(['lug:a', 'lug:c'])
+    expect((await placesInBook('es-419', 'jhn')).map((p) => p.id)).toEqual(['lug:d'])
+    expect(await placesInBook('es-419', 'rev')).toEqual([]) // a real book with no place of the world
+    expect(await placesInBook('es-419', 'xyz')).toEqual([])
+  })
+  test('booksWithPlaces: canonical order, with the number of places each names', async () => {
+    list()
+    expect(await booksWithPlaces('es-419')).toEqual([{ code: 'gen', places: 2 }, { code: 'exo', places: 1 }, { code: 'mat', places: 2 }, { code: 'jhn', places: 1 }])
+  })
+  test('no xtopics: nothing, in the three', async () => {
+    asWorld({ topics: [['lug:a', place('Alpha')]], verses: { 'lug:a': [v(1, 1, 1)] }, noXtopics: true })
+    expect(await allPlaces('es-419')).toEqual([])
+    expect(await placesInBook('es-419', 'gen')).toEqual([])
+    expect(await booksWithPlaces('es-419')).toEqual([])
+  })
+})
+
+describe('the list of places: failed reads and several packs', () => {
+  const W: World = { topics: [['lug:a', place('Alpha')]], verses: { 'lug:a': [v(1, 1, 1)] } }
+  test('a read that fails is not kept: the next call finds the places', async () => {
+    let n = 0
+    setPlaceReader(async () => { if (n++ === 0) throw new Error('offline'); return world(W) })
+    expect(await allPlaces('es-419')).toEqual([])
+    expect((await allPlaces('es-419')).map((p) => p.id)).toEqual(['lug:a'])
+    n = 0
+    resetPlaces()
+    expect(await placesInBook('es-419', 'gen')).toEqual([])
+    expect((await placesInBook('es-419', 'gen')).map((p) => p.id)).toEqual(['lug:a'])
+    n = 0
+    resetPlaces()
+    expect(await booksWithPlaces('es-419')).toEqual([])
+    expect(await booksWithPlaces('es-419')).toEqual([{ code: 'gen', places: 1 }])
+  })
+  test('two packs do not share a cache', async () => {
+    const other: World = { topics: [['lug:z', place('Zeta')], ['lug:y', place('Yota')]], verses: { 'lug:z': [v(2, 1, 1)], 'lug:y': [v(2, 1, 2)] } }
+    setPlaceReader(async (lang) => world(lang === 'en' ? other : W))
+    expect((await allPlaces('es-419')).map((p) => p.id)).toEqual(['lug:a'])
+    expect((await allPlaces('en')).map((p) => p.id)).toEqual(['lug:y', 'lug:z'])
+    expect(await placesInBook('en', 'gen')).toEqual([])
+    expect((await placesInBook('en', 'exo')).length).toBe(2)
+    expect(await booksWithPlaces('es-419')).toEqual([{ code: 'gen', places: 1 }])
+    expect(await booksWithPlaces('en')).toEqual([{ code: 'exo', places: 2 }])
   })
 })
