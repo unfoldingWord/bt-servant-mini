@@ -559,6 +559,88 @@ describe('mountMap', () => {
     expect(html).not.toContain('<img')
     m.destroy()
   })
+
+  // onPick: a tap on a point (the pick waits 300 ms for a second tap), a tap on a cluster zooms in
+  const margin = (el: FakeEl) => Number(/translate\((-?[\d.]+)px/.exec(layerOf(el).style.transform)![1]) // the layer rests at -m
+  /** where the n-th drawn dot is on the screen (box coordinates) */
+  const dotAt = (el: FakeEl, n: number) => { const d = dots(layerOf(el).html)[n]!, m = margin(el); return [d[0] + m, d[1] + m] as const }
+  const mouseTap = (box: FakeEl, x: number, y: number) => { box.fire('pointerdown', { pointerId: 1, clientX: x, clientY: y }); box.fire('pointerup', { pointerId: 1, clientX: x, clientY: y }) }
+  const spread = (el: FakeEl) => { const ys = dots(layerOf(el).html).map((d) => d[1]); return Math.max(...ys) - Math.min(...ys) }
+  const wait = () => new Promise((r) => setTimeout(r, 360))
+  const CLUSTER: MapPoint[] = [
+    { id: 'place:a', lat: 31.0, lon: 35.0, sure: 3, form: 1, label: 'A' },
+    { id: 'place:b', lat: 31.004, lon: 35.0, sure: 3, form: 1, label: 'B' }, // ~6 px from A at the first view
+    { id: 'place:c', lat: 33.0, lon: 35.5, sure: 3, form: 1, label: 'C' },
+  ]
+
+  test('onPick: a tap on a point picks it (after the wait for a second tap); a tap far from any does not; a drag does not; without onPick nothing happens', async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const picked: string[] = []
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, gestures: 'full', onPick: (id) => picked.push(id) })
+    const box = el.children[0]!
+    const [x, y] = dotAt(el, 0)
+    mouseTap(box, x + 5, y - 5)
+    expect(picked).toEqual([]) // not yet: a second tap could follow
+    await wait()
+    expect(picked.length).toBe(1)
+    expect(['place:bethel', 'place:jerusalem']).toContain(picked[0])
+    // the other point, by finger
+    const T = (id: number, a: number, b: number) => ({ identifier: id, clientX: a, clientY: b })
+    const [x1, y1] = dotAt(el, 1)
+    box.fire('touchstart', { touches: [T(1, x1, y1)] })
+    box.fire('touchend', { touches: [], changedTouches: [T(1, x1, y1)] })
+    await wait()
+    expect(picked.length).toBe(2)
+    expect(picked[1]).not.toBe(picked[0])
+    // far from both (30+ px from each dot)
+    mouseTap(box, 5, 5)
+    box.fire('touchstart', { touches: [T(1, 300, 230)] })
+    box.fire('touchend', { touches: [], changedTouches: [T(1, 300, 230)] })
+    await wait()
+    expect(picked.length).toBe(2)
+    // a drag that ends on a point is not a tap
+    box.fire('pointerdown', { pointerId: 1, clientX: x + 40, clientY: y })
+    box.fire('pointermove', { pointerId: 1, clientX: x, clientY: y })
+    box.fire('pointerup', { pointerId: 1, clientX: x, clientY: y })
+    await wait()
+    expect(picked.length).toBe(2)
+    m.destroy()
+    // no onPick: the same tap leaves the view as it was
+    const el2 = new FakeEl('div')
+    const m2 = await mountMap(el2 as any, { ...BASE, gestures: 'full' })
+    const [x2, y2] = dotAt(el2, 0), t0 = layerOf(el2).style.transform, h0 = layerOf(el2).html
+    mouseTap(el2.children[0]!, x2, y2)
+    await wait()
+    expect(layerOf(el2).style.transform).toBe(t0)
+    expect(layerOf(el2).html).toBe(h0)
+    m2.destroy()
+  })
+
+  test('onPick: several points under the tap zoom in on them instead of picking; a double tap goes back to the first view and picks nothing', async () => {
+    setBasemapSource(async () => SMALL_BYTES)
+    const picked: string[] = []
+    const el = new FakeEl('div')
+    const m = await mountMap(el as any, { ...BASE, points: CLUSTER, gestures: 'full', onPick: (id) => picked.push(id) })
+    const box = el.children[0]!
+    const s0 = spread(el)
+    expect(dots(layerOf(el).html).length).toBe(3)
+    // (the drawing keeps the two labels apart, so the tap goes between the two dots of the pair)
+    const [x0, y0] = dotAt(el, 0), [x1, y1] = dotAt(el, 1)
+    const x = (x0 + x1) / 2, y = (y0 + y1) / 2
+    mouseTap(box, x, y)
+    await wait()
+    expect(picked).toEqual([])
+    expect(dots(layerOf(el).html).length).toBe(2) // zoomed in (x2.5, centered on the pair): the far point C is off the picture now
+    const [zx, zy] = dotAt(el, 0)
+    // a double tap: first view again, nothing picked
+    mouseTap(box, zx, zy); mouseTap(box, zx, zy)
+    await wait()
+    expect(picked).toEqual([])
+    expect(dots(layerOf(el).html).length).toBe(3)
+    expect(spread(el)).toBeCloseTo(s0, 0)
+    m.destroy()
+  })
 })
 
 // ------------------------------------------------------------------------------------------------ the basemap lookup (packs.ts)

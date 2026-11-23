@@ -595,3 +595,49 @@ export async function placeNamed(pack: string, name: string, lang: PlaceLang, ki
   const ids = lookupPlaces(ix, name, lang)
   return ids.length ? pickPlace(ix, ids, kind, last) : null
 }
+
+/** The packs of the list (same order) that have the `geo` table and at least one place with a point; one that cannot be read is left out. */
+export async function placePacks(packs: string[]): Promise<string[]> {
+  const out: string[] = []
+  for (const pack of packs) {
+    try {
+      if (!(await hasGeo(pack))) continue
+      if ((await allPlaces(pack)).some((r) => r.sure >= 1 && r.lat !== undefined && r.lon !== undefined)) out.push(pack)
+    } catch { /* unreadable: left out */ }
+  }
+  return out
+}
+const foldedCache = new WeakMap<PlaceIx, Map<string, string[]>>() // id -> the folded names it is found by (byName turned around)
+function foldedNames(ix: PlaceIx): Map<string, string[]> {
+  let m = foldedCache.get(ix)
+  if (!m) {
+    foldedCache.set(ix, (m = new Map()))
+    for (const [k, ids] of ix.byName) for (const id of ids) { const l = m.get(id); if (l) l.push(k); else m.set(id, [k]) }
+  }
+  return m
+}
+/** Whether the folded name has a word (or, for a longer query, a run of words) that begins with the folded query. */
+function wordStarts(name: string, q: string): boolean {
+  if (name.startsWith(q)) return true
+  for (let i = 1; i < name.length; i++) if (/[\s\-'’]/.test(name[i - 1]!) && name.startsWith(q, i)) return true
+  return false
+}
+/**
+ * The places whose name, or any other name they are found by, has a word beginning with the query (folded like the names), in the order
+ * of allPlaces (the most named first), one row per id, up to `limit`; `more`: there were others. No query: the first `limit`. With
+ * `book` (3-letter code): only the places that book names. A pack that cannot be read gives none and keeps nothing.
+ */
+export async function searchPlaces(pack: string, q: string, limit = 30, book?: string): Promise<{ places: PlaceRef[]; more: boolean }> {
+  const ix = await placeIx(pack)
+  if (!ix) return { places: [], more: false }
+  const list = book ? await placesInBook(pack, book) : await allPlaces(pack)
+  const f = placeFold(q).trim()
+  const names = foldedNames(ix)
+  const places: PlaceRef[] = []
+  for (const r of list) {
+    if (f && !(names.get(r.id) ?? []).some((n) => wordStarts(n, f))) continue
+    if (places.length >= limit) return { places, more: true }
+    places.push(r)
+  }
+  return { places, more: false }
+}

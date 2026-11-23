@@ -7,7 +7,7 @@ import type { Topic, TopicsCore, XtopicsCore, XtopicsPart } from '@bt-synergy/la
 import { peopleQuery } from '@lpc/query/family'
 import { fullPhone } from './harness'
 import { mapsFixture } from './maps-fixture'
-import { allPlaces, booksWithPlaces, personVerses, placeData, placeQuestion, placesInBook, placeShape, placesAt, placeVerses, referenceFor, REFERENCE_PLACES, resetPlaces, setPlaceReader, type PlaceReader } from '../src/places'
+import { allPlaces, booksWithPlaces, personVerses, placeData, placePacks, placeQuestion, placesInBook, searchPlaces, placeShape, placesAt, placeVerses, referenceFor, REFERENCE_PLACES, resetPlaces, setPlaceReader, type PlaceReader } from '../src/places'
 
 // ------------------------------------------------------------------------------------------------------------------- the shapes
 type Row = [q: string, kind: string, names: string[], lang: string]
@@ -575,5 +575,71 @@ describe('the list of places: failed reads and several packs', () => {
     expect((await placesInBook('en', 'exo')).length).toBe(2)
     expect(await booksWithPlaces('es-419')).toEqual([{ code: 'gen', places: 1 }])
     expect(await booksWithPlaces('en')).toEqual([{ code: 'exo', places: 2 }])
+  })
+})
+
+describe('placePacks and searchPlaces', () => {
+  const PT = { lat: 3000, lon: 3500, sure: 1 as const, form: 1 as const }
+  // fame: Sinai 3 verses, Sion 2, Siria 2, Egipto 1; «Monte Sinaí» is found by its second word too
+  const W: World = {
+    topics: [['lug:eg', place('Égipto')], ['lug:si', place('Siria')], ['lug:sn', place('Monte Sinaí')], ['lug:so', place('Sion')], ['per:p', person('Sión')]],
+    geo: { 'lug:sn': PT, 'lug:so': PT, 'lug:si': { ...PT, sure: 0 } },
+    verses: { 'lug:sn': [v(1, 1, 1), v(1, 1, 2), v(40, 1, 1)], 'lug:so': [v(1, 2, 1), v(40, 2, 1)], 'lug:si': [v(2, 1, 1), v(40, 3, 1)], 'lug:eg': [v(2, 2, 2)], 'per:p': [v(1, 5, 1)] },
+    places: { names: {}, aliases: { Cinaí: ['lug:sn'], Sion: ['lug:so'] }, notes: {} },
+  }
+  const ids = async (q: string, limit?: number, book?: string) => (await searchPlaces('es-419', q, limit, book)).places.map((p) => p.id)
+
+  test('placePacks: the packs with `geo` and a point, in the order given; none without geo, with no point, unreadable or no xtopics', async () => {
+    const worlds: Record<string, World | 'fail' | undefined> = {
+      a: W, b: { ...W, geo: undefined }, c: { ...W, geo: { 'lug:si': { ...PT, sure: 0 } } }, d: 'fail', e: { ...W, noXtopics: true }, f: { ...W, geo: { 'lug:so': PT } },
+    }
+    setPlaceReader(async (lang) => { const w = worlds[lang]; if (!w || w === 'fail') throw new Error('offline'); return world(w) })
+    expect(await placePacks(['f', 'b', 'a', 'c', 'd', 'e', 'x'])).toEqual(['f', 'a'])
+    expect(await placePacks([])).toEqual([])
+  })
+  test('prefix of any word of any name, folded: «sinai» finds «Monte Sinaí», its alias «Cinaí» is found by «cin»; accents and case do not matter', async () => {
+    asWorld(W)
+    expect(await ids('sinai')).toEqual(['lug:sn'])
+    expect(await ids('MONTE')).toEqual(['lug:sn'])
+    expect(await ids('monte sin')).toEqual(['lug:sn'])
+    expect(await ids('cin')).toEqual(['lug:sn'])
+    expect(await ids('si')).toEqual(['lug:sn', 'lug:si', 'lug:so']) // in the order of allPlaces
+    expect(await ids('egip')).toEqual(['lug:eg'])
+    expect(await ids('inai')).toEqual([]) // a prefix of a word, not any part
+    expect(await ids('zzz')).toEqual([])
+  })
+  test('one row per id even if several names match', async () => {
+    asWorld(W)
+    expect(await ids('sion')).toEqual(['lug:so']) // its title and its alias both match
+    expect((await ids('')).includes('per:p')).toBe(false)
+  })
+  test('empty query: the first of allPlaces; limit and more', async () => {
+    asWorld(W)
+    const all = await allPlaces('es-419')
+    expect(await ids('')).toEqual(all.map((p) => p.id))
+    expect(await ids('  ')).toEqual(all.map((p) => p.id))
+    expect(await searchPlaces('es-419', '', 2)).toEqual({ places: all.slice(0, 2), more: true })
+    expect((await searchPlaces('es-419', '', all.length)).more).toBe(false)
+    const s = await searchPlaces('es-419', 'si', 2)
+    expect(s.places.length).toBe(2)
+    expect(s.more).toBe(true)
+    expect((await searchPlaces('es-419', 'si', 3)).more).toBe(false)
+  })
+  test('with a book: only the places that book names', async () => {
+    asWorld(W)
+    expect(await ids('', 30, 'gen')).toEqual(['lug:sn', 'lug:so'])
+    expect(await ids('si', 30, 'mat')).toEqual(['lug:sn', 'lug:si', 'lug:so'])
+    expect(await ids('si', 30, 'exo')).toEqual(['lug:si'])
+    expect(await ids('', 30, 'rev')).toEqual([])
+    expect(await ids('', 30, 'xyz')).toEqual([])
+  })
+  test('a failed read gives nothing and keeps nothing: the next call finds the places', async () => {
+    let n = 0
+    setPlaceReader(async () => { if (n++ === 0) throw new Error('offline'); return world(W) })
+    expect(await searchPlaces('es-419', 'sinai')).toEqual({ places: [], more: false })
+    expect(await ids('sinai')).toEqual(['lug:sn'])
+    asWorld({ ...W, noXtopics: true })
+    resetPlaces()
+    expect(await searchPlaces('es-419', '')).toEqual({ places: [], more: false })
   })
 })
