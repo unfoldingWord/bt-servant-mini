@@ -25,7 +25,7 @@ import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './
 import { count } from './usage'
 import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, type RelKind, kinQuestion, KT, KIN_T, TIE_T, type KinLang, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import { kinVerses, trip as tripOf, type PlaceRef, type Relative } from '@bt-synergy/language-pack-client'
-import { hasGeo, personPlace, personVerses, placeData, placeNamed, placeQuestion, placeRefs, placeShape, placesAt, placeVerses, referenceFor, type PlaceAsk } from './places'
+import { hasGeo, personPlace, placesOfArticle, personVerses, placeData, placeNamed, placeQuestion, placeRefs, placeShape, placesAt, placeVerses, referenceFor, type PlaceAsk } from './places'
 import { PLACE_SOURCES, PLT } from './placetext'
 import { isolateRef } from './bidi'
 import type { MapPoint } from './mapview'
@@ -2794,6 +2794,26 @@ async function mapStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | 
   return { label: PLT(ui).seeMap, sheet: placeSheet({ ...sheet, lang: pack }, ['view'], { ref }) }
 }
 
+/**
+ * Under the Translation Words article of a name that is a place with a point: «Ver en el mapa» and, when the place has events, «¿Qué pasó aquí?».
+ * Several such places: the map asks which (the same choice as a question that names a homonym). At most `room` buttons; none when the
+ * data has no `geo` or no point, so the answer is the one it was.
+ */
+async function placeButtons(sheet: Sheet, concept: string, ui: string, room: number): Promise<Follow[]> {
+  if (room < 1 || !concept.startsWith('tw:names/')) return []
+  const found = await placesOfArticle(sheet.lang, concept)
+  if (!found) return []
+  const { pack, places } = found
+  const t = PLT(ui)
+  const base = { ...sheet, lang: pack }
+  const first = places[0]!
+  const term = (sheet.term ?? '') || first.name
+  if (places.length > 1) return [{ label: t.seeMap, sheet: placeSheet(base, ['map'], { candidates: places.map((p) => p.id), term }) }]
+  const out: Follow[] = [{ label: t.seeMap, sheet: placeSheet(base, ['map'], { concept: first.id, term }) }]
+  if (room > 1 && ((await placeData(pack, first.id).catch(() => null))?.events.length ?? 0) > 0) out.push({ label: t.happenedQ, sheet: placeSheet(base, ['happened'], { concept: first.id, term }) })
+  return out
+}
+
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
   {
@@ -2982,7 +3002,10 @@ ${x.meta}` },
       if (taB) follow.push(taB)
       if (sheet.ref) follow.push({ label: TT(ui).all.replace('{ref}', refLabelOf(ui, sheet.ref)), sheet: { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes'], phrase: null } as Sheet })
       // (the verses with the term only when no passage is asked about: then that passage is the place)
-      if (id) follow.push(...(sheet.ref ? [] : await verseSteps(base, id, ui)), ...(await packSteps(articleSheet(base, id, sheet.lang), null, ui).catch(() => [])))
+      if (id) follow.push(...(sheet.ref ? [] : await verseSteps(base, id, ui)))
+      // a name that is a place with a point: the map before the related articles, only in the room left (the buttons as they will show: each once)
+      if (id && isName) follow.push(...(await placeButtons(base, id, ui, MAX_FOLLOW - (await tidy(dropShown(follow, null, new Set(), art?.answer ?? ''), sheet.lang)).length).catch(() => [] as Follow[])))
+      if (id) follow.push(...(await packSteps(articleSheet(base, id, sheet.lang), null, ui).catch(() => [])))
       // online AI gets both articles as its sources (named under its answer)
       const sources = [id, taId].filter((v): v is string => !!v).map((v) => ({ id: v, title: titleOfStep(follow, v) }))
       return {
@@ -3425,6 +3448,8 @@ ${x.meta}` },
         const end = /\n\n◂(?=\n|$)/
         if (fam?.line) r.answer = end.test(r.answer) ? r.answer.replace(end, `\n\n${fam.line}\n\n◂`) : `${r.answer}\n\n${fam.line}`
         for (const st of fam?.steps ?? []) if (room() > 0) follow.push(st)
+        // a place with a point: the map and what happened there, last, only in the room left (nothing for a person's article)
+        follow.push(...(await placeButtons(sheet, sheet.concept, ui, room()).catch(() => [] as Follow[])))
       }
       const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: dropShown([...x.others, ...follow], sheet.ref, shown).slice(0, MAX_FOLLOW), ui,
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,

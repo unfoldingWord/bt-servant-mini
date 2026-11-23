@@ -509,6 +509,20 @@ export async function hasGeo(pack: string): Promise<boolean> {
   return !!(await placeIx(pack))?.core.geo
 }
 /**
+ * The places a Translation Words article names (`tw:names/jerusalem`) that have a point on the map, best known first, and the pack that has
+ * them; null when no pack with the `geo` table has one (the article is a person's, or the places have no point: no map to offer).
+ */
+export async function placesOfArticle(lang: string, tw: string): Promise<{ pack: string; places: PlaceRef[] } | null> {
+  for (const pack of await packsFor(lang, lang)) {
+    const ix = await placeIx(pack)
+    if (!ix?.core.geo) continue
+    const ids = [...ix.tw].filter(([, cs]) => cs.includes(tw)).map(([id]) => id)
+    const places = byFame(ix, ids).map((id) => ix.byId.get(id)?.ref).filter((r): r is PlaceRef => !!r && r.sure >= 1 && r.lat !== undefined)
+    if (places.length) return { pack, places }
+  }
+  return null
+}
+/**
  * The birth or death place of a person, for a button that already chose the person (a question that named a homonym): the person's
  * name and the place the data gives (`born-in` / `died-in`), or null for the place when the data has none. Null: not a person here.
  */
