@@ -145,7 +145,9 @@ describe('placeQuestion on the signed sample (es-419)', () => {
   })
   test('born / died: the person, and the place of `born-in` (none of `died-in`)', async () => {
     expect(await placeQuestion('¿Dónde nació Abraham?', 'es', null)).toMatchObject({ kind: 'born', person: { id: 'per:abraham', name: 'Abraham' }, places: [{ id: 'lug:ur', sure: 2, form: 5 }] })
-    expect(await placeQuestion('¿Dónde murió Abraham?', 'es', null)).toMatchObject({ kind: 'died', person: { id: 'per:abraham' }, places: [] })
+    // (no `died-in` / `born-in` for the person: null, the question goes on to the verse search)
+    expect(await placeQuestion('¿Dónde murió Abraham?', 'es', null)).toBeNull()
+    expect(await placeQuestion('¿Dónde nació Sara?', 'es', null)).toBeNull()
     expect(await placeQuestion('where was Abraham born?', 'en', null)).toMatchObject({ person: { id: 'per:abraham' }, places: [{ id: 'lug:ur' }] })
   })
   test('two people of one name: ask (their refs are `per:` with no point)', async () => {
@@ -290,6 +292,17 @@ describe('homonyms (§5.2)', () => {
     })
     expect((await placeQuestion('where is Ephraim?', 'en', null))!.choose!.options).toHaveLength(3)
   })
+  test('died: a `died-in` relation gives the place; a person with only `born-in` falls back (null)', async () => {
+    asWorld({
+      topics: [['lug:hebron', place('Hebrón')], ['per:sara', person('Sara')], ['per:ana', person('Ana')]],
+      geo: { 'lug:hebron': { lat: 3150, lon: 3510, sure: 2, form: 1 } },
+      verses: {}, count: { 'lug:hebron': 40, 'per:sara': 10, 'per:ana': 5 },
+      relations: [{ from: 'per:sara', to: 'lug:hebron', type: 'died-in' }, { from: 'per:ana', to: 'lug:hebron', type: 'born-in' }],
+    })
+    expect(await placeQuestion('¿Dónde murió Sara?', 'es', null)).toMatchObject({ kind: 'died', person: { id: 'per:sara' }, places: [{ id: 'lug:hebron' }] })
+    expect(await placeQuestion('¿Dónde murió Ana?', 'es', null)).toBeNull()
+    expect(await placeQuestion('¿Dónde nació Ana?', 'es', null)).toMatchObject({ kind: 'born', places: [{ id: 'lug:hebron' }] })
+  })
   test('a person and a place of one name: the question decides', async () => {
     // «Israel»: the patriarch (a person), the land (a place), and one Translation Words article joined to both (a rule of E1)
     asWorld({
@@ -301,7 +314,7 @@ describe('homonyms (§5.2)', () => {
     })
     expect(await placeQuestion('¿Dónde queda Israel?', 'es', null)).toMatchObject({ kind: 'where', places: [{ id: 'lug:israel', name: 'Israel', form: 2 }] })
     expect(await placeQuestion('mapa de Israel', 'es', null)).toMatchObject({ kind: 'map', places: [{ id: 'lug:israel' }] })
-    expect(await placeQuestion('¿Dónde nació Israel?', 'es', null)).toMatchObject({ kind: 'born', person: { id: 'per:israel', name: 'Israel' }, places: [] })
+    expect(await placeQuestion('¿Dónde nació Israel?', 'es', null)).toBeNull()
     // «who was Israel?» is no place question: the people's family and article answer it, as today
     expect(placeShape('¿Quién era Israel?')).toBeNull()
     expect(await placeQuestion('¿Quién era Israel?', 'es', null)).toBeNull()

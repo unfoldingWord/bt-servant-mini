@@ -383,7 +383,9 @@ export async function placeQuestion(q: string, nav: string, last: string | null)
       ask.person = { id, name: pix.byId.get(id)!.name }
       const at = placeOfPerson(ix.core, id, s.kind === 'born' ? 'born-in' : 'died-in')
       const entry = at ? ix.byId.get(at) : undefined
-      if (entry) ask.places = [entry.ref]
+      // (the data has no born-in / died-in for this person: not a place question, it goes on to the verse search)
+      if (!entry) continue
+      ask.places = [entry.ref]
       return ask
     }
     // every name is resolved first: a name that is no place fails this pack before any choice is asked

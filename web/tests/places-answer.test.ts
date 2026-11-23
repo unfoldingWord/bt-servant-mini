@@ -115,12 +115,19 @@ describe('on the signed sample (es-419)', () => {
     expect(card.reply.info).toMatch(/^Según la ubicación propuesta|^Ur aparece en el mapa/)
     expect(c.graph!.nodes.map((n) => n.label)).toContain('Ur')
   })
-  test('no birth place in the data: the data do not say, never a guess; the person\'s card', async () => {
-    const r = await ask('¿Dónde nació Sara?')
-    expect(r.reply.info).toMatch(/^Los datos que tengo no dicen dónde nació Sara\./)
-    expect(r.reply.map).toBeUndefined()
-    expect(labels(r)).toEqual(['Sara'])
-    expect((await ask('¿Dónde murió Abraham?')).reply.info).toMatch(/^Los datos que tengo no dicen dónde murió Abraham\./)
+  test('no born-in / died-in relation for the person: not the place route, the verse search answers', async () => {
+    for (const q of ['¿Dónde nació Sara?', '¿Dónde murió Abraham?']) {
+      const r = await ask(q)
+      expect(r.route).toBe('search')
+      expect(r.answered).not.toBe('place')
+      expect(r.reply.info ?? '').not.toMatch(/Los datos que tengo no dicen dónde/)
+      expect(r.reply.map).toBeUndefined()
+    }
+  }, 60000)
+  test('with the relation, born and died keep the place answer', async () => {
+    const r = await ask('¿Dónde nació Abraham?')
+    expect(r.route).toBe('place')
+    expect(r.reply.info).toMatch(/nació en Ur\./)
   })
   test('the same questions in English, and a place card with the days from its reference place', async () => {
     expect((await ask('Where was Abraham born?', 'en')).reply.info).toMatch(/^According to Theographic, Abraham was born in Ur\./)
