@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map bench (dev)</title>
+<style>
+  body { font: 13px/1.4 system-ui, sans-serif; margin: 8px; background: #fff; color: #111 }
+  #stage { width: 375px; margin-bottom: 8px }
+  table { border-collapse: collapse; margin: 6px 0 14px } th, td { border: 1px solid #aaa; padding: 2px 6px; text-align: right } th:first-child, td:first-child { text-align: left }
+  h2 { font-size: 15px; margin: 12px 0 2px } pre { white-space: pre-wrap; word-break: break-all }
+  .ok { color: #0a6b2d } .bad { color: #b00020 }
+</style>
+</head>
+<body>
+<h1 style="font-size:17px">Map bench (dev APK only)</h1>
+<div id="status">running...</div>
+<div id="readout" hidden style="position:sticky;top:0;z-index:5;background:#ffe;border:1px solid #cc9;padding:2px 4px;font:11px/1.3 monospace;word-break:break-all">...</div>
+<div id="hold" hidden>
+  <p><a href="../index.html">Volver al chat</a></p>
+  <p><b>Prueba de gestos.</b> Un dedo desplaza la página. Dos dedos mueven el mapa; separar o juntar los dos dedos hace zoom. El mapa tiene <span id="npoints">?</span> puntos. La barra amarilla se queda arriba: "cambios", "escala max" y "ultimo" recuerdan el último movimiento del mapa después de soltar.</p>
+  <div id="fill1"></div>
+</div>
+<div id="stage"></div>
+<div id="fill2" hidden></div>
+<div id="out"></div>
+<script>
+// hold mode: filler so the page really scrolls (the map sits right after the first block, near the first screen)
+if (new URLSearchParams(location.search).get('hold') === '1') {
+  var f = function (n) { var h = ''; for (var i = 1; i <= n; i++) h += '<p>Texto de relleno ' + i + ': el desplazamiento de la página debe seguir funcionando con un dedo.</p>'; return h }
+  document.getElementById('hold').hidden = false; document.getElementById('readout').hidden = false
+  document.getElementById('fill1').innerHTML = f(3)
+  var b = document.getElementById('fill2'); b.hidden = false; b.innerHTML = f(60)
+}
+</script>
+<script src="./maps-bench.js"></script>
+</body>
+</html>

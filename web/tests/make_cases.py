@@ -480,10 +480,10 @@ FINDALL = [
     ('ar-goliath', 'ar', 'أين قتل داود جليات؟', None, {'route': 'search', 'ref': G17}),
     ('ar-snow', 'ar', 'أين يذكر الثلج؟', None, {'route': 'search', 'has': ['ثلج|الثلج|ٱلثَّلْجِ|الثَّلْجِ|ثَلْج']}),
     # review of Nov 15: one verse is THE answer only when it is clearly ahead ("Jesus" and "born" are in many verses alike)
-    ('not-en-born', 'en', 'Where was Jesus born?', None, {'route': 'search', 'not': [NOT_WHERE]}),
-    ('not-es-born', 'es', 'dónde nació Jesús', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-en-born', 'en', 'Where was Jesus born?', None, {'route': 'place', 'not': [NOT_WHERE]}),
+    ('not-es-born', 'es', 'dónde nació Jesús', None, {'route': 'place', 'not': [NOT_WHERE]}),
     ('not-ar-born', 'ar', 'أين ولد يسوع', None, {'route': 'search', 'not': [NOT_WHERE]}),
-    ('not-hi-born', 'hi', 'यीशु का जन्म कहाँ हुआ?', None, {'route': 'search', 'not': [NOT_WHERE]}),
+    ('not-hi-born', 'hi', 'यीशु का जन्म कहाँ हुआ?', None, {'route': 'place', 'not': [NOT_WHERE]}),
     ('not-en-boat', 'en', 'Where is the boat?', None, {'route': 'search', 'not': [NOT_WHERE]}),
     ('not-en-car', 'en', 'Where did Jesus park his car?', None, {'not': [NOT_WHERE]}),
     # the Spanish pack's only "matrimonio" is in a verse it cannot show: English verses, not the introduction to Ruth

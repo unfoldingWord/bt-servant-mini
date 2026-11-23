@@ -21,8 +21,14 @@ BT Servant Mini (alpha) ships these inside the APK:
     relations, descriptions and versification are not used.
   - **Theographic Bible Metadata** (Robert Rouse, https://github.com/robertrouse/theographic-bible-metadata), CC BY-SA 4.0: the
     events and the people and places that take part in them (which Open Bible Stories tell an event a person is in).
-  The packs are built from these by the unfoldingWord language-pack builder and shared under CC BY-SA 4.0; each family answer
-  names its sources under it.
+  - **OpenBible.info Bible Geocoding Data** (https://github.com/openbibleinfo/Bible-Geocoding-Data), CC BY 4.0
+    (https://creativecommons.org/licenses/by/4.0/): the point of each place and how sure its location is. Changed: only the best
+    point, a certainty level and the place type are used. Mini reads them for «where is X», distances, days of travel and the map.
+  - **Natural Earth** (https://www.naturalearthdata.com), public domain: the coast, lakes and rivers of the base map (land 5.1.1,
+    lakes 5.0.0, rivers_lake_centerlines 5.0.0), a small `basemap` file the app downloads once from the packs server; without it the
+    places are drawn on a plain background. Made with Natural Earth.
+  The packs are built from these by the unfoldingWord language-pack builder and shared under CC BY-SA 4.0; each family and place
+  answer names its sources under it.
 - **Open Bible Stories pictures** (the optional format-3 catalog `zxx-obsimg`, not inside the APK; downloaded from the packs
   server on a tap in the menu, or passed as a `.tcpack` file): illustrations © Sweet Publishing (https://sweetpublishing.com),
   CC BY-SA 3.0 Unported (https://creativecommons.org/licenses/by-sa/3.0/). Converted to WebP (quality 75) from Door43's

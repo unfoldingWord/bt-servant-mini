@@ -10,6 +10,7 @@ import { openLang, hasLang, installedLangs } from './packs'
 import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag, patchTextForAI, versionName } from './aquifer'
 import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { isObsRef, obsAnswer, storyText } from './obs'
+import type { PlaceRef, Trip } from '@lpc/query/geo'
 import tEn from './data/tpl-en.json'
 import tEs from './data/tpl-es.json'
 import tFr from './data/tpl-fr.json'
@@ -1117,4 +1118,265 @@ export async function passageContext(s: Sheet): Promise<string> {
   const pm = patchOfRow(model.notes?.rows[0])
   if (pm) parts.push(patchForAI(pm))
   return parts.join('\n\n')
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// Place, distance and travel-time sentences (diseno-mapas.md 5.3 and 5.8). Pure functions: they take what language-pack-client gives (`PlaceRef`,
+// `Trip`) and the UI language, and return the text. Every sentence is whole per language (hi and ar agree in gender and number, so no sentence is
+// built word by word); only the eight directions are fragments, and each fragment is a whole phrase with its own preposition.
+// `trip` is always `trip(a, b)` of the client, with `a` the first place named in the call (direction from a to b): "a is north of b" reads the
+// opposite direction. So `trip(place, ref)` for `whereLine` and `refDaysLine`, and `trip(a, b)` for `distanceLine`; `daysLine` takes any trip.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+type GeoLang = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
+type GeoText = {
+  /** the eight directions, clockwise from north: where something stands in relation to {ref} */
+  dir: string[]
+  /** "according to the proposed location" (certainty 2), with the separator that joins it to the sentence */
+  pre: string
+  where: string; near: string; onMap: string; uncertain: string; uncertainRef: string
+  region: string; water: string; waterRef: string; unknown: string
+  straight: string; nearDist: string; regionDist: string; waterDist: string; uncertainDist: string
+  /** "on foot, by donkey or by camel", "on horseback", and the ship with its season */
+  foot: string; horse: string; ship: string
+  less: string; over: string; lessAll: string
+  sep: string; end: string; approx: string; refDays: string
+  born: string; bornF: string; bornNone: string; bornNoneF?: string; died: string; diedF: string; diedNone: string; diedNoneF?: string
+}
+const geoText: Record<GeoLang, GeoText> = {
+  en: {
+    dir: ['north of {ref}', 'northeast of {ref}', 'east of {ref}', 'southeast of {ref}', 'south of {ref}', 'southwest of {ref}', 'west of {ref}', 'northwest of {ref}'],
+    pre: 'According to the proposed location, ',
+    where: '{pre}{name} was about {n} km {loc}.', near: '{pre}{name} was next to {ref}.', onMap: '{name} is shown on the map.',
+    uncertain: 'It is not known for certain where {name} was; several sites have been proposed.',
+    uncertainRef: 'It is not known for certain where {name} was; several sites near {ref} have been proposed.',
+    region: '{name} is a region; it has no exact point on the map.', water: '{name} is a body of water.', waterRef: '{name}, near {ref}.',
+    unknown: 'It is not known where {name} was.',
+    straight: '{pre}about {n} km in a straight line; {a} is {loc}.', nearDist: '{pre}{a} was next to {b} (less than 3 km).',
+    regionDist: '{name} is a region; it has no point to measure from.', waterDist: '{name} is a river or other water; it has no point to measure from.',
+    uncertainDist: 'It is not known for certain where {name} was, so no distance is given.',
+    foot: 'on foot, by donkey or by camel', horse: 'on horseback', ship: 'by ship, in the sailing season (spring to autumn)',
+    less: 'less than a day', over: 'more than two months', lessAll: 'less than a day {foot}',
+    sep: '; ', end: '.', approx: '(approx.)', refDays: '{pre}from {ref} to {name}, {foot}: {r} (approx.).',
+    born: 'According to Theographic, {name} was born in {place}.', bornF: 'According to Theographic, {name} was born in {place}.',
+    bornNone: 'The data I have do not say where {name} was born.',
+    died: 'According to Theographic, {name} died in {place}.', diedF: 'According to Theographic, {name} died in {place}.',
+    diedNone: 'The data I have do not say where {name} died.',
+  },
+  es: {
+    dir: ['al norte de {ref}', 'al noreste de {ref}', 'al este de {ref}', 'al sureste de {ref}', 'al sur de {ref}', 'al suroeste de {ref}', 'al oeste de {ref}', 'al noroeste de {ref}'],
+    pre: 'Según la ubicación propuesta, ',
+    where: '{pre}{name} estaba a unos {n} km {loc}.', near: '{pre}{name} estaba junto a {ref}.', onMap: '{name} aparece en el mapa.',
+    uncertain: 'No se sabe con certeza dónde estaba {name}; se han propuesto varios sitios.',
+    uncertainRef: 'No se sabe con certeza dónde estaba {name}; se han propuesto varios sitios cerca de {ref}.',
+    region: '{name} es una región; no tiene un punto exacto en el mapa.', water: '{name} es una masa de agua.', waterRef: '{name}, cerca de {ref}.',
+    unknown: 'No se sabe dónde estaba {name}.',
+    straight: '{pre}unos {n} km en línea recta; {a} está {loc}.', nearDist: '{pre}{a} estaba junto a {b} (a menos de 3 km).',
+    regionDist: '{name} es una región; no tiene un punto para medir.', waterDist: '{name} es un río u otra agua; no tiene un punto para medir.',
+    uncertainDist: 'No se sabe con certeza dónde estaba {name}, así que no se da una distancia.',
+    foot: 'a pie, en burro o en camello', horse: 'a caballo', ship: 'en barco, en la temporada de navegación (primavera a otoño)',
+    less: 'menos de un día', over: 'más de dos meses', lessAll: 'menos de un día {foot}',
+    sep: '; ', end: '.', approx: '(aprox.)', refDays: '{pre}de {ref} a {name}, {foot}: {r} (aprox.).',
+    born: 'Según Theographic, {name} nació en {place}.', bornF: 'Según Theographic, {name} nació en {place}.',
+    bornNone: 'Los datos que tengo no dicen dónde nació {name}.',
+    died: 'Según Theographic, {name} murió en {place}.', diedF: 'Según Theographic, {name} murió en {place}.',
+    diedNone: 'Los datos que tengo no dicen dónde murió {name}.',
+  },
+  fr: {
+    dir: ['au nord de {ref}', 'au nord-est de {ref}', "à l'est de {ref}", 'au sud-est de {ref}', 'au sud de {ref}', 'au sud-ouest de {ref}', "à l'ouest de {ref}", 'au nord-ouest de {ref}'],
+    pre: "Selon l'emplacement proposé, ",
+    where: '{pre}{name} se trouvait à environ {n} km {loc}.', near: '{pre}{name} se trouvait tout près de {ref}.', onMap: '{name} figure sur la carte.',
+    uncertain: "On ne sait pas avec certitude où se trouvait {name} ; plusieurs sites ont été proposés.",
+    uncertainRef: "On ne sait pas avec certitude où se trouvait {name} ; plusieurs sites près de {ref} ont été proposés.",
+    region: "{name} est une région ; elle n'a pas de point précis sur la carte.", water: '{name} est une étendue d’eau.', waterRef: '{name}, près de {ref}.',
+    unknown: 'On ne sait pas où se trouvait {name}.',
+    straight: '{pre}environ {n} km à vol d’oiseau ; {a} est {loc}.', nearDist: '{pre}{a} se trouvait tout près de {b} (à moins de 3 km).',
+    regionDist: "{name} est une région ; elle n'a pas de point à mesurer.", waterDist: "{name} est un fleuve ou une autre étendue d’eau ; il n'a pas de point à mesurer.",
+    uncertainDist: "On ne sait pas avec certitude où se trouvait {name} ; aucune distance n'est donnée.",
+    foot: "à pied, à dos d'âne ou de chameau", horse: 'à cheval', ship: 'en bateau, pendant la saison de navigation (du printemps à l’automne)',
+    less: "moins d'un jour", over: 'plus de deux mois', lessAll: "moins d'un jour {foot}",
+    sep: ' ; ', end: '.', approx: '(approx.)', refDays: '{pre}de {ref} à {name}, {foot} : {r} (approx.).',
+    born: 'Selon Theographic, {name} est né à {place}.', bornF: 'Selon Theographic, {name} est née à {place}.',
+    bornNone: 'Les données que j’ai ne disent pas où {name} est né.', bornNoneF: 'Les données que j’ai ne disent pas où {name} est née.',
+    died: 'Selon Theographic, {name} est mort à {place}.', diedF: 'Selon Theographic, {name} est morte à {place}.',
+    diedNone: 'Les données que j’ai ne disent pas où {name} est mort.', diedNoneF: 'Les données que j’ai ne disent pas où {name} est morte.',
+  },
+  id: {
+    dir: ['di sebelah utara {ref}', 'di sebelah timur laut {ref}', 'di sebelah timur {ref}', 'di sebelah tenggara {ref}', 'di sebelah selatan {ref}', 'di sebelah barat daya {ref}', 'di sebelah barat {ref}', 'di sebelah barat laut {ref}'],
+    pre: 'Menurut lokasi yang diusulkan, ',
+    where: '{pre}{name} berada sekitar {n} km {loc}.', near: '{pre}{name} berada tepat di dekat {ref}.', onMap: '{name} ditunjukkan di peta.',
+    uncertain: 'Tidak diketahui dengan pasti di mana {name} berada; beberapa tempat telah diusulkan.',
+    uncertainRef: 'Tidak diketahui dengan pasti di mana {name} berada; beberapa tempat dekat {ref} telah diusulkan.',
+    region: '{name} adalah sebuah wilayah; tidak ada titik pastinya di peta.', water: '{name} adalah badan air.', waterRef: '{name}, dekat {ref}.',
+    unknown: 'Tidak diketahui di mana {name} berada.',
+    straight: '{pre}sekitar {n} km dalam garis lurus; {a} berada {loc}.', nearDist: '{pre}{a} berada tepat di dekat {b} (kurang dari 3 km).',
+    regionDist: '{name} adalah sebuah wilayah; tidak ada titik untuk diukur.', waterDist: '{name} adalah sungai atau perairan lain; tidak ada titik untuk diukur.',
+    uncertainDist: 'Tidak diketahui dengan pasti di mana {name} berada, jadi jaraknya tidak diberikan.',
+    foot: 'berjalan kaki, dengan keledai atau unta', horse: 'berkuda', ship: 'dengan kapal, pada musim berlayar (musim semi sampai musim gugur)',
+    less: 'kurang dari sehari', over: 'lebih dari dua bulan', lessAll: 'kurang dari sehari {foot}',
+    sep: '; ', end: '.', approx: '(perkiraan)', refDays: '{pre}dari {ref} ke {name}, {foot}: {r} (perkiraan).',
+    born: 'Menurut Theographic, {name} lahir di {place}.', bornF: 'Menurut Theographic, {name} lahir di {place}.',
+    bornNone: 'Data yang saya miliki tidak menyebutkan di mana {name} lahir.',
+    died: 'Menurut Theographic, {name} meninggal di {place}.', diedF: 'Menurut Theographic, {name} meninggal di {place}.',
+    diedNone: 'Data yang saya miliki tidak menyebutkan di mana {name} meninggal.',
+  },
+  // hi, ar: pending native review
+  hi: {
+    dir: ['{ref} के उत्तर में', '{ref} के उत्तर-पूर्व में', '{ref} के पूर्व में', '{ref} के दक्षिण-पूर्व में', '{ref} के दक्षिण में', '{ref} के दक्षिण-पश्चिम में', '{ref} के पश्चिम में', '{ref} के उत्तर-पश्चिम में'],
+    pre: 'प्रस्तावित स्थान के अनुसार, ',
+    where: '{pre}{name} {loc} लगभग {n} किमी दूर है।', near: '{pre}{name} {ref} के बिलकुल पास है।', onMap: '{name} नक्शे पर दिखाया गया है।',
+    uncertain: 'निश्चित रूप से नहीं पता कि {name} कहाँ था; कई जगहें सुझाई गई हैं।',
+    uncertainRef: 'निश्चित रूप से नहीं पता कि {name} कहाँ था; {ref} के पास कई जगहें सुझाई गई हैं।',
+    region: '{name} एक क्षेत्र है; नक्शे पर इसका कोई ठीक बिंदु नहीं है।', water: '{name} एक जलराशि है।', waterRef: '{name}, {ref} के पास।',
+    unknown: 'यह नहीं पता कि {name} कहाँ था।',
+    straight: '{pre}सीधी रेखा में लगभग {n} किमी; {a} {loc} है।', nearDist: '{pre}{a} {b} के बिलकुल पास है (3 किमी से कम)।',
+    regionDist: '{name} एक क्षेत्र है; इसमें नापने के लिए कोई बिंदु नहीं है।', waterDist: '{name} एक नदी या जलराशि है; इसमें नापने के लिए कोई बिंदु नहीं है।',
+    uncertainDist: 'निश्चित रूप से नहीं पता कि {name} कहाँ था, इसलिए दूरी नहीं दी गई।',
+    foot: 'पैदल, गधे या ऊँट से', horse: 'घोड़े से', ship: 'जहाज़ से, नौकायन के मौसम में (वसंत से पतझड़ तक)',
+    less: 'एक दिन से कम', over: 'दो महीने से अधिक', lessAll: '{foot} एक दिन से कम',
+    sep: '; ', end: '।', approx: '(लगभग)', refDays: '{pre}{ref} से {name} तक, {foot}: {r} (लगभग)।',
+    born: 'Theographic के अनुसार, {name} का जन्म {place} में हुआ।', bornF: 'Theographic के अनुसार, {name} का जन्म {place} में हुआ।',
+    bornNone: 'मेरे पास मौजूद आँकड़े नहीं बताते कि {name} का जन्म कहाँ हुआ।',
+    died: 'Theographic के अनुसार, {name} की मृत्यु {place} में हुई।', diedF: 'Theographic के अनुसार, {name} की मृत्यु {place} में हुई।',
+    diedNone: 'मेरे पास मौजूद आँकड़े नहीं बताते कि {name} की मृत्यु कहाँ हुई।',
+  },
+  ar: {
+    dir: ['شمال {ref}', 'شمال شرق {ref}', 'شرق {ref}', 'جنوب شرق {ref}', 'جنوب {ref}', 'جنوب غرب {ref}', 'غرب {ref}', 'شمال غرب {ref}'],
+    pre: 'بحسب الموقع المقترح، ',
+    where: '{pre}موقع {name}: على بعد نحو {n} كم {loc}.', near: '{pre}{name} قريب جدًا من {ref}.', onMap: '{name} مبيّن على الخريطة.',
+    uncertain: 'لا يُعرف بيقين أين كان موقع {name}؛ اقتُرحت عدة مواقع.',
+    uncertainRef: 'لا يُعرف بيقين أين كان موقع {name}؛ اقتُرحت عدة مواقع قرب {ref}.',
+    region: '{name} منطقة؛ ليس لها نقطة محددة على الخريطة.', water: '{name} مسطح مائي.', waterRef: '{name}، قرب {ref}.',
+    unknown: 'لا يُعرف أين كان موقع {name}.',
+    straight: '{pre}نحو {n} كم في خط مستقيم؛ {a} {loc}.', nearDist: '{pre}{a} قريب جدًا من {b} (أقل من 3 كم).',
+    regionDist: '{name} منطقة؛ ليس لها نقطة للقياس.', waterDist: '{name} نهر أو مسطح مائي؛ ليس له نقطة للقياس.',
+    uncertainDist: 'لا يُعرف بيقين أين كان موقع {name}، فلا تُعطى مسافة.',
+    foot: 'سيرًا على الأقدام أو على حمار أو جمل', horse: 'على الحصان', ship: 'بالسفينة، في موسم الإبحار (من الربيع إلى الخريف)',
+    less: 'أقل من يوم', over: 'أكثر من شهرين', lessAll: 'أقل من يوم {foot}',
+    sep: '؛ ', end: '.', approx: '(تقريبًا)', refDays: '{pre}من {ref} إلى {name}، {foot}: {r} (تقريبًا).',
+    born: 'بحسب Theographic، وُلد {name} في {place}.', bornF: 'بحسب Theographic، وُلدت {name} في {place}.',
+    bornNone: 'البيانات التي لديّ لا تذكر أين وُلد {name}.', bornNoneF: 'البيانات التي لديّ لا تذكر أين وُلدت {name}.',
+    died: 'بحسب Theographic، مات {name} في {place}.', diedF: 'بحسب Theographic، ماتت {name} في {place}.',
+    diedNone: 'البيانات التي لديّ لا تذكر أين مات {name}.', diedNoneF: 'البيانات التي لديّ لا تذكر أين ماتت {name}.',
+  },
+}
+const geoLang = (ui: string): GeoLang => {
+  const l = (ui || '').slice(0, 2).toLowerCase()
+  return (l in geoText ? l : 'en') as GeoLang
+}
+const geoFill = (tpl: string, v: Record<string, string>): string => tpl.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k]! : m))
+const geoUp = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+/** "N km" rounded as shown: under 10 km to the km, up to 100 to 5 km, more to 10 km. */
+function geoKm(km: number): number {
+  if (km < 10) return Math.max(1, Math.round(km))
+  if (km <= 100) return Math.round(km / 5) * 5
+  return Math.round(km / 10) * 10
+}
+const GEO_DIR: Record<Trip['direction'], number> = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 }
+/** The phrase "north of Y" for where `a` stands in relation to `b`: the opposite of the bearing a to b. */
+const geoLoc = (t: GeoText, d: Trip['direction'], ref: string): string => geoFill(t.dir[(GEO_DIR[d] + 4) % 8]!, { ref })
+const geoPre = (t: GeoText, sure: number): string => (sure === 2 ? t.pre : '')
+
+/** "It is not known where X was": a place with no point (certainty 0). */
+export function unknownPlaceLine(ui: string, place: PlaceRef): string {
+  return geoFill(geoText[geoLang(ui)].unknown, { name: place.name })
+}
+
+/**
+ * Where `place` is, in relation to `ref` (the nearest reference place): "Bethel was about 15 km north of Jerusalem." `trip` is `trip(place, ref)` of the
+ * client (undefined when either has no point or has nothing to measure). Region, water and uncertain places get their own sentences, without km.
+ */
+export function whereLine(ui: string, place: PlaceRef, ref: PlaceRef | null, trip: Trip | undefined): string {
+  const t = geoText[geoLang(ui)]
+  const v = { name: place.name, ref: ref?.name ?? '' }
+  if (place.sure === 0) return unknownPlaceLine(ui, place)
+  if (place.form === 2) return geoFill(t.region, v)
+  if (place.form === 3) return geoFill(ref ? t.waterRef : t.water, v)
+  if (place.sure === 1) return geoFill(ref ? t.uncertainRef : t.uncertain, v)
+  if (!ref || !trip) return geoFill(t.onMap, v)
+  const pre = geoPre(t, trip.sure)
+  if (trip.near) return geoFill(t.near, { ...v, pre })
+  return geoFill(t.where, { ...v, pre, n: String(geoKm(trip.km)), loc: geoLoc(t, trip.direction, ref.name) })
+}
+
+/**
+ * The distance between two places in a straight line: "About 9 km in a straight line; Bethlehem is south of Jerusalem." `trip` is `trip(a, b)`. A region
+ * or a water has no point to measure; an uncertain or unlocated place gives no number.
+ */
+export function distanceLine(ui: string, a: PlaceRef, b: PlaceRef, trip: Trip | undefined): string {
+  const t = geoText[geoLang(ui)]
+  const nopoint = [a, b].find((p) => p.sure === 0)
+  if (nopoint) return unknownPlaceLine(ui, nopoint)
+  const shape = [a, b].find((p) => p.form === 2 || p.form === 3)
+  if (shape) return geoFill(shape.form === 2 ? t.regionDist : t.waterDist, { name: shape.name })
+  const doubt = [a, b].find((p) => p.sure === 1)
+  if (doubt) return geoFill(t.uncertainDist, { name: doubt.name })
+  if (!trip) return ''
+  const pre = geoPre(t, trip.sure)
+  if (trip.near) return geoFill(t.nearDist, { pre, a: a.name, b: b.name })
+  return geoUp(geoFill(t.straight, { pre, a: a.name, n: String(geoKm(trip.km)), loc: geoLoc(t, trip.direction, b.name) }))
+}
+
+/** Whole days as a range (approx.): "about 8 to 11 days", "about 3 days", "less than a day", "more than two months". */
+function geoRange(l: GeoLang, t: GeoText, d: { low: number; high: number }): string {
+  if (d.low >= 60) return t.over
+  if (d.low === 0 && d.high <= 1) return t.less
+  const same = d.low === d.high
+  const [a, b] = [String(d.low), String(d.high)]
+  switch (l) {
+    case 'en': return same ? `about ${a} ${d.low === 1 ? 'day' : 'days'}` : `about ${a} to ${b} days`
+    case 'es': return same ? (d.low === 1 ? 'un día' : `unos ${a} días`) : `unos ${a} a ${b} días`
+    case 'fr': return same ? `environ ${a} ${d.low === 1 ? 'jour' : 'jours'}` : `environ ${a} à ${b} jours`
+    case 'id': return same ? `sekitar ${a} hari` : `sekitar ${a} sampai ${b} hari`
+    case 'hi': return same ? `लगभग ${a} दिन` : `लगभग ${a} से ${b} दिन`
+    case 'ar': {
+      // number agreement: 1 and 2 are words, 3 to 10 take the plural, 11 or more the accusative singular
+      const unit = (n: number) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n <= 10 ? `${n} أيام` : `${n} يومًا`)
+      return same ? `نحو ${unit(d.low)}` : `نحو ${a} إلى ${unit(d.high)}`
+    }
+  }
+}
+
+/**
+ * How long the trip takes, from the client's `Trip` (the rules of 5.8 are there: no `days` with certainty below 2, nearer than 3 km, or without a
+ * point): "On foot, by donkey or by camel: about 8 to 11 days; on horseback: about 4 to 6 days (approx.)." Empty string without `trip.days`.
+ */
+export function daysLine(ui: string, trip: Trip | undefined): string {
+  if (!trip?.days) return ''
+  const l = geoLang(ui)
+  const t = geoText[l]
+  const { foot, horse, ship } = trip.days
+  const lessFoot = foot.low === 0 && foot.high <= 1
+  const lessHorse = horse.low === 0 && horse.high <= 1
+  const colon = l === 'fr' ? ' : ' : ': '
+  const parts: string[] = []
+  if (lessFoot && lessHorse) parts.push(geoFill(t.lessAll, { foot: t.foot }))
+  else {
+    parts.push(`${t.foot}${colon}${geoRange(l, t, foot)}`)
+    parts.push(`${t.horse}${colon}${geoRange(l, t, horse)}`)
+  }
+  if (ship) parts.push(`${t.ship}${colon}${geoRange(l, t, ship)}`)
+  const pre = geoPre(t, trip.sure)
+  const body = parts.join(t.sep)
+  return (pre ? pre + body : geoUp(body)) + ` ${t.approx}${t.end}`
+}
+
+/** For the place card: the days on foot from its reference place, as `refDaysLine(ui, place, ref, trip(place, ref))`. Empty string without days. */
+export function refDaysLine(ui: string, place: PlaceRef, ref: PlaceRef, trip: Trip | undefined): string {
+  if (!trip?.days) return ''
+  const l = geoLang(ui)
+  const t = geoText[l]
+  const pre = geoPre(t, trip.sure)
+  const s = geoFill(t.refDays, { pre, ref: ref.name, name: place.name, foot: t.foot, r: geoRange(l, t, trip.days.foot) })
+  return pre ? s : geoUp(s)
+}
+
+/** "According to Theographic, Paul was born in Tarsus." `place` null: "The data I have do not say where X was born." `female` picks fr and ar agreement. */
+export function bornLine(ui: string, person: string, place: PlaceRef | null, female = false): string {
+  const t = geoText[geoLang(ui)]
+  return place ? geoFill(female ? t.bornF : t.born, { name: person, place: place.name }) : geoFill((female && t.bornNoneF) || t.bornNone, { name: person })
+}
+
+export function diedLine(ui: string, person: string, place: PlaceRef | null, female = false): string {
+  const t = geoText[geoLang(ui)]
+  return place ? geoFill(female ? t.diedF : t.died, { name: person, place: place.name }) : geoFill((female && t.diedNoneF) || t.diedNone, { name: person })
 }
