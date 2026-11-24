@@ -85,8 +85,8 @@ describe('how many cards, and which', () => {
       HT(ui).kinQ.forEach((q, i) => {
         const k = kinShape(q)
         // (Spanish and some others say "children" for the plural: the same family question, asked for sons)
-        expect(i === 0 ? ['sons', 'children'] : [kinds[i]], `${ui}: ${q}`).toContain(k?.kind as string)
-        expect(k?.lang, `${ui}: ${q}`).toBe(ui as typeof k.lang)
+        expect(i === 0 ? ['sons', 'children'] : [kinds[i]], `${ui}: ${q}`).toContain(k!.kind)
+        expect(k?.lang, `${ui}: ${q}`).toBe(ui as any)
       })
     }
   })
@@ -97,8 +97,8 @@ describe('how many cards, and which', () => {
       HT(ui).placeQ.forEach((q, i) => {
         const k = placeShape(q)
         expect(k?.kind, `${ui}: ${q}`).toBe(kinds[i])
-        expect(k?.lang, `${ui}: ${q}`).toBe(ui as typeof k.lang)
-        expect(k?.names.length, `${ui}: ${q}`).toBe(1)
+        expect(k?.lang, `${ui}: ${q}`).toBe(ui as any)
+        expect(k!.names.length, `${ui}: ${q}`).toBe(1)
       })
     }
   })
@@ -158,7 +158,7 @@ describe('how many cards, and which', () => {
   })
 
   test('the "without typing" card names the Bible Stories only when the phone has them', () => {
-    const body = (ui: string, obs: boolean) => cardsFor(ui, null, true, true, { obs, books: true }).find((c) => c.id === 'browse')!.body
+    const body = (ui: string, obs: boolean) => cardsFor(ui, null, true, true, has({ obs, books: true })).find((c) => c.id === 'browse')!.body
     for (const ui of UIS) expect(body(ui, true), ui).not.toBe(body(ui, false))
     expect(body('es', true)).toContain('Historias de la Biblia')
     expect(body('es', false)).not.toContain('Historias de la Biblia')
@@ -269,7 +269,7 @@ describe('the Bible Stories card and the examples', () => {
     await withObs('en')
     const ex = (await examplesOf('en', ['en'], 'en'))!
     for (const obs of [true, false]) {
-      for (const c of cardsFor('en', obs ? ex : { ...ex, obs: null }, true, true, { obs, books: true })) {
+      for (const c of cardsFor('en', obs ? ex : { ...ex, obs: null }, true, true, has({ obs, books: true }))) {
         const tries = c.ask.length || c.fill || c.tryBrowse || c.sheet
         // (a card with no example, no fill, no sheet and no browse has no "Try it": the saved and menu ones have their own button)
         if (!tries) expect(['obs', 'who', 'save', 'menu', 'browse']).toContain(c.id)
