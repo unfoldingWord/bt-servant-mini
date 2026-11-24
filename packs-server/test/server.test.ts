@@ -34,6 +34,7 @@ function memoryBucket(files: Record<string, Uint8Array>) {
 
 const bytes = (n: number, seed = 1) => Uint8Array.from({ length: n }, (_, i) => (i * 7 + seed) & 255)
 const SEG = 'a'.repeat(64)
+const COMP = 'c'.repeat(64)
 const MODEL = '25937ade35ce4462bbb5879de7c420ba63b70e009c13f81a316d23de4c47ccb7'
 const files = {
   'v3/catalog/en.seg': bytes(300, 2),
@@ -42,6 +43,7 @@ const files = {
   'v3/catalog/common.seg': bytes(120, 5),
   [`v3/seg/${SEG}.seg`]: bytes(1000, 6),
   [`v3/seg/${MODEL}.seg`]: bytes(5000, 7),
+  [`v3/complement/${COMP}`]: bytes(60, 8),
 }
 const env = () => ({ PACKS: memoryBucket(files) })
 const req = (path: string, init: RequestInit = {}) => new Request(`https://packs.test${path}`, init)
@@ -110,6 +112,16 @@ describe('serving', () => {
     expect(r.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable, no-transform')
     expect(r.headers.get('Accept-Ranges')).toBe('bytes')
     expect(await body(r)).toEqual(files[`v3/seg/${SEG}.seg`])
+  })
+  test('a complement (the map background): immutable, with no extension in the key; a bad id is a bad path', async () => {
+    const r = await handle(req(`/v3/packs/complement/${COMP}`), env())
+    expect(r.status).toBe(200)
+    expect(r.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable, no-transform')
+    expect(await body(r)).toEqual(files[`v3/complement/${COMP}`])
+    expect(parsePath(`complement/${COMP}`)).toEqual({ route: 'complement', id: COMP, key: `v3/complement/${COMP}` })
+    for (const bad of ['complement/catalog', 'complement/' + COMP.toUpperCase(), 'complement/abc', 'complement']) expect(parsePath(bad)).toBeNull()
+    expect((await handle(req(`/v3/packs/complement/${'d'.repeat(64)}`), env())).status).toBe(404)
+    expect(await (await handle(req(`/v3/packs/complement/${'d'.repeat(64)}`), env())).json()).toEqual({ error: 'complement not found' })
   })
   test('the model: HEAD gives its size (wllama), Range resumes a cut download (Android)', async () => {
     const all = files[`v3/seg/${MODEL}.seg`]!

@@ -512,11 +512,11 @@ describe('basemapBytes', () => {
       return existsSync(p) ? ok(readFileSync(p)) : none()
     }
     if (url === `./packs/${'common/complements'}/${f.basemap.id}.basemap`) return serve.app ? ok(serve.app) : none()
-    if (url === `http://packs.test/common/complements/${f.basemap.id}.basemap`) return serve.server ? ok(serve.server) : none()
+    if (url === `http://packs.test/v3/packs/complement/${f.basemap.id}`) return serve.server ? ok(serve.server) : none()
     return none()
   }) as typeof fetch
   const phone = () => { ;(globalThis as any).indexedDB = new fake.IDBFactory(); resetAddedStore(); reloadPacks(); asked.length = 0 }
-  const fetched = () => asked.filter((u) => u.includes('.basemap'))
+  const fetched = () => asked.filter((u) => u.includes('.basemap') || u.includes('/v3/packs/complement/'))
 
   beforeAll(async () => {
     fake = await import(FAKE_IDB)
@@ -546,10 +546,10 @@ describe('basemapBytes', () => {
     expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
     expect(fetched().length).toBe(0)
   })
-  test('not in the app folder: the packs server, at the same relative path', async () => {
+  test('not in the app folder: the packs server, at /v3/packs/complement/<id>', async () => {
     phone(); serve.app = null; serve.server = f.basemap.bytes
     expect((await basemapBytes(f.lang))?.length).toBe(f.basemap.bytes.length)
-    expect(fetched()).toEqual([`./packs/common/complements/${f.basemap.id}.basemap`, `http://packs.test/common/complements/${f.basemap.id}.basemap`])
+    expect(fetched()).toEqual([`./packs/common/complements/${f.basemap.id}.basemap`, `http://packs.test/v3/packs/complement/${f.basemap.id}`])
   })
   test('nowhere: null, no error, and the network is not asked again for a while', async () => {
     phone(); serve.app = null; serve.server = null
