@@ -269,3 +269,38 @@ describe('the line of ancestors', () => {
     expect(draw(v).textContent).toContain('daughter of Jesse')
   })
 })
+
+describe('the lines of the tree (the CSS hangs on this structure)', () => {
+  test('descendants: every row sits in a tv-item under a tv-kids; the open bar stays inside the item', () => {
+    const d = draw(view({ open: 2 }), { bar: async () => [] })
+    const kids = d.byClass('tv-kids')
+    expect(kids.length).toBeGreaterThan(1)
+    for (const k of kids) expect(k.children.every((c) => c.has('tv-item'))).toBe(true)
+    for (const r of d.byClass('tv-row')) expect(r.parentElement!.has('tv-item')).toBe(true)
+    expect(d.byClass('flat').length).toBe(0)
+    // the last child of a group is the last tv-item of its container
+    const dan = nameOf(d, 'Dan').parentElement!.parentElement!
+    expect(dan.parentElement!.children[dan.parentElement!.children.length - 1]).toBe(dan)
+    // a nested branch is inside its parent's item
+    const hanoch = nameOf(d, 'Hanoch').parentElement!.parentElement!
+    expect(hanoch.parentElement!.parentElement!.has('tv-branch')).toBe(true)
+    expect(hanoch.parentElement!.parentElement!.parentElement!.has('tv-item')).toBe(true)
+    nameOf(d, 'Reuben').click()
+    const bar = d.byClass('tv-bar')[0]!
+    expect(bar.parentElement!.has('tv-item')).toBe(true)
+  })
+  test('ancestors: rows are tv-up, only the last is marked, the bar goes inside the row', () => {
+    const v: TreeView = {
+      mode: 'up', open: 1, ui: 'en', pack: 'en', focus: tp('per:david', 'David', 1), parents: [], partners: [], siblings: [], groups: [], nodes: [], cut: false,
+      line: [{ p: tp('per:jesse', 'Jesse', 1), mother: tp('per:ruth', 'Ruth', 2) }, { p: tp('per:ahlai', 'Ahlai', 1), others: [tp('per:jarha', 'Jarha', 1)] }, { p: tp('per:eve', 'Eve', 2) }],
+    }
+    const d = draw(v)
+    const ups = d.byClass('tv-up')
+    expect(ups.length).toBe(3)
+    expect(ups.map((u) => u.has('last'))).toEqual([false, false, true])
+    nameOf(d, 'Jarha').click()
+    const bar = d.byClass('tv-bar')[0]!
+    expect(bar.parentElement).toBe(ups[1]!)
+    expect(d.byClass('tv-up').length).toBe(3)
+  })
+})
