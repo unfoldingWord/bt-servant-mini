@@ -88,7 +88,7 @@ for (const [ui, pack] of PHONES) {
     const fr = await ask([ex.free], ui)
     expect(fr.found, ex.free).toBeGreaterThan(0)
     // and every "Try it" of every card, as the guide sends it
-    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true })) {
+    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true, people: true, places: true })) {
       if (!c.ask.length) continue
       const r = await ask(c.ask, ui)
       expect(r.found, `${ui} ${c.id}: ${c.ask.join(' → ')}`).toBeGreaterThan(0)
@@ -110,7 +110,8 @@ test('another app language than the pack: the examples are still answered', asyn
     await installPacks([pack])
     const ex = (await examplesOf(ui, [pack], null))!
     for (const q of [ex.passage, ex.notes, ex.questions].filter((x): x is string => !!x)) expect((await ask([q], ui)).found, `${ui}/${pack}: ${q}`).toBeGreaterThan(0)
-    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true })) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
+    // (not the people and places cards: they name Isaac and Jerusalem in the app's language, which a pack of another language may not have)
+    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true, people: false, places: false })) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
   }
 }, 120000)
 
@@ -177,3 +178,26 @@ test('every card says that writing in your own words works too, in every languag
     }
   }
 })
+
+// the people and places cards: each phrase, typed in its language with that language's pack, goes where its card says
+// (the packs here have the family data and the place names, but no map points: the places answer has no map)
+for (const [ui, pack] of PHONES) {
+  test(`${ui} with ${pack}: the people and places phrases route to a family, a tree and a place`, async () => {
+    await installPacks([pack])
+    const s = HT(ui)
+    const [sons, tree, up, down] = s.kinQ
+    for (const q of [sons, tree, up, down]) {
+      const r = await ask([q], ui)
+      expect([r.route, r.answered, r.concept], `${ui}: ${q}`).toEqual(['kin', 'family', 'per:isaac'])
+      expect(r.found, `${ui}: ${q}`).toBeGreaterThan(0)
+    }
+    // the tree phrase shows the tree; the first one (the "Try it") only the sons
+    expect(!!(await ask([sons], ui)).reply.tree, `${ui}: ${sons}`).toBe(false)
+    for (const q of [tree, up, down]) expect(!!(await ask([q], ui)).reply.tree, `${ui}: ${q}`).toBe(true)
+    for (const q of s.placeQ) {
+      const r = await ask([q], ui)
+      expect([r.route, r.answered, r.concept], `${ui}: ${q}`).toEqual(['place', 'place', 'lug:jerusalem'])
+      expect(r.found, `${ui}: ${q}`).toBeGreaterThan(0)
+    }
+  }, 120000)
+}

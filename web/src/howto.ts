@@ -1,6 +1,7 @@
-// How to ask (Abel, Nov 16 2026): a short optional guide for someone new, never a gate. Six to eight cards, one screen each (a
-// passage; a word or a topic; the Bible Stories, when the phone has them; who is who, when it has a book; following the
-// conversation; saving and notes; without typing; more in the menu), each with a "Try it" where it has an example, that
+// How to ask (Abel, Nov 16 2026): a short optional guide for someone new, never a gate. Six to ten cards, one screen each (a
+// passage; a word or a topic; the Bible Stories, when the phone has them; who is who, when it has a book; families and family trees,
+// when it has the people data; places and maps, when it has the place data; following the conversation; saving and notes; without
+// typing; more in the menu), each with a "Try it" where it has an example, that
 // asks it the way typing it and pressing send does, with the packs on this phone. Every card says that writing in
 // your own words works too: the short forms are the fastest way, not the only one.
 //
@@ -13,6 +14,10 @@ import { CANON, openLang } from './packs'
 import { booksOf, type Ctx, firstPack, fillName, helpsKnown, loadHelps, ST, understood } from './suggest'
 import { termArticle } from './pipeline'
 import { composerOn } from './composer'
+import { hasPeople, KT } from './kin'
+import { placePacks } from './places'
+import { PLT } from './placetext'
+import { followTitle, FOLLOW_TYPES } from './followtype'
 import { onlineAvailable } from './online'
 import { bidiLabel, rtlLang } from './bidi'
 import { backLabel, GT } from './graph'
@@ -40,9 +45,22 @@ type H = {
   freeQ: string
   /** a word's meaning (each with the article it names, tried in order until the pack has one), and a translation topic */
   terms: [string, string][]; topics: [string, string][]
+  /**
+   * What the people card shows ({k1}..{k4} in its body): the sons of Isaac, his family tree, his ancestors, his descendants. Each is a
+   * phrase the kin reader (kin.ts) understands in this language; the first one is what "Try it" sends.
+   */
+  kinQ: [string, string, string, string]
+  /** What the places card shows ({p1}..{p3}): where Jerusalem is, a map of it, what happened there (places.ts reads each). The first is "Try it". */
+  placeQ: [string, string, string]
+  /** the places card's last sentence when the phone has the Bible Stories ("See on the map" is under their frames too) */
+  mapObs: string
+  /** the "without typing" card's sentence about the tab of people and places in Browse ({tab}: its name, as Browse shows it) */
+  tab: string
 }
-export type CardId = 'passage' | 'word' | 'obs' | 'who' | 'follow' | 'save' | 'browse' | 'menu'
-// {map}, {back} (with its arrow, → in Arabic), {browse}, {saved}: the names the app shows for them (graph.ts, explore.ts, saved.ts), so the card says what the screen says
+export type CardId = 'passage' | 'word' | 'obs' | 'who' | 'people' | 'places' | 'follow' | 'save' | 'browse' | 'menu'
+// {map} (the button of the conversation map, graph.ts: not a map of places), {back} (with its arrow, → in Arabic), {browse}, {saved}, {treeBtn}
+// (the family tree button, kin.ts), {seeMap} (placetext.ts), {structure} (macula.ts), {types} (the follow-up types, followtype.ts), {tab}:
+// the names the app shows for them, so the card says what the screen says
 const STR: Record<string, H> = {
   en: {
     menu: 'How to ask', step: '{n} of {m}', back: 'Back', next: 'Next',
@@ -56,9 +74,11 @@ const STR: Record<string, H> = {
       passage: ['A passage', 'Write the book, the chapter and the verse. Add a word like “notes” or “questions” to see only that.'],
       word: ['A word or a topic', 'Ask what a word means, or how to translate something. The answer comes from Translation Words and Translation Academy.'],
       obs: ['Bible Stories', 'Write OBS and the number of the story, or of the story and the frame. Each frame comes with its picture and its notes. Tap an underlined word to see its note or its key term, and open the Bible passage the story tells. You can also write "story of" and a name: I suggest the stories.'],
-      who: ['Who is who', 'Ask who “he” or “she” is in a verse, or ask for the sentence structure. The answer comes from the original text (Hebrew or Greek) and shows you the words that translate it.'],
+      who: ['Who is who', 'Ask who “he” or “she” is in a verse, or ask for the sentence structure. The answer comes from the original text (Hebrew or Greek) and shows you the words that translate it. Under it, “{structure}” shows how the sentence is built.'],
+      people: ['Families and family trees', 'Ask for someone’s family: “{k1}”. For the whole family tree write “{k2}”, or tap “{treeBtn}” under a family answer or under a Translation Words article about a person. “{k3}” and “{k4}” show one direction only. In a tree, tap a name to go to that person.'],
+      places: ['Places and maps', 'Ask where a place is: “{p1}”. See it on a map: “{p2}”. Or ask what happened there: “{p3}”. Under a passage, tap “{seeMap}” to see the places it names.'],
       save: ['Save and annotate', 'Tap ☆ to save a verse, an article or an answer, and ✎ to write your note. Everything stays on this phone, in Browse → ☆ {saved}. To send an answer by WhatsApp, use its share button.'],
-      follow: ['Follow the conversation', 'After an answer, go on in a few words: I remember the passage. The buttons under every answer take you further, and the {map} or “{back}” takes you back to any earlier point. A long answer comes in parts: move through them with ◀ ▶.'],
+      follow: ['Follow the conversation', 'After an answer, go on in a few words: I remember the passage. The buttons under every answer take you further. Each has a small icon for its kind, and they are grouped by kind: “More” shows the rest under their titles ({types}). The “{map}” button next to {browse} opens the conversation map (not a map of places): it, or “{back}”, takes you back to any earlier point of the conversation. A long answer comes in parts: move through them with ◀ ▶.'],
       browse: ['Without typing', '{browse} shows the Bible book by book, the Bible Stories, the Translation Academy manuals and the guided modes, which take you step by step.'],
       menu: ['More in the menu', 'In the menu: the pictures of the Bible Stories to keep without internet. In Settings: online AI (optional: with internet, a larger model explains what I find) and Safety: a discreet mode and a PIN, if someone might check your phone.'],
     },
@@ -67,6 +87,10 @@ const STR: Record<string, H> = {
     notes: 'notes {ref}', questions: 'questions {ref}', follow: ['next verse', 'and the notes?'], freeQ: 'Explain {ref} in simple words',
     terms: [['What is grace?', 'tw:kt/grace'], ['What is love?', 'tw:kt/love'], ['What is faith?', 'tw:kt/faith']],
     topics: [['How do I translate a metaphor?', 'ta:translate/figs-metaphor'], ['How do I translate an idiom?', 'ta:translate/figs-idiom']],
+    kinQ: ['sons of Isaac', 'family tree of Isaac', 'ancestors of Isaac', 'descendants of Isaac'],
+    placeQ: ['Where is Jerusalem?', 'map of Jerusalem', 'what happened in Jerusalem'],
+    mapObs: ' The same under a frame of the Bible Stories.',
+    tab: 'In {browse} there is also a “{tab}” tab: search a name or a place and open its card.',
   },
   es: {
     menu: 'Cómo preguntar', step: '{n} de {m}', back: 'Atrás',
@@ -80,9 +104,11 @@ const STR: Record<string, H> = {
       passage: ['Un pasaje', 'Escribe el libro, el capítulo y el versículo. Añade una palabra como «notas» o «preguntas» para ver solo eso.'],
       word: ['Una palabra o un tema', 'Pregunta qué significa una palabra o cómo traducir algo. La respuesta viene de Translation Words y Translation Academy.'],
       obs: ['Historias de la Biblia', 'Escribe OBS y el número de la historia, o de la historia y el cuadro. Cada cuadro trae su imagen y sus notas. Toca una palabra subrayada para ver su nota o su palabra clave, y abre el pasaje de la Biblia que cuenta la historia. También puedes escribir "historia de" y un nombre: te sugiero las historias.'],
-      who: ['Quién es quién', 'Pregunta quién es «él» o «ella» en un versículo, o pide la estructura de la oración. La respuesta sale del texto original (hebreo o griego) y te muestra las palabras que lo traducen.'],
+      who: ['Quién es quién', 'Pregunta quién es «él» o «ella» en un versículo, o pide la estructura de la oración. La respuesta sale del texto original (hebreo o griego) y te muestra las palabras que lo traducen. Debajo, «{structure}» muestra cómo está armada la oración.'],
+      people: ['Familias y árboles', 'Pregunta por la familia de alguien: «{k1}». Para el árbol de toda la familia escribe «{k2}», o toca «{treeBtn}» bajo una respuesta de familia o bajo un artículo de Translation Words sobre una persona. «{k3}» y «{k4}» muestran un solo sentido. En un árbol, toca un nombre para ir a esa persona.'],
+      places: ['Lugares y mapas', 'Pregunta dónde está un lugar: «{p1}». Míralo en un mapa: «{p2}». O pregunta qué pasó allí: «{p3}». Bajo un pasaje, toca «{seeMap}» para ver los lugares que nombra.'],
       save: ['Guarda y anota', 'Toca ☆ para guardar un versículo, un artículo o una respuesta, y ✎ para escribir tu nota. Todo queda en este teléfono, en Explorar → ☆ {saved}. Para mandar una respuesta por WhatsApp, usa su botón de compartir.'],
-      follow: ['Sigue la conversación', 'Después de una respuesta, sigue con pocas palabras: recuerdo el pasaje. Los botones bajo cada respuesta te llevan más lejos, y el {map} o «{back}» te devuelve a cualquier punto anterior. Una respuesta larga viene en partes: pasa con ◀ ▶.'],
+      follow: ['Sigue la conversación', 'Después de una respuesta, sigue con pocas palabras: recuerdo el pasaje. Los botones bajo cada respuesta te llevan más lejos. Cada uno tiene un icono pequeño de su tipo, y van agrupados por tipo: «Más» muestra el resto bajo sus títulos ({types}). El botón «{map}» junto a {browse} abre el mapa de la conversación (no un mapa de lugares): él, o «{back}», te devuelve a cualquier punto anterior de la conversación. Una respuesta larga viene en partes: pasa con ◀ ▶.'],
       browse: ['Sin escribir', '{browse} muestra la Biblia libro por libro, las Historias de la Biblia, los manuales de Translation Academy y los modos guiados, que te llevan paso a paso.'],
       menu: ['Más en el menú', 'En el menú: las imágenes de las Historias de la Biblia para tenerlas sin internet. En Ajustes: la IA en línea (opcional: con internet, un modelo más grande explica lo que encuentro) y Seguridad: un modo discreto y un PIN, si alguien puede revisar tu teléfono.'],
     },
@@ -91,6 +117,10 @@ const STR: Record<string, H> = {
     notes: 'notas {ref}', questions: 'preguntas {ref}', follow: ['versículo siguiente', '¿y las notas?'], freeQ: 'Explícame {ref} con palabras sencillas',
     terms: [['¿Qué significa gracia?', 'tw:kt/grace'], ['¿Qué significa amor?', 'tw:kt/love'], ['¿Qué significa fe?', 'tw:kt/faith']],
     topics: [['¿Cómo traduzco una metáfora?', 'ta:translate/figs-metaphor'], ['¿Cómo traduzco una expresión idiomática?', 'ta:translate/figs-idiom']],
+    kinQ: ['hijos de Isaac', 'árbol de Isaac', 'antepasados de Isaac', 'descendientes de Isaac'],
+    placeQ: ['¿Dónde está Jerusalén?', 'mapa de Jerusalén', '¿Qué pasó en Jerusalén?'],
+    mapObs: ' Lo mismo bajo un cuadro de las Historias de la Biblia.',
+    tab: 'En {browse} hay además una pestaña «{tab}»: busca un nombre o un lugar y abre su ficha.',
   },
   fr: {
     menu: 'Comment poser une question', step: '{n} sur {m}',
@@ -104,9 +134,11 @@ const STR: Record<string, H> = {
       passage: ['Un passage', 'Écrivez le livre, le chapitre et le verset. Ajoutez un mot comme « notes » ou « questions » pour ne voir que cela.'],
       word: ['Un mot ou un sujet', 'Demandez ce que signifie un mot, ou comment traduire quelque chose. La réponse vient de Translation Words et de Translation Academy.'],
       obs: ['Histoires de la Bible', "Écrivez OBS et le numéro de l'histoire, ou de l'histoire et de l'image. Chaque image vient avec son illustration et ses notes. Touchez un mot souligné pour voir sa note ou son mot clé, et ouvrez le passage de la Bible que raconte l'histoire. Vous pouvez aussi écrire « histoire de » et un nom : je vous suggère les histoires."],
-      who: ['Qui est qui', 'Demandez qui est « il » ou « elle » dans un verset, ou la structure de la phrase. La réponse vient du texte original (hébreu ou grec) et vous montre les mots qui le traduisent.'],
+      who: ['Qui est qui', 'Demandez qui est « il » ou « elle » dans un verset, ou la structure de la phrase. La réponse vient du texte original (hébreu ou grec) et vous montre les mots qui le traduisent. Dessous, « {structure} » montre comment la phrase est construite.'],
+      people: ['Familles et arbres', 'Demandez la famille de quelqu’un : « {k1} ». Pour l’arbre de toute la famille, écrivez « {k2} », ou touchez « {treeBtn} » sous une réponse sur une famille ou sous un article de Translation Words sur une personne. « {k3} » et « {k4} » ne montrent qu’un sens. Dans un arbre, touchez un nom pour aller à cette personne.'],
+      places: ['Lieux et cartes', 'Demandez où se trouve un lieu : « {p1} ». Voyez-le sur une carte : « {p2} ». Ou demandez ce qui s’y est passé : « {p3} ». Sous un passage, touchez « {seeMap} » pour voir les lieux qu’il nomme.'],
       save: ['Enregistrer et annoter', 'Touchez ☆ pour enregistrer un verset, un article ou une réponse, et ✎ pour écrire votre note. Tout reste sur ce téléphone, dans Parcourir → ☆ {saved}. Pour envoyer une réponse par WhatsApp, utilisez son bouton de partage.'],
-      follow: ['Suivre la conversation', 'Après une réponse, continuez en quelques mots : je me souviens du passage. Les boutons sous chaque réponse vous mènent plus loin, et la {map} ou « {back} » vous ramène à un point précédent. Une longue réponse vient en parties : passez de l’une à l’autre avec ◀ ▶.'],
+      follow: ['Suivre la conversation', 'Après une réponse, continuez en quelques mots : je me souviens du passage. Les boutons sous chaque réponse vous mènent plus loin. Chacun a une petite icône de son genre, et ils sont groupés par genre : « Plus » montre le reste sous leurs titres ({types}). Le bouton « {map} » à côté de {browse} ouvre la carte de la conversation (pas une carte de lieux) : lui, ou « {back} », vous ramène à un point précédent de la conversation. Une longue réponse vient en parties : passez de l’une à l’autre avec ◀ ▶.'],
       browse: ['Sans écrire', '{browse} montre la Bible livre par livre, les Histoires de la Bible, les manuels de Translation Academy et les modes guidés, qui vous mènent pas à pas.'],
       menu: ['Plus dans le menu', "Dans le menu : les images des Histoires de la Bible pour les avoir sans internet. Dans Réglages : l'IA en ligne (facultative : avec internet, un modèle plus grand explique ce que je trouve) et Sécurité : un mode discret et un code PIN, si quelqu'un peut consulter votre téléphone."],
     },
@@ -115,6 +147,10 @@ const STR: Record<string, H> = {
     notes: 'notes {ref}', questions: 'questions {ref}', follow: ['verset suivant', 'et les notes ?'], freeQ: 'Explique {ref} avec des mots simples',
     terms: [['Que signifie grâce ?', 'tw:kt/grace'], ['Que signifie amour ?', 'tw:kt/love'], ['Que signifie foi ?', 'tw:kt/faith']],
     topics: [['Comment traduire une métaphore ?', 'ta:translate/figs-metaphor'], ['Comment traduire une expression idiomatique ?', 'ta:translate/figs-idiom']],
+    kinQ: ['fils d’Isaac', 'arbre généalogique d’Isaac', 'ancêtres d’Isaac', 'descendants d’Isaac'],
+    placeQ: ['Où est Jérusalem ?', 'carte de Jérusalem', 'que s’est-il passé à Jérusalem ?'],
+    mapObs: ' De même sous une image des Histoires de la Bible.',
+    tab: 'Dans {browse}, il y a aussi un onglet « {tab} » : cherchez un nom ou un lieu et ouvrez sa fiche.',
   },
   id: {
     menu: 'Cara bertanya', step: '{n} dari {m}', back: 'Kembali',
@@ -128,9 +164,11 @@ const STR: Record<string, H> = {
       passage: ['Sebuah perikop', 'Tulis kitab, pasal, dan ayatnya. Tambahkan kata seperti «catatan» atau «pertanyaan» untuk melihat itu saja.'],
       word: ['Kata atau topik', 'Tanyakan arti sebuah kata, atau cara menerjemahkan sesuatu. Jawabannya dari Translation Words dan Translation Academy.'],
       obs: ['Kisah-kisah Alkitab', 'Tulis OBS dan nomor kisahnya, atau nomor kisah dan bingkainya. Setiap bingkai disertai gambar dan catatannya. Ketuk kata bergaris bawah untuk melihat catatan atau istilah kuncinya, dan buka perikop Alkitab yang dikisahkan kisah itu. Kamu juga bisa menulis "cerita tentang" dan sebuah nama: aku menyarankan kisah-kisahnya.'],
-      who: ['Siapa adalah siapa', 'Tanyakan siapa «dia» dalam sebuah ayat, atau minta struktur kalimatnya. Jawabannya berasal dari teks asli (Ibrani atau Yunani) dan menunjukkan kata-kata yang menerjemahkannya.'],
+      who: ['Siapa adalah siapa', 'Tanyakan siapa «dia» dalam sebuah ayat, atau minta struktur kalimatnya. Jawabannya berasal dari teks asli (Ibrani atau Yunani) dan menunjukkan kata-kata yang menerjemahkannya. Di bawahnya, «{structure}» menunjukkan bagaimana kalimat itu tersusun.'],
+      people: ['Keluarga dan silsilah', 'Tanyakan keluarga seseorang: «{k1}». Untuk pohon seluruh keluarga, tulis «{k2}», atau ketuk «{treeBtn}» di bawah jawaban tentang keluarga atau di bawah artikel Translation Words tentang seseorang. «{k3}» dan «{k4}» hanya menunjukkan satu arah. Di dalam pohon, ketuk sebuah nama untuk menuju orang itu.'],
+      places: ['Tempat dan peta', 'Tanyakan di mana sebuah tempat: «{p1}». Lihat di peta: «{p2}». Atau tanyakan apa yang terjadi di sana: «{p3}». Di bawah sebuah perikop, ketuk «{seeMap}» untuk melihat tempat yang disebutnya.'],
       save: ['Simpan dan beri catatan', 'Ketuk ☆ untuk menyimpan ayat, artikel, atau jawaban, dan ✎ untuk menulis catatan Anda. Semuanya tetap di ponsel ini, di Jelajahi → ☆ {saved}. Untuk mengirim jawaban lewat WhatsApp, pakai tombol bagikannya.'],
-      follow: ['Ikuti percakapan', 'Setelah jawaban, lanjutkan dengan beberapa kata: saya ingat perikopnya. Tombol di bawah setiap jawaban membawa Anda lebih jauh, dan {map} atau «{back}» membawa Anda kembali ke titik mana pun sebelumnya. Jawaban yang panjang datang dalam beberapa bagian: berpindahlah dengan ◀ ▶.'],
+      follow: ['Ikuti percakapan', 'Setelah jawaban, lanjutkan dengan beberapa kata: saya ingat perikopnya. Tombol di bawah setiap jawaban membawa Anda lebih jauh. Masing-masing punya ikon kecil menurut jenisnya, dan dikelompokkan menurut jenis: «Lainnya» menampilkan sisanya di bawah judulnya ({types}). Tombol «{map}» di samping {browse} membuka peta percakapan (bukan peta tempat): tombol itu, atau «{back}», membawa Anda kembali ke titik mana pun sebelumnya dalam percakapan. Jawaban yang panjang datang dalam beberapa bagian: berpindahlah dengan ◀ ▶.'],
       browse: ['Tanpa mengetik', '{browse} menampilkan Alkitab kitab demi kitab, Kisah-kisah Alkitab, buku panduan Translation Academy, dan mode terpandu yang menuntun Anda selangkah demi selangkah.'],
       menu: ['Lebih banyak di menu', 'Di menu: gambar Kisah-kisah Alkitab agar tersedia tanpa internet. Di Pengaturan: AI daring (pilihan: dengan internet, model yang lebih besar menjelaskan apa yang saya temukan) dan Keamanan: mode diam-diam dan PIN, jika ada yang mungkin memeriksa ponsel Anda.'],
     },
@@ -139,6 +177,10 @@ const STR: Record<string, H> = {
     notes: 'catatan {ref}', questions: 'pertanyaan {ref}', follow: ['ayat berikutnya', 'dan catatannya?'], freeQ: 'Jelaskan {ref} dengan kata-kata sederhana',
     terms: [['Apa arti kasih karunia?', 'tw:kt/grace'], ['Apa arti iman?', 'tw:kt/faith'], ['Apa arti kasih?', 'tw:kt/love']],
     topics: [['Bagaimana menerjemahkan metafora?', 'ta:translate/figs-metaphor'], ['Bagaimana menerjemahkan ungkapan?', 'ta:translate/figs-idiom']],
+    kinQ: ['putra Ishak', 'pohon keluarga Ishak', 'leluhur Ishak', 'keturunan Ishak'],
+    placeQ: ['Di mana Yerusalem?', 'peta Yerusalem', 'Apa yang terjadi di Yerusalem?'],
+    mapObs: ' Sama di bawah bingkai Kisah-kisah Alkitab.',
+    tab: 'Di {browse} ada juga tab «{tab}»: cari sebuah nama atau tempat dan buka kartunya.',
   },
   hi: {
     menu: 'कैसे पूछें', step: '{m} में से {n}', back: 'पीछे', next: 'आगे',
@@ -152,9 +194,11 @@ const STR: Record<string, H> = {
       passage: ['कोई अंश', 'पुस्तक, अध्याय और पद लिखें। केवल वही देखने के लिए «नोट्स» या «प्रश्न» जैसा शब्द जोड़ें।'],
       word: ['कोई शब्द या विषय', 'पूछें कि किसी शब्द का क्या अर्थ है, या किसी बात का अनुवाद कैसे करें। उत्तर Translation Words और Translation Academy से आता है।'],
       obs: ['बाइबल की कहानियाँ', 'OBS और कहानी का नंबर लिखें, या कहानी और फ़्रेम का नंबर। हर फ़्रेम के साथ उसका चित्र और उसके नोट्स आते हैं। रेखांकित शब्द पर टैप करके उसका नोट या मुख्य शब्द देखें, और वह बाइबल अंश खोलें जिसे कहानी सुनाती है। आप "[नाम] की कहानी" भी लिख सकते हैं: मैं कहानियाँ सुझाऊँगा।'],
-      who: ['कौन किसको दर्शाता है', 'पूछें कि किसी पद में «वह» कौन है, या वाक्य की संरचना माँगें। उत्तर मूल पाठ (इब्रानी या यूनानी) से आता है और उसका अनुवाद करने वाले शब्द दिखाता है।'],
+      who: ['कौन किसको दर्शाता है', 'पूछें कि किसी पद में «वह» कौन है, या वाक्य की संरचना माँगें। उत्तर मूल पाठ (इब्रानी या यूनानी) से आता है और उसका अनुवाद करने वाले शब्द दिखाता है। उसके नीचे «{structure}» दिखाता है कि वाक्य कैसे बना है।'],
+      people: ['परिवार और वंशवृक्ष', 'किसी के परिवार के बारे में पूछें: “{k1}”। पूरे परिवार के वंशवृक्ष के लिए “{k2}” लिखें, या परिवार वाले उत्तर के नीचे, या किसी व्यक्ति के बारे में Translation Words के लेख के नीचे, «{treeBtn}» टैप करें। “{k3}” और “{k4}” केवल एक दिशा दिखाते हैं। वृक्ष में किसी नाम पर टैप करके उस व्यक्ति के पास जाएँ।'],
+      places: ['स्थान और नक्शे', 'पूछें कि कोई स्थान कहाँ है: “{p1}”। उसे नक्शे पर देखें: “{p2}”। या पूछें कि वहाँ क्या हुआ: “{p3}”। किसी अंश के नीचे «{seeMap}» टैप करके उसमें आए स्थान देखें।'],
       save: ['सहेजें और नोट लिखें', 'किसी पद, लेख या उत्तर को सहेजने के लिए ☆ टैप करें, और अपना नोट लिखने के लिए ✎। सब कुछ इसी फ़ोन पर रहता है, «{browse}» → ☆ {saved} में। उत्तर को WhatsApp से भेजने के लिए उसका शेयर बटन इस्तेमाल करें।'],
-      follow: ['बातचीत जारी रखें', 'उत्तर के बाद कुछ शब्दों में आगे बढ़ें: मुझे अंश याद रहता है। हर उत्तर के नीचे के बटन आपको आगे ले जाते हैं, और {map} या «{back}» आपको किसी भी पिछले बिंदु पर लौटा देता है। लंबा उत्तर भागों में आता है: ◀ ▶ से आगे-पीछे जाएँ।'],
+      follow: ['बातचीत जारी रखें', 'उत्तर के बाद कुछ शब्दों में आगे बढ़ें: मुझे अंश याद रहता है। हर उत्तर के नीचे के बटन आपको आगे ले जाते हैं। हर एक पर उसके प्रकार का छोटा चिह्न होता है, और वे प्रकार के अनुसार समूहों में आते हैं: «और» बाकी को उनके शीर्षकों के नीचे दिखाता है ({types})। «{browse}» के पास का «{map}» बटन बातचीत का नक्शा खोलता है (स्थानों का नक्शा नहीं): वह, या «{back}», आपको बातचीत के किसी भी पिछले बिंदु पर लौटा देता है। लंबा उत्तर भागों में आता है: ◀ ▶ से आगे-पीछे जाएँ।'],
       browse: ['बिना लिखे', '«{browse}» बाइबल को पुस्तक-दर-पुस्तक, बाइबल की कहानियाँ, Translation Academy की पुस्तिकाएँ और निर्देशित तरीके दिखाता है, जो आपको कदम-दर-कदम ले चलते हैं।'],
       menu: ['मेनू में और भी', 'मेनू में: बाइबल की कहानियों के चित्र जो बिना इंटरनेट रहें। सेटिंग में: ऑनलाइन AI (वैकल्पिक: इंटरनेट हो तो एक बड़ा मॉडल मेरी ढूँढी जानकारी समझाता है) और सुरक्षा: एक गुप्त मोड और PIN, यदि कोई आपका फ़ोन देख सकता है।'],
     },
@@ -163,6 +207,10 @@ const STR: Record<string, H> = {
     notes: '{ref} नोट्स', questions: '{ref} प्रश्न', follow: ['अगला पद', 'और नोट्स?'], freeQ: '{ref} को सरल शब्दों में समझाइए',
     terms: [['प्रेम क्या है?', 'tw:kt/love'], ['पाप क्या है?', 'tw:kt/sin'], ['वाचा क्या है?', 'tw:kt/covenant']],
     topics: [['रूपक का अनुवाद कैसे करें?', 'ta:translate/figs-metaphor'], ['मुहावरे का अनुवाद कैसे करें?', 'ta:translate/figs-idiom']],
+    kinQ: ['इसहाक के पुत्र', 'इसहाक का वंशवृक्ष', 'इसहाक के पूर्वज', 'इसहाक के वंशज'],
+    placeQ: ['यरूशलेम कहाँ है?', 'यरूशलेम का नक्शा', 'यरूशलेम में क्या हुआ?'],
+    mapObs: ' बाइबल की कहानियों के फ़्रेम के नीचे भी यही है।',
+    tab: '«{browse}» में एक «{tab}» टैब भी है: कोई नाम या स्थान खोजें और उसका कार्ड खोलें।',
   },
   ar: {
     menu: 'كيف تسأل', step: '{n} من {m}', back: 'السابق', next: 'التالي',
@@ -176,9 +224,11 @@ const STR: Record<string, H> = {
       passage: ['مقطع', 'اكتب السفر والأصحاح والآية. أضف كلمة مثل «ملاحظات» أو «أسئلة» لترى ذلك وحده.'],
       word: ['كلمة أو موضوع', 'اسأل عن معنى كلمة، أو كيف تترجم شيئًا. تأتي الإجابة من Translation Words وTranslation Academy.'],
       obs: ['قصص الكتاب المقدس', 'اكتب OBS ورقم القصة، أو رقم القصة والإطار. لكل إطار صورته وملاحظاته. المس كلمة تحتها خط لترى ملاحظتها أو كلمتها الرئيسية، وافتح مقطع الكتاب المقدس الذي ترويه القصة. يمكنك أيضًا أن تكتب "قصة" واسمًا: أقترح عليك القصص.'],
-      who: ['من هو مَن', 'اسأل من هو «هو» أو «هي» في آية، أو اطلب بنية الجملة. تأتي الإجابة من النص الأصلي (العبري أو اليوناني) وتُظهر لك الكلمات التي تترجمه.'],
+      who: ['من هو مَن', 'اسأل من هو «هو» أو «هي» في آية، أو اطلب بنية الجملة. تأتي الإجابة من النص الأصلي (العبري أو اليوناني) وتُظهر لك الكلمات التي تترجمه. وتحتها يُظهر «{structure}» كيف بُنيت الجملة.'],
+      people: ['العائلات والأشجار', 'اسأل عن عائلة شخص: «{k1}». ولشجرة العائلة كلها اكتب «{k2}»، أو المس «{treeBtn}» تحت إجابة عن عائلة أو تحت مقالة في Translation Words عن شخص. «{k3}» و«{k4}» يعرضان اتجاهًا واحدًا فقط. في الشجرة، المس اسمًا لتنتقل إلى ذلك الشخص.'],
+      places: ['الأماكن والخرائط', 'اسأل أين يقع مكان: «{p1}». وشاهده على خريطة: «{p2}». أو اسأل ماذا حدث هناك: «{p3}». تحت مقطع، المس «{seeMap}» لترى الأماكن التي يذكرها.'],
       save: ['احفظ ودوّن', 'المس ☆ لتحفظ آية أو مقالة أو إجابة، و✎ لتكتب ملاحظتك. يبقى كل شيء على هذا الهاتف، في تصفّح ← ☆ {saved}. لإرسال إجابة عبر واتساب، استخدم زر المشاركة.'],
-      follow: ['تابع المحادثة', 'بعد الإجابة، تابع ببضع كلمات: أتذكّر المقطع. الأزرار تحت كل إجابة تأخذك أبعد، و{map} أو «{back}» تعيدك إلى أي نقطة سابقة. تأتي الإجابة الطويلة على أجزاء: تنقّل بينها بـ ◀ ▶.'],
+      follow: ['تابع المحادثة', 'بعد الإجابة، تابع ببضع كلمات: أتذكّر المقطع. الأزرار تحت كل إجابة تأخذك أبعد. لكل زر أيقونة صغيرة لنوعه، وهي مجمّعة حسب النوع: «المزيد» يعرض الباقي تحت عناوينها ({types}). زر «{map}» بجانب «{browse}» يفتح خريطة المحادثة (وليست خريطة أماكن): هو، أو «{back}»، يعيدك إلى أي نقطة سابقة من المحادثة. تأتي الإجابة الطويلة على أجزاء: تنقّل بينها بـ ◀ ▶.'],
       browse: ['دون كتابة', '«{browse}» يعرض الكتاب المقدس سفرًا سفرًا، وقصص الكتاب المقدس، وأدلة Translation Academy، والمسارات الموجّهة التي تقودك خطوة بخطوة.'],
       menu: ['المزيد في القائمة', 'في القائمة: صور قصص الكتاب المقدس لتبقى دون إنترنت. وفي الإعدادات: الذكاء الاصطناعي عبر الإنترنت (اختياري) والأمان: وضع متخفٍّ ورمز PIN، إن كان أحد قد يفتّش هاتفك.'],
     },
@@ -187,6 +237,10 @@ const STR: Record<string, H> = {
     notes: 'ملاحظات {ref}', questions: 'أسئلة {ref}', follow: ['الآية التالية', 'والملاحظات؟'], freeQ: 'اشرح {ref} بكلمات بسيطة',
     terms: [['ما هي المحبة؟', 'tw:kt/love'], ['ما هي الخطيئة؟', 'tw:kt/sin'], ['ما هي النعمة؟', 'tw:kt/grace']],
     topics: [['كيف أترجم الاستعارة؟', 'ta:translate/figs-metaphor'], ['كيف أترجم التعبير الاصطلاحي؟', 'ta:translate/figs-idiom']],
+    kinQ: ['أبناء إسحاق', 'شجرة عائلة إسحاق', 'أسلاف إسحاق', 'نسل إسحاق'],
+    placeQ: ['أين تقع أورشليم؟', 'خريطة أورشليم', 'ماذا حدث في أورشليم؟'],
+    mapObs: ' وكذلك تحت إطار من قصص الكتاب المقدس.',
+    tab: 'في «{browse}» توجد أيضًا علامة تبويب «{tab}»: ابحث عن اسم أو مكان وافتح بطاقته.',
   },
 }
 export const HT = (ui: string): H => STR[ui] ?? STR.en!
@@ -373,10 +427,14 @@ async function findWho(ui: string, packs: string[]): Promise<WhoExample | null> 
   return null
 }
 
-/** What the phone has that decides the cards: some Open Bible Stories, some book of the Bible (every book brings its MACULA data). */
-export type PhoneHas = { obs: boolean; books: boolean }
+/**
+ * What the phone has that decides the cards: some Open Bible Stories, some book of the Bible (every book brings its MACULA data), people
+ * (a pack with the family data: the same index Browse's people tab and the family answers read, kin.ts) and places (a pack with the
+ * `geo` table and a place with a point: what Browse's places tab and "See on the map" need, places.ts).
+ */
+export type PhoneHas = { obs: boolean; books: boolean; people: boolean; places: boolean }
 // (until it is read: the conservative set, so a card is added when it arrives and never taken away)
-let lastHas: PhoneHas = { obs: false, books: false }
+let lastHas: PhoneHas = { obs: false, books: false, people: false, places: false }
 export async function phoneHas(packs: string[]): Promise<PhoneHas> {
   const books = (await Promise.all(packs.map(async (l) => {
     try {
@@ -387,7 +445,11 @@ export async function phoneHas(packs: string[]): Promise<PhoneHas> {
     }
   }))).some(Boolean)
   const obs = packs[0] ? await hasObs(packs[0]).catch(() => false) : false
-  return (lastHas = { obs, books })
+  // (each pack alone, the first that has any is enough: a family or a map is asked in whatever pack answers it)
+  let people = false, places = false
+  for (const l of packs) if (await hasPeople(l).catch(() => false)) { people = true; break }
+  for (const l of packs) if ((await placePacks([l]).catch(() => [] as string[])).length) { places = true; break }
+  return (lastHas = { obs, books, people, places })
 }
 
 // ---------------------------------------------------------------------------------------------------------------- cards
@@ -424,15 +486,17 @@ const typingOn = (): boolean => {
   }
 }
 /**
- * The guide's cards in the app's language, six to eight: always a passage, a word or a topic, following the conversation, saving,
+ * The guide's cards in the app's language, six to ten: always a passage, a word or a topic, following the conversation, saving,
  * without typing and the menu; the Bible Stories card when the phone has them, "who is who" when it has a book (`has`; `who`: its
- * example, found when the card is reached). The menu card has the online AI settings and its "Try it" only where online AI is available;
+ * example, found when the card is reached), families and trees when it has the people data, places and maps when it has the place data. The menu card has the online AI settings and its "Try it" only where online AI is available;
  * with the typing suggestions off, the "without typing" card says how to turn them on, and its "Try it" opens Browse.
  */
 export function cardsFor(ui: string, ex: Examples | null, online = onlineHere(), typing = typingOn(), has: PhoneHas = lastHas, who: WhoExample | null = null): Card[] {
   const s = HT(ui)
   const words = (t: string) => t.replace('{map}', GT(ui).map).replace('{back}', backLabel(ui, '…')).replace('{browse}', XT(ui).browse)
-    .replace('{toggle}', ST(ui).toggle).replace('{saved}', SVT(ui).title)
+    .replace('{toggle}', ST(ui).toggle).replace('{saved}', SVT(ui).title).replace('{treeBtn}', KT(ui).treeBtn).replace('{seeMap}', PLT(ui).seeMap)
+    .replace('{structure}', MW(ui).tree).replace('{types}', FOLLOW_TYPES.map((t) => followTitle(ui, t)).join(', '))
+    .replace(/\{k([1-4])\}/g, (_, i) => s.kinQ[Number(i) - 1]!).replace(/\{p([1-3])\}/g, (_, i) => s.placeQ[Number(i) - 1]!)
   const card = (id: CardId, rest: Omit<Card, 'id' | 'title' | 'body'>, body = s.cards[id][1]): Card => ({ id, title: s.cards[id][0], body: words(body), ...rest })
   const none = { examples: [], ask: [] }
   const out: Card[] = [
@@ -442,6 +506,9 @@ export function cardsFor(ui: string, ex: Examples | null, online = onlineHere(),
   // (a "Try it" only with an example found, so none answers with nothing)
   if (has.obs) out.push(card('obs', ex?.obs ? { examples: [ex.obs], ask: [ex.obs] } : none))
   if (has.books) out.push(card('who', who ? { examples: [who.label], ask: [], sheet: who } : none))
+  // families and places: a "Try it" is a real question (the first phrase of each card), answered by the data these cards need
+  if (has.people) out.push(card('people', { examples: [...s.kinQ], ask: [s.kinQ[0]] }))
+  if (has.places) out.push(card('places', { examples: [...s.placeQ], ask: [s.placeQ[0]] }, s.cards.places[1] + (has.obs ? s.mapObs : '')))
   out.push(
     // a follow-up needs a passage before it: "Try it" asks the passage, then the next verse
     card('follow', ex ? { examples: [...ex.follow], ask: [ex.passage, ex.follow[0]] } : none),
@@ -452,7 +519,10 @@ export function cardsFor(ui: string, ex: Examples | null, online = onlineHere(),
     online ? card('menu', { examples: ex ? [ex.free] : [], ask: ex ? [ex.free] : [], extra: 'online' }) : card('menu', { ...none, extra: 'menu' }, s.menuPlain),
   )
   const b = out.find((c) => c.id === 'browse')!
-  b.body = `${b.body} ${words(typing ? s.typing : s.typingOff)}`
+  // the people and places tab of Browse (its name as Browse shows it: both, one or the other, explore.ts), before the typing sentence
+  const tab = has.people && has.places ? XT(ui).peoplePlaces : has.places ? XT(ui).places : XT(ui).people
+  const tabs = has.people || has.places ? ` ${words(s.tab).replace('{tab}', tab)}` : ''
+  b.body = `${b.body}${tabs} ${words(typing ? s.typing : s.typingOff)}`
   return out
 }
 

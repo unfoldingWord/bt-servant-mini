@@ -1,18 +1,28 @@
-// How to ask, the new cards (Abel, Nov 17): six to eight cards by what the phone has (the Bible Stories, a book), the "who is who"
+// How to ask, the new cards (Abel, Nov 17; Nov 24: families and places): six to ten cards by what the phone has (the Bible Stories, a book), the "who is who"
 // example found from the MACULA data of each pack (es-419, hi, ar), the Bible Stories example answered, online AI or not on the
 // menu card, and no "Try it" that answers with nothing. The lines "What can you do?" adds, only for what the phone has.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { ALL_PACKS, installPacks } from './fs-packs'
 import { withObs } from './obs-fixture'
 import { turn } from './harness'
-import { cardsFor, examplesOf, HT, phoneHas, whoExampleOf, type CardId, type WhoExample } from '../src/howto'
+import { cardsFor, examplesOf, HT, phoneHas, whoExampleOf, type CardId, type PhoneHas, type WhoExample } from '../src/howto'
+import { KT, kinShape } from '../src/kin'
+import { placeShape } from '../src/places'
+import { PLT } from '../src/placetext'
+import { followTitle, FOLLOW_TYPES } from '../src/followtype'
+import { GT } from '../src/graph'
+import { XT } from '../src/explore'
+import { MW } from '../src/macula'
 import { helpLines } from '../src/helplines'
 import { maculaAnswer, resetMacula } from '../src/macula'
 import { type ConvState } from '../src/pipeline'
 import type { Sheet } from '../src/sheet'
 
 const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
-const ids = (ui: string, has: { obs: boolean; books: boolean }, online: boolean) => cardsFor(ui, null, online, true, has).map((c) => c.id)
+// (what the phone has: the people and places flags are off unless a test says so)
+const H0: PhoneHas = { obs: false, books: false, people: false, places: false }
+const has = (o: Partial<PhoneHas>): PhoneHas => ({ ...H0, ...o })
+const ids = (ui: string, h: Partial<PhoneHas>, online: boolean) => cardsFor(ui, null, online, true, has(h)).map((c) => c.id)
 
 const saved = (globalThis as any).localStorage
 beforeAll(() => {
@@ -25,30 +35,111 @@ afterAll(async () => {
 })
 
 describe('how many cards, and which', () => {
-  test('six, seven or eight by the Bible Stories and the books', () => {
+  test('six to ten by the Bible Stories, the books, the people and the places', () => {
     for (const ui of UIS) {
-      expect(ids(ui, { obs: false, books: false }, true)).toEqual(['passage', 'word', 'follow', 'save', 'browse', 'menu'])
+      expect(ids(ui, H0, true)).toEqual(['passage', 'word', 'follow', 'save', 'browse', 'menu'])
       expect(ids(ui, { obs: true, books: false }, true)).toEqual(['passage', 'word', 'obs', 'follow', 'save', 'browse', 'menu'])
-      expect(ids(ui, { obs: false, books: true }, true)).toEqual(['passage', 'word', 'who', 'follow', 'save', 'browse', 'menu'])
-      const all: CardId[] = ['passage', 'word', 'obs', 'who', 'follow', 'save', 'browse', 'menu']
-      expect(ids(ui, { obs: true, books: true }, true)).toEqual(all)
-      expect(ids(ui, { obs: true, books: true }, false)).toEqual(all) // the menu card is there with or without online AI
+      expect(ids(ui, has({ books: true }), true)).toEqual(['passage', 'word', 'who', 'follow', 'save', 'browse', 'menu'])
+      const all: CardId[] = ['passage', 'word', 'obs', 'who', 'people', 'places', 'follow', 'save', 'browse', 'menu']
+      expect(ids(ui, { obs: true, books: true, people: true, places: true }, true)).toEqual(all)
+      expect(ids(ui, { obs: true, books: true, people: true, places: true }, false)).toEqual(all) // the menu card is there with or without online AI
     }
+  })
+
+  test('the families card only with the people data, the places card only with the place data', () => {
+    for (const ui of UIS) {
+      expect(ids(ui, { people: true }, true), ui).toEqual(['passage', 'word', 'people', 'follow', 'save', 'browse', 'menu'])
+      expect(ids(ui, { places: true }, true), ui).toEqual(['passage', 'word', 'places', 'follow', 'save', 'browse', 'menu'])
+      expect(ids(ui, { people: true, places: true }, true), ui).toEqual(['passage', 'word', 'people', 'places', 'follow', 'save', 'browse', 'menu'])
+      expect(ids(ui, {}, true), ui).not.toContain('people')
+      expect(ids(ui, {}, true), ui).not.toContain('places')
+    }
+  })
+
+  test('the "Try it" of the new cards sends a real question (the first phrase), and the phrases are shown as examples', () => {
+    for (const ui of UIS) {
+      const cs = cardsFor(ui, null, true, true, has({ people: true, places: true }))
+      const people = cs.find((c) => c.id === 'people')!, places = cs.find((c) => c.id === 'places')!
+      expect(people.ask, ui).toEqual([HT(ui).kinQ[0]])
+      expect(people.examples, ui).toEqual([...HT(ui).kinQ])
+      expect(places.ask, ui).toEqual([HT(ui).placeQ[0]])
+      expect(places.examples, ui).toEqual([...HT(ui).placeQ])
+      // the body names the very phrases (and the app's own button names), with no placeholder left
+      for (const q of HT(ui).kinQ) expect(people.body, `${ui} ${q}`).toContain(q)
+      for (const q of HT(ui).placeQ) expect(places.body, `${ui} ${q}`).toContain(q)
+      expect(people.body, ui).toContain(KT(ui).treeBtn)
+      expect(places.body, ui).toContain(PLT(ui).seeMap)
+    }
+  })
+
+  test('the places card says "See on the map" is under the Bible Stories frames only when the phone has the stories', () => {
+    for (const ui of UIS) {
+      const body = (obs: boolean) => cardsFor(ui, null, true, true, has({ places: true, obs })).find((c) => c.id === 'places')!.body
+      expect(body(true), ui).toBe(body(false) + HT(ui).mapObs)
+    }
+  })
+
+  test('each phrase of the people card reads as the right family question in its language (sons, tree, up, down)', () => {
+    const kinds = ['sons', 'tree', 'up', 'down']
+    for (const ui of UIS) {
+      HT(ui).kinQ.forEach((q, i) => {
+        const k = kinShape(q)
+        // (Spanish and some others say "children" for the plural: the same family question, asked for sons)
+        expect(i === 0 ? ['sons', 'children'] : [kinds[i]], `${ui}: ${q}`).toContain(k?.kind as string)
+        expect(k?.lang, `${ui}: ${q}`).toBe(ui as typeof k.lang)
+      })
+    }
+  })
+
+  test('each phrase of the places card reads as the right place question in its language (where, map, happened)', () => {
+    const kinds = ['where', 'map', 'happened']
+    for (const ui of UIS) {
+      HT(ui).placeQ.forEach((q, i) => {
+        const k = placeShape(q)
+        expect(k?.kind, `${ui}: ${q}`).toBe(kinds[i])
+        expect(k?.lang, `${ui}: ${q}`).toBe(ui as typeof k.lang)
+        expect(k?.names.length, `${ui}: ${q}`).toBe(1)
+      })
+    }
+  })
+
+  test('the who card names the sentence structure button; the follow card the icons, the types and the conversation map; the browse card the tab', () => {
+    for (const ui of UIS) {
+      const cs = cardsFor(ui, null, true, true, has({ books: true, people: true, places: true }))
+      const body = (id: CardId) => cs.find((c) => c.id === id)!.body
+      expect(body('who'), ui).toContain(MW(ui).tree)
+      const f = body('follow')
+      for (const t of FOLLOW_TYPES) expect(f, `${ui} ${t}`).toContain(followTitle(ui, t))
+      expect(f, ui).toContain(GT(ui).map)
+      expect(f, ui).toContain('◀ ▶')
+      expect(body('browse'), ui).toContain(XT(ui).peoplePlaces)
+      // one of the two alone: that tab's name, as Browse draws it; none: nothing to say about it
+      const only = (h: Partial<PhoneHas>) => cardsFor(ui, null, true, true, has(h)).find((c) => c.id === 'browse')!.body
+      expect(only({ people: true }), ui).toContain(XT(ui).people)
+      expect(only({ people: true }), ui).not.toContain(XT(ui).peoplePlaces)
+      expect(only({ places: true }), ui).toContain(XT(ui).places)
+      expect(only({ places: true }), ui).not.toContain(XT(ui).peoplePlaces)
+      expect(only({}), ui).not.toContain(XT(ui).peoplePlaces)
+    }
+    // the conversation map is called that, not just "Map": the geographic maps are another thing
+    expect(cardsFor('en', null, true, true).find((c) => c.id === 'follow')!.body).toContain('conversation map')
+    expect(cardsFor('es', null, true, true).find((c) => c.id === 'follow')!.body).toContain('mapa de la conversación')
   })
 
   test('what the phone has: Open Bible Stories and books, from the packs', async () => {
     if (!ALL_PACKS.includes('en')) return
     await installPacks(['en'])
     await withObs('en', 'none')
-    expect(await phoneHas(['en'])).toEqual({ obs: false, books: true })
+    // (people: the packs on this machine have the family data; places: they have no `geo` table, so no place with a point)
+    expect(await phoneHas(['en'])).toEqual({ obs: false, books: true, people: true, places: false })
     await withObs('en')
-    expect(await phoneHas(['en'])).toEqual({ obs: true, books: true })
-    expect(await phoneHas([])).toEqual({ obs: false, books: false })
+    expect(await phoneHas(['en'])).toEqual({ obs: true, books: true, people: true, places: false })
+    expect(await phoneHas([])).toEqual({ obs: false, books: false, people: false, places: false })
   })
 
   test('every card has a title and a body with no placeholder left, in every language', () => {
     for (const ui of UIS) {
-      for (const c of cardsFor(ui, null, true, true, { obs: true, books: true })) {
+      for (const c of cardsFor(ui, null, true, true, has({ obs: true, books: true, people: true, places: true }))) {
         expect(c.title.length, `${ui} ${c.id}`).toBeGreaterThan(0)
         expect(c.body, `${ui} ${c.id}`).not.toMatch(/\{\w+\}/)
       }
@@ -56,14 +147,14 @@ describe('how many cards, and which', () => {
   })
 
   test('the card for Saved names the app\'s own word and opens Saved; the Bible Stories and the Safety cards say what they are', () => {
-    const save = (ui: string) => cardsFor(ui, null, true, true, { obs: true, books: true }).find((c) => c.id === 'save')!
+    const save = (ui: string) => cardsFor(ui, null, true, true, has({ obs: true, books: true, people: true, places: true })).find((c) => c.id === 'save')!
     expect(save('es').body).toContain('☆ Guardados')
     expect(save('en').body).toContain('☆ Saved')
     expect(save('ar').body).toContain('☆ المحفوظات')
     for (const ui of UIS) expect(save(ui).extra).toBe('saved')
-    expect(cardsFor('es', null, true, true, { obs: true, books: true }).find((c) => c.id === 'obs')!.body).toContain('OBS')
+    expect(cardsFor('es', null, true, true, has({ obs: true, books: true, people: true, places: true })).find((c) => c.id === 'obs')!.body).toContain('OBS')
     // the long answer in parts, on the "follow" card
-    for (const ui of UIS) expect(cardsFor(ui, null, true, true, { obs: false, books: false }).find((c) => c.id === 'follow')!.body, ui).toContain('◀ ▶')
+    for (const ui of UIS) expect(cardsFor(ui, null, true, true, H0).find((c) => c.id === 'follow')!.body, ui).toContain('◀ ▶')
   })
 
   test('the "without typing" card names the Bible Stories only when the phone has them', () => {
@@ -79,8 +170,8 @@ describe('the menu card, with and without online AI', () => {
   test('where there is online AI: its settings button and its "Try it"; where not: the button to open the menu', () => {
     const ex = { free: 'Explícame Rut 2:3 con palabras sencillas', passage: 'Rut 2:3', follow: ['a', 'b'], book: 'Rut', notes: 'n', questions: null, term: null, topic: null, obs: null } as any
     for (const ui of UIS) {
-      const on = cardsFor(ui, ex, true, true, { obs: false, books: false }).find((c) => c.id === 'menu')!
-      const off = cardsFor(ui, ex, false, true, { obs: false, books: false }).find((c) => c.id === 'menu')!
+      const on = cardsFor(ui, ex, true, true, H0).find((c) => c.id === 'menu')!
+      const off = cardsFor(ui, ex, false, true, H0).find((c) => c.id === 'menu')!
       expect(on.extra, ui).toBe('online')
       expect(on.ask, ui).toEqual([ex.free])
       expect(off.extra, ui).toBe('menu')
@@ -91,8 +182,8 @@ describe('the menu card, with and without online AI', () => {
       expect(off.body, ui).toContain('PIN') // Safety is there with or without online AI
     }
     // the online AI sentence is not in the card where the phone cannot have it
-    expect(cardsFor('es', null, false, true, { obs: false, books: false }).find((c) => c.id === 'menu')!.body).not.toContain('IA en línea')
-    expect(cardsFor('es', null, true, true, { obs: false, books: false }).find((c) => c.id === 'menu')!.body).toContain('IA en línea')
+    expect(cardsFor('es', null, false, true, H0).find((c) => c.id === 'menu')!.body).not.toContain('IA en línea')
+    expect(cardsFor('es', null, true, true, H0).find((c) => c.id === 'menu')!.body).toContain('IA en línea')
   })
 })
 
@@ -114,7 +205,7 @@ describe('the "who is who" example', () => {
       // its label is the app's own "who is who in {ref}" with the verse
       expect(w.label, ui).toContain(w.ref.split(' ')[1]!)
       // the card carries it as a sheet and not as a sentence
-      const c = cardsFor(ui, null, true, true, { obs: false, books: true }, w).find((x) => x.id === 'who')!
+      const c = cardsFor(ui, null, true, true, has({ books: true }), w).find((x) => x.id === 'who')!
       expect(c.sheet).toEqual(w)
       expect(c.ask).toEqual([])
       expect(c.examples).toEqual([w.label])
@@ -129,7 +220,7 @@ describe('the "who is who" example', () => {
   test('no book on the phone, no example, and the card has no "Try it"', async () => {
     resetMacula()
     expect(await whoExampleOf('es', [])).toBeNull()
-    const c = cardsFor('es', null, true, true, { obs: false, books: true }, null).find((x) => x.id === 'who')!
+    const c = cardsFor('es', null, true, true, has({ books: true }), null).find((x) => x.id === 'who')!
     expect(c.sheet).toBeUndefined()
     expect(c.ask).toEqual([])
     expect(c.examples).toEqual([])
@@ -152,7 +243,7 @@ describe('the Bible Stories card and the examples', () => {
     await withObs('en')
     const ex = (await examplesOf('en', ['en'], 'en'))!
     expect(ex.obs).toMatch(/^OBS \d+:\d+$/)
-    const c = cardsFor('en', ex, true, true, { obs: true, books: true }).find((x) => x.id === 'obs')!
+    const c = cardsFor('en', ex, true, true, has({ obs: true, books: true, people: true, places: true })).find((x) => x.id === 'obs')!
     expect(c.ask).toEqual([ex.obs!])
     expect(c.examples).toEqual([ex.obs!])
     const conv: ConvState = { last: null }
@@ -166,7 +257,7 @@ describe('the Bible Stories card and the examples', () => {
     await withObs('en', 'none')
     const ex = (await examplesOf('es', ['es-419'], 'es-419'))!
     expect(ex.obs).toBeNull()
-    const c = cardsFor('es', ex, true, true, { obs: true, books: true }).find((x) => x.id === 'obs')!
+    const c = cardsFor('es', ex, true, true, has({ obs: true, books: true, people: true, places: true })).find((x) => x.id === 'obs')!
     expect(c.ask).toEqual([])
     expect(c.examples).toEqual([])
     await withObs('en')
