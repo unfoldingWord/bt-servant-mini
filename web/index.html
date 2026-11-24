@@ -551,6 +551,11 @@
   .ex-busy { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--fg); }
   /* The conversation's graph (main.ts, graph.ts): "← Back to …" under an answer, the divider where the person went back, the Map */
   .follow.back-row { margin-bottom: -4px; }
+  .follow button.has-ic { display: inline-flex; align-items: center; gap: 6px; }
+  .follow button .ic { flex: none; color: var(--muted); }
+  .follow button.path-next .ic, .follow button.ty-continue .ic { color: var(--accent); }
+  .follow[dir="rtl"] button.ty-continue .ic { transform: scaleX(-1); } /* the arrow points the way of reading */
+  .follow p.follow-title { flex: 0 0 100%; margin: 6px 0 -2px; font: 600 12px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; color: var(--muted); }
   .follow button.more { color: var(--accent); font-weight: 600; } /* the next steps not in sight (main.ts followRow) */
   .follow button.back { min-height: 44px; border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
   .msg.mark { align-self: stretch; display: flex; align-items: center; gap: 10px; color: var(--muted); font: 13px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
