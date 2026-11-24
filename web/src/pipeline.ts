@@ -25,7 +25,7 @@ import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './
 import { count } from './usage'
 import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, type RelKind, kinQuestion, KT, KIN_T, TIE_T, type KinLang, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
 import { kinVerses, trip as tripOf, type PlaceRef, type Relative } from '@bt-synergy/language-pack-client'
-import { hasGeo, personPlace, placesOfArticle, personVerses, placeData, placeNamed, placeQuestion, placeRefs, placeShape, placesAt, placeVerses, referenceFor, type PlaceAsk } from './places'
+import { hasGeo, personPlace, placesOfArticle, personVerses, placeData, placeNamed, placeQuestion, placeRefs, placeShape, placesAt, placeVerses, referenceFor, referencesAmong, type PlaceAsk } from './places'
 import { PLACE_SOURCES, PLT } from './placetext'
 import { isolateRef } from './bidi'
 import type { MapPoint } from './mapview'
@@ -2577,8 +2577,10 @@ export const mapPoint = (p: PlaceRef): MapPoint | null =>
 const listOf = (ui: string, head: string, ps: { p: PlaceRef; ref?: string; tag?: string }[], geo = true): PlaceList =>
   ({ head, items: ps.map(({ p, ref, tag }) => ({ text: p.name, ...(tag || tagOf(PLT(ui), p, geo) ? { tag: tag || tagOf(PLT(ui), p, geo) } : {}), ...(p.note ? { note: p.note } : {}), ...(ref ? { ref } : {}) })) })
 /** The map of these places, or none when no place has a point (§5.5: «sin mapa», the list and the text stay). */
-function mapOf(ui: string, pack: string, ps: PlaceRef[], summary: string, small?: boolean): MapBlock | undefined {
+function mapOf(ui: string, pack: string, ps: PlaceRef[], summary: string, small?: boolean, refs: PlaceRef[] = []): MapBlock | undefined {
   const points = ps.map(mapPoint).filter((x): x is MapPoint => !!x)
+  // reference places are scenery: `ref`, after the protagonists, and only when there is a protagonist with a point
+  if (points.length) for (const r of refs) { const m = mapPoint(r); if (m) points.push({ ...m, ref: true }) }
   return points.length ? { pack, points, summary, ...(small ? { small: true as const } : {}) } : undefined
 }
 const TIPNR_THEO = 'robertrouse/theographic-bible-metadata'
@@ -2656,9 +2658,10 @@ async function placeAnswer(x: Ctx): Promise<Done> {
     const names = at.map((p) => p.name)
     const info = at.length ? `**${colon(ui, trimColon(t.listPassage.replace('{ref}', label)))}**` : t.passageNone.replace('{ref}', label)
     const follow: Follow[] = at.slice(0, MAX_FOLLOW).map((p) => ({ label: p.name, sheet: placeSheet(sheet, ['card'], { concept: p.id, term: p.name }) }))
-    const list = at.length ? listOf(ui, '', at.map((p) => ({ p, ref: verseRefOf(ui, p.verse).label }))) : undefined
+    const refs = geo && at.length ? await referencesAmong(pack, at).catch(() => [] as PlaceRef[]) : []
+    const list = at.length ? listOf(ui, '', [...at.map((p) => ({ p, ref: verseRefOf(ui, p.verse).label })), ...refs.map((p) => ({ p, tag: t.tagRef }))]) : undefined
     return done({ info: [info, ...(at.length ? [placeCredit(ui, ['openbibleinfo/Bible-Geocoding-Data'], true)] : [])].join('\n\n'), follow,
-      ...(at.length ? { map: mapOf(ui, pack, at, t.sumPassage.replace('{n}', String(at.length)).replace('{ref}', label) + (names.length <= 6 ? `: ${nameList(ui, names)}` : '')), list } : {}),
+      ...(at.length ? { map: mapOf(ui, pack, at, t.sumPassage.replace('{n}', String(at.length)).replace('{ref}', label) + (names.length <= 6 ? `: ${nameList(ui, names)}` : ''), undefined, refs), list } : {}),
       meta: meta(`view ${ref}: ${at.map((p) => p.id).join(', ')}`) }, { ref, found: at.length })
   }
 

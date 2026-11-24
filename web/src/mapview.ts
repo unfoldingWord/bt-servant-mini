@@ -4,7 +4,7 @@
 // `map:first-draw` and `map:redraw` (performance.measure) that are read on a phone over CDP.
 import { decodeBasemap, type Basemap } from '@bt-synergy/language-pack-v3'
 import {
-  clampScale, drawMap, fit, MAX_SCALE, minScale, project, unproject,
+  clampScale, drawMap, fit, LIGHT_REFERENCE, MAX_SCALE, minScale, project, unproject,
   type Frame, type MapPoint, type Theme,
 } from '@bt-synergy/language-pack-client'
 import { basemapBytes, onPacksChanged } from './packs'
@@ -24,11 +24,11 @@ export const mapHeight = (w: number, height?: number): number => Math.max(120, M
  */
 export const MAP_LIGHT: Theme = {
   sea: '#cfe0ee', land: '#f1ead9', coast: '#7d725c', lake: '#cfe0ee', river: '#3f7fb0', route: '#b3402b',
-  point: '#1f1f1f', pointHollow: '#1f1f1f', label: '#1f1f1f', halo: '#ffffff', cluster: '#34495e', clusterText: '#ffffff',
+  point: '#1f1f1f', pointHollow: '#1f1f1f', label: '#1f1f1f', halo: '#ffffff', cluster: '#34495e', clusterText: '#ffffff', ...LIGHT_REFERENCE,
 }
 export const MAP_DARK: Theme = {
   sea: '#1c2733', land: '#3b3a33', coast: '#a39a82', lake: '#1c2733', river: '#6fa8d8', route: '#ff8a65',
-  point: '#f5f0e0', pointHollow: '#f5f0e0', label: '#f2efe6', halo: '#1b1b19', cluster: '#e8d9b0', clusterText: '#1b1b19',
+  point: '#f5f0e0', pointHollow: '#f5f0e0', label: '#f2efe6', halo: '#1b1b19', cluster: '#e8d9b0', clusterText: '#1b1b19', reference: '#9aa5b1', referenceLabel: '#aab4bf', // (grey on the dark land, 3:1 or more)
 }
 const LITERAL = /^(#[0-9a-f]{3,8}|rgba?\([0-9., %]+\)|hsla?\([0-9., %deg]+\))$/i
 const kebab = (k: string) => k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())
@@ -137,7 +137,8 @@ const BUTTON_ROOM = 60
  * on the right of the screen, in either direction) the room on the right grows by the column's width. The room never takes more than 40% of the width
  * (a quarter for the labels). Many points (clusters) show few labels: the plain fit.
  */
-export function homeFrame(points: readonly { lat: number; lon: number; label: string }[], w: number, h: number, measure?: (t: string) => number, rtl = false): Frame {
+export function homeFrame(all: readonly { lat: number; lon: number; label: string; ref?: true }[], w: number, h: number, measure?: (t: string) => number, rtl = false): Frame {
+  const points = all.filter((p) => p.ref !== true) // reference places never widen the view, take room for a label or count toward the 12
   const plain = fit(points, w, h, HOME_MARGIN)
   if (points.length > 12) return plain
   const long = Math.max(0, ...points.map((p) => (!p.label ? 0 : measure ? measure(p.label) : p.label.length * 12 * 0.6 + 3)))
