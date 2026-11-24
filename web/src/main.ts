@@ -31,7 +31,7 @@ import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, 
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { answer, backNow, treeBar, treeBase, treeStep, treeWords, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
-import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
+import { backLine, GD, GT, mapGuides, mapRows, newGraph, nodeOf, sessionNode } from './graph'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
 import { FU, languagePicker, packFor, emptyLine, quickSpec, quickTap } from './firstuse'
@@ -2026,11 +2026,19 @@ function drawMap() {
   }
   const list = el('div', 'ex-rows gm-rows')
   let here: HTMLElement | null = null
-  for (const r of g ? mapRows(g, mapOpened) : []) {
+  const rows = g ? mapRows(g, mapOpened) : []
+  const guides = mapGuides(rows)
+  for (const [i, r] of rows.entries()) {
     const row = el('button', r.k === 'node' && r.cur ? 'ex-row gm-row on' : 'ex-row gm-row') as HTMLButtonElement
     row.type = 'button'
-    // indented by depth (at most 6 steps: a small phone keeps room for the name)
-    row.style.paddingInlineStart = `${6 + Math.min(r.depth, 6) * 18}px`
+    // the tree guides in place of an indent: one cell per level (at most GUIDE_MAX: a small phone keeps room for the name)
+    const gs = guides[i]!
+    if (gs.length) {
+      const gb = el('span', 'gm-g')
+      gb.setAttribute('aria-hidden', 'true')
+      for (const c of gs) gb.appendChild(el('i', `gm-c gm-c-${c}`))
+      row.appendChild(gb)
+    }
     if (r.k === 'more') {
       row.classList.add('gm-more')
       row.appendChild(el('span', 'ex-row-t', t.more.replace('{n}', String(r.n))))

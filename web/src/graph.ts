@@ -234,6 +234,36 @@ export function mapRows(g: Graph, open: Set<string> = new Set()): MapRow[] {
   return out
 }
 
+/** One cell of a row's tree guides: the rail of an outer level goes on (`pipe`) or ended (`blank`); the row's own level is an
+ * elbow with the rail going on to a later sibling (`tee`) or ending here (`last`). */
+export type Guide = 'pipe' | 'tee' | 'last' | 'blank'
+/** Levels with a guide of their own (the Map keeps room for the name on a small phone). */
+export const GUIDE_MAX = 6
+
+/**
+ * The tree guides of each row, from the depths alone (rows in reading order; level 1 is the first step in; the main line, depth 0,
+ * has none). A level's rail goes on past a row while a later row has that depth before any shallower row closes it. A row of depth
+ * D gets D cells, the last one an elbow (`tee` or `last`). Past GUIDE_MAX the cells stop at GUIDE_MAX and the row has no elbow
+ * (its last cell is a plain `pipe` or `blank`), so a row below the cap never looks like a sibling of one at the cap. "… N more"
+ * and group rows are rows like any other.
+ */
+export function mapGuides(rows: readonly { depth: number }[]): Guide[][] {
+  const out: Guide[][] = new Array(rows.length)
+  const more: boolean[] = [] // more[L]: a later row of depth L, with no shallower row in between
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const D = rows[i]!.depth
+    const cells: Guide[] = []
+    for (let L = 1; L <= Math.min(D, GUIDE_MAX); L++) {
+      const on = !!more[L]
+      cells.push(L === D ? (on ? 'tee' : 'last') : on ? 'pipe' : 'blank')
+    }
+    out[i] = cells
+    more[D] = true
+    for (let L = D + 1; L < more.length; L++) more[L] = false
+  }
+  return out
+}
+
 // ----------------------------------------------------------------------------------------------------------- drift
 // Guiding without blocking (Abel, Nov 15): when the conversation has gone far from where it started, the answer offers once to
 // go on in a new conversation; the person may ignore it. Never on a point that goes on along the passage or goes into it.
