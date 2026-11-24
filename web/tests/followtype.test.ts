@@ -13,7 +13,7 @@ describe('followType', () => {
     expect(followType(b('next', { pathNext: true }))).toBe('continue')
     expect(followType(b('next', { sessionNext: true }))).toBe('continue')
     expect(followType(b('back', { back: 'n1' }))).toBe('continue')
-        expect(followType(b('path', { toPath: true }))).toBe('continue')
+    expect(followType(b('path', { toPath: true }))).toBe('continue')
     expect(followType(b('session', { toSession: true }))).toBe('continue')
     expect(followType(b('again', { again: { q: 'x' } }))).toBe('continue')
     expect(followType(b('add', { add: { lang: 'id', unit: 'obs' }, sheet: sh('passage', ['text']) }))).toBe('continue')
@@ -59,10 +59,10 @@ describe('order', () => {
   })
   test('what is in sight keeps the next step, the way back and "again" (they never go behind More)', () => {
     const many = [...list, b('Again', { again: { q: 'x' } }), b('Back', { back: 'n' })]
-    const { shown, more } = splitFollow(sortByType(many), 1)
+    const { shown, groups } = layoutFollow(many, 1)
     const names = shown.map((x) => x.label)
     for (const k of ['Next', 'Again', 'Back']) expect(names).toContain(k)
-    expect(shown.length + more.length).toBe(many.length)
+    expect(shown.length + groups.reduce((n, g) => n + g.items.length, 0)).toBe(many.length)
     // the types stay in order in what is shown
     const ty = shown.map((x) => FOLLOW_TYPES.indexOf(followType(x)))
     expect(ty).toEqual([...ty].sort((a, c) => a - c))
