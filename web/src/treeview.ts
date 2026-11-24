@@ -80,16 +80,26 @@ const CSS = `
 .tv-g { font-size: 12px; color: var(--muted); padding-inline-start: 4px; }
 .tv-more { font: 13px/1.25 system-ui, sans-serif; color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-height: 36px; }
 .tv-head { font-size: 13px; font-weight: 600; color: var(--muted); margin: 10px 0 2px; }
-.tv-kids { margin: 0; padding: 0; padding-inline-start: 12px; margin-inline-start: 4px; border-inline-start: 1px solid var(--line); }
-.tv-kids.flat { margin-inline-start: 0; padding-inline-start: 0; }
-.tv-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+.tv { --tv-rail: var(--muted); }
+@supports (color: color-mix(in srgb, red, blue)) { .tv { --tv-rail: color-mix(in srgb, var(--muted) 60%, transparent); } }
+.tv-kids { margin: 0; padding: 0; margin-inline-start: 8px; }
+.tv-item { position: relative; padding: 3px 0; padding-inline: 10px 0; }
+.tv-item::before { content: ""; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; border-inline-start: 2px solid var(--tv-rail); }
+.tv-item:last-child::before { bottom: auto; height: 21px; }
+.tv-item::after { content: ""; position: absolute; inset-inline-start: 0; top: 21px; width: 8px; border-top: 2px solid var(--tv-rail); }
+.tv-row { display: flex; align-items: center; gap: 8px; margin: 0; }
 .tv-tog { flex: none; width: 36px; min-width: 36px; height: 36px; font: 12px/1 system-ui, sans-serif; color: var(--accent); background: transparent;
   border: 1px solid var(--line); border-radius: 8px; padding: 0; }
 .tv-tog.cap { width: auto; padding: 0 6px; }
 .tv-bar { display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px; align-items: center; margin: 2px 0 6px; padding: 4px 6px;
   border: 1px dashed var(--line); border-radius: 8px; background: var(--card); color: var(--muted); }
 .tv-bar button, .tv-top button { font: 13px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px; min-height: 36px; }
-.tv-up { margin: 4px 0; padding-inline-start: 8px; border-inline-start: 1px solid var(--line); }
+.tv-up { position: relative; margin: 0 0 0 8px; padding: 4px 0; padding-inline: 10px 0; }
+.tv-up::before { content: ""; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; border-inline-start: 2px solid var(--tv-rail); }
+.tv-up.last::before { bottom: auto; height: 22px; }
+.tv-up::after { content: ""; position: absolute; inset-inline-start: 0; top: 22px; width: 8px; border-top: 2px solid var(--tv-rail); }
+.tv-up > .tv-line { margin: 0; }
+.tv-up > .tv-un { display: block; line-height: 36px; }
 .tv-end { font-size: 13px; color: var(--muted); font-style: italic; margin: 6px 0; }
 `
 function css() {
@@ -268,7 +278,7 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
 
   /** the rows of one generation of descendants */
   function list(host: HTMLElement, idxs: number[], gen: number, parentId: string) {
-    const ul = el('div', `tv-kids${gen > 4 ? ' flat' : ''}`)
+    const ul = el('div', 'tv-kids')
     for (const i of idxs) {
       const n = v.nodes[i]
       if (!n) continue
@@ -318,17 +328,22 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
     host.appendChild(focusBox(view.focus))
     let child: TP = view.focus
     let from: string | null = view.focus.id
-    for (const r of view.line ?? []) {
-      const row = el('div', 'tv-up')
+    const rows = view.line ?? []
+    rows.forEach((r, ri) => {
+      const row = el('div', ri === rows.length - 1 ? 'tv-up last' : 'tv-up')
+      // the open bar goes inside the row, after its last block, so the rail runs past it
+      let tail: HTMLElement = row
+      const at = () => tail
       if (r.gap) {
         row.appendChild(el('span', 'tv-un', fill(w.gap, 'n', String(r.gap))))
       } else {
         const main = el('div', 'tv-line')
-        main.appendChild(withName(ofWord(child), name(r.p, () => row, from), 'tv-lab'))
+        main.appendChild(withName(ofWord(child), name(r.p, at, from), 'tv-lab'))
         row.appendChild(main)
+        tail = main
         if (r.mother) {
           const m = el('span', 'tv-small tv-mother')
-          m.appendChild(withName(w.and, name(r.mother, () => row, from), 'tv-small'))
+          m.appendChild(withName(w.and, name(r.mother, at, from), 'tv-small'))
           main.appendChild(m)
         }
         if (r.others?.length) {
@@ -337,16 +352,17 @@ export function renderTree(v: TreeView, o: TreeOptions): HTMLElement {
           if (a) os.append(a)
           r.others.forEach((z, k) => {
             if (k) os.append(rtl ? '، ' : ', ')
-            os.appendChild(name(z, () => row, from))
+            os.appendChild(name(z, at, from))
           })
           if (b) os.append(b)
           row.appendChild(os)
+          tail = os
         }
       }
       host.appendChild(row)
       child = r.p
       from = r.p.id
-    }
+    })
     if (!view.cut) host.appendChild(el('p', 'tv-end', w.upEnd))
   }
 }
