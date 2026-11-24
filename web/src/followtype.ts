@@ -1,6 +1,6 @@
 // The type of a next-step button (follow-ups grouped by type): worked out when the row is drawn, from the fields the button
 // already has, so nothing is stored and a conversation saved before still draws. No DOM here, so it is tested under bun.
-import type { Followup } from './converse'
+import { type Followup, splitFollow } from './converse'
 
 export const FOLLOW_TYPES = ['continue', 'read', 'understand', 'people', 'places', 'actions'] as const
 export type FollowType = (typeof FOLLOW_TYPES)[number]
@@ -13,7 +13,7 @@ export type FollowType = (typeof FOLLOW_TYPES)[number]
  */
 export function followType(f: Followup): FollowType {
   try {
-    if (f.pathNext || f.sessionNext || f.toPath || f.toSession || f.back != null || f.again || f.add) return 'continue'
+    if (f.pathNext || f.sessionNext || f.toPath || f.toSession || f.back || f.again || f.add) return 'continue'
     if (f.howto || f.typed) return 'actions'
     if (f.browse) return f.browse.manual ? 'understand' : 'read'
     switch (f.sheet?.intent) {
@@ -45,6 +45,19 @@ export function groupByType(follow: Followup[]): { type: FollowType; items: Foll
     else out.push({ type: t, items: [f] })
   }
   return out
+}
+
+/**
+ * What followRow draws: the buttons in sight and the ones behind "More", in groups. What is in sight is chosen by splitFollow on
+ * the ORIGINAL order (so the set is the one it always was); only then are the buttons put in the order of their types. A group
+ * has a `title` unless it continues the type of the last button in sight (the same title is not said twice).
+ */
+export function layoutFollow(follow: Followup[], backs: number): { shown: Followup[]; groups: { type: FollowType; title: boolean; items: Followup[] }[] } {
+  const { shown, more } = splitFollow(follow, backs)
+  const sorted = sortByType(shown)
+  const last = sorted.length ? followType(sorted[sorted.length - 1]!) : null
+  const groups = groupByType(more).map((g, i) => ({ ...g, title: !(i === 0 && g.type === last) }))
+  return { shown: sorted, groups }
 }
 
 /** The titles of the types, shown only over the buttons behind "More" (the app's language; English for any other). */

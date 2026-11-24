@@ -1,7 +1,7 @@
 // Follow-ups grouped by type (followtype.ts): the type comes from the fields a button already has, so saved ones still sort.
 import { describe, expect, test } from 'bun:test'
 import type { Followup } from '../src/converse'
-import { FOLLOW_ICONS, FOLLOW_TYPES, followIcon, followTitle, followType, groupByType, sortByType } from '../src/followtype'
+import { FOLLOW_ICONS, FOLLOW_TYPES, followIcon, followTitle, followType, groupByType, layoutFollow, sortByType } from '../src/followtype'
 import { splitFollow } from '../src/converse'
 
 const sh = (intent: string, what: string[] = [], extra: object = {}) =>
@@ -13,8 +13,7 @@ describe('followType', () => {
     expect(followType(b('next', { pathNext: true }))).toBe('continue')
     expect(followType(b('next', { sessionNext: true }))).toBe('continue')
     expect(followType(b('back', { back: 'n1' }))).toBe('continue')
-    expect(followType(b('back', { back: '' }))).toBe('continue')
-    expect(followType(b('path', { toPath: true }))).toBe('continue')
+        expect(followType(b('path', { toPath: true }))).toBe('continue')
     expect(followType(b('session', { toSession: true }))).toBe('continue')
     expect(followType(b('again', { again: { q: 'x' } }))).toBe('continue')
     expect(followType(b('add', { add: { lang: 'id', unit: 'obs' }, sheet: sh('passage', ['text']) }))).toBe('continue')
@@ -83,5 +82,36 @@ describe('titles and icons', () => {
       expect(s).toContain('aria-hidden="true"')
       expect(s).not.toMatch(/\p{Extended_Pictographic}/u)
     }
+  })
+})
+
+describe('layoutFollow (what followRow draws)', () => {
+  const many = [
+    b('Add', { add: { lang: 'id', unit: 'obs' } }), b('Place', { sheet: sh('place') }), b('Art1', { sheet: sh('article') }),
+    b('Psa', { sheet: sh('passage', ['text']) }), b('Next', { pathNext: true }), b('Kin', { sheet: sh('kin') }),
+    b('Art2', { sheet: sh('article'), key: true }), b('Luk', { sheet: sh('passage', ['text']) }), b('Guide', { howto: true }),
+    b('Again', { again: { q: 'x' } }),
+  ]
+  test('the buttons in sight are the same set splitFollow always chose; only their order changes', () => {
+    for (const backs of [0, 1, 2, 3]) {
+      const old = splitFollow(many, backs)
+      const lay = layoutFollow(many, backs)
+      expect(new Set(lay.shown)).toEqual(new Set(old.shown))
+      expect(lay.shown.length).toBe(old.shown.length)
+      expect(new Set(lay.groups.flatMap((g) => g.items))).toEqual(new Set(old.more))
+    }
+  })
+  test('a short list has nothing behind More', () => {
+    expect(layoutFollow(many.slice(0, 3), 0).groups).toEqual([])
+  })
+  test('the first group has no title when it is the type of the last button in sight', () => {
+    const l = [b('R1', { sheet: sh('passage', ['text']) }), b('R2', { sheet: sh('passage', ['text']) }), b('R3', { sheet: sh('passage', ['text']) }),
+      b('R4', { sheet: sh('passage', ['text']) }), b('R5', { sheet: sh('passage', ['text']) }), b('R6', { sheet: sh('passage', ['text']) }), b('K', { sheet: sh('kin') })]
+    const lay = layoutFollow(l, 0)
+    expect(followType(lay.shown[lay.shown.length - 1]!)).toBe('read')
+    expect(lay.groups.map((g) => [g.type, g.title])).toEqual([['read', false], ['people', true]])
+  })
+  test('back "" is not a way back (like splitFollow and the click)', () => {
+    expect(followType(b('x', { back: '', sheet: sh('passage', ['text']) }))).toBe('read')
   })
 })

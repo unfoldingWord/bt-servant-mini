@@ -15,7 +15,7 @@ import { PREVIEW_SERVER } from './shared'
 import { isCreditLine, onKinReady, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
-import { followIcon, followTitle, followType, groupByType, sortByType } from './followtype'
+import { followIcon, followTitle, followType, layoutFollow } from './followtype'
 import { renderMacula } from './syntaxview'
 import { buildTree, saveReplacer, type TreeView } from './tree'
 import { renderTree } from './treeview'
@@ -528,18 +528,21 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTML
   // ways back and the retry row (backs < 0) stay as they are. What is in sight is still chosen by splitFollow (a path's or a
   // session's next step first), and the types are named only over the buttons behind "More"
   const typed = backs >= 0
-  const { shown, more } = backs < 0 ? { shown: follow, more: [] as Followup[] } : splitFollow(sortByType(follow), backs)
-  for (const x of shown) f.appendChild(followButton(m, x, typed))
-  if (more.length) {
+  const lay = typed ? layoutFollow(follow, backs) : { shown: follow, groups: [] as ReturnType<typeof layoutFollow>['groups'] }
+  for (const x of lay.shown) f.appendChild(followButton(m, x, typed))
+  if (lay.groups.length) {
     // (the app's words, not the answer's: an English question in a Spanish app does not turn "Más" into "More")
     const b = el('button', 'more', bidiLabel(`${MORE[nav.split('-')[0]!] ?? MORE.en} ${rtlLang(nav) ? '◂' : '▸'}`, nav)) as HTMLButtonElement
     b.type = 'button'
     b.onclick = () => {
       const nodes: HTMLElement[] = []
-      for (const g of groupByType(more)) {
-        const h = el('p', 'follow-title', bidiLabel(followTitle(nav, g.type), nav))
-        h.dir = rtlLang(nav) ? 'rtl' : 'ltr'
-        nodes.push(h, ...g.items.map((x) => followButton(m, x, true)))
+      for (const g of lay.groups) {
+        if (g.title) {
+          const h = el('p', 'follow-title', bidiLabel(followTitle(nav, g.type), nav))
+          h.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+          nodes.push(h)
+        }
+        nodes.push(...g.items.map((x) => followButton(m, x, true)))
       }
       b.replaceWith(...nodes)
       ;(nodes.find((n) => n.tagName === 'BUTTON') as HTMLButtonElement | undefined)?.focus()

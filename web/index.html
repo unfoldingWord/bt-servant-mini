@@ -554,7 +554,7 @@
   .follow button.has-ic { display: inline-flex; align-items: center; gap: 6px; }
   .follow button .ic { flex: none; color: var(--muted); }
   .follow button.path-next .ic, .follow button.ty-continue .ic { color: var(--accent); }
-  [dir="rtl"] .follow button.ty-continue .ic { transform: scaleX(-1); } /* the arrow points the way of reading */
+  .follow[dir="rtl"] button.ty-continue .ic { transform: scaleX(-1); } /* the arrow points the way of reading */
   .follow p.follow-title { flex: 0 0 100%; margin: 6px 0 -2px; font: 600 12px/1.3 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; color: var(--muted); }
   .follow button.more { color: var(--accent); font-weight: 600; } /* the next steps not in sight (main.ts followRow) */
   .follow button.back { min-height: 44px; border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
