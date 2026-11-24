@@ -23,19 +23,26 @@ describe('mapGuides', () => {
     // 0 / 1 A (last) / 2 deeper (tee) / 2 deeper (last) / 0 line
     expect(show(G([0, 1, 2, 2, 0]))).toEqual(['', '`', '.+', '.`', ''])
   })
-  test('an outer rail also goes on at the end of the list only when a later row needs it', () => {
+  test('a chain at the end of the list: the parent cell is last, then blank', () => {
     expect(show(G([0, 1, 2]))).toEqual(['', '`', '.`'])
   })
-  test('folded "more" and group rows are rows like any other (a real graph)', () => {
+  test('a long line at depth 0 folds, and it has no guides', () => {
     const g = newGraph()
-    add(g, 'passage', sh('rut 1:1'))
-    for (let v = 2; v <= 8; v++) add(g, 'passage', sh(`rut 1:${v}`)) // a long line: folds
+    for (let v = 1; v <= 8; v++) add(g, 'passage', sh(`rut 1:${v}`))
     const rows = mapRows(g)
     expect(rows.map((r) => r.k)).toEqual(['node', 'node', 'node', 'more', 'node', 'node'])
     expect(G(rows.map((r) => r.depth)).every((c) => c.length === 0)).toBe(true)
-    // a folded line at depth 1 under a branch, with a later sibling at depth 1 after it
-    const more = [0, 1, 1, 1, 1, 1, 1, 0].map((depth) => ({ depth })) // branch, 2 line, "more", 2 line... all depth 1
-    expect(show(mapGuides(more))).toEqual(['', '+', '+', '+', '+', '+', '`', ''])
+  })
+  test('a real graph with a folded branch at depth 1: the "more" row sits among its siblings', () => {
+    const g = newGraph()
+    add(g, 'passage', sh('rut 2:3'))
+    const b = add(g, 'passage', sh('jon 1:3')) // another book: a branch
+    expect(b.edge).toBe('branch')
+    for (let v = 4; v <= 10; v++) add(g, 'passage', sh(`jon 1:${v}`)) // its line, folds
+    const rows = mapRows(g)
+    expect(rows.map((r) => `${r.k}${r.depth}`)).toEqual(['node0', 'node1', 'node1', 'node1', 'more1', 'node1', 'node1'])
+    // the folded branch is the only one: every row of the line is a tee but the last
+    expect(show(G(rows.map((r) => r.depth)))).toEqual(['', '+', '+', '+', '+', '+', '`'])
   })
   test('a group row and its steps one step in', () => {
     // 0 / 1 group / 2 step / 2 step / 1 branch after the session
@@ -54,5 +61,12 @@ describe('mapGuides', () => {
     expect(gs[4]![D - 1]).toBe('last')
     // with nothing at the cap after them, the capped rows end in blank
     expect(G([0, D, D + 1])[2]![D - 1]).toBe('blank')
+  })
+  test('edge cases: empty list, a first row below 0, a jump of more than one level, consecutive depth-7 rows', () => {
+    expect(G([])).toEqual([])
+    expect(show(G([2]))).toEqual(['.`'])
+    expect(show(G([0, 3]))).toEqual(['', '..`'])
+    expect(show(G([0, 1, 7, 7, 1]))).toEqual(['', '+', '|.....', '|.....', '`'])
+    expect(G([0, 7, 7])[1]).toHaveLength(GUIDE_MAX)
   })
 })
