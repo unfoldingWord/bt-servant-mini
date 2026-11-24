@@ -73,7 +73,7 @@ const CSS = `
 .tv-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 4px 0; }
 .tv-lab { font-size: 13px; color: var(--muted); }
 .tv-name { font: 14px/1.25 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 8px;
-  padding: 4px 8px; min-height: 36px; text-align: start; }
+  padding: 4px 8px; min-height: 36px; text-align: start; min-width: 0; overflow-wrap: anywhere; }
 .tv-name[aria-expanded=true] { border-color: var(--accent); background: var(--accent-soft); }
 .tv-name.un, .tv-un { font-style: italic; color: var(--muted); }
 .tv-name.sm { font-size: 12px; min-height: 32px; padding: 2px 6px; color: var(--muted); }
@@ -86,7 +86,7 @@ const CSS = `
 .tv-item { position: relative; padding: 3px 0; padding-inline: 10px 0; }
 .tv-item::before { content: ""; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; border-inline-start: 2px solid var(--tv-rail); }
 .tv-item:last-child::before { bottom: auto; height: 21px; }
-.tv-item::after { content: ""; position: absolute; inset-inline-start: 0; top: 21px; width: 8px; border-top: 2px solid var(--tv-rail); }
+.tv-item::after { content: ""; position: absolute; inset-inline-start: 0; top: 20px; width: 8px; border-top: 2px solid var(--tv-rail); }
 .tv-row { display: flex; align-items: center; gap: 8px; margin: 0; }
 .tv-tog { flex: none; width: 36px; min-width: 36px; height: 36px; font: 12px/1 system-ui, sans-serif; color: var(--accent); background: transparent;
   border: 1px solid var(--line); border-radius: 8px; padding: 0; }
@@ -94,10 +94,10 @@ const CSS = `
 .tv-bar { display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px; align-items: center; margin: 2px 0 6px; margin-inline-start: 6px; padding: 4px 6px;
   border: 1px dashed var(--line); border-radius: 8px; background: var(--card); color: var(--muted); }
 .tv-bar button, .tv-top button { font: 13px/1.3 system-ui, sans-serif; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px; min-height: 36px; }
-.tv-up { position: relative; margin: 0 0 0 8px; padding: 4px 0; padding-inline: 10px 0; }
+.tv-up { position: relative; margin: 0; margin-inline-start: 8px; padding: 4px 0; padding-inline: 10px 0; }
 .tv-up::before { content: ""; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; border-inline-start: 2px solid var(--tv-rail); }
 .tv-up.last::before { bottom: auto; height: 22px; }
-.tv-up::after { content: ""; position: absolute; inset-inline-start: 0; top: 22px; width: 8px; border-top: 2px solid var(--tv-rail); }
+.tv-up::after { content: ""; position: absolute; inset-inline-start: 0; top: 21px; width: 8px; border-top: 2px solid var(--tv-rail); }
 .tv-up > .tv-line { margin: 0; }
 .tv-up > .tv-un { display: block; line-height: 36px; }
 .tv-end { font-size: 13px; color: var(--muted); font-style: italic; margin: 6px 0; }
