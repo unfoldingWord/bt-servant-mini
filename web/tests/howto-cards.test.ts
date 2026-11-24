@@ -22,6 +22,8 @@ const UIS = ['en', 'es', 'fr', 'id', 'hi', 'ar']
 // (what the phone has: the people and places flags are off unless a test says so)
 const H0: PhoneHas = { obs: false, books: false, people: false, places: false }
 const has = (o: Partial<PhoneHas>): PhoneHas => ({ ...H0, ...o })
+// (an Examples with nothing found: the other cards need its fields)
+const STUB = { passage: 'p', notes: 'n', questions: null, follow: ['a', 'b'], free: 'f', term: null, topic: null, obs: null, book: 'b', ref: 'x 1:1', chapter: null }
 const ids = (ui: string, h: Partial<PhoneHas>, online: boolean) => cardsFor(ui, null, online, true, has(h)).map((c) => c.id)
 
 const saved = (globalThis as any).localStorage
@@ -58,7 +60,8 @@ describe('how many cards, and which', () => {
 
   test('the "Try it" of the new cards sends a real question (the first phrase), and the phrases are shown as examples', () => {
     for (const ui of UIS) {
-      const cs = cardsFor(ui, null, true, true, has({ people: true, places: true }))
+      const ex = { ...STUB, kin: HT(ui).kinQ[0], place: HT(ui).placeQ[0] } as any
+      const cs = cardsFor(ui, ex, true, true, has({ people: true, places: true }))
       const people = cs.find((c) => c.id === 'people')!, places = cs.find((c) => c.id === 'places')!
       expect(people.ask, ui).toEqual([HT(ui).kinQ[0]])
       expect(people.examples, ui).toEqual([...HT(ui).kinQ])
@@ -70,6 +73,12 @@ describe('how many cards, and which', () => {
       expect(people.body, ui).toContain(KT(ui).treeBtn)
       expect(places.body, ui).toContain(PLT(ui).seeMap)
     }
+  })
+
+  test('no example found in the packs: the people and places cards are text only', () => {
+    const cs = cardsFor('hi', { ...STUB, kin: null, place: null } as any, true, true, has({ people: true, places: true }))
+    for (const id of ['people', 'places']) expect(cs.find((c) => c.id === id)!.ask).toEqual([])
+    for (const id of ['people', 'places']) expect(cardsFor('hi', null, true, true, has({ people: true, places: true })).find((c) => c.id === id)!.ask).toEqual([])
   })
 
   test('the places card says "See on the map" is under the Bible Stories frames only when the phone has the stories', () => {

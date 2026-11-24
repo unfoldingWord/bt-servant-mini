@@ -14,8 +14,8 @@ import { CANON, openLang } from './packs'
 import { booksOf, type Ctx, firstPack, fillName, helpsKnown, loadHelps, ST, understood } from './suggest'
 import { termArticle } from './pipeline'
 import { composerOn } from './composer'
-import { hasPeople, KT } from './kin'
-import { placePacks } from './places'
+import { hasPeople, KT, kinQuestion } from './kin'
+import { placePacks, placeQuestion } from './places'
 import { PLT } from './placetext'
 import { followTitle, FOLLOW_TYPES } from './followtype'
 import { onlineAvailable } from './online'
@@ -280,6 +280,8 @@ export type Examples = {
   obs: string | null
   /** the book's name as the composer writes it, for "start writing a book's name" */
   book: string
+  /** the family and the place question "Try it" sends: the card's first phrase in the app's language, else in the language of a pack on the phone, whichever finds Isaac / Jerusalem there; null: none does */
+  kin: string | null; place: string | null
 }
 /** Verses with notes in most packs, in the order they are tried (Ruth 2:3 first, as Abel wrote the guide). */
 const VERSES = ['rut 2:3', 'jon 1:3', 'tit 1:1', 'mrk 1:1', 'jhn 3:16', 'mat 5:3', 'act 1:8', 'rom 1:1', 'eph 2:8', 'gen 1:1', 'psa 23:1', '3jn 1:4']
@@ -378,8 +380,20 @@ async function findExamples(ui: string, packs: string[], helpsLang: string | nul
   // an Open Bible Stories frame that has notes, asked as "OBS 1:2" (the app reads it in every language)
   // (the same pack phoneHas asks: the first one on the phone, then English, then the others, so the card and its example agree)
   const fr = await firstNotedFrame(packs[0]!).catch(() => null)
+  // the people and places cards: the name must be found in these packs (a Hindi app with only Spanish has no «इसहाक»), so the phrase
+  // is tried in the app's language, then in the language of each pack on the phone (the question's own language is read by the router)
+  const langs = [ui, ...packs.map((l) => l.slice(0, 2))].filter((l, i, a) => a.indexOf(l) === i)
+  const resolves = async (pick: (t: H) => string, ask: (q: string) => Promise<unknown>) => {
+    for (const l of langs) {
+      const q = pick(HT(l))
+      try { if (await ask(q)) return q } catch { /* the next language */ }
+    }
+    return null
+  }
+  const kin = await resolves((t) => t.kinQ[0], (q) => kinQuestion(q, ui, null))
+  const place = await resolves((t) => t.placeQ[0], (q) => placeQuestion(q, ui, null))
   return {
-    ref, chapter, passage: named(ref), notes: fill(s.notes, named(ref)), questions: chapter ? fill(s.questions, named(chapter)) : null,
+    kin, place, ref, chapter, passage: named(ref), notes: fill(s.notes, named(ref)), questions: chapter ? fill(s.questions, named(chapter)) : null,
     follow: s.follow, free: fill(s.freeQ, named(ref)), term, topic, obs: fr ? obsLabel(fr.n, fr.f) : null, book: fillName(ui, ref.split(' ')[0]!),
   }
 }
@@ -506,9 +520,9 @@ export function cardsFor(ui: string, ex: Examples | null, online = onlineHere(),
   // (a "Try it" only with an example found, so none answers with nothing)
   if (has.obs) out.push(card('obs', ex?.obs ? { examples: [ex.obs], ask: [ex.obs] } : none))
   if (has.books) out.push(card('who', who ? { examples: [who.label], ask: [], sheet: who } : none))
-  // families and places: a "Try it" is a real question (the first phrase of each card), answered by the data these cards need
-  if (has.people) out.push(card('people', { examples: [...s.kinQ], ask: [s.kinQ[0]] }))
-  if (has.places) out.push(card('places', { examples: [...s.placeQ], ask: [s.placeQ[0]] }, s.cards.places[1] + (has.obs ? s.mapObs : '')))
+  // families and places: a "Try it" is a real question (the first phrase of each card, found in these packs: examplesOf), else none
+  if (has.people) out.push(card('people', { examples: [...s.kinQ], ask: ex?.kin ? [ex.kin] : [] }))
+  if (has.places) out.push(card('places', { examples: [...s.placeQ], ask: ex?.place ? [ex.place] : [] }, s.cards.places[1] + (has.obs ? s.mapObs : '')))
   out.push(
     // a follow-up needs a passage before it: "Try it" asks the passage, then the next verse
     card('follow', ex ? { examples: [...ex.follow], ask: [ex.passage, ex.follow[0]] } : none),

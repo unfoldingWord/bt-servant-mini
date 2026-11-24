@@ -110,8 +110,8 @@ test('another app language than the pack: the examples are still answered', asyn
     await installPacks([pack])
     const ex = (await examplesOf(ui, [pack], null))!
     for (const q of [ex.passage, ex.notes, ex.questions].filter((x): x is string => !!x)) expect((await ask([q], ui)).found, `${ui}/${pack}: ${q}`).toBeGreaterThan(0)
-    // (not the people and places cards: they name Isaac and Jerusalem in the app's language, which a pack of another language may not have)
-    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true, people: false, places: false })) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
+    // (the people and places cards too: their phrase is the one a pack of the phone finds, or they have no Try-it)
+    for (const c of cardsFor(ui, ex, true, true, { obs: !!ex.obs, books: true, people: true, places: true })) if (c.ask.length) expect((await ask(c.ask, ui)).found, `${ui}/${pack} ${c.id}`).toBeGreaterThan(0)
   }
 }, 120000)
 
