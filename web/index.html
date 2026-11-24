@@ -577,7 +577,15 @@
   #gmap.open { display: flex; }
   #gmap:focus { outline: none; }
   #gmap .ex-head { padding-inline-start: 16px; }
-  .gm-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding-block: 8px; }
+  .gm-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding-block: 8px; padding-inline-start: 6px; }
+  /* tree guides (graph.ts mapGuides): one 18px cell per level; the row's padding and border are crossed so a rail runs unbroken from row to row.
+     Logical properties: the rails and elbows mirror in RTL by themselves. */
+  .gm-g { --gm-rail: var(--muted); display: flex; flex: none; align-self: stretch; margin-block: -8px -9px; }
+  @supports (color: color-mix(in srgb, red, blue)) { .gm-g { --gm-rail: color-mix(in srgb, var(--muted) 60%, transparent); } }
+  .gm-c { position: relative; display: block; width: 18px; }
+  .gm-c-pipe::before, .gm-c-tee::before, .gm-c-last::before { content: ""; position: absolute; inset-inline-start: 8px; top: 0; bottom: 0; border-inline-start: 2px solid var(--gm-rail); }
+  .gm-c-last::before { bottom: 50%; }
+  .gm-c-tee::after, .gm-c-last::after { content: ""; position: absolute; inset-inline-start: 8px; top: 50%; width: 12px; margin-top: -1px; border-top: 2px solid var(--gm-rail); }
   .gm-row.on { background: var(--accent-soft); border-radius: 10px; }
   .gm-ic { flex: none; width: 24px; display: grid; place-items: center; color: var(--faint); }
   .gm-row.on .gm-ic { color: var(--accent); }
