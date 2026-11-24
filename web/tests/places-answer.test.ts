@@ -308,11 +308,13 @@ describe('on a hand-made reader (verses, events with passages)', () => {
   test('the passage\'s places: «Ver en el mapa» sheet of a verse range and of a frame of Open Bible Stories', async () => {
     const base0 = { id: '', intent: 'place', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: 'es-419' } as never
     const r = await turn({ last: null }, { q: '', sheet: placeSheet(base0, ['view'], { ref: 'gen 12:1-13:3' }) }, 'es')
-    expect(r.reply.list!.items).toEqual([{ text: 'Betel', ref: 'Génesis 12:8' }])
+    // (Jerusalem, 20 km away, is inside the frame of Bethel alone: a reference place, last, tagged, no verse)
+    expect(r.reply.list!.items).toEqual([{ text: 'Betel', ref: 'Génesis 12:8' }, { text: 'Jerusalén', tag: 'de referencia' }])
+    expect(r.reply.map!.points.map((p) => [p.id, p.ref])).toEqual([['lug:bethel', undefined], ['lug:jerusalem', true]])
     expect(r.reply.map!.summary).toBe('Mapa: 1 lugares en Génesis 12:1-13:3: Betel')
     expect(r.reply.info).toMatch(/^\*\*Lugares en Génesis 12:1-13:3:\*\*/)
     const f = await turn({ last: null }, { q: '', sheet: placeSheet(base0, ['view'], { ref: 'obs 5:9' }) }, 'es')
-    expect(f.reply.list!.items.map((i) => i.text)).toEqual(['Betel'])
+    expect(f.reply.list!.items.map((i) => i.text)).toEqual(['Betel', 'Jerusalén'])
     expect(f.reply.info).toMatch(/^\*\*Lugares en .*5:9:\*\*/)
     const none = await turn({ last: null }, { q: '', sheet: placeSheet(base0, ['view'], { ref: 'gen 5:5' }) }, 'es')
     expect(none.reply.map).toBeUndefined()
@@ -448,8 +450,8 @@ describe('«Ver en el mapa» under a passage and a frame of Open Bible Stories',
     expect(f?.sheet).toMatchObject({ intent: 'place', ref: 'gen 12:8', what: ['view'] })
     const m = await turn(c, { q: '', sheet: f!.sheet! }, 'en')
     expect(m.answered).toBe('place')
-    expect(m.reply.map!.points.map((p) => p.id)).toEqual(['lug:bethel'])
-    expect(m.reply.list!.items).toEqual([{ text: 'Betel', ref: 'Genesis 12:8' }])
+    expect(m.reply.map!.points.map((p) => p.id)).toEqual(['lug:bethel', 'lug:jerusalem'])
+    expect(m.reply.list!.items).toEqual([{ text: 'Betel', ref: 'Genesis 12:8' }, { text: 'Jerusalén', tag: 'for reference' }])
     expect(c.graph!.nodes.at(-1)!.label).toBe('Genesis 12:8 · Map')
   })
   test('a range of verses and a chapter', async () => {

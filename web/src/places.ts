@@ -504,6 +504,39 @@ export async function referenceFor(pack: string, place: PlaceRef): Promise<Place
   return best?.ref ?? null
 }
 
+/**
+ * The well-known places a passage map shows as scenery (at most `max`, default 3). Candidates are REFERENCE_PLACES in that list's order, which is
+ * the order of importance (Jerusalem first), with a point and certainty 2 or 3, not among `protagonists`, inside the frame of the protagonists (their
+ * box, widened by a tenth of its size each way, at least 40 km as `fit` shows one point). One is skipped when it lies closer than 3% of the frame's
+ * diagonal to a protagonist (it would hide under the dot) or closer than 15% of it to a reference already chosen (so they spread across the map).
+ * No protagonist with a point: none.
+ */
+export async function referencesAmong(pack: string, protagonists: readonly PlaceRef[], max = 3): Promise<PlaceRef[]> {
+  const pts = protagonists.filter((p) => p.lat !== undefined && p.lon !== undefined)
+  const ix = pts.length ? await placeIx(pack) : null
+  if (!ix) return []
+  const lats = pts.map((p) => p.lat!), lons = pts.map((p) => p.lon!)
+  const [la0, la1, lo0, lo1] = [Math.min(...lats), Math.max(...lats), Math.min(...lons), Math.max(...lons)]
+  const minLa = 40 / 111.2, minLo = minLa / Math.max(0.2, Math.cos((((la0 + la1) / 2) * Math.PI) / 180))
+  const dLa = Math.max(minLa, (la1 - la0) / 10), dLo = Math.max(minLo, (lo1 - lo0) / 10)
+  const diag = distance({ lat: la0 - dLa, lon: lo0 - dLo }, { lat: la1 + dLa, lon: lo1 + dLo }).km
+  const ids = new Set(pts.map((p) => p.id))
+  const out: PlaceRef[] = []
+  for (const id of REFERENCE_PLACES) {
+    if (out.length >= max) break
+    if (ids.has(id)) continue
+    const g = ix.core.geo?.[id]
+    if (!g || g.sure < 2) continue
+    const ref = ix.byId.get(id)?.ref ?? refOf(ix, id)
+    if (ref.lat === undefined || ref.lon === undefined) continue
+    if (ref.lat < la0 - dLa || ref.lat > la1 + dLa || ref.lon < lo0 - dLo || ref.lon > lo1 + dLo) continue
+    const km = (q: PlaceRef) => distance({ lat: q.lat!, lon: q.lon! }, { lat: ref.lat!, lon: ref.lon! }).km
+    if (pts.some((p) => km(p) < 0.03 * diag) || out.some((q) => km(q) < 0.15 * diag)) continue
+    out.push(ref)
+  }
+  return out
+}
+
 // ------------------------------------------------------------------------------------------------- what the answers of pipeline.ts need
 /** The places of these ids as the answers show them (`PlaceRef`, in the order asked; an id that is no place is left out). */
 export async function placeRefs(pack: string, ids: string[]): Promise<PlaceRef[]> {
