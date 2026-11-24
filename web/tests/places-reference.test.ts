@@ -13,12 +13,12 @@ import { homeFrame, MAP_DARK, MAP_LIGHT, mapSvg } from '../src/mapview'
 import { place, v, world, type World } from './places-world'
 
 const P = (lat: number, lon: number, sure: 0 | 1 | 2 | 3 = 3) => ({ lat: Math.round(lat * 100), lon: Math.round(lon * 100), sure, form: 1 as const })
-const names = { 'lug:joppa': 'Joppa', 'lug:nineveh': 'Nineveh', 'lug:jerusalem': 'Jerusalem', 'lug:samaria': 'Samaria', 'lug:nazareth': 'Nazareth', 'lug:tyre': 'Tyre', 'lug:damascus': 'Damascus', 'lug:gaza': 'Gaza', 'lug:athens': 'Athens', 'lug:babylon': 'Babylon' }
+const names = { 'lug:joppa': 'Joppa', 'lug:nineveh': 'Nineveh', 'lug:jerusalem': 'Jerusalem', 'lug:samaria': 'Samaria', 'lug:nazareth': 'Nazareth', 'lug:tyre': 'Tyre', 'lug:damascus': 'Damascus', 'lug:gaza': 'Gaza', 'lug:athens': 'Athens', 'lug:babylon': 'Babylon', 'lug:antioch-act-6-5': 'Antioch' }
 const JONAH: World = {
   topics: Object.entries(names).map(([id, n]) => [id, place(n)] as [string, ReturnType<typeof place>]),
   geo: {
     'lug:joppa': P(32.05, 34.75), 'lug:nineveh': P(36.36, 43.15), 'lug:jerusalem': P(31.78, 35.22), 'lug:samaria': P(32.28, 35.2), 'lug:nazareth': P(32.7, 35.3),
-    'lug:tyre': P(33.27, 35.2), 'lug:damascus': P(33.51, 36.29), 'lug:gaza': P(31.5, 34.47), 'lug:athens': P(37.97, 23.72), 'lug:babylon': P(32.54, 44.42),
+    'lug:tyre': P(33.27, 35.2), 'lug:damascus': P(33.51, 36.29), 'lug:gaza': P(31.5, 34.47), 'lug:athens': P(37.97, 23.72), 'lug:babylon': P(32.54, 44.42), 'lug:antioch-act-6-5': P(36.2, 36.16),
   },
   // Jonah 1:3 names Joppa; 1:2 Nineveh. (Athens is far outside, Gaza just below the frame.) Jerusalem and the others are named nowhere.
   verses: { 'lug:joppa': [v(32, 1, 3)], 'lug:nineveh': [v(32, 1, 2)], 'lug:jerusalem': [v(40, 1, 1)] },
@@ -47,7 +47,7 @@ describe('reference places on a passage map', () => {
     expect(pts.slice(0, prot.length).every((p) => !p.ref)).toBe(true) // (the references come after)
     expect(refs.length).toBeLessThanOrEqual(3)
     expect(refs.map((p) => p.id)).toContain('lug:jerusalem')
-    expect(refs.map((p) => p.id)).toEqual(['lug:samaria', 'lug:jerusalem', 'lug:nazareth']) // nearest to a protagonist first
+    expect(refs.map((p) => p.id)).toEqual(['lug:jerusalem', 'lug:damascus', 'lug:antioch-act-6-5']) // REFERENCE_PLACES order (importance), spread out
     expect(new Set(pts.map((p) => p.id)).size).toBe(pts.length)
     expect(pts.map((p) => p.id)).not.toContain('lug:athens') // far outside
     expect(pts.map((p) => p.id)).not.toContain('lug:gaza') // just below the frame
@@ -55,6 +55,17 @@ describe('reference places on a passage map', () => {
     for (const p of refs) expect(p).not.toHaveProperty('verses')
     expect(r.reply.map!.summary).toMatch(/^Map: 2 places in Jonah 1:1-17: Nineveh, Joppa$/) // (the references are not counted nor named)
     expect(r.reply.follow!.map((f) => f.label)).toEqual(['Nineveh', 'Joppa'])
+  })
+  test('no two references are closer than 15% of the frame diagonal, none under a protagonist dot', async () => {
+    use(JONAH)
+    const pts = (await view('en')).reply.map!.points
+    const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => Math.hypot((a.lat - b.lat) * 111.2, (a.lon - b.lon) * 111.2 * Math.cos((a.lat * Math.PI) / 180))
+    const diag = Math.hypot((36.36 - 32.05 + 0.86) * 111.2, (43.15 - 34.75 + 1.68) * 111.2 * Math.cos((34.2 * Math.PI) / 180))
+    const refs = pts.filter((p) => p.ref), prot = pts.filter((p) => !p.ref)
+    for (let i = 0; i < refs.length; i++) {
+      for (let j = i + 1; j < refs.length; j++) expect(km(refs[i]!, refs[j]!)).toBeGreaterThan(0.15 * diag * 0.9)
+      for (const p of prot) expect(km(refs[i]!, p)).toBeGreaterThan(0.03 * diag * 0.9)
+    }
   })
   test('the list: protagonists with their verse, then the references with the tag and no verse, in each of the six languages', async () => {
     use(JONAH)
