@@ -73,7 +73,7 @@ describe('Try it sends only when the chat can take it', () => {
     await installPacks(['en'])
     await withObs('en')
     const ex = (await examplesOf('en', ['en'], 'en'))!
-    const card = cardsFor('en', ex, true, true, { obs: false, books: true }).find((c) => c.id === 'follow')!
+    const card = cardsFor('en', ex, true, true, { obs: false, books: true, people: false, places: false }).find((c) => c.id === 'follow')!
     expect(card.ask).toEqual([ex.passage, ex.follow[0]])
     const conv: ConvState = { last: null }
     const answers: Awaited<ReturnType<typeof turn>>[] = []

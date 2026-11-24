@@ -422,6 +422,8 @@ export function kinKnown(q: string, nav: string): boolean {
 export const kinReady = (pack: string): boolean => !!ready.get(pack)
 /** The packs, in the order given, whose people index is built already and has people (no read: Browse's people tab shows only what is there). */
 export const peoplePacks = (packs: string[]): string[] => packs.filter((l) => !!ready.get(l)?.byId.size)
+/** Whether a pack has people (reads its people index when it is not built yet): the how-to guide's families card appears only where there are. */
+export const hasPeople = async (pack: string): Promise<boolean> => !!(await peopleIx(pack))?.byId.size
 /** Builds the people index of these packs at idle (the app's start, after a change of packs): a family question then skips the readers. */
 export function warmKin(langs: string[]) {
   const ric = (globalThis as any).requestIdleCallback as ((f: () => void, o?: { timeout: number }) => void) | undefined
