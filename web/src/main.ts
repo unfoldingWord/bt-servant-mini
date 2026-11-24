@@ -15,6 +15,7 @@ import { PREVIEW_SERVER } from './shared'
 import { isCreditLine, onKinReady, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
+import { followIcon, followTitle, followType, groupByType, sortByType } from './followtype'
 import { renderMacula } from './syntaxview'
 import { buildTree, saveReplacer, type TreeView } from './tree'
 import { renderTree } from './treeview'
@@ -523,16 +524,25 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTML
   // in the app's direction (not the answer's: an Arabic answer in an English app keeps English buttons left to right)
   const ui = m.ui ?? nav
   f.dir = rtlLang(ui) ? 'rtl' : 'ltr'
-  const { shown, more } = backs < 0 ? { shown: follow, more: [] as Followup[] } : splitFollow(follow, backs)
-  for (const x of shown) f.appendChild(followButton(m, x))
+  // the main row is grouped by type (followtype.ts): the buttons in the order of their types, each with the icon of its type; the
+  // ways back and the retry row (backs < 0) stay as they are. What is in sight is still chosen by splitFollow (a path's or a
+  // session's next step first), and the types are named only over the buttons behind "More"
+  const typed = backs >= 0
+  const { shown, more } = backs < 0 ? { shown: follow, more: [] as Followup[] } : splitFollow(sortByType(follow), backs)
+  for (const x of shown) f.appendChild(followButton(m, x, typed))
   if (more.length) {
     // (the app's words, not the answer's: an English question in a Spanish app does not turn "Más" into "More")
     const b = el('button', 'more', bidiLabel(`${MORE[nav.split('-')[0]!] ?? MORE.en} ${rtlLang(nav) ? '◂' : '▸'}`, nav)) as HTMLButtonElement
     b.type = 'button'
     b.onclick = () => {
-      const bs = more.map((x) => followButton(m, x))
-      b.replaceWith(...bs)
-      bs[0]?.focus()
+      const nodes: HTMLElement[] = []
+      for (const g of groupByType(more)) {
+        const h = el('p', 'follow-title', bidiLabel(followTitle(nav, g.type), nav))
+        h.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+        nodes.push(h, ...g.items.map((x) => followButton(m, x, true)))
+      }
+      b.replaceWith(...nodes)
+      ;(nodes.find((n) => n.tagName === 'BUTTON') as HTMLButtonElement | undefined)?.focus()
     }
     f.appendChild(b)
   }
@@ -559,7 +569,7 @@ function treeBlock(m: Msg, v: TreeView): HTMLElement {
   return wrap
 }
 /** One next step's button. */
-function followButton(m: Msg, x: Followup): HTMLButtonElement {
+function followButton(m: Msg, x: Followup, icon = false): HTMLButtonElement {
   const ui = m.ui ?? nav
   // a way back reads as it is now, in the app's language (a message kept from before has the words and the place it was drawn with)
   const now = backNow(conv().graph, x, nav)
@@ -567,6 +577,12 @@ function followButton(m: Msg, x: Followup): HTMLButtonElement {
   b.type = 'button'
   if (x.back || x.toPath || x.toSession) b.className = 'back'
   else if (x.pathNext) b.className = 'path-next'
+  // the icon of its type (the main row only; the label stays the button's name)
+  if (icon && !(x.back || x.toPath || x.toSession)) {
+    const t = followType(x)
+    b.insertAdjacentHTML('afterbegin', followIcon(t))
+    b.classList.add('has-ic', `ty-${t}`)
+  }
   b.onclick = () => {
     if (x.back) goTo(x.back, 'back')
     else if (x.browse) {
