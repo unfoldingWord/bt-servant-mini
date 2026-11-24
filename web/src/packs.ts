@@ -504,8 +504,8 @@ function changed() {
 // ------------------------------------------------------------------------------------------------------------ basemap
 
 /**
- * Where the `basemap` complement is looked for, relative to the packs folder of the app and to the base of a packs server:
- * `<COMPLEMENTS_DIR>/<sha256 hex>.basemap`. The builder writes `<out>/complements/<sha256>.basemap`; no publisher uploads it yet.
+ * Where the `basemap` complement is looked for: `<COMPLEMENTS_DIR>/<sha256 hex>.basemap` in the packs folder of the app (the APK
+ * build copies it there, web/build.py), and `/v3/packs/complement/<sha256 hex>` on a packs server (format 3 `serving.md`).
  */
 export const COMPLEMENTS_DIR = 'common/complements'
 const BASEMAP_MAX = 1024 * 1024 // the real one is about 6 KB; a bigger file is not one of ours
@@ -592,7 +592,7 @@ export async function basemapBytes(pack: string): Promise<Uint8Array | null> {
     const last = basemapMiss.get(e.id)
     if (last !== undefined && Date.now() - last < BASEMAP_RETRY_MS) return null
     const file = `${COMPLEMENTS_DIR}/${e.id}.basemap`
-    const urls = [`${BASE}/${file}`, ...servers.map((b) => `${b.replace(/\/+$/, '')}/${file}`)]
+    const urls = [`${BASE}/${file}`, ...servers.map((b) => `${b.replace(/\/+$/, '')}/v3/packs/complement/${e.id}`)]
     for (const url of urls) {
       try {
         const r = await fetchIn(url, BASEMAP_FETCH_MS)
@@ -818,6 +818,8 @@ export async function downloadLang(
       onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
     }))
     markPartial(lang, false)
+    // the map background (a few KB): fetched now, while there is internet, so the first map works offline; a miss never fails the language
+    void basemapBytes(lang).catch(() => null)
     // the language's Aquifer patch (a few MB at most): after the language is whole, and a failure here never fails the language
     await downloadPatch(lang, o.signal ? { signal: o.signal } : {}).catch(() => null)
     return { books: offer.books.length, bytes: report.bytes ?? 0 }

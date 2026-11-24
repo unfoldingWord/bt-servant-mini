@@ -78,6 +78,14 @@ for d in sorted(PACKS.iterdir()):
     (out / 'ids.json').write_text(json.dumps(ids), encoding='utf-8')
     langs.append(d.name)
 (FULL / 'index.json').write_text(json.dumps({'langs': langs}), encoding='utf-8')
+# The map background: when the common catalog the packs carry lists a `basemap` complement, its file (<PACKS>/complements/<sha256>.basemap)
+# goes to packs/common/complements/<sha256>.basemap, where the app looks first, so the first map has coastlines with no internet. A listed
+# file that is missing (or is not the one the catalog says) stops the build; packs whose catalog lists none copy nothing.
+if langs:
+    _r = subprocess.run(['bun', 'tools/complements.ts', str(PACKS), str(FULL)], cwd=ROOT / 'web', capture_output=True, text=True, shell=sys.platform == 'win32')
+    print((_r.stdout + _r.stderr).strip())
+    if _r.returncode:
+        raise SystemExit('the basemap complement of the packs is missing: bun web/tools/complements.ts <packs> <packs> --fetch https://bt-servant-mini-packs.unfoldingword.workers.dev puts it in <packs>/complements')
 # desktop testing: the page plus the full packs, outside the APK's assets
 DESK = ROOT / 'web' / 'desktop'
 shutil.rmtree(DESK, ignore_errors=True)
