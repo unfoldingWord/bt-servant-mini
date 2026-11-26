@@ -32,7 +32,8 @@ import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, 
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
 import { answer, backNow, treeBar, treeBase, treeStep, treeWords, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
-import { backLine, GD, GT, mapGuides, mapRows, newGraph, nodeOf, sessionNode } from './graph'
+import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
+import { lanesList } from './lanesview'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
 import { FU, languagePicker, packFor, emptyLine, quickSpec, quickTap } from './firstuse'
@@ -1912,14 +1913,11 @@ function closeOutline() {
 }
 
 // ------------------------------------------------------------------------------------------------------------ the map
-// The conversation's graph as a list, full screen like Browse (and under the PIN lock like it): each point its name and a small
-// mark for how it joined the one above (same passage, from it, new topic), indented when it went deeper or branched; the
-// current point marked. A tap goes back there. From the menu and from the bar (next to Browse), once there are 3 points.
+// The conversation's graph in lanes (graph.ts mapRows, lanesview.ts), full screen like Browse (and under the PIN lock like it): each
+// point its name and what kind of step it is, the main line and each fork in a lane of its own, the way to the current point in
+// colour; the current point marked. A tap goes back there. From the menu and from the bar (next to Browse), once there are 3 points.
 const MAP_MIN = 3
 const ICONS: Record<string, string> = {
-  start: '<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>',
-  line: '<path d="M12 3v18"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
-  deeper: '<path d="M6 4v8a4 4 0 0 0 4 4h9"/><path d="M15 12l4 4-4 4"/>',
   branch: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10"/><path d="M18 9c0 5-12 3-12 8"/>',
 }
 const svg = (inner: string, size = 18) =>
@@ -2043,60 +2041,22 @@ function drawMap() {
     }
     b.body.appendChild(row)
   }
-  const list = el('div', 'ex-rows gm-rows')
-  let here: HTMLElement | null = null
-  const rows = g ? mapRows(g, mapOpened) : []
-  const guides = mapGuides(rows)
-  for (const [i, r] of rows.entries()) {
-    const row = el('button', r.k === 'node' && r.cur ? 'ex-row gm-row on' : 'ex-row gm-row') as HTMLButtonElement
-    row.type = 'button'
-    // the tree guides in place of an indent: one cell per level (at most GUIDE_MAX: a small phone keeps room for the name)
-    const gs = guides[i]!
-    if (gs.length) {
-      const gb = el('span', 'gm-g')
-      gb.setAttribute('aria-hidden', 'true')
-      for (const c of gs) gb.appendChild(el('i', `gm-c gm-c-${c}`))
-      row.appendChild(gb)
-    }
-    if (r.k === 'more') {
-      row.classList.add('gm-more')
-      row.appendChild(el('span', 'ex-row-t', t.more.replace('{n}', String(r.n))))
-      row.onclick = () => {
-        mapOpened.add(r.key)
-        drawMap()
-      }
-    } else if (r.k === 'group') {
-      // a 5M session (5M in the pack): its name over its steps; the steps themselves are the points to go back to
-      row.classList.add('gm-group')
-      row.disabled = true
-      const name = el('span', 'ex-row-t', r.label)
-      name.dir = 'ltr'
-      row.appendChild(name)
-    } else {
-      const ic = el('span', `gm-ic gm-${r.node.edge}`)
-      ic.innerHTML = svg(ICONS[r.node.edge] ?? ICONS.start!)
-      const txt = el('span', 'gm-txt')
-      const name = el('span', 'ex-row-t', r.node.label)
-      name.dir = dirOf(r.node.label) // what the person asked, or a button's label: its own direction
-      txt.appendChild(name)
-      txt.appendChild(el('span', 'ex-row-s', r.cur ? `${t.here} · ${t.edge[r.node.edge]}` : t.edge[r.node.edge]))
-      row.append(ic, txt)
-      if (r.cur) {
-        row.setAttribute('aria-current', 'true')
-        here = row
-      }
-      const id = r.node.id
-      row.onclick = () => {
-        if (busy) return
-        closeMap(false)
-        goTo(id, 'map')
-      }
-    }
-    list.appendChild(row)
-  }
+  const { list, here } = lanesList(g ? mapRows(g, mapOpened) : [], {
+    t,
+    rtl: rtlLang(nav),
+    onGo: (id) => {
+      if (busy) return
+      closeMap(false)
+      goTo(id, 'map')
+    },
+    onOpen: (key) => {
+      mapOpened.add(key)
+      drawMap()
+    },
+  })
   b.body.appendChild(list)
   b.body.scrollTop = 0
-  if (here) (here as HTMLElement).scrollIntoView({ block: 'center' })
+  here?.scrollIntoView({ block: 'center' })
 }
 
 form.addEventListener('submit', (e) => {

@@ -183,18 +183,45 @@ export function addNode(g: Graph, t: Turn & { label: string; copy?: boolean; fou
   return n
 }
 
-/** A row of the Map: a point (indented by its depth) or "… 6 more" for the middle of a long line. */
-export type MapRow =
-  | { k: 'node'; node: GNode; depth: number; cur: boolean }
-  | { k: 'more'; n: number; key: string; depth: number }
-  /** a 5M session: "OBS 1 · 5M", its steps one step in under it (`key`: its first step's id) */
-  | { k: 'group'; label: string; key: string; depth: number }
-/** A line of more `line` points than this in a row shows its first and last two and "… N more" between. */
-export const LINE_FOLD = 5
+/** What a point is, said short under its name ("passage", "map", "people", "tree"…): from what the node already stores. */
+export type StepKind = 'passage' | 'intro' | 'map' | 'article' | 'term' | 'people' | 'tree' | 'place' | 'search' | 'study' | 'answer'
+export function stepKind(n: GNode): StepKind {
+  if (n.kind === 'obs5m') return 'study'
+  if (n.sheet.intent === 'place') return n.sheet.what[0] === 'map' ? 'map' : 'place'
+  if (n.sheet.intent === 'kin') return ['tree', 'up', 'down'].includes(n.sheet.what[0] ?? '') ? 'tree' : 'people'
+  if (n.kind === 'intro') return 'intro'
+  if (n.kind === 'passage') return 'passage'
+  if (n.kind === 'search') return 'search'
+  if (n.kind === 'meaning') return 'term'
+  if (n.kind === 'article' || n.kind === 'books' || n.kind === 'translate-unknown') return 'article'
+  return 'answer'
+}
 
 /**
- * The tree in reading order: a point, the points that go deeper or branch from it (indented one step), then the ones that go
- * on along its line (same depth). `open`: the folded lines the person opened (by their first point's id).
+ * A row of the Map, in reading order, with where it sits in the lanes (git-graph style): a point, "… 3 more" for the middle of a
+ * long chain, or the heading of a 5M session. `lane`: its column (0 is the main line); `p`: the row it comes from (null: none);
+ * `hot`: on the way from the first point to the current one; `depth`: how many `deeper`/`branch` steps in (not drawn, kept for tests).
+ */
+export type MapRow = {
+  depth: number; ix: number; lane: number; p: number | null; hot: boolean
+} & (
+  /** `forks`: how many points start from it; `from`: the row of its origin when that is far above in another lane ("comes from …") */
+  | { k: 'node'; node: GNode; cur: boolean; forks: number; from: number | null }
+  /** the middle of a chain that is not on the current path, folded (`key`: its first point's id; `n` points hidden) */
+  | { k: 'more'; n: number; key: string }
+  /** a 5M session: "OBS 1 · 5M", with no dot of its own: its first step is the next row */
+  | { k: 'group'; label: string; key: string }
+)
+/** A chain of this many points or more, each with one child and not on the current path, shows its first and last and "… N more". */
+export const FOLD_MIN = 4
+/** A branch whose origin is more than this many rows above says where it comes from. */
+export const FROM_GAP = 2
+
+/**
+ * The tree in reading order (a point, then what goes deeper or branches from it, then the ones that go on along its line) and
+ * its lanes: the main line is lane 0; a point goes on in its parent's lane when it is the one that continues it (the first `line`
+ * child; below the main line, else the first child), any other child opens a lane, which takes the lowest column free from its
+ * origin row to its last row. `open`: the folded chains the person opened (by their first point's id).
  */
 export function mapRows(g: Graph, open: Set<string> = new Set()): MapRow[] {
   const kids = new Map<string | null, GNode[]>()
@@ -202,67 +229,107 @@ export function mapRows(g: Graph, open: Set<string> = new Set()): MapRow[] {
     const k = nodeOf(g, n.parent) ? n.parent : null
     kids.set(k, [...(kids.get(k) ?? []), n])
   }
-  const rows: MapRow[] = []
+  const onPath = new Set<string>()
+  for (let x = nodeOf(g, g.cur); x && !onPath.has(x.id); x = nodeOf(g, x.parent)) onPath.add(x.id)
+  // reading order; the first step of a 5M session gets a heading row of its own and its steps one level in
+  type E = { group: true; label: string; key: string; depth: number } | { group?: false; node: GNode; depth: number }
+  const order: E[] = []
   const walk = (n: GNode, depth: number) => {
-    // the first step of a 5M session: its group row, the steps under it
     if (n.kind === 'obs5m' && nodeOf(g, n.parent)?.kind !== 'obs5m') {
       const story = /^obs5m:(\d+)\//.exec(n.sheet.concept ?? '')?.[1]
-      rows.push({ k: 'group', label: `OBS ${story ?? ''} · 5M`, key: n.id, depth })
+      order.push({ group: true, label: `OBS ${story ?? ''} · 5M`, key: n.id, depth })
       depth++
     }
-    rows.push({ k: 'node', node: n, depth, cur: n.id === g.cur })
+    order.push({ node: n, depth })
     const ks = kids.get(n.id) ?? []
     for (const x of ks.filter((x) => x.edge !== 'line')) walk(x, depth + 1)
     for (const x of ks.filter((x) => x.edge === 'line')) walk(x, depth)
   }
-  // (iteratively for the roots: a conversation's first point, and any whose parent is gone)
   for (const r of kids.get(null) ?? []) walk(r, 0)
-  // fold the long lines: consecutive `line` points at the same depth, unless the current one is in the middle
-  const out: MapRow[] = []
-  for (let i = 0; i < rows.length;) {
-    const r = rows[i]!
-    if (r.k !== 'node' || r.node.edge !== 'line') { out.push(r); i++; continue }
-    let j = i
-    while (j < rows.length && rows[j]!.k === 'node' && (rows[j] as { node: GNode }).node.edge === 'line' && rows[j]!.depth === r.depth) j++
-    const run = rows.slice(i, j) as Extract<MapRow, { k: 'node' }>[]
-    const mid = run.slice(2, -2)
-    if (run.length > LINE_FOLD && !open.has(r.node.id) && !mid.some((x) => x.cur)) {
-      out.push(...run.slice(0, 2), { k: 'more', n: mid.length, key: r.node.id, depth: r.depth }, ...run.slice(-2))
-    } else out.push(...run)
-    i = j
-  }
-  return out
-}
-
-/** One cell of a row's tree guides: the rail of an outer level goes on (`pipe`) or ended (`blank`); the row's own level is an
- * elbow with the rail going on to a later sibling (`tee`) or ending here (`last`). */
-export type Guide = 'pipe' | 'tee' | 'last' | 'blank'
-/** Levels with a guide of their own (the Map keeps room for the name on a small phone). */
-export const GUIDE_MAX = 6
-
-/**
- * The tree guides of each row, from the depths alone (rows in reading order; level 1 is the first step in; the main line, depth 0,
- * has none). A level's rail goes on past a row while a later row has that depth before any shallower row closes it. A row of depth
- * D gets D cells, the last one an elbow (`tee` or `last`). Past GUIDE_MAX the cells stop at GUIDE_MAX and the row has no elbow
- * (its last cell is a plain `pipe` or `blank`), so a row below the cap never looks like a sibling of one at the cap. "… N more"
- * and group rows are rows like any other.
- */
-export function mapGuides(rows: readonly { depth: number }[]): Guide[][] {
-  const out: Guide[][] = new Array(rows.length)
-  const more: boolean[] = [] // more[L]: a later row of depth L, with no shallower row in between
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const D = rows[i]!.depth
-    const cells: Guide[] = []
-    for (let L = 1; L <= Math.min(D, GUIDE_MAX); L++) {
-      const on = !!more[L]
-      cells.push(L === D ? (on ? 'tee' : 'last') : on ? 'pipe' : 'blank')
+  // fold: a chain of points with one child each, off the current path, keeps its first and last
+  type NE = { group?: false; node: GNode; depth: number }
+  const single = (e: E | undefined): e is NE =>
+    !!e && !e.group && (kids.get(e.node.id)?.length ?? 0) === 1 && !onPath.has(e.node.id) && !!nodeOf(g, e.node.parent) && e.node.edge !== 'line' && e.node.kind !== 'obs5m'
+  type R = { e: E; via?: true } | { more: number; key: string; depth: number; after: GNode }
+  const out: R[] = []
+  for (let r = 0; r < order.length; r++) {
+    const e = order[r]!
+    if (single(e) && single(order[r + 1]) && (order[r + 1] as NE).node.parent === e.node.id) {
+      let last = r + 1
+      while (single(order[last + 1]) && (order[last + 1] as NE).node.parent === (order[last] as NE).node.id) last++
+      if (last - r + 1 >= FOLD_MIN && !open.has(e.node.id)) {
+        out.push({ e }, { more: last - r - 1, key: e.node.id, depth: e.depth + 1, after: e.node }, { e: order[last]!, via: true })
+      } else {
+        // (a chain too short, or opened: its points as they are, not looked at again as shorter chains)
+        for (let i = r; i <= last; i++) out.push({ e: order[i]! })
+      }
+      r = last
+      continue
     }
-    out[i] = cells
-    more[D] = true
-    for (let L = D + 1; L < more.length; L++) more[L] = false
+    out.push({ e })
   }
-  return out
+  // the rows, with the row each one comes from
+  const rowOf = new Map<string, number>()
+  out.forEach((x, i) => { if ('e' in x && !x.e.group) rowOf.set(x.e.node.id, i) })
+  const rows: MapRow[] = []
+  const group: number[] = [] // the lane-sharing chain of each row (0: the main line, -1: no lane of its own)
+  let gn = 1
+  out.forEach((x, ix) => {
+    let p: number | null = null
+    let grp = 0
+    let row: MapRow
+    if ('more' in x) {
+      p = rowOf.get(x.after.id) ?? null
+      grp = group[p!] ?? 0
+      row = { k: 'more', n: x.more, key: x.key, depth: x.depth, ix, lane: 0, p, hot: false }
+    } else if (x.e.group) {
+      grp = -1
+      row = { k: 'group', label: x.e.label, key: x.e.key, depth: x.e.depth, ix, lane: 0, p: null, hot: false }
+    } else {
+      const n = x.e.node
+      const par = nodeOf(g, n.parent)
+      p = x.via ? ix - 1 : par ? rowOf.get(par.id) ?? null : null
+      if (p === null) grp = 0
+      else if (x.via) grp = group[p]!
+      else {
+        // the child that goes on in its parent's lane: the first `line` child; below the main line, else the first child
+        const sibs = kids.get(par!.id) ?? []
+        const straight = sibs.find((s) => s.edge === 'line') ?? (group[p] !== 0 ? sibs[0] : undefined)
+        grp = straight?.id === n.id ? group[p]! : gn++
+      }
+      row = { k: 'node', node: n, cur: n.id === g.cur, forks: kids.get(n.id)?.length ?? 0, from: null, depth: x.e.depth, ix, lane: 0, p, hot: onPath.has(n.id) }
+    }
+    group.push(grp)
+    rows.push(row)
+  })
+  // lanes: each chain takes the lowest column free over its span (its origin row to its last row)
+  const span = new Map<number, [number, number]>()
+  rows.forEach((row, ix) => {
+    const c = group[ix]!
+    if (c <= 0) return
+    const s = span.get(c)
+    span.set(c, s ? [s[0], ix] : [row.p ?? ix, ix])
+  })
+  const laneOf = new Map<number, number>([[0, 0]])
+  const end: number[] = []
+  for (const [c, [a, b]] of [...span].sort((x, y) => x[1][0] - y[1][0] || x[0] - y[0])) {
+    let l = 1
+    while ((end[l] ?? -1) >= a) l++
+    laneOf.set(c, l)
+    end[l] = b
+  }
+  rows.forEach((row, ix) => { row.lane = laneOf.get(group[ix]!) ?? 0 })
+  // a 5M heading sits in the lane of its first step
+  rows.forEach((row, ix) => { if (row.k === 'group' && rows[ix + 1]) row.lane = rows[ix + 1]!.lane })
+  // "comes from": the first row of a branch, far below its origin
+  for (const row of rows) {
+    if (row.k !== 'node' || row.p === null) continue
+    if (rows[row.p]!.lane !== row.lane && row.ix - row.p > FROM_GAP) row.from = row.p
+  }
+  return rows
 }
+/** How many columns the lanes of these rows need. */
+export const laneCount = (rows: readonly { lane: number }[]): number => rows.reduce((m, r) => Math.max(m, r.lane + 1), 1)
 
 // ----------------------------------------------------------------------------------------------------------- drift
 // Guiding without blocking (Abel, Nov 15): when the conversation has gone far from where it started, the answer offers once to
@@ -376,21 +443,22 @@ export function stepPlace(p: Path, book: string): string {
 type L = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
 export type GraphWords = {
   map: string; mapLong: string; hint: string; here: string; more: string; back: string; points: string; close: string
-  edge: Record<Edge, string>
+  /** what a point is, under its name; `from`: "comes from «{x}»" (a branch far below its origin); `forks`: the badge of a point with 2 or more branches */
+  kinds: Record<StepKind, string>; from: string; forks: string
 }
 const G: Record<L, GraphWords> = {
   en: { map: 'Map', mapLong: 'Map of this conversation', hint: 'Tap a point to go back to it and continue from there. Nothing is deleted.', here: 'You are here', more: '… {n} more', back: 'Back to {label}', points: '{n} points', close: 'Close',
-    edge: { start: 'start', line: 'same passage', deeper: 'from the point above', branch: 'new topic' } },
+    kinds: { passage: "passage", intro: "introduction", map: "map", article: "article", term: "key term", people: "people", tree: "family tree", place: "place", search: "search", study: "5M step", answer: "answer" }, from: "comes from “{x}”", forks: "{n} branches" },
   es: { map: 'Mapa', mapLong: 'Mapa de esta conversación', hint: 'Toca un punto para volver ahí y seguir desde ese punto. No se borra nada.', here: 'Estás aquí', more: '… {n} más', back: 'Volver a {label}', points: '{n} puntos', close: 'Cerrar',
-    edge: { start: 'inicio', line: 'mismo pasaje', deeper: 'del punto de arriba', branch: 'tema nuevo' } },
+    kinds: { passage: "pasaje", intro: "introducción", map: "mapa", article: "artículo", term: "palabra clave", people: "personas", tree: "árbol", place: "lugar", search: "búsqueda", study: "paso 5M", answer: "respuesta" }, from: "sale de «{x}»", forks: "{n} ramas" },
   fr: { map: 'Carte', mapLong: 'Carte de cette conversation', hint: "Touchez un point pour y revenir et continuer à partir de là. Rien n'est effacé.", here: 'Vous êtes ici', more: '… {n} de plus', back: 'Revenir à {label}', points: '{n} points', close: 'Fermer',
-    edge: { start: 'début', line: 'même passage', deeper: 'du point au-dessus', branch: 'nouveau sujet' } },
+    kinds: { passage: "passage", intro: "introduction", map: "carte", article: "article", term: "mot clé", people: "personnes", tree: "arbre", place: "lieu", search: "recherche", study: "étape 5M", answer: "réponse" }, from: "vient de « {x} »", forks: "{n} branches" },
   id: { map: 'Peta', mapLong: 'Peta percakapan ini', hint: 'Ketuk sebuah titik untuk kembali ke sana dan melanjutkan dari situ. Tidak ada yang dihapus.', here: 'Anda di sini', more: '… {n} lagi', back: 'Kembali ke {label}', points: '{n} titik', close: 'Tutup',
-    edge: { start: 'awal', line: 'bagian yang sama', deeper: 'dari titik di atas', branch: 'topik baru' } },
+    kinds: { passage: "perikop", intro: "pengantar", map: "peta", article: "artikel", term: "istilah kunci", people: "orang", tree: "pohon", place: "tempat", search: "pencarian", study: "langkah 5M", answer: "jawaban" }, from: "berasal dari “{x}”", forks: "{n} cabang" },
   hi: { map: 'नक्शा', mapLong: 'इस बातचीत का नक्शा', hint: 'किसी बिंदु पर टैप करें, वहाँ लौटें और वहीं से आगे बढ़ें। कुछ भी नहीं मिटता।', here: 'आप यहाँ हैं', more: '… {n} और', back: '{label} पर लौटें', points: '{n} बिंदु', close: 'बंद करें',
-    edge: { start: 'शुरुआत', line: 'वही भाग', deeper: 'ऊपर वाले बिंदु से', branch: 'नया विषय' } },
+    kinds: { passage: "भाग", intro: "परिचय", map: "नक्शा", article: "लेख", term: "मुख्य शब्द", people: "लोग", tree: "वंशवृक्ष", place: "स्थान", search: "खोज", study: "5M चरण", answer: "उत्तर" }, from: "“{x}” से निकला", forks: "{n} शाखाएँ" },
   ar: { map: 'الخريطة', mapLong: 'خريطة هذه المحادثة', hint: 'اضغط على نقطة للعودة إليها والمتابعة من هناك. لا يُحذف شيء.', here: 'أنت هنا', more: '… {n} أخرى', back: 'العودة إلى {label}', points: '{n} نقاط', close: 'إغلاق',
-    edge: { start: 'البداية', line: 'المقطع نفسه', deeper: 'من النقطة أعلاه', branch: 'موضوع جديد' } },
+    kinds: { passage: "مقطع", intro: "مقدمة", map: "خريطة", article: "مقالة", term: "كلمة رئيسية", people: "أشخاص", tree: "شجرة", place: "مكان", search: "بحث", study: "خطوة 5M", answer: "إجابة" }, from: "يتفرع من «{x}»", forks: "{n} فروع" },
 }
 export const GT = (ui: string): GraphWords => G[(ui in G ? ui : 'en') as L]
 /** The button under an answer: "← Back to Ruth 2:3" (the arrow points back in right-to-left text too). */

@@ -87,16 +87,12 @@ describe('the Map', () => {
     const rows = mapRows(g).map((r) => (r.k === 'node' ? `${r.depth} ${r.node.id === a.id ? 'a' : r.node.id === notes.id ? 'notes' : r.node.id === glean.id ? 'glean' : r.node.id === num.id ? 'num' : 'next'}${r.cur ? '*' : ''}` : 'more'))
     expect(rows).toEqual(['0 a', '0 notes', '1 glean', '2 num', '0 next*'])
   })
-  test('a line of more than 5 points folds its middle, unless the current point is there; opened, it shows all', () => {
+  test('a long line stays in lane 0, one row per point: it is the way to the current point, so nothing folds (see map-lanes.test.ts)', () => {
     const g = newGraph()
-    const ids: string[] = []
-    for (let v = 1; v <= 9; v++) ids.push(add(g, 'passage', sh(`rut 1:${v}`)).id)
+    for (let v = 1; v <= 9; v++) add(g, 'passage', sh(`rut 1:${v}`))
     const rows = mapRows(g)
-    expect(rows.map((r) => r.k)).toEqual(['node', 'node', 'node', 'more', 'node', 'node'])
-    expect(rows.find((r) => r.k === 'more')).toMatchObject({ n: 4 })
-    expect(mapRows(g, new Set([ids[1]!])).length).toBe(9)
-    g.cur = ids[4]!
-    expect(mapRows(g).length).toBe(9)
+    expect(rows.map((r) => r.k)).toEqual(Array(9).fill('node'))
+    expect(rows.every((r) => r.lane === 0 && r.depth === 0)).toBe(true)
   })
   test('the branch: a point and up to 3 above it, oldest first', () => {
     const g = newGraph()
