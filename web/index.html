@@ -8,11 +8,11 @@
   /* The look of the BT Servant web client: cream page, beige bubbles for the person, the answer as plain serif text, terracotta accent. */
   :root {
     --bg: #f5f5f0; --fg: #1a1a18; --muted: #6b6a68; --faint: #9a9893; --me: #ddd9ce; --card: #ffffff; --line: #00000015;
-    --accent: #ae5630; --accent-hover: #c4633a; --accent-soft: #ae563018; --ok: #3d7a4f;
+    --accent: #ae5630; --accent-hover: #c4633a; --accent-soft: #ae563018; --ok: #3d7a4f; --rail: #8f8b80; --accent-text: var(--accent);
   }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #262624; --fg: #eeeeee; --muted: #b8b5a9; --faint: #8a8985; --me: #393937; --card: #30302e; --line: #6c6a6040;
-      --accent: #c4633a; --accent-hover: #d67447; --accent-soft: #c4633a26; --ok: #7fbf8f; }
+      --accent: #c4633a; --accent-hover: #d67447; --accent-soft: #c4633a26; --ok: #7fbf8f; --rail: #7d796c; --accent-text: #e08a62; /* accent text on the dark bar: 4.5:1 or more */ }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
@@ -580,23 +580,37 @@
   #gmap:focus { outline: none; }
   #gmap .ex-head { padding-inline-start: 16px; }
   .gm-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding-block: 8px; padding-inline-start: 6px; }
-  /* tree guides (graph.ts mapGuides): one 18px cell per level; the row's padding and border are crossed so a rail runs unbroken from row to row.
-     Logical properties: the rails and elbows mirror in RTL by themselves. */
-  .gm-g { --gm-rail: var(--muted); display: flex; flex: none; align-self: stretch; margin-block: -8px -9px; }
-  @supports (color: color-mix(in srgb, red, blue)) { .gm-g { --gm-rail: color-mix(in srgb, var(--muted) 60%, transparent); } }
-  .gm-c { position: relative; display: block; width: 18px; }
-  .gm-c-pipe::before, .gm-c-tee::before, .gm-c-last::before { content: ""; position: absolute; inset-inline-start: 8px; top: 0; bottom: 0; border-inline-start: 2px solid var(--gm-rail); }
-  .gm-c-last::before { bottom: 50%; }
-  .gm-c-tee::after, .gm-c-last::after { content: ""; position: absolute; inset-inline-start: 8px; top: 50%; width: 12px; margin-top: -1px; border-top: 2px solid var(--gm-rail); }
-  .gm-row.on { background: var(--accent-soft); border-radius: 10px; }
   .gm-ic { flex: none; width: 24px; display: grid; place-items: center; color: var(--faint); }
-  .gm-row.on .gm-ic { color: var(--accent); }
-  [dir="rtl"] .gm-deeper svg, [dir="rtl"] .gm-branch svg { transform: scaleX(-1); }
   .gm-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
   [dir="rtl"] .gm-txt { text-align: right; } /* a name in a left-to-right script (dir=auto) still lines up on the right */
   .gm-row .ex-row-t { overflow-wrap: anywhere; }
-  .gm-row.on .ex-row-t { font-weight: 650; }
-  .gm-more .ex-row-t { color: var(--accent); font-weight: 600; }
+  /* the conversation's lanes (graph.ts mapRows, lanesview.ts): each row has a gutter of 14px + 18px per lane, and one SVG behind the rows
+     (.gm-svg, drawn from the rows' real positions) holds the lanes. The way to the current point is the accent colour, thick, with filled
+     dots; the rest is the rail colour with hollow dots. Logical properties: the gutter and the SVG mirror in RTL. */
+  .gm-rows { position: relative; border-top: 0; margin-top: 0; }
+  .gm-svg { position: absolute; inset-block-start: 0; inset-inline-start: 0; pointer-events: none; overflow: visible; }
+  .gm-e { fill: none; stroke: var(--rail); stroke-width: 2; stroke-linecap: round; }
+  .gm-e.hot { stroke: var(--accent); stroke-width: 3; }
+  .gm-e.cut { stroke-dasharray: 3 4; }
+  .gm-d { fill: var(--bg); stroke: var(--rail); stroke-width: 2; }
+  .gm-d.hot { fill: var(--accent); stroke: var(--accent); }
+  .gm-n { position: relative; display: flex; align-items: center; min-height: 52px; cursor: pointer; border-radius: 10px; }
+  .gm-n:active { background: var(--accent-soft); }
+  .gm-n.on { background: var(--accent-soft); }
+  .gm-n.gm-group { cursor: default; }
+  .gm-n.gm-group:active { background: transparent; }
+  .gm-gut { flex: none; align-self: stretch; }
+  .gm-n .gm-txt { padding-block: 5px; padding-inline: 4px 8px; }
+  .gm-go { display: block; max-width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: start; cursor: pointer; }
+  .gm-go:focus-visible, .gm-from:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .gm-name { overflow-wrap: anywhere; }
+  .gm-n.on .gm-go { color: var(--accent-text); font-weight: 650; }
+  .gm-more .gm-go { color: var(--accent-text); font-weight: 600; font-size: 14px; }
+  .gm-group .ex-row-t { color: var(--muted); font-weight: 600; }
+  .gm-fork { display: inline-block; margin-inline-start: 6px; padding: 0 6px; border: 1px solid var(--rail); border-radius: 999px; color: var(--muted); font: 500 11px/1.5 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; vertical-align: 1px; }
+  .gm-from { margin: 0; padding: 0; border: 0; background: transparent; color: var(--accent-text); font: inherit; text-align: start; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  @keyframes gm-flash { from { background: var(--accent-soft); } to { background: transparent; } }
+  .gm-flash { animation: gm-flash 1.2s ease-out; }
   /* Guiding without blocking (pipeline.ts, main.ts): where a light path is, the line that proposes it, the drift offer, "Continue the path" in the Map */
   .path-mark { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent);
     font: 600 12.5px/1.35 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; max-width: 100%; overflow-wrap: anywhere; }
