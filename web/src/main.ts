@@ -1345,8 +1345,8 @@ status.onclick = () => showAbout(nav, () => setReady())
   brand.onclick = () => showAbout(nav, () => setReady())
   brand.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); brand.click() } }
 }
-// the notice opens the menu, where the model can be downloaded or loaded
-notice.onclick = () => { if (!panel.classList.contains('show')) menu.click() }
+// the notice opens the menu straight on the model view, where the model can be downloaded or loaded
+notice.onclick = () => { if (!panel.classList.contains('show')) { menu.click(); go('model')() } }
 
 function setReady() {
   const ok = modelReady() && !modelOff()

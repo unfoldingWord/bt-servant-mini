@@ -16,6 +16,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
+  html, body { max-width: 100vw; overflow-x: clip; } /* safety net: one wide child must never widen the layout viewport (the composer would pan with the page) */
   body { display: flex; flex-direction: column; font: 16px/1.5 system-ui, -apple-system, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
   header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; position: relative; }
   #menu { border: 0; background: transparent; color: var(--muted); padding: 6px; border-radius: 8px; display: grid; place-items: center; }
@@ -32,7 +33,8 @@
   #status[data-state="downloading"]::before, #status[data-state="copying"]::before, #status[data-state="importing"]::before, #status[data-state="starting"]::before { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .35; } }
   #notice { display: block; width: calc(100% - 28px); margin: 0 14px 6px; text-align: start; font: 13px/1.4 system-ui, sans-serif; color: var(--muted);
-    background: var(--accent-soft); border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+    background: var(--accent-soft); border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer;
+    min-width: 0; overflow-wrap: anywhere; word-break: break-word; max-height: calc(4 * 1.4em + 16px); overflow: hidden; } /* raw error text can hold a long unbroken path; about 4 lines, the full text is in the panel the tap opens */
   #notice[hidden] { display: none; }
   #netnote { display: flex; gap: 8px; align-items: flex-start; margin: 0 14px 8px; padding: 10px 12px; border-radius: 12px; background: var(--card); border-inline-start: 3px solid var(--accent); font: 13.5px/1.45 system-ui, sans-serif; color: var(--fg); }
   #netnote.back { border-inline-start-color: #3a9d5d; }
@@ -43,7 +45,7 @@
   #pwahint .go { border: 0; border-radius: 999px; background: var(--accent); color: #fff; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
   #pwahint .x { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px; cursor: pointer; }
   .brand { flex: 0 1 auto; }
-  #log { flex: 1; overflow-y: auto; padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 18px; }
+  #log { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 18px; }
   .msg { overflow-wrap: anywhere; }
   .me { align-self: flex-end; max-width: 85%; background: var(--me); border-radius: 14px; padding: 9px 14px; white-space: pre-wrap; }
   .bot { align-self: stretch; font-family: Georgia, "Noto Serif", "Noto Serif Devanagari", serif; font-size: 16.5px; line-height: 1.6; }
@@ -57,7 +59,7 @@
   @keyframes wait-shimmer { 0%, 100% { opacity: .6; } 50% { opacity: .9; } }
   @media (prefers-reduced-motion: reduce) { .wait .orb { animation: none; transform: none; opacity: .85; } .wait .wt { animation: none; opacity: .8; } }
   .intro { margin: 0 0 10px; }
-  .info { font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--card);
+  .info { overflow-wrap: anywhere; font: 14.5px/1.55 system-ui, "Noto Sans", "Noto Sans Devanagari", sans-serif; background: var(--card);
     border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
   .plain { white-space: pre-wrap; }
   .plain.md { white-space: normal; }
@@ -163,11 +165,11 @@
   #panel .del.armed { background: #b4432f; color: #fff; border-radius: 10px; padding: 9px 10px; white-space: nowrap; }
   #panel .add { margin-top: 8px; width: 100%; border: 0; border-radius: 10px; background: var(--accent); color: #fff; padding: 10px; font: inherit; font-weight: 600; }
   #panel .add:disabled { opacity: .4; }
-  #panel .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  #panel .note { overflow-wrap: anywhere; font-size: 13px; color: var(--muted); margin: 8px 0 0; }
   #panel .langs { display: flex; flex-wrap: wrap; gap: 6px; }
   #panel .langs button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 14px; }
   #panel .langs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  #panel .packs { font-size: 13px; color: var(--muted); }
+  #panel .packs { overflow-wrap: anywhere; font-size: 13px; color: var(--muted); }
   /* Resources and server screens (resources.ts): a card per language, parts one under another; logical sides, so Arabic flips alone */
   #panel .res-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; }
   #panel .res-name { font-weight: 600; font-size: 14.5px; margin-bottom: 4px; }
@@ -187,7 +189,7 @@
   #about, #safety, #report { position: fixed; inset: 0; z-index: 10; background: var(--bg); background: color-mix(in srgb, var(--bg) 92%, transparent); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #about .card, #safety .card, #report .card { background: var(--card); border-radius: 18px; padding: 22px 20px 18px; max-width: 520px; max-height: 92vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.18); }
   #about h2, #safety h2, #report h2 { font: 600 22px/1.25 Georgia, "Noto Serif", serif; margin: 0 0 12px; }
-  #about p, #safety p, #report p { margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
+  #about p, #safety p, #report p { overflow-wrap: anywhere; margin: 0 0 12px; line-height: 1.55; font-size: 15.5px; }
   #about .meta, #safety .meta, #report .meta { color: var(--muted); font-size: 13.5px; }
   #about .setup h2, #safety .setup h2, #report .setup h2 { font: 600 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); margin: 8px 0; }
   #about .langs, #safety .langs, #report .langs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
