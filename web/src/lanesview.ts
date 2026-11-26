@@ -4,10 +4,9 @@
 // accent colour, thick, with filled dots; the rest is the rail colour with hollow dots. In right-to-left text the gutter and the
 // x positions are on the right. Colours are CSS variables (index.html .gm-*), so light and dark need nothing here.
 import { dirOf } from './bidi'
-import { type GraphWords, laneCount, type MapRow, stepKind } from './graph'
+import { type GraphWords, laneCount, laneWidth, type MapRow, stepKind } from './graph'
 
-/** The width of one lane's column, and the room around the lanes (half each side). */
-export const LANE_W = 18
+/** The room around the lanes (half each side); a lane's column is 18px, narrower with many lanes (graph.ts laneWidth). */
 export const GUTTER_PAD = 14
 const NS = 'http://www.w3.org/2000/svg'
 
@@ -40,7 +39,8 @@ function fromText(tpl: string, name: string): DocumentFragment {
 /** The list of rows with the lanes behind them; `here`: the row of the current point. */
 export function lanesList(rows: readonly MapRow[], o: LanesOpts): { list: HTMLElement; here: HTMLElement | null } {
   const { t } = o
-  const gutter = GUTTER_PAD + laneCount(rows) * LANE_W
+  const lanes = laneCount(rows)
+  const guts: HTMLElement[] = []
   const list = h('div', 'ex-rows gm-rows')
   list.dir = o.rtl ? 'rtl' : 'ltr'
   let here: HTMLElement | null = null
@@ -57,8 +57,10 @@ export function lanesList(rows: readonly MapRow[], o: LanesOpts): { list: HTMLEl
   }
   for (const r of rows) {
     const row = h('div', r.k === 'node' && r.cur ? 'gm-n on' : 'gm-n')
+    if (r.k === 'node') row.dataset.id = r.node.id
     const gut = h('span', 'gm-gut')
-    gut.style.width = `${gutter}px`
+    gut.style.width = `${GUTTER_PAD + lanes * laneWidth(Infinity, lanes)}px` // (set again once the list's width is known)
+    guts.push(gut)
     gut.setAttribute('aria-hidden', 'true')
     row.appendChild(gut)
     const txt = h('span', 'gm-txt')
@@ -115,14 +117,14 @@ export function lanesList(rows: readonly MapRow[], o: LanesOpts): { list: HTMLEl
 
   // the lanes: one SVG behind the rows, from where the rows really are
   let svg: SVGSVGElement | null = null
-  let lastW = -1
-  let lastH = -1
   const draw = () => {
     const W = list.clientWidth
+    if (!W) return
+    // the gutter first (a narrower lane column when many lanes would take over 40% of the width), then the rows' real positions;
+    // always redrawn: it is cheap, and it settles after one more pass (the observer fires only when the size changes)
+    const lw = laneWidth(W, lanes)
+    for (const g of guts) g.style.width = `${GUTTER_PAD + lanes * lw}px`
     const H = list.scrollHeight
-    if (!W || (W === lastW && H === lastH)) return
-    lastW = W
-    lastH = H
     svg?.remove()
     const s = document.createElementNS(NS, 'svg')
     s.setAttribute('class', 'gm-svg')
@@ -131,7 +133,7 @@ export function lanesList(rows: readonly MapRow[], o: LanesOpts): { list: HTMLEl
     s.setAttribute('height', String(H))
     const y = (ix: number) => els[ix]!.offsetTop + els[ix]!.offsetHeight / 2
     const x = (lane: number) => {
-      const v = GUTTER_PAD / 2 + LANE_W / 2 + lane * LANE_W
+      const v = GUTTER_PAD / 2 + lw / 2 + lane * lw
       return o.rtl ? W - v : v
     }
     const add = (tag: string, a: Record<string, string | number>) => {

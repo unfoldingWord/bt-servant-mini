@@ -294,6 +294,7 @@ export function mapRows(g: Graph, open: Set<string> = new Set()): MapRow[] {
       else {
         // the child that goes on in its parent's lane: the first `line` child; below the main line, else the first child
         const sibs = kids.get(par!.id) ?? []
+        // (on purpose: a side child off the main line always opens a lane, so lane 0 stays the spine of the main line)
         const straight = sibs.find((s) => s.edge === 'line') ?? (group[p] !== 0 ? sibs[0] : undefined)
         grp = straight?.id === n.id ? group[p]! : gn++
       }
@@ -328,6 +329,11 @@ export function mapRows(g: Graph, open: Set<string> = new Set()): MapRow[] {
   }
   return rows
 }
+/**
+ * The width of one lane's column for a list `width` px wide: 18px, narrower when many lanes would take more than about 40% of the
+ * width (never under 8px).
+ */
+export const laneWidth = (width: number, lanes: number): number => Math.max(8, Math.min(18, (width * 0.4 - 14) / Math.max(1, lanes)))
 /** How many columns the lanes of these rows need. */
 export const laneCount = (rows: readonly { lane: number }[]): number => rows.reduce((m, r) => Math.max(m, r.lane + 1), 1)
 

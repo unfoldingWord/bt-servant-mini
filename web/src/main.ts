@@ -1991,7 +1991,7 @@ function closeMap(refocus = true) {
   mapOpener = null
   if (refocus && to?.isConnected) to.focus({ preventScroll: true })
 }
-function drawMap() {
+function drawMap(keep?: { top: number; open: string }) {
   const b = ensureMap()
   const t = GT(nav)
   const g = conv().graph
@@ -2050,13 +2050,20 @@ function drawMap() {
       goTo(id, 'map')
     },
     onOpen: (key) => {
+      // the scroll stays where it was, and the focus goes to the first row that was revealed
       mapOpened.add(key)
-      drawMap()
+      drawMap({ top: gmap?.body.scrollTop ?? 0, open: key })
     },
   })
   b.body.appendChild(list)
-  b.body.scrollTop = 0
-  here?.scrollIntoView({ block: 'center' })
+  if (keep) {
+    b.body.scrollTop = keep.top
+    const first = list.querySelector<HTMLElement>(`[data-id="${keep.open}"]`)?.nextElementSibling
+    first?.querySelector<HTMLElement>('.gm-go')?.focus({ preventScroll: true })
+  } else {
+    b.body.scrollTop = 0
+    here?.scrollIntoView({ block: 'center' })
+  }
 }
 
 form.addEventListener('submit', (e) => {

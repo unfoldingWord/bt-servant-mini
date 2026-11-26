@@ -2,7 +2,7 @@
 // lane; only a fork opens a lane, the lowest free one over its span (origin row to its last row); the way to the current point is
 // `hot`; a chain of 4 or more off that path folds to first / "… N more" / last (forks stay visible). No DOM: the drawing is lanesview.ts.
 import { describe, expect, test } from 'bun:test'
-import { type Edge, FOLD_MIN, type GNode, type Graph, laneCount, type MapRow, mapRows, type NodeSheet, stepKind } from '../src/graph'
+import { type Edge, FOLD_MIN, type GNode, type Graph, laneCount, laneWidth, type MapRow, mapRows, type NodeSheet, stepKind } from '../src/graph'
 
 type Spec = [parent: number | null, edge: Edge, kind?: string]
 const sheet = (concept: string | null = null, intent = 'passage', what: string[] = []): NodeSheet => ({ intent, ref: null, concept, what, term: null, lang: 'en' })
@@ -213,5 +213,19 @@ describe('the prototype conversation (30 points)', () => {
   test('"comes from": only a branch in another lane and more than 2 rows below its origin', () => {
     const rows = mapRows(g, new Set(g.nodes.map((n) => n.id)))
     expect(rows.filter((r) => r.k === 'node' && r.from !== null).map((r) => `${idx(r)}<${(r as { from: number }).from}`)).toEqual(['28<5', '29<16'].slice(0, 1).concat(['2<0'].slice(0, 0)).concat(['3<0'].slice(0, 0)))
+  })
+})
+
+describe('the gutter width', () => {
+  test('18px per lane while the lanes take at most 40% of the width; narrower after, never under 8px', () => {
+    expect(laneWidth(360, 3)).toBe(18) // 14 + 54 = 68 of 144
+    expect(laneWidth(360, 9)).toBeCloseTo((360 * 0.4 - 14) / 9, 5) // 18 would be 176 px of 360
+    for (const lanes of [1, 4, 6, 7, 12, 40]) {
+      const lw = laneWidth(360, lanes)
+      expect(lw).toBeLessThanOrEqual(18)
+      expect(lw).toBeGreaterThanOrEqual(8)
+      if (lw > 8) expect(14 + lanes * lw).toBeLessThanOrEqual(360 * 0.4 + 1e-9)
+    }
+    expect(laneWidth(360, 40)).toBe(8)
   })
 })
