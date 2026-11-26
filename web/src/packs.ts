@@ -976,8 +976,10 @@ type Updater = {
  * Brings one language up to date: reads its catalog again and installs the shared units (SHARED_UNITS) it lacks; Open Bible
  * Stories when the catalog lists them and the phone lacks them (OBS_MAX or less, not on a metered connection); then, when the
  * refresh lists a newer common `xtopics` or `xmap` (a few hundred KB: the section map came that way), those too, up to
- * COMMON_UPDATE_MAX together, and never on a metered connection (`metered`: true; null, unknown, updates as if not). The units
- * installed.
+ * COMMON_UPDATE_MAX together, and never on a metered connection (`metered`: true; null, unknown, updates as if not). An `obs`
+ * the phone already has (the Stories and the 5M sessions that ride in it) is moved to the newer revision the refresh lists for the
+ * language's own unit (a real upgrade, to > from), under the rules of its first install: OBS_MAX or less, never on a metered
+ * connection. The units installed (the caller drops its cached readers when any came, so the new content is read at once).
  */
 export async function updateLang(client: Updater, lang: string, units: readonly string[] = SHARED_UNITS, signal?: AbortSignal,
   metered: boolean | null = meteredNow()): Promise<string[]> {
@@ -987,7 +989,13 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
   const opts = { concurrency: 1, ...(signal ? { signal } : {}) }
   if (missing.length) await client.install(lang, { units: missing, defaults: false }, opts)
   // Open Bible Stories for a language installed before they came with it: OBS_MAX or less, never on a metered connection
-  const obs = metered !== true && r.listed(OBS_UNIT) && !r.installed(OBS_UNIT) && typeof r.size === 'function' && r.size(OBS_UNIT) <= OBS_MAX ? [OBS_UNIT] : []
+  const obs: string[] = metered !== true && r.listed(OBS_UNIT) && !r.installed(OBS_UNIT) && typeof r.size === 'function' && r.size(OBS_UNIT) <= OBS_MAX ? [OBS_UNIT] : []
+  // an obs the phone has, at an older revision: the newer one (a more complete 5M); the client replaces the unit when its segments
+  // changed. The key is the language's own (`<catalog>/obs`), never a common one.
+  if (metered !== true && !obs.length && r.listed(OBS_UNIT) && r.installed(OBS_UNIT)) {
+    const up = report?.updates?.find((x) => x.key.slice(x.key.indexOf('/') + 1) === OBS_UNIT && !x.key.startsWith('common/') && x.to > x.from)
+    if (up && up.bytes <= OBS_MAX) obs.push(up.key)
+  }
   if (obs.length) await client.install(lang, { units: obs, defaults: false }, opts)
   const common: string[] = []
   let bytes = 0
@@ -1021,8 +1029,9 @@ const CHECKED = 'btsm.packs.checked'
  * Once a day with internet, each added language gets the shared units it lacks (a few articles collections, ~50–60 KB each),
  * silently and with the same verification as a download. It never makes the person wait: a download, an import or a removal
  * stops it (what is complete stays), and it tries again on the next opening. "Checked today" is kept only once every language
- * was tried; a language that failed waits for tomorrow. Not on a connection where the person asked to save data. The number of
- * languages updated.
+ * was tried; a language that failed waits for tomorrow. Not on a connection where the person asked to save data. An installed
+ * `obs` that a newer revision replaced on the server (the Stories with a more complete 5M) is brought up too (`updateLang`).
+ * The number of languages updated.
  */
 export async function updateLangs(): Promise<number> {
   if ((globalThis as any).navigator?.connection?.saveData) return 0
