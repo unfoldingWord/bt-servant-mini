@@ -111,6 +111,43 @@ test('obs: not on a metered connection, not over 3 MB, not when installed or not
   expect(await updateLang(withObsUnit({ bytes: OBS_MAX }).client, 'id', ARTICLES, undefined, false)).toEqual(['obs'])
 })
 
+// A phone that has obs gets its newer revision (a more complete 5M): wifi only, OBS_MAX or less, a real upgrade only.
+function withObsUpdate(u: { key?: string; bytes?: number; from?: number; to?: number } | undefined, installed = true) {
+  const calls: string[] = []
+  const client = {
+    refresh: async (lang: string) => {
+      if (lang.includes('-x-')) return undefined
+      calls.push(`refresh ${lang}`)
+      return { updates: u ? [{ key: 'id/obs', bytes: 120_000, from: 1, to: 2, ...u }] : [] }
+    },
+    open: async () => ({ listed: () => true, installed: (x: string) => (x === 'obs' ? installed : true), size: () => 287_929 }),
+    install: async (lang: string, want: { units: string[]; defaults: false }) => { if (!lang.includes('-x-')) calls.push(`install ${lang} ${want.units.join(',')}`) },
+  }
+  return { client, calls }
+}
+
+test('obs update: a newer revision of the installed obs is installed on wifi, and counts as updated', async () => {
+  const { client, calls } = withObsUpdate({})
+  expect(await updateLang(client, 'id', ARTICLES, undefined, false)).toEqual(['id/obs'])
+  expect(calls).toEqual(['refresh id', 'install id id/obs'])
+  expect(await updateLang(withObsUpdate({ bytes: OBS_MAX }).client, 'id', ARTICLES, undefined, null)).toEqual(['id/obs'])
+})
+
+test('obs update: not on a metered connection, not over OBS_MAX, not when to <= from', async () => {
+  for (const [u, metered] of [[{}, true], [{ bytes: OBS_MAX + 1 }, false], [{ from: 2, to: 2 }, false], [{ from: 3, to: 2 }, false], [{ key: 'common/obs' }, false]] as const) {
+    const { client, calls } = withObsUpdate(u)
+    expect(await updateLang(client, 'id', ARTICLES, undefined, metered)).toEqual([])
+    expect(calls).toEqual(['refresh id'])
+  }
+  expect(await updateLang(withObsUpdate(undefined).client, 'id', ARTICLES, undefined, false)).toEqual([])
+})
+
+test('obs update: an obs not installed but listed still comes whole (the first install), not by the update key', async () => {
+  const { client, calls } = withObsUpdate({}, false)
+  expect(await updateLang(client, 'id', ARTICLES, undefined, false)).toEqual(['obs'])
+  expect(calls).toEqual(['refresh id', 'install id obs'])
+})
+
 // ---------------------------------------------------------------------------------------------------- meteredNow
 const g = globalThis as any
 const nav = g.navigator
