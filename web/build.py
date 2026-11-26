@@ -1,6 +1,6 @@
 """Builds the page into app/src/main/assets/www: the JS bundle, index.html and the language packs (with ids.json and index.json).
    python -I -X utf8 web/build.py        (from the repo root; needs bun; runs the fast tests in web/tests, --full all of them, --no-tests none; --dev also puts web/src/data/dev in web/desktop/dev, for ?dev=;
-   --devapk puts it in app/src/devtest for the dev APK, `gradle assembleFullDevtest`)"""
+   --devapk puts it in app/src/devtest for the dev APK, `gradle assembleFullDevtest`, plus the map bench, web/bench, at www/bench/maps.html)"""
 import json, os, re, shutil, subprocess, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,7 +45,10 @@ DEV_TEXT = 'Where did everything in the universe come from?'
 def no_dev(out):
     assert DEV_TEXT not in (out / 'main.js').read_text(encoding='utf-8'), f'a dev fixture got into {out}/main.js'
     assert not any('obs5m' in f.name for f in out.rglob('*') if f.is_file()), f'a dev fixture file is in {out}'
+def no_bench(out):
+    assert '__mapBench' not in (out / 'main.js').read_text(encoding='utf-8') and not (out / 'bench').exists(), f'the map bench got into {out}'
 no_dev(WWW)
+no_bench(WWW)
 # the answer tests (web/tests) on every build: a fast part by default (under a minute), all of them with --full (about 4
 # minutes, with the scores against web/tests/baseline.json); --no-tests skips them
 if '--no-tests' not in sys.argv:
@@ -75,6 +78,14 @@ for d in sorted(PACKS.iterdir()):
     (out / 'ids.json').write_text(json.dumps(ids), encoding='utf-8')
     langs.append(d.name)
 (FULL / 'index.json').write_text(json.dumps({'langs': langs}), encoding='utf-8')
+# The map background: when the common catalog the packs carry lists a `basemap` complement, its file (<PACKS>/complements/<sha256>.basemap)
+# goes to packs/common/complements/<sha256>.basemap, where the app looks first, so the first map has coastlines with no internet. A listed
+# file that is missing (or is not the one the catalog says) stops the build; packs whose catalog lists none copy nothing.
+if langs:
+    _r = subprocess.run(['bun', 'tools/complements.ts', str(PACKS), str(FULL)], cwd=ROOT / 'web', capture_output=True, text=True, shell=sys.platform == 'win32')
+    print((_r.stdout + _r.stderr).strip())
+    if _r.returncode:
+        raise SystemExit('the basemap complement of the packs is missing: bun web/tools/complements.ts <packs> <packs> --fetch https://bt-servant-mini-packs.unfoldingword.workers.dev puts it in <packs>/complements')
 # desktop testing: the page plus the full packs, outside the APK's assets
 DESK = ROOT / 'web' / 'desktop'
 shutil.rmtree(DESK, ignore_errors=True)
@@ -89,6 +100,20 @@ DEVAPK = ROOT / 'app' / 'src' / 'devtest' / 'assets' / 'www' / 'dev'
 shutil.rmtree(DEVAPK, ignore_errors=True)
 if '--devapk' in sys.argv:
     shutil.copytree(ROOT / 'web' / 'src' / 'data' / 'dev', DEVAPK)
+    # the map speed bench (web/bench): its page and its own bundle go beside the app's page in the same assets folder, so the dev app
+    # serves it at https://appassets.androidplatform.net/assets/www/bench/maps.html (open it over CDP: Page.navigate; see web/bench/maps-bench.ts).
+    # Nothing in web/src imports web/bench, so the app's bundle never has it; the `no_bench` checks below say so for every build.
+    BENCH = DEVAPK.parent / 'bench'
+    shutil.rmtree(BENCH, ignore_errors=True)
+    BENCH.mkdir(parents=True)
+    r = subprocess.run(['bun', 'build', 'bench/maps-bench.ts', '--outdir', str(BENCH), '--target', 'browser', '--sourcemap=none'],
+                       cwd=ROOT / 'web', capture_output=True, text=True, shell=sys.platform == 'win32')
+    if r.returncode:
+        print(r.stdout[-800:], r.stderr[-2000:])
+        raise SystemExit('bun build (map bench) failed')
+    shutil.copy(ROOT / 'web' / 'bench' / 'maps.html', BENCH / 'maps.html')
+else:
+    shutil.rmtree(DEVAPK.parent / 'bench', ignore_errors=True)
 print('packs', langs, 'www', sum(f.stat().st_size for f in WWW.rglob('*') if f.is_file()) // 1024, 'KB')
 
 # The iOS app (ios/): the same page as the Android app, without packs (they are added from the app, like the light build).
@@ -112,6 +137,7 @@ if r.returncode:
     print(r.stdout[-800:], r.stderr[-2000:])
     raise SystemExit('bun build (web app) failed')
 no_dev(APP)
+no_bench(APP)
 va = hashlib.sha256((APP / 'main.js').read_bytes()).hexdigest()[:10]
 head = """<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#262624">

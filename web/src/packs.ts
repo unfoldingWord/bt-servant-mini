@@ -1,12 +1,14 @@
 // Language packs (format 3) in two layers: the ones shipped in the app (assets/www/packs, read-only; none in the light
 // build), and the ones the person adds — downloaded from the packs server or imported from a .tcpack file (SD card, phone
 // memory, another phone) — kept in the page's IndexedDB. A language lives in one layer: an added one wins.
+import { basemapOf } from '@bt-synergy/language-pack-v3'
 import {
-  ClientError, createClient, emptyState, httpSource, indexedDbStore, planInstall, verifyCatalogFile,
+  ClientError, createClient, patchedReader, emptyState, httpSource, indexedDbStore, planInstall, verifyCatalogFile,
   type BlobStore, type PackReader, type PackSource, type VerifiedCatalog,
 } from '@bt-synergy/language-pack-client'
 import { PACKS_SERVERS, SHARED_UNITS, trustedKeys } from './shared'
 import { CANON } from './canon'
+import { noteTitles } from './aquifer'
 import { partsOfUnits, type PartLine } from './modules'
 export { CANON } from './canon'
 
@@ -27,7 +29,76 @@ export const PACK_NAMES: Record<string, string> = {
  * language. The Open Bible Stories pictures (obsimg.ts) are the only one.
  */
 export const IMAGES_CATALOG = 'zxx-obsimg'
-const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx-')
+const notALanguage = (name: string) => name === 'common' || name.startsWith('zxx-') || isPatch(name)
+
+// ------------------------------------------------------------------------------------------------------ Aquifer patches
+// A patch catalog (`hi-x-aquifer`, `{lang}-x-{source}`, plan-aquifer.md) fills what Door43 lacks in a language: notes, questions or
+// book introductions of books the language pack has no help for. It is installed in the same store, never listed as a language,
+// opened together with its language (`client.open(lang, { patches })`: the reader keeps Door43's rows and only fills the tables
+// Door43 lacks, marking each row with `patch`), and removed with it. Languages with a published patch (Nov 2026; ru and fr wait).
+// Two kinds: `aquifer` (notes, questions) and `yaapi` (an unaligned Bible text of a version, where Door43 has no text of the book).
+const PATCHES: Record<string, readonly string[]> = { hi: ['hi-x-aquifer'], 'es-419': ['es-419-x-aquifer', 'es-419-x-yaapi'], id: ['id-x-aquifer'] }
+export const PATCH_LANGS: readonly string[] = Object.keys(PATCHES)
+export const isPatch = (name: string): boolean => /-x-[a-z0-9]+$/.test(name)
+export type PatchKind = 'aquifer' | 'yaapi'
+export const PATCH_KINDS: readonly PatchKind[] = ['aquifer', 'yaapi']
+/** The patch catalogs of a language, in the order of preference (the first that has a table wins), or none. */
+export const patchesOf = (lang: string): readonly string[] => PATCHES[lang] ?? []
+export const patchKind = (name: string): PatchKind => (name.endsWith('-x-yaapi') ? 'yaapi' : 'aquifer')
+const AQUIFER_KEY = 'btsm.aquifer'
+const YAAPI_KEY = 'btsm.yaapi'
+/**
+ * The menu's "Use Aquifer complementary helps". On unless the person turned it off: the reader already keeps Door43's own
+ * notes and questions, so with it on Aquifer is used only where Door43 has nothing for that book.
+ */
+let aquiferMem: boolean | null = null
+export function aquiferOn(): boolean {
+  if (aquiferMem !== null) return aquiferMem
+  try {
+    return (globalThis as any).localStorage?.getItem(AQUIFER_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+let yaapiMem: boolean | null = null
+/** The menu's "Use yaapi Bible texts": on unless turned off; only fills books where Door43 has no text of the Bible at all. */
+export function yaapiOn(): boolean {
+  if (yaapiMem !== null) return yaapiMem
+  try {
+    return (globalThis as any).localStorage?.getItem(YAAPI_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+export function setYaapi(on: boolean) {
+  yaapiMem = on
+  try {
+    ;(globalThis as any).localStorage?.setItem(YAAPI_KEY, on ? '1' : '0')
+  } catch { /* lasts until the app closes */ }
+  changed()
+}
+const kindOn = (kind: PatchKind): boolean => (kind === 'yaapi' ? yaapiOn() : aquiferOn())
+/** The patches of a language the person has switched on. */
+export const activePatches = (lang: string): string[] => patchesOf(lang).filter((p) => kindOn(patchKind(p)))
+/** The kinds of patch that are on the phone, for an installed language (the menu's switches and About speak only of these). */
+export async function patchedKinds(): Promise<PatchKind[]> {
+  try {
+    const st: any = await (await added()).getState()
+    // (a language that came with the app has its patch in the phone's own store too)
+    const have = new Set<PatchKind>()
+    for (const l of await installedLangs()) for (const p of patchesOf(l)) if (st?.active?.[p]) have.add(patchKind(p))
+    return PATCH_KINDS.filter((k) => have.has(k))
+  } catch {
+    return []
+  }
+}
+export function setAquifer(on: boolean) {
+  aquiferMem = on // (kept here too, so the choice holds when the phone cannot write it)
+  try {
+    ;(globalThis as any).localStorage?.setItem(AQUIFER_KEY, on ? '1' : '0')
+  } catch { /* the choice lasts until the app closes */ }
+  changed()
+}
 
 // ------------------------------------------------------------------------------------------------------------ servers
 
@@ -286,6 +357,7 @@ export async function openAdded(name: string): Promise<PackReader> {
 /** Tests: forget the store opened (the next use opens the page's IndexedDB again) and every reader. */
 export function resetAddedStore() {
   idb = null
+  keptDb = null
   changed()
 }
 
@@ -375,17 +447,48 @@ export async function origin(lang: string): Promise<'added' | 'shipped' | null> 
 
 const noNetwork = { fetch: async () => { throw new Error('offline') } } as any
 const open = new Map<string, Promise<PackReader>>()
-export function openLang(lang: string): Promise<PackReader> {
-  if (!open.has(lang)) {
-    const p = (async () => {
-      if ((await addedLangs()).includes(lang)) return (await addedClient()).open(lang)
-      return createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
-    })()
-    open.set(lang, p)
-    // a failed open is not kept: one failure (at the app's start, say) must not break every later read of the language
-    p.catch(() => { if (open.get(lang) === p) open.delete(lang) })
+/** Reads the names of the patch versions (their catalog titles) for the labels: a patch that cannot be read just has no names. */
+async function learnTitles(patches: readonly string[]) {
+  for (const patch of patches) {
+    try { noteTitles((await (await addedClient()).open(patch)).resources?.() ?? []) } catch { /* the code is shown instead */ }
   }
-  return open.get(lang)!
+}
+export function openLang(lang: string, plain = false): Promise<PackReader> {
+  // `plain`: the language alone, without its Aquifer patch (the Resources screen counts the books Door43 gave)
+  const key = plain ? `plain:${lang}` : lang
+  if (!open.has(key)) {
+    const p = (async () => {
+      if ((await addedLangs()).includes(lang)) {
+        const ps = activePatches(lang)
+        // a patch that is not installed is left out by the client; a patch that cannot be read must not take the language with it
+        if (ps.length && !plain) {
+          await learnTitles(ps)
+          try { return await (await addedClient()).open(lang, { patches: ps }) } catch { /* the language alone */ }
+        }
+        return (await addedClient()).open(lang)
+      }
+      const base = await createClient({ store: assetStore(lang), source: noNetwork, trust }).open(lang)
+      // a language that came with the app gets its patch from the phone's own store (the daily check installs it)
+      if (!plain) {
+        const readers: PackReader[] = []
+        for (const patch of activePatches(lang)) {
+          try {
+            const pr = await (await addedClient()).open(patch)
+            if (CANON.some((b) => pr.installed(`book:${b}`))) readers.push(pr)
+          } catch { /* that patch is left out */ }
+        }
+        if (readers.length) {
+          for (const pr of readers) noteTitles(pr.resources?.() ?? [])
+          return patchedReader(base, readers)
+        }
+      }
+      return base
+    })()
+    open.set(key, p)
+    // a failed open is not kept: one failure (at the app's start, say) must not break every later read of the language
+    p.catch(() => { if (open.get(key) === p) open.delete(key) })
+  }
+  return open.get(key)!
 }
 const listeners: (() => void)[] = []
 /** Called after a language is added or removed, so every cache that holds readers can drop them. */
@@ -394,8 +497,116 @@ export function onPacksChanged(f: () => void) {
 }
 function changed() {
   open.clear()
+  basemapMiss.clear()
+  basemapEntries.clear()
   for (const f of listeners) f()
 }
+// ------------------------------------------------------------------------------------------------------------ basemap
+
+/**
+ * Where the `basemap` complement is looked for: `<COMPLEMENTS_DIR>/<sha256 hex>.basemap` in the packs folder of the app (the APK
+ * build copies it there, web/build.py), and `/v3/packs/complement/<sha256 hex>` on a packs server (format 3 `serving.md`).
+ */
+export const COMPLEMENTS_DIR = 'common/complements'
+const BASEMAP_MAX = 1024 * 1024 // the real one is about 6 KB; a bigger file is not one of ours
+/** After a miss, the network is not asked again for this long (a changed pack list clears it sooner). */
+const BASEMAP_RETRY_MS = 10 * 60 * 1000
+const basemapMiss = new Map<string, number>()
+/** One try at one place may take this long (the file is about 6 KB): the map is already on the screen without it. */
+let BASEMAP_FETCH_MS = 4000
+/** Tests: how long one try at one place may take (no argument puts 4 s back). */
+export const setBasemapFetchMs = (ms = 4000) => { BASEMAP_FETCH_MS = ms }
+// The copy kept for the next time lives in a database of its own: client.prune() deletes what its catalogs do not name, in the client's store.
+let keptDb: Promise<BlobStore> | null = null
+/** The store of the kept basemap copy (outside the client's store, so a prune or a removed language leaves it). */
+export function basemapStore(): Promise<BlobStore> {
+  // a database that cannot be opened (private mode) is not kept: the next try opens it again
+  const p = (keptDb ??= (async () => (keptStoreMaker ?? (() => indexedDbStore({ name: 'btsm-maps' })))())())
+  p.catch(() => { if (keptDb === p) keptDb = null })
+  return p
+}
+let keptStoreMaker: (() => Promise<BlobStore>) | null = null
+/** Tests: make the kept-copy store from this (no argument puts the IndexedDB one back). */
+export function setBasemapStore(f?: () => Promise<BlobStore>) {
+  keptStoreMaker = f ?? null
+  keptDb = null
+}
+// The catalog entry of a pack is read once until the packs change (a backoff or a pack with no basemap does not read catalogs again).
+const basemapEntries = new Map<string, Promise<{ id: string; size: number } | null>>()
+async function fetchIn(url: string, ms: number): Promise<Response> {
+  const ac = new AbortController()
+  let t: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([fetch(url, { signal: ac.signal }), new Promise<never>((_, no) => { t = setTimeout(() => { ac.abort(); no(new Error('timeout')) }, ms) })])
+  } finally { clearTimeout(t) }
+}
+const sha256hex = async (b: Uint8Array): Promise<string> => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)))
+
+/** The `basemap` complement the installed common catalog lists for this pack's language: its sha256 (hex) and size; null when none (or two, or another version). */
+function basemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
+  let p = basemapEntries.get(pack)
+  if (!p) {
+    p = readBasemapEntry(pack)
+    basemapEntries.set(pack, p)
+    p.catch(() => { if (basemapEntries.get(pack) === p) basemapEntries.delete(pack) })
+  }
+  return p
+}
+let basemapEntryReads = 0
+/** Tests: how many times a basemap catalog entry was computed (not read from the cache). */
+export const basemapEntryReadCount = (): number => basemapEntryReads
+async function readBasemapEntry(pack: string): Promise<{ id: string; size: number } | null> {
+  basemapEntryReads++
+  const store = (await addedLangs().catch(() => [] as string[])).includes(pack) ? await added() : (await shipped()).includes(pack) ? assetStore(pack) : null
+  if (!store) return null
+  const state = await store.getState()
+  const entry = state?.published[state.aliases?.[pack] ?? pack]
+  if (!state || !entry) return null
+  const read = async (id: string) => {
+    const bytes = await store.get(id)
+    return bytes ? verifyCatalogFile(bytes, trust, { from: 'store', expectedId: id }) : null
+  }
+  const lang = await read(entry.id)
+  for (const [, , rid] of lang?.catalog.requires ?? []) {
+    const common = await read(hex(rid)).catch(() => null)
+    const b = basemapOf(common?.catalog.complements)
+    if (b) return { id: hex(b.id), size: b.size }
+  }
+  return null
+}
+
+/**
+ * The bytes of the map background (the `basemap` complement) for a pack, checked against the sha256 the catalog lists, or null: the common
+ * catalog lists none, it is not on the phone or any server, or the bytes are not the ones listed (the map is then drawn without a background).
+ * Looked for in the kept copy (where it is kept after the first time), then the app's packs folder (the APK carries it), then the
+ * packs servers; a copy found outside the store is kept there, in a store of its own. Never throws.
+ */
+export async function basemapBytes(pack: string): Promise<Uint8Array | null> {
+  try {
+    const e = await basemapEntry(pack)
+    if (!e || !ID_RE.test(e.id) || e.size > BASEMAP_MAX) return null
+    const right = async (b: Uint8Array | undefined) => (b && b.length === e.size && (await sha256hex(b)) === e.id ? b : null)
+    let kept: Uint8Array | null = null
+    try { kept = await right(await (await basemapStore()).get(e.id)) } catch { /* no kept copy readable: the other places */ }
+    if (kept) return kept
+    const last = basemapMiss.get(e.id)
+    if (last !== undefined && Date.now() - last < BASEMAP_RETRY_MS) return null
+    const file = `${COMPLEMENTS_DIR}/${e.id}.basemap`
+    const urls = [`${BASE}/${file}`, ...servers.map((b) => `${b.replace(/\/+$/, '')}/v3/packs/complement/${e.id}`)]
+    for (const url of urls) {
+      try {
+        const r = await fetchIn(url, BASEMAP_FETCH_MS)
+        const ok = r.ok ? await right(new Uint8Array(await r.arrayBuffer())) : null
+        if (!ok) continue
+        try { await (await basemapStore()).put(e.id, ok) } catch { /* not kept: the bytes are good all the same */ } // kept so the next time needs no network
+        return ok
+      } catch { /* the next place */ }
+    }
+    basemapMiss.set(e.id, Date.now())
+  } catch { /* no background */ }
+  return null
+}
+
 /** Tests: read the shipped list again and drop the open readers (web/tests/fs-packs.ts). */
 export function reloadPacks() {
   index = null
@@ -607,11 +818,75 @@ export async function downloadLang(
       onProgress: (p) => onProgress?.({ done: before.length + p.done, total: before.length + p.total, bytes: already + p.bytes, totalBytes: offer.bytes }),
     }))
     markPartial(lang, false)
+    // the map background (a few KB): fetched now, while there is internet, so the first map works offline; a miss never fails the language
+    void basemapBytes(lang).catch(() => null)
+    // the language's Aquifer patch (a few MB at most): after the language is whole, and a failure here never fails the language
+    await downloadPatch(lang, o.signal ? { signal: o.signal } : {}).catch(() => null)
     return { books: offer.books.length, bytes: report.bytes ?? 0 }
   } finally {
     // what is complete was activated even after a cancel or a failure: every cache that holds readers drops them
     changed()
   }
+}
+
+/**
+ * Installs the books of a language's Aquifer patch (every `book:*` its catalog lists, with the common `orig:*` they need), or
+ * refreshes it when it is there. Null when the language has no patch or no server has it; no internet is not an error.
+ */
+export async function downloadPatch(lang: string, o: { signal?: AbortSignal } = {}): Promise<{ books: number; bytes: number } | null> {
+  try {
+    return await serial(() => installPatch(lang, o.signal))
+  } catch {
+    return null
+  } finally {
+    changed()
+  }
+}
+/**
+ * The install itself (no queue: `downloadPatch` and the daily check each wrap it as they need). Installs the books of the patch
+ * the server lists, or refreshes it when the phone has it; into the phone's own store, so it also serves a language that came
+ * with the app. `bytes` is what was fetched (0: already up to date); null when the language has no patch or no server has it.
+ */
+export async function installPatch(lang: string, signal?: AbortSignal): Promise<{ books: number; bytes: number } | null> {
+  // every patch of the language, one after the other: one that fails (not on the server yet) does not stop the next
+  let total = null as { books: number; bytes: number } | null
+  let failed: unknown
+  for (const patch of patchesOf(lang)) {
+    try {
+      const r = await installOnePatch(patch, signal)
+      if (r) total = { books: (total?.books ?? 0) + r.books, bytes: (total?.bytes ?? 0) + r.bytes }
+    } catch (e) {
+      if (signal?.aborted) {
+        if (total) changed() // (what an earlier patch of the language installed counts: the readers are dropped)
+        throw e
+      }
+      failed ??= e
+    }
+  }
+  if (!total && failed) throw failed
+  return total
+}
+async function installOnePatch(patch: string, signal?: AbortSignal): Promise<{ books: number; bytes: number } | null> {
+  const http = addedSource()
+  const cats = await serverCatalogs(patch, http)
+  stopIfAborted(signal) // (the person started something while the catalog was asked for)
+  if (!cats) return null
+  const listed = new Set(cats[0]!.catalog.units.map((u) => u.id))
+  const units = CANON.filter((b) => listed.has(`book:${b}`)).map((b) => `book:${b}`)
+  if (!units.length) return null
+  const store = await added()
+  const client = createClient({ store, source: http, trust })
+  const st: any = await store.getState().catch(() => undefined)
+  if (st?.published?.[patch]) await client.refresh(patch, signal ? { signal } : {})
+  let report: any
+  try {
+    report = await client.install(patch, { defaults: false, units }, { concurrency: 1, ...(signal ? { signal } : {}) })
+  } catch (e) {
+    // (books installed before a stop or a failure count too: the readers are dropped; nothing else here changed anything)
+    changed()
+    throw e
+  }
+  return { books: units.length, bytes: report?.bytes ?? 0 }
 }
 
 /** What the server offers for a catalog that is not a language (the pictures): the size of `want`, its segments in install order. */
@@ -725,7 +1000,21 @@ export async function updateLang(client: Updater, lang: string, units: readonly 
     }
   }
   if (common.length) await client.install(lang, { units: common, defaults: false }, opts)
-  return [...missing, ...obs, ...common]
+  // the language's Aquifer patch: a newer revision, or the books of one the phone never had (never on a metered connection;
+  // a patch that cannot be reached must not make the language's update fail)
+  const patchInstalled: string[] = []
+  for (const patch of metered === true ? [] : patchesOf(lang)) {
+    try {
+      await client.refresh(patch, signal ? { signal } : {})
+      const pr = await client.open(patch)
+      const todo = CANON.filter((b) => pr.listed(`book:${b}`) && !pr.installed(`book:${b}`)).map((b) => `book:${b}`)
+      if (todo.length) {
+        await client.install(patch, { units: todo, defaults: false }, opts)
+        patchInstalled.push(...todo.map((u) => `${patch}/${u}`)) // counts as updated: the readers are dropped
+      }
+    } catch { /* no such patch on any server, or no internet: the next one */ }
+  }
+  return [...missing, ...obs, ...common, ...patchInstalled]
 }
 const CHECKED = 'btsm.packs.checked'
 /**
@@ -767,6 +1056,39 @@ export async function updateLangs(): Promise<number> {
         break
       }
       /* this language fails: tried again tomorrow */
+    }
+  }
+  // the languages that came with the app: only their Aquifer patch (their own packs are the app's), never on a metered connection
+  if (!stopped && meteredNow() !== true) {
+    const shippedLangs: string[] = []
+    try {
+      for (const l of await installedLangs()) if (patchesOf(l).length && (await origin(l)) === 'shipped') shippedLangs.push(l)
+    } catch { /* the store cannot be read: tomorrow */ }
+    for (const lang of shippedLangs) {
+      if (userWaiting) {
+        stopped = true
+        break
+      }
+      try {
+        const got = await serial(async () => {
+          const c = new AbortController()
+          const t = setTimeout(() => c.abort(new Error('timeout')), 120000)
+          background = c
+          try {
+            return await installPatch(lang, c.signal)
+          } finally {
+            clearTimeout(t)
+            background = null
+          }
+        }, true)
+        if (got && got.bytes > 0) n++
+      } catch {
+        if (userWaiting) {
+          stopped = true
+          break
+        }
+        /* no patch on any server, or no internet: tomorrow */
+      }
     }
   }
   if (!stopped) {
@@ -898,8 +1220,11 @@ export async function removeLang(lang: string): Promise<void> {
       const store = await added()
       const st: any = await store.getState()
       if (!st) return
-      for (const k of ['active', 'published']) if (st[k]) delete st[k][lang]
-      for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${lang}/`)) delete st.units[key]
+      // the language's Aquifer patch goes with it
+      for (const name of [lang, ...patchesOf(lang)]) {
+        for (const k of ['active', 'published']) if (st[k]) delete st[k][name]
+        for (const key of Object.keys(st.units ?? {})) if (key.startsWith(`${name}/`)) delete st.units[key]
+      }
       await store.setState(st)
       await (await addedClient()).prune()
     })

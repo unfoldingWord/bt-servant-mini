@@ -1,6 +1,6 @@
 // The decisions between the question and the answer, without the page: what a question asks for once its slots are known,
 // and which answer it gets. main.ts draws; this decides, so the decisions can be tested under bun (web/tests/).
-import { answerSheet, booksWith, clean, facts, linkedVerses, type Result, setQuestion, setUiLang, type Sheet, type Study, studyOf } from './answer'
+import { answerSheet, bornLine, booksWith, daysLine, diedLine, distanceLine, refDaysLine, whereLine, clean, facts, linkedVerses, type Result, setQuestion, setUiLang, type Sheet, type Study, studyOf } from './answer'
 import { bookCode, bookExact, bookNameWords, buildSheet, endsLongName, fold, idsOf, type Slots } from './sheet'
 import { asksWhere, FT, noFit } from './findall'
 import { asksIntro, chapterNumber, type Command, has, kindOf, pattern, replyLang, withoutReply } from './commands'
@@ -19,10 +19,16 @@ import { type Card5, cardOf, frameLinks, next as nextOf5, ORDER as ORDER5, type 
 import { W5 } from './obs5mwords'
 import { savedSessions } from './obs5mstore'
 import { verseId } from '@bt-synergy/language-pack-v3'
+import { buildTree, treeText, type TreeOf, type TreeView, type TreeMode } from './tree'
+import type { TreeWords } from './treeview'
 import { asksWho, maculaAnswer, maculaSteps, maculaWord, type MacView } from './macula'
 import { count } from './usage'
-import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, kinQuestion, KT, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
-import type { Relative } from '@bt-synergy/language-pack-client'
+import { articleOf, askedName, colon, namedIn, versesCount, kinReady, nameOnly, shownAs, tiesLine, tiesOfPerson, type Tie, withName, familyOf, firstVerses, headKind, joinNames, kinKnown, type KinKind, type RelKind, kinQuestion, KT, KIN_T, TIE_T, type KinLang, peopleAt, peopleOfArticle as peopleOf, personOf, relativesOf, SOURCE_NAMES, storiesOf } from './kin'
+import { kinVerses, trip as tripOf, type PlaceRef, type Relative } from '@bt-synergy/language-pack-client'
+import { hasGeo, personPlace, placesOfArticle, personVerses, placeData, placeNamed, placeQuestion, placeRefs, placeShape, placesAt, placeVerses, referenceFor, referencesAmong, type PlaceAsk } from './places'
+import { PLACE_SOURCES, PLT } from './placetext'
+import { isolateRef } from './bidi'
+import type { MapPoint } from './mapview'
 import type { HelpItem } from './view'
 import taSynonyms from './data/ta-synonyms.json'
 import bookTables from './data/books.json'
@@ -959,6 +965,14 @@ export async function readQuestion(q: string, read: { slots: Slots | null; raw: 
 ${raw}
 (family: ${kin.kind} of ${kin.ids.join(' | ')}, ${kin.pick}; read by code)`, q, inScope: 'kinship' }
   }
+  // "¿Dónde queda Betel?", "distancia entre Belén y Jerusalén", "¿dónde nació Pablo?": a place question whose names are what it asks
+  // (places.ts), answered by code, with the map when the data has points. null: the question goes on exactly as before (diseno-mapas.md §5.7)
+  const pl = await placeQuestion(q, env.nav, c.last?.ref ?? null).catch(() => null)
+  if (pl) {
+    const sheet = placeSheetOf(pl, placeShape(q)?.names ?? [])
+    const at = pl.choose ? 'choose' : pl.places.map((p) => p.id).join(' | ') || pl.person?.id
+    return { sheet, ui: pl.ui, meta: `model ${ms} ms\n${raw}\n(place: ${pl.kind} ${at}; read by code)`, q, inScope: 'place' }
+  }
   // "Abraham": a name alone with a Translation Words article about a person is that article, whatever the reader made of it (Abel,
   // Nov 18: a reader read "Abraham" in a 5M session as a passage of Genesis, and the verses that mention him came instead)
   const named = await nameOnly(q, env.nav).catch(() => null)
@@ -1875,7 +1889,7 @@ async function noIntro(sheet: Sheet, ui: string, before: Sheet | null): Promise<
   return { said, follow }
 }
 /** Each button once (the same sheet or the same Browse), at most MAX_FOLLOW; Browse at a book opens the pack that has it. */
-export async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
+export async function tidy(follow: Follow[], l: string, max = MAX_FOLLOW): Promise<Follow[]> {
   const seen = new Set<string>()
   const out: Follow[] = []
   for (const f of follow) {
@@ -1888,7 +1902,7 @@ export async function tidy(follow: Follow[], l: string): Promise<Follow[]> {
       out.push({ ...f, browse: { ...f.browse, lang: p } })
     } else out.push(f)
   }
-  return out.slice(0, MAX_FOLLOW)
+  return out.slice(0, max)
 }
 
 const clipTo = (s: string, n: number): string => (s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + ' …' : s)
@@ -1902,6 +1916,10 @@ const TA_T: Record<string, string> = {
 // -------------------------------------------------------------------------------------------------------------- the answer
 
 export type Follow = Followup
+/** The map of a place answer: its points (a place with no point is only in the list) and the summary the screen reader says; `small`: a few lines high. */
+export type MapBlock = { pack: string; points: MapPoint[]; summary: string; small?: true }
+/** The list that goes next to the map (or alone, when there is none): `ref` a reference (drawn in <bdi>), `tag` how sure the place is. */
+export type PlaceList = { head: string; items: { text: string; tag?: string; note?: string; ref?: string }[] }
 /** An answer as data: main.ts draws it (and adds the online answer, the thumbs, the report). */
 export type Reply = {
   text?: string; intro?: string | null; info?: string; follow?: Follow[]; meta?: string; ui?: string
@@ -1929,6 +1947,10 @@ export type Reply = {
   drift?: boolean
   /** who is who in a verse, or its sentence structure (macula.ts), drawn by syntaxview.ts */
   macula?: MacView
+  /** a family tree (tree.ts), drawn by treeview.ts; a saved conversation keeps only `treeOf` and builds it again */
+  tree?: TreeView; treeOf?: TreeOf
+  /** a place answer: the map (mapview.ts draws it) and the list next to it; a saved conversation keeps both as data */
+  map?: MapBlock; list?: PlaceList
   /** a step of a 5M session (5M in the pack): where it is ("Movement 1 · observation · frame 5/16"), and its card (obs5m.ts) */
   sessionMark?: string; card?: Card5
   /** in a 5M session, any other answer: "← Back to the session: …", the way back to its current step (first on the row of the way back) */
@@ -2259,7 +2281,12 @@ async function storySteps(base: Sheet, id: string, n = 2): Promise<Follow[]> {
 const personLabel = (p: { name: string; note?: string }) => (p.note ? `${p.name} — ${p.note}` : p.name)
 const halfOf = (ui: string, r: Relative) => (r.half ? ` (${KT(ui).half[r.gender === 2 ? 1 : 0]})` : '')
 /** The credit line under a family answer: TIPNR, and ACAI when the packs have it. */
-const creditLine = (ui: string, sources: string[]) => `*${KT(ui).credit.replace('{src}', sources.map((s) => SOURCE_NAMES[s] ?? s).join(ui === 'ar' ? '، ' : ', '))}*`
+export const creditLine = (ui: string, sources: string[]) => `*${KT(ui).credit.replace('{src}', sources.map((s) => SOURCE_NAMES[s] ?? s).join(ui === 'ar' ? '، ' : ', '))}*`
+/** The credit line of a person's family data as a tree answer has it (the sources the data names, else TIPNR), without the italics: Browse's person view. */
+export async function familyCredit(pack: string, ui: string, id: string): Promise<string> {
+  const sources = (await familyOf(pack, id).catch(() => null))?.data?.sources ?? ['STEPBible/STEPBible-Data/TIPNR']
+  return creditLine(ui, sources).replace(/^\*|\*$/g, '')
+}
 /** The family can be shown without its verses: the parts were not read. In a language the person added, the way to download them. */
 async function partsStep(base: Sheet, ui: string, missing: boolean): Promise<Follow[]> {
   if (!missing || (await origin(base.lang).catch(() => null)) !== 'added') return []
@@ -2307,7 +2334,7 @@ async function articleFamily(sheet: Sheet, ui: string): Promise<{ line: string; 
   // (the family data's own sources: ACAI only when the packs have it)
   const sources = (await familyOf(pack, ids[0]!).catch(() => null))?.data?.sources ?? ['STEPBible/STEPBible-Data/TIPNR']
   // (its sources in a short parenthesis: inside the fold, not the answer's last line, so no source line of its own)
-  return { line: text ? `${colon(ui, label)} ${text} (${sources.map((x) => (SOURCE_NAMES[x] ?? x).replace(/ \(.*\)$/, '')).join(', ')}).` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }] }
+  return { line: text ? `${colon(ui, label)} ${text} (${sources.map((x) => (SOURCE_NAMES[x] ?? x).replace(/ \(.*\)$/, '')).join(', ')}).` : '', steps: [{ label, sheet: kinSheet(base, 'family', { concept: ids[0]! }) }, treeButton(base, ui, ids[0]!)] }
 }
 /** Under one verse (or verses of one chapter) or a frame of Open Bible Stories: "People here: Isaac, Esau…", when the data names any. */
 async function hereStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | null> {
@@ -2331,6 +2358,57 @@ async function personStep(base: Sheet, id: string, label: string): Promise<Follo
   // (the open too: a pack that does not open gives the card, never no button)
   const has = tw ? await (async () => !!(await (await openLang(base.lang)).article(tw)).data)().catch(() => false) : false
   return tw && has ? { label, sheet: articleSheet(base, tw, base.lang) } : { label, sheet: kinSheet(base, 'who', { concept: id }) }
+}
+
+/** «Árbol familiar»: the tree of a person, among the steps in sight (`key`). */
+const treeButton = (base: Sheet, ui: string, id: string, term?: string | null): Follow =>
+  ({ label: KT(ui).treeBtn, sheet: kinSheet(base, 'tree', { concept: id, term: term ?? null }), key: true })
+
+/** The base sheet a tree's buttons are made on (main.ts: a message has no sheet of its own). */
+export const treeBase = (pack: string): Sheet =>
+  ({ id: '', intent: 'kin', ref: null, what: ['tree'], version: null, concept: null, term: null, phrase: null, candidates: null, lang: pack })
+/** The words of a tree (treeview.ts) in a language, from KIN_T; the title is the view's when given. */
+export function treeWords(ui: string, v?: TreeView): TreeWords {
+  const t = KT(ui)
+  const tie = (TIE_T[ui as KinLang] ?? TIE_T.en).childOf
+  const title = v ? withName(ui, v.mode === 'up' ? t.up : v.down ? t.down : t.tree, v.focus.name) : t.tree.replace('{x}', '')
+  return { title, note: t.treeNote, parents: colon(ui, t.parentsL), wife: colon(ui, t.wife), wives: colon(ui, t.wives), husband: colon(ui, t.husband), spouses: colon(ui, t.spouses),
+    siblings: colon(ui, t.siblingsL), children: colon(ui, t.childrenL), withP: t.withP, noMother: t.noMother, noFather: t.noFather, noParent: t.noParent, unnamed: t.unnamed, gap: t.gap, upEnd: t.upEnd,
+    alsoSays: t.alsoSays, childOf: tie[0], daughterOf: tie[1], and: `${t.and}${ui === 'ar' && t.and.length === 1 ? '' : ' '}{x}`, showKids: t.showKids, hideKids: t.hideKids,
+    sonL: t.sonL, daughterL: t.daughterL, more: '+{n}', half: `(${t.half[0]})` }
+}
+/** The «Antepasados de X» / «Árbol de X» button of a tree's top and of a person at its cap. */
+export const treeStep = (base: Sheet, ui: string, kind: 'tree' | 'up', id: string, name: string): Follow =>
+  ({ label: withName(ui, KT(ui)[kind], name), sheet: kinSheet(base, kind, { concept: id }) })
+
+/** One button of the bar under a name in a tree, with what it is (Explore stacks a person view for `person`, `tree` and `up`, with `id`). */
+export type TreeBarItem = { kind: 'person' | 'tree' | 'up' | 'verse' | 'story'; id?: string; follow: Followup }
+
+/**
+ * The bar under a tapped name in a tree (diseno-arboles.md §4.5): the person (article or card), the other view of the tree, the verse of
+ * the tie with the person they hang from (`fromId`), and their first Open Bible Stories story. `focus`: the tree's centre.
+ * `treeBarItems` says what each button is (`kind`; `id` is the person it is about, none for a verse or a story); `treeBar` gives the chat the buttons alone.
+ */
+export async function treeBarItems(base: Sheet, ui: string, id: string, fromId: string | null, view: TreeMode, focus: string): Promise<TreeBarItem[]> {
+  const p = await personOf(base.lang, id).catch(() => null)
+  const raw = p?.name ?? ''
+  // (a person the data names no real name for, «Unnamed#9», `a_wife_of_Lot`: «(sin nombre)», as the tree shows it)
+  const name = !raw || /^Unnamed#/i.test(raw) || raw.includes('_') ? KT(ui).unnamed : await shownAs(base.lang, id, raw).catch(() => raw)
+  const out: TreeBarItem[] = [{ kind: 'person', id, follow: await personStep(base, id, name) }]
+  const other = view === 'tree' && id === focus ? 'up' : 'tree'
+  out.push({ kind: other, id, follow: treeStep(base, ui, other, id, name) })
+  if (fromId) {
+    const fam = (await familyOf(base.lang, id).catch(() => null))?.data
+    const rel = fam ? [...fam.parents, ...fam.children, ...fam.partners, ...fam.siblings].find((r) => r.id === fromId) : null
+    const pair = rel?.verses[0]
+    if (pair) out.push(...(await pairSteps(base, ui, [pair], [], base)).slice(0, 1).map((follow): TreeBarItem => ({ kind: 'verse', follow })))
+  }
+  out.push(...(await storySteps(base, id, 1)).map((follow): TreeBarItem => ({ kind: 'story', follow })))
+  return out
+}
+
+export async function treeBar(base: Sheet, ui: string, id: string, fromId: string | null, view: TreeMode, focus: string): Promise<Followup[]> {
+  return (await treeBarItems(base, ui, id, fromId, view, focus)).map((i) => i.follow)
 }
 
 async function kinAnswer(x: Ctx): Promise<Done> {
@@ -2376,6 +2454,20 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const tw = tw0 ? { ...tw0, label: withName(ui, t.article, tw0.label) } : null
   const plain: string[] = []
   const person = (r: { id: string; name: string }) => personStep(sheet, r.id, r.name)
+  if (kind === 'tree' || kind === 'up' || kind === 'down') {
+    // the family tree (tree.ts, diseno-arboles.md §4.6): built from the family data on the phone; «descendants» is the tree with three generations open
+    const mode: TreeMode = kind === 'up' ? 'up' : 'tree'
+    const view = await buildTree(sheet.lang, f.id, mode, ui, kind === 'down' ? 3 : undefined)
+    const other = mode === 'up' ? 'tree' : 'up'
+    const rel = f.parents.length + f.partners.length + f.children.length + f.siblings.length
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []),
+      { label: withName(ui, t[other], shownName), sheet: kinSheet(sheet, other, { concept: f.id, term: sheet.term }) },
+      ...(rel ? [{ label: t.moreFamily, sheet: kinSheet(sheet, 'family', { concept: f.id, term: sheet.term }) }] : []),
+      ...(f.verses > 0 ? [{ label: withName(ui, t.whereNamed, f.name), sheet: kinSheet(sheet, 'verses', { concept: f.id, term: sheet.term }) }] : [])]
+    const info = [treeText(view), creditLine(ui, f.sources)].join('\n\n')
+    return { answered: 'family', ref: null, concept: f.id, found: rel + 1,
+      reply: { ui, info, tree: view, treeOf: { pack: sheet.lang, id: f.id, mode, open: view.open, ...(view.down ? { down: true as const } : {}) }, follow, lang: sheet.lang, meta: meta(`${kind} ${f.id}`) } }
+  }
   if (kind === 'who') {
     // who a person is (Abel, Nov 18): one line of how they are tied to someone known ("hijo de Isaí, padre de David",
     // "descendiente de Judá"), not every relation; the whole family behind "Más familia", the verses behind "Dónde se nombra"
@@ -2394,7 +2486,7 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const more: Follow[] = rel ? [{ label: t.moreFamily, sheet: kinSheet(sheet, 'family', { concept: f.id, term: sheet.term }) }] : []
     const where: Follow[] = f.verses > own.verses.length ? [{ label: withName(ui, t.whereNamed, f.name), sheet: kinSheet(sheet, 'verses', { concept: f.id, term: sheet.term }) }] : []
     // (MAX_FOLLOW: the other one of that name and the download first, the article, the family, the verses, a story)
-    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...more, ...verses, ...where, ...stories]
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...more, ...verses, ...where, ...stories]
     const head = [tieText, f.note].filter(Boolean).join('; ')
     const info = [`**${shownName}**${head ? ` — ${head}` : ''}`, namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`card ${f.id}: ${ties.map((tt) => `${tt.kind} ${tt.ids.join('+')}`).join(', ') || 'no ties'}`) } }
@@ -2421,19 +2513,19 @@ async function kinAnswer(x: Ctx): Promise<Done> {
     const sources = stories.length ? [...f.sources, 'robertrouse/theographic-bible-metadata'] : f.sources
     const verses = await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)
     // (MAX_FOLLOW: the other one of that name and the download first, the article, every relative that fits, then verses and a story)
-    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), ...(await Promise.all(rel.slice(0, MAX_FOLLOW).map(person))),
+    const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0)), ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...(await Promise.all(rel.slice(0, MAX_FOLLOW).map(person))),
       ...verses, ...stories]
     const info = [`**${shownName}**${f.note ? ` — ${f.note}` : ''}`, line(t.parents, f.parents), line(t.partners, f.partners), line(t.children, f.children),
       line(t.siblings, f.siblings), namedIn(ui, f.verses) + (plain.length ? ` ${plain.join(', ')}` : ''), creditLine(ui, sources)].filter(Boolean).join('\n\n')
     return { answered: 'family', ref: null, concept: f.id, found: rel.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`family ${f.id}`) } }
   }
-  const k = kind as Exclude<KinKind, 'who' | 'family'>
+  const k = kind as RelKind
   const list = await Promise.all(relativesOf(k, f).map(async (r) => ({ ...r, name: await shownAs(sheet.lang, r.id, r.name).catch(() => r.name) })))
   const head = withName(ui, t.head[headKind(k, list)], shownName)
   if (!list.length) {
     // never "X had no children": the data names none; the person's article and first verses
     const own = await firstVerses(sheet.lang, f.id, 2).catch(() => ({ verses: [] as number[], missing: [] as string[] }))
-    const follow = [...others, ...(tw ? [tw] : []), ...(await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)),
+    const follow = [...others, ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...(await pairSteps(sheet, ui, own.verses.map((v) => [v, v] as [number, number]), plain, sheet)),
       { label: f.name, sheet: kinSheet(sheet, 'who', { concept: f.id }) }, ...(await partsStep(sheet, ui, missingParts || own.missing.length > 0))]
     return { answered: 'family', ref: null, concept: f.id, found: 1,
       reply: { ui, info: [t.none.replace('{head}', head), creditLine(ui, f.sources)].join('\n\n'), follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: none`) } }
@@ -2443,12 +2535,350 @@ async function kinAnswer(x: Ctx): Promise<Done> {
   const info = [`**${colon(ui, head)}** ${names}.`, plain.join(', '), creditLine(ui, f.sources)].filter(Boolean).join('\n\n')
   // (MAX_FOLLOW: the other one of that name and the download first, the person's article, then every relative that fits, the verses
   // last: Abel, Nov 18, missed Madián among Abraham's sons when only five relatives were buttons)
-  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), ...(await Promise.all(list.slice(0, MAX_FOLLOW).map(person))), ...verses.slice(0, others.length ? 1 : 2)]
+  const follow: Follow[] = [...others, ...(await partsStep(sheet, ui, missingParts)), ...(tw ? [tw] : []), treeButton(sheet, ui, f.id, sheet.term), ...(await Promise.all(list.slice(0, MAX_FOLLOW).map(person))), ...verses.slice(0, others.length ? 1 : 2)]
   return { answered: 'family', ref: null, concept: f.id, found: list.length + 1, reply: { ui, info, follow, lang: sheet.lang, meta: meta(`${k} of ${f.id}: ${list.map((r) => r.id).join(', ')}`) } }
+}
+
+// ------------------------------------------------------------------------------------------------------- places (places.ts, mapview.ts)
+// "¿Dónde queda Betel?", "distancia entre Belén y Jerusalén", "¿dónde nació Pablo?", a place's card, "Ver en el mapa" under a passage
+// (handoff/mini-servant/encargo-ms-mapas.md task 4; diseno-mapas.md §5.3, §5.5, §5.8). A place sheet: what [kind, …]; concept the place (born / died:
+// the person); term the name as written; candidates the other places of that name (a choice when there is no concept); ref the passage of «view».
+//   where | map | card | happened | verses | events: concept the place
+//   born | died: concept the person (the place is read again from the data)
+//   distance | days: concept one place; what[1] the other (a place id, or «~name»: a name still to resolve after a choice); what[2] «2»: the
+//                    concept is the question's second name
+//   view: ref the verse, range, chapter or OBS frame; its places are the answer
+
+/** A place sheet on the base's pack. */
+export const placeSheet = (base: Sheet, what: string[], o: { concept?: string | null; candidates?: string[] | null; term?: string | null; ref?: string | null } = {}): Sheet =>
+  ({ ...base, id: `m${Date.now()}`, intent: 'place', what, concept: o.concept ?? null, candidates: o.candidates?.length ? o.candidates : null,
+    term: o.term ?? null, ref: o.ref ?? null, phrase: null, version: null })
+
+/** The sheet of a resolved place question (readQuestion). `names`: the names as written (placeShape). */
+export function placeSheetOf(ask: PlaceAsk, names: string[]): Sheet {
+  const base = { id: '', intent: 'place', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: ask.pack } as Sheet
+  const two = ask.kind === 'distance' || ask.kind === 'days'
+  if (ask.choose) {
+    // (the options of the name that has no winner; the other name of a distance goes with them, written, to be resolved after the choice)
+    const second = two && ask.choose.index === 1
+    const what = two ? [ask.kind, `~${names[second ? 0 : 1] ?? ''}`, ...(second ? ['2'] : [])] : [ask.kind]
+    return placeSheet(base, what, { candidates: ask.choose.options.map((o) => o.id), term: ask.choose.name })
+  }
+  if (ask.person) return placeSheet(base, [ask.kind], { concept: ask.person.id, term: names[0] ?? ask.person.name })
+  const [a, b] = ask.places
+  if (two) return placeSheet(base, [ask.kind, b?.id ?? ''], { concept: a?.id ?? null, term: names[0] ?? null })
+  return placeSheet(base, [ask.kind], { concept: a?.id ?? null, candidates: ask.other?.map((o) => o.id) ?? null, term: names[0] ?? null })
+}
+
+/** What a place answer shows next to its map, and the tags that say how sure a place is (a color alone never says it). */
+export const tagOf = (t: ReturnType<typeof PLT>, p: PlaceRef, geo: boolean): string => (p.sure === 0 ? (geo ? t.tagUnknown : '') : p.form === 2 ? t.tagRegion : p.form === 3 ? t.tagWater : p.sure === 1 ? t.tagUncertain : '')
+export const mapPoint = (p: PlaceRef): MapPoint | null =>
+  p.sure >= 1 && p.lat !== undefined && p.lon !== undefined ? { id: p.id, lat: p.lat, lon: p.lon, sure: p.sure as 1 | 2 | 3, form: p.form, label: p.name } : null
+const listOf = (ui: string, head: string, ps: { p: PlaceRef; ref?: string; tag?: string }[], geo = true): PlaceList =>
+  ({ head, items: ps.map(({ p, ref, tag }) => ({ text: p.name, ...(tag || tagOf(PLT(ui), p, geo) ? { tag: tag || tagOf(PLT(ui), p, geo) } : {}), ...(p.note ? { note: p.note } : {}), ...(ref ? { ref } : {}) })) })
+/** The map of these places, or none when no place has a point (§5.5: «sin mapa», the list and the text stay). */
+function mapOf(ui: string, pack: string, ps: PlaceRef[], summary: string, small?: boolean, refs: PlaceRef[] = []): MapBlock | undefined {
+  const points = ps.map(mapPoint).filter((x): x is MapPoint => !!x)
+  // reference places are scenery: `ref`, after the protagonists, and only when there is a protagonist with a point
+  if (points.length) for (const r of refs) { const m = mapPoint(r); if (m) points.push({ ...m, ref: true }) }
+  return points.length ? { pack, points, summary, ...(small ? { small: true as const } : {}) } : undefined
+}
+const TIPNR_THEO = 'robertrouse/theographic-bible-metadata'
+const nameList =(ui: string, names: string[]): string => names.join(ui === 'ar' ? '، ' : ', ')
+/** «Lugares: OpenBible.info, TIPNR, ACAI · mapa: Natural Earth.» (the sources the data names, and the two that name the places). */
+function placeCredit(ui: string, sources: string[], map: boolean): string {
+  const all = [...new Set([...sources, 'STEPBible/STEPBible-Data/TIPNR', 'BibleAquifer/ACAI'])]
+  const t = PLT(ui)
+  return `*${(map ? t.creditMap : t.credit).replace('{src}', nameList(ui, all.map((s) => (PLACE_SOURCES[s] ?? s).replace(/ \(.*\)$/, ''))))}*`
+}
+/** A verse or a range of one chapter, its reference and its label as the app names it (digits and a plain hyphen, §5: `13:1-14:2` never an en dash). */
+function verseRefOf(ui: string, a: number, z = a): { ref: string; label: string; book: string } {
+  const book = CANON[Math.floor(a / 1_000_000) - 1] ?? ''
+  const [ch, v1, v2] = [Math.floor(a / 1000) % 1000, a % 1000, z % 1000]
+  const same = Math.floor(a / 1000) === Math.floor(z / 1000)
+  const ref = `${book} ${ch}:${v1}${same && v2 > v1 ? `-${v2}` : ''}`
+  return { ref, label: refLabelOf(ui, ref), book }
+}
+/** The buttons of verses (a book no pack has: its label in `plain`); the same as pairSteps, with the labels of verseRefOf. */
+async function placeVerseSteps(base: Sheet, ui: string, pairs: [number, number][], plain: string[]): Promise<Follow[]> {
+  const out: Follow[] = []
+  const seen = new Set<string>()
+  for (const p of pairs) {
+    const r = verseRefOf(ui, p[0], p[1])
+    if (seen.has(r.ref) || !r.book) continue
+    seen.add(r.ref)
+    const pack = await packWithBook(r.book, base.lang).catch(() => null)
+    if (pack) out.push({ label: r.label, sheet: passageSheet(base, r.ref, ['text', 'notes'], pack) })
+    else plain.push(r.label)
+  }
+  return out
+}
+/** The passage of an event: its first verse, to its last when they are in one chapter. */
+async function eventPassage(pack: string, ui: string, id: string): Promise<{ ref: string; label: string; book: string } | null> {
+  const vs = await personVerses(pack, id).catch(() => [] as number[])
+  return vs.length ? verseRefOf(ui, vs[0]!, vs.at(-1)!) : null
+}
+const trimColon = (s: string): string => s.replace(/\s*[:：]\s*$/, '')
+
+async function placeAnswer(x: Ctx): Promise<Done> {
+  const { sheet, ui } = x
+  const t = PLT(ui)
+  const kt = KT(ui)
+  const pack = sheet.lang
+  const kind = sheet.what[0] ?? 'where'
+  const meta = (more: string) => `${env.details} · ${secs(x)} s\n${x.meta}${x.searched}\nplace: ${more}`
+  const done = (reply: Reply, o: { ref?: string | null; concept?: string | null; found?: number; answered?: string } = {}): Done =>
+    ({ answered: o.answered ?? 'place', ref: o.ref ?? null, concept: o.concept ?? null, found: o.found ?? 1, reply: { ui, lang: pack, ...reply } })
+  const persons = kind === 'born' || kind === 'died'
+  const two = kind === 'distance' || kind === 'days'
+  // which of the places (or people) of that name: each option carries on with the same question
+  if (!sheet.concept && sheet.candidates?.length && kind !== 'view') {
+    const follow: Follow[] = []
+    if (persons) {
+      for (const id of sheet.candidates) {
+        const p = await personOf(pack, id)
+        follow.push({ label: p?.note ? personLabel(p) : `${p?.name ?? id} (${versesCount(ui, p?.verses ?? 0)})`, sheet: placeSheet(sheet, [kind], { concept: id, term: sheet.term }) })
+      }
+    } else {
+      for (const p of await placeRefs(pack, sheet.candidates)) {
+        const n = (await placeData(pack, p.id).catch(() => null))?.verses ?? 0
+        follow.push({ label: p.note ? `${p.name} — ${p.note}` : `${p.name} (${versesCount(ui, n)})`, sheet: placeSheet(sheet, sheet.what, { concept: p.id, term: sheet.term }) })
+      }
+    }
+    return done({ intro: (persons ? t.choosePerson : t.choosePlace).replace('{x}', sheet.term ?? ''), follow, meta: meta(`choose ${sheet.candidates.join(', ')}`) },
+      { answered: 'choose', found: follow.length })
+  }
+  const geo = await hasGeo(pack)
+
+  // the places of a passage or a frame («Ver en el mapa»)
+  if (kind === 'view') {
+    const ref = sheet.ref ?? ''
+    const at = (await placesAt(pack, ref).catch(() => [])).filter((p) => p.sure >= 1 && p.lat !== undefined)
+    const label = ui === 'ar' ? isolateRef(refLabelOf(ui, ref)) : refLabelOf(ui, ref) // (Arabic: the reference is isolated in the sentence and in the summary, its numbers a left-to-right run: bidi.ts isolateRef)
+    const names = at.map((p) => p.name)
+    const info = at.length ? `**${colon(ui, trimColon(t.listPassage.replace('{ref}', label)))}**` : t.passageNone.replace('{ref}', label)
+    const follow: Follow[] = at.slice(0, MAX_FOLLOW).map((p) => ({ label: p.name, sheet: placeSheet(sheet, ['card'], { concept: p.id, term: p.name }) }))
+    const refs = geo && at.length ? await referencesAmong(pack, at).catch(() => [] as PlaceRef[]) : []
+    const list = at.length ? listOf(ui, '', [...at.map((p) => ({ p, ref: verseRefOf(ui, p.verse).label })), ...refs.map((p) => ({ p, tag: t.tagRef }))]) : undefined
+    return done({ info: [info, ...(at.length ? [placeCredit(ui, ['openbibleinfo/Bible-Geocoding-Data'], true)] : [])].join('\n\n'), follow,
+      ...(at.length ? { map: mapOf(ui, pack, at, t.sumPassage.replace('{n}', String(at.length)).replace('{ref}', label) + (names.length <= 6 ? `: ${nameList(ui, names)}` : ''), undefined, refs), list } : {}),
+      meta: meta(`view ${ref}: ${at.map((p) => p.id).join(', ')}`) }, { ref, found: at.length })
+  }
+
+  // where a person was born or died (Theographic): the place, "they appear together in" the verses of both, a small map
+  if (persons) {
+    const pp = await personPlace(pack, sheet.concept!, kind as 'born' | 'died')
+    if (!pp) throw new Error(`no person ${sheet.concept}`)
+    const female = (await familyOf(pack, pp.person.id).catch(() => null))?.data?.gender === 2
+    const name = askedName(sheet.term, pp.person.name)
+    const line = (kind === 'born' ? bornLine : diedLine)(ui, name, pp.place, female)
+    const personCard: Follow = { label: name, sheet: kinSheet({ ...sheet, lang: pack }, 'who', { concept: pp.person.id }) }
+    // (placeQuestion no longer takes born / died without a place; this is only for a button made earlier, or a data change since)
+    if (!pp.place) {
+      return done({ info: [line, placeCredit(ui, [TIPNR_THEO], false)].join('\n\n'), follow: [personCard], meta: meta(`${kind} ${pp.person.id}: no place in the data`) },
+        { concept: pp.person.id })
+    }
+    const [mine, there] = await Promise.all([personVerses(pack, pp.person.id), placeVerses(pack, pp.place.id)]).catch(() => [[], []] as number[][])
+    const pairs = kinVerses(mine!, there!)
+    const plain: string[] = []
+    const verses = await placeVerseSteps(sheet, ui, pairs, plain)
+    const labels = pairs.map((p) => verseRefOf(ui, p[0], p[1]).label)
+    const map = geo ? mapOf(ui, pack, [pp.place], t.sumPlace.replace('{x}', pp.place.name), true) : undefined
+    const list = labels.length ? { head: colon(ui, trimColon(t.together)), items: labels.map((l) => ({ text: '', ref: l })) } satisfies PlaceList : undefined
+    const card: Follow = { label: withName(ui, t.card, pp.place.name), sheet: placeSheet(sheet, ['card'], { concept: pp.place.id, term: pp.place.name }) }
+    return done({ info: [line, placeCredit(ui, [TIPNR_THEO, 'openbibleinfo/Bible-Geocoding-Data'], !!map)].join('\n\n'),
+      follow: [...verses, card, personCard], ...(map ? { map } : {}), ...(list ? { list } : {}), meta: meta(`${kind} ${pp.person.id} in ${pp.place.id}`) }, { concept: pp.person.id })
+  }
+
+  // the distance between two places, and the days of the trip: the same answer
+  if (two) {
+    let other = sheet.what[1] ?? ''
+    if (other.startsWith('~')) {
+      const r = await placeNamed(pack, other.slice(1), ui as 'en', kind as 'distance', x.c.last?.ref ?? null)
+      if (!r) throw new Error(`no place ${other}`)
+      if ('choose' in r) {
+        const follow = r.choose.map((p) => ({ label: p.note ? `${p.name} — ${p.note}` : p.name, sheet: placeSheet(sheet, [kind, sheet.concept!, ...(sheet.what[2] === '2' ? [] : ['2'])], { concept: p.id, term: other.slice(1) }) }))
+        return done({ intro: t.choosePlace.replace('{x}', other.slice(1)), follow, meta: meta(`choose the other of ${sheet.concept}`) }, { answered: 'choose', found: follow.length })
+      }
+      other = r.win.id
+    }
+    const flip = sheet.what[2] === '2'
+    const refs = await placeRefs(pack, flip ? [other, sheet.concept!] : [sheet.concept!, other])
+    if (refs.length < 2) throw new Error(`no places ${sheet.concept} ${other}`)
+    // (in Hindi «X से Y कितनी दूर»: the second name is the one that is far: the sentence is about it)
+    const [a, b] = kind === 'distance' && ui === 'hi' ? [refs[1]!, refs[0]!] : [refs[0]!, refs[1]!]
+    const tr = geo ? tripOf(a, b) : undefined
+    const main = geo ? distanceLine(ui, a, b, tr) : `${a.name}, ${b.name}. ${t.noGeo}`
+    const days = daysLine(ui, tr)
+    const map = geo ? mapOf(ui, pack, [a, b], t.sumMany.replace('{x}', nameList(ui, [a.name, b.name]))) : undefined
+    const list = listOf(ui, t.listHead, [{ p: a }, { p: b }], geo)
+    const sources = (await placeData(pack, a.id).catch(() => null))?.sources ?? []
+    const follow: Follow[] = [a, b].map((p) => ({ label: withName(ui, t.card, p.name), sheet: placeSheet(sheet, ['card'], { concept: p.id, term: p.name }) }))
+    return done({ info: [main, days, placeCredit(ui, sources, !!map)].filter(Boolean).join('\n\n'), follow, ...(map ? { map } : {}), list,
+      meta: meta(`${kind} ${a.id} ${b.id}: ${tr ? `${Math.round(tr.km)} km` : 'no trip'}`) }, { concept: a.id })
+  }
+
+  // one place
+  const place = (await placeRefs(pack, [sheet.concept!]))[0]
+  if (!place) throw new Error(`no place ${sheet.concept}`)
+  const data = await placeData(pack, place.id).catch(() => null)
+  const verses = await placeVerses(pack, place.id).catch(() => [] as number[])
+  const count = Math.max(data?.verses ?? 0, verses.length)
+  const name = askedName(sheet.term, place.name)
+  const plain: string[] = []
+  const events = data?.events ?? []
+  const evLabel = (e: { id: string; title: string }) => e.title || e.id
+  const sources = data?.sources ?? []
+  const others: Follow[] = (sheet.candidates ?? []).length
+    ? [{ label: t.otherPlace.replace('{x}', sheet.term ?? place.name), sheet: placeSheet(sheet, [kind], { candidates: sheet.candidates, term: sheet.term }) }] : []
+  const tw0 = data?.tw.length ? await twStep(sheet, data.tw[0]!).catch(() => null) : null
+  const tw = tw0 ? { ...tw0, label: withName(ui, kt.article, tw0.label) } : null
+  const appears: Follow[] = count > 1 ? [{ label: t.appears.replace('{n}', String(count)), sheet: placeSheet(sheet, ['verses'], { concept: place.id, term: sheet.term }) }] : []
+  const eventsBtn = (n: number): Follow[] => (n > 0 ? [{ label: trimColon(withName(ui, t.eventsHead, name).replace('{n}', String(n))), sheet: placeSheet(sheet, ['events'], { concept: place.id, term: sheet.term }) }] : [])
+  const cardBtn: Follow[] = kind === 'card' ? [] : [{ label: withName(ui, t.card, name), sheet: placeSheet(sheet, ['card'], { concept: place.id, term: sheet.term }) }]
+
+  // the events of a place: the first five, or all of them; each with its passage, a button to its first
+  if (kind === 'happened' || kind === 'events') {
+    const shown = kind === 'events' ? events : events.slice(0, 5)
+    if (!events.length) {
+      // no event: where the place is named, as «Dónde aparece»
+      const first = await placeVerseSteps(sheet, ui, verses.slice(0, 5).map((v) => [v, v] as [number, number]), plain)
+      const info = [`**${name}** — ${t.eventsNone.replace('{x}', name)}`, count ? (count === 1 ? t.named1 : t.named.replace('{n}', String(count))) + (plain.length ? ` ${plain.join(', ')}` : '') : '', placeCredit(ui, sources, false)].filter(Boolean).join('\n\n')
+      return done({ info, follow: [...others, ...first, ...appears, ...(tw ? [tw] : []), ...cardBtn], meta: meta(`${kind} ${place.id}: no events`) }, { concept: place.id, found: 1 })
+    }
+    const rows: PlaceList['items'] = []
+    const buttons: Follow[] = []
+    for (const e of shown) {
+      const p = await eventPassage(pack, ui, e.id)
+      rows.push({ text: evLabel(e), ...(p ? { ref: p.label } : {}) })
+      if (p && buttons.length < (kind === 'events' ? 6 : 3)) {
+        const pk = await packWithBook(p.book, pack).catch(() => null)
+        if (pk) buttons.push({ label: p.label, sheet: passageSheet(sheet, p.ref, ['text', 'notes'], pk) })
+      }
+    }
+    const more = events.length > shown.length ? eventsBtn(events.length).map((b) => ({ ...b, label: t.allEvents.replace('{n}', String(events.length)) })) : []
+    const info = [`**${colon(ui, trimColon(withName(ui, t.eventsHead, name).replace('{n}', String(events.length))))}**`, placeCredit(ui, [...sources, 'robertrouse/theographic-bible-metadata'], false)].join('\n\n')
+    return done({ info, list: { head: '', items: rows }, follow: [...others, ...more, ...buttons, ...appears, ...(tw ? [tw] : []), ...cardBtn], meta: meta(`${kind} ${place.id}: ${events.length} events`) }, { concept: place.id, found: events.length })
+  }
+
+  // where a place is named: the first verses, each a button
+  if (kind === 'verses') {
+    const first = await placeVerseSteps(sheet, ui, verses.slice(0, 8).map((v) => [v, v] as [number, number]), plain)
+    const info = [`**${name}** — ${count === 1 ? t.named1 : t.named.replace('{n}', String(count))}`, plain.join(', '), placeCredit(ui, sources, false)].filter(Boolean).join('\n\n')
+    return done({ info, follow: [...first, ...(tw ? [tw] : []), ...cardBtn, ...eventsBtn(events.length)], meta: meta(`verses of ${place.id}`) }, { concept: place.id, found: Math.max(1, first.length) })
+  }
+
+  // where it is (and «mapa de X», and the card): the sentence from the nearest reference place, the map with the list, the first verse, where it appears,
+  // the article, what happened here
+  const ref = geo && place.sure >= 1 ? await referenceFor(pack, place).catch(() => null) : null
+  const tr = ref ? tripOf(place, ref) : undefined
+  const line = geo ? whereLine(ui, place, ref, tr) : `**${name}** — ${t.noGeo}`
+  const lines = [line]
+  if (kind === 'card' && ref) {
+    const d = refDaysLine(ui, place, ref, tr)
+    if (d) lines.push(d)
+  }
+  if (events.length) lines.push(`**${t.happenedHere}** ${events.slice(0, 3).map(evLabel).join('; ')}${events.length > 3 ? ' …' : ''}`)
+  const map = geo ? mapOf(ui, pack, [place, ...(ref ? [ref] : [])], t.sumPlace.replace('{x}', place.name)) : undefined
+  const first = await placeVerseSteps(sheet, ui, verses.slice(0, 1).map((v) => [v, v] as [number, number]), plain)
+  const list = listOf(ui, t.listHead, [{ p: place, ...(verses[0] ? { ref: verseRefOf(ui, verses[0]).label } : {}) }, ...(ref ? [{ p: ref, tag: t.tagRef }] : [])], geo)
+  const follow: Follow[] = [...others, ...first, ...appears, ...(tw ? [tw] : []), ...eventsBtn(events.length), ...cardBtn]
+  const info = [...lines, plain.length ? plain.join(', ') : '', placeCredit(ui, sources, !!map)].filter(Boolean).join('\n\n')
+  return done({ info, follow, ...(map ? { map } : {}), list, meta: meta(`${kind} ${place.id}${ref ? ` near ${ref.id}` : ''}${tr ? `: ${Math.round(tr.km)} km` : ''}`) }, { concept: place.id })
+}
+
+/** What a place's card in Browse shows (explorelugares.ts): the data and the sheets of the place answer, read once. A passage with no pack for its book has no `sheet`. */
+export type PlaceCard = {
+  place: PlaceRef
+  /** the name with its note, as the title */
+  title: string
+  /** how sure the place is, in words (empty when it is sure) */
+  tag: string
+  /** the mini map (none without a point) */
+  map?: MapBlock
+  count: number
+  verses: { label: string; sheet?: Sheet }[]
+  events: { title: string; label?: string; sheet?: Sheet }[]
+  eventCount: number
+  /** the buttons that answer in the chat */
+  buttons: { kind: 'card' | 'happened' | 'verses' | 'article'; label: string; sheet: Sheet }[]
+  /** the credit line of the data, plain text */
+  credit: string
+}
+/** The card of one place for Browse (placeAnswer's data: the first 8 verses, the first 5 events, the chat buttons); null when it is no place. */
+export async function placeCard(pack: string, ui: string, id: string): Promise<PlaceCard | null> {
+  const place = (await placeRefs(pack, [id]))[0]
+  if (!place) return null
+  const t = PLT(ui)
+  const geo = await hasGeo(pack)
+  const [data, vs] = await Promise.all([placeData(pack, id).catch(() => null), placeVerses(pack, id).catch(() => [] as number[])])
+  const base = { id: '', intent: 'place', ref: null, what: [], version: null, concept: null, term: null, phrase: null, candidates: null, lang: pack } as Sheet
+  const passage = async (r: { ref: string; book: string }): Promise<Sheet | undefined> => {
+    const pk = r.book ? await packWithBook(r.book, pack).catch(() => null) : null
+    return pk ? passageSheet(base, r.ref, ['text', 'notes'], pk) : undefined
+  }
+  const count = Math.max(data?.verses ?? 0, vs.length)
+  const verses: PlaceCard['verses'] = []
+  for (const v of vs.slice(0, 8)) {
+    const r = verseRefOf(ui, v)
+    verses.push({ label: r.label, sheet: await passage(r) })
+  }
+  const evs = data?.events ?? []
+  const events: PlaceCard['events'] = []
+  for (const e of evs.slice(0, 5)) {
+    const p = await eventPassage(pack, ui, e.id)
+    events.push({ title: e.title || e.id, ...(p ? { label: p.label, sheet: await passage(p) } : {}) })
+  }
+  const map = geo ? mapOf(ui, pack, [place], t.sumPlace.replace('{x}', place.name), true) : undefined
+  const buttons: PlaceCard['buttons'] = [{ kind: 'card', label: withName(ui, t.card, place.name), sheet: placeSheet(base, ['card'], { concept: id, term: place.name }) }]
+  if (evs.length) buttons.push({ kind: 'happened', label: t.happenedQ, sheet: placeSheet(base, ['happened'], { concept: id, term: place.name }) })
+  if (count > 1) buttons.push({ kind: 'verses', label: t.appears.replace('{n}', String(count)), sheet: placeSheet(base, ['verses'], { concept: id, term: place.name }) })
+  const tw = data?.tw.length ? await twStep(base, data.tw[0]!).catch(() => null) : null
+  if (tw) buttons.push({ kind: 'article', label: withName(ui, KT(ui).article, tw.label), sheet: tw.sheet! })
+  return {
+    place, title: place.note ? `${place.name} (${place.note})` : place.name, tag: tagOf(t, place, geo), ...(map ? { map } : {}), count, verses, events, eventCount: evs.length, buttons,
+    credit: placeCredit(ui, data?.sources ?? [], !!map).replace(/^\*|\*$/g, ''),
+  }
+}
+
+/** Under a passage or a frame of Open Bible Stories: «Ver en el mapa», when the data names places in it that have a point (the same room as hereStep). */
+async function mapStep(sheet: Sheet, ref: string, ui: string): Promise<Follow | null> {
+  if (!/^(?:[0-9a-z]{3} \d+(?::\d+(?:-(?:\d+:)?\d+)?)?|obs \d+:\d+)$/.test(ref)) return null
+  const pack = await kinPack(sheet.lang)
+  if (!pack) return null
+  const at = await placesAt(pack, ref)
+  if (!at.some((p) => p.sure >= 1 && p.lat !== undefined)) return null
+  return { label: PLT(ui).seeMap, sheet: placeSheet({ ...sheet, lang: pack }, ['view'], { ref }) }
+}
+
+/**
+ * Under the Translation Words article of a name that is a place with a point: «Ver en el mapa» and, when the place has events, «¿Qué pasó aquí?».
+ * Several such places: the map asks which (the same choice as a question that names a homonym). At most `room` buttons; none when the
+ * data has no `geo` or no point, so the answer is the one it was.
+ */
+async function placeButtons(sheet: Sheet, concept: string, ui: string, room: number): Promise<Follow[]> {
+  if (room < 1 || !concept.startsWith('tw:names/')) return []
+  const found = await placesOfArticle(sheet.lang, concept)
+  if (!found) return []
+  const { pack, places } = found
+  const t = PLT(ui)
+  const base = { ...sheet, lang: pack }
+  const first = places[0]!
+  const term = (sheet.term ?? '') || first.name
+  if (places.length > 1) return [{ label: t.seeMap, sheet: placeSheet(base, ['map'], { candidates: places.map((p) => p.id), term }) }]
+  const out: Follow[] = [{ label: t.seeMap, sheet: placeSheet(base, ['map'], { concept: first.id, term }) }]
+  if (room > 1 && ((await placeData(pack, first.id).catch(() => null))?.events.length ?? 0) > 0) out.push({ label: t.happenedQ, sheet: placeSheet(base, ['happened'], { concept: first.id, term }) })
+  return out
 }
 
 /** The answer's steps, in order: the first that returns an answer wins (`sheet`, `name-verses` and `options` build the last one). */
 export const ROUTES: Route[] = [
+  {
+    // a place question, a place's card, the places of a passage (places.ts, mapview.ts): from the places data, with no model
+    name: 'place',
+    when: (x) => x.sheet.intent === 'place',
+    run: (x) => placeAnswer(x),
+  },
   {
     // a family question, a person's card, who is named in a verse or frame (kin.ts): from the family data, with no model
     name: 'kin',
@@ -2629,7 +3059,10 @@ ${x.meta}` },
       if (taB) follow.push(taB)
       if (sheet.ref) follow.push({ label: TT(ui).all.replace('{ref}', refLabelOf(ui, sheet.ref)), sheet: { ...sheet, id: `p${Date.now()}`, intent: 'passage', what: ['text', 'notes'], phrase: null } as Sheet })
       // (the verses with the term only when no passage is asked about: then that passage is the place)
-      if (id) follow.push(...(sheet.ref ? [] : await verseSteps(base, id, ui)), ...(await packSteps(articleSheet(base, id, sheet.lang), null, ui).catch(() => [])))
+      if (id) follow.push(...(sheet.ref ? [] : await verseSteps(base, id, ui)))
+      // a name that is a place with a point: the map before the related articles, only in the room left (the buttons as they will show: each once)
+      if (id && isName) follow.push(...(await placeButtons(base, id, ui, MAX_FOLLOW - (await tidy(dropShown(follow, null, new Set(), art?.answer ?? ''), sheet.lang)).length).catch(() => [] as Follow[])))
+      if (id) follow.push(...(await packSteps(articleSheet(base, id, sheet.lang), null, ui).catch(() => [])))
       // online AI gets both articles as its sources (named under its answer)
       const sources = [id, taId].filter((v): v is string => !!v).map((v) => ({ id: v, title: titleOfStep(follow, v) }))
       return {
@@ -2901,6 +3334,8 @@ ${x.meta}` },
       if (f.f && f.state === 'ok' && dropShown([...x.others, ...follow], null, new Set(), x.r?.answer ?? '').length < MAX_FOLLOW) {
         const here = await hereStep(sheet, sheet.ref!, ui).catch(() => null)
         if (here) follow.push(here)
+        const onMap = await mapStep(sheet, sheet.ref!, ui).catch(() => null)
+        if (onMap && dropShown([...x.others, ...follow], null, new Set(), x.r?.answer ?? '').length < MAX_FOLLOW) follow.push(onMap)
       }
       if (!follow.length) follow.push(browseStep(ui))
       const said = [introLine(f, ui), fromOtherLine(f, sheet.lang, ui)].filter(Boolean).join(' ') || null
@@ -3061,6 +3496,8 @@ ${x.meta}` },
       if (sheet.intent === 'passage' && pack && !none && follow.length && sheet.ref && room() > 0) {
         const here = await hereStep(sheet, sheet.ref, ui).catch(() => null)
         if (here) follow.push(here)
+        const onMap = room() > 0 ? await mapStep(sheet, sheet.ref, ui).catch(() => null) : null
+        if (onMap) follow.push(onMap)
       }
       if (sheet.intent === 'article' && sheet.concept?.startsWith('tw:names/') && r) {
         const fam = await articleFamily(sheet, ui).catch(() => null)
@@ -3068,6 +3505,8 @@ ${x.meta}` },
         const end = /\n\n◂(?=\n|$)/
         if (fam?.line) r.answer = end.test(r.answer) ? r.answer.replace(end, `\n\n${fam.line}\n\n◂`) : `${r.answer}\n\n${fam.line}`
         for (const st of fam?.steps ?? []) if (room() > 0) follow.push(st)
+        // a place with a point: the map and what happened there, last, only in the room left (nothing for a person's article)
+        follow.push(...(await placeButtons(sheet, sheet.concept, ui, room()).catch(() => [] as Follow[])))
       }
       const reply: Reply = { intro: x.lead ? [x.lead, said].filter(Boolean).join(' ') : said, info: r!.answer, follow: dropShown([...x.others, ...follow], sheet.ref, shown).slice(0, MAX_FOLLOW), ui,
         study: study ?? undefined, lang: sheet.lang, ctx: sheet.intent === 'article' ? sheet.concept ?? undefined : undefined,
@@ -3109,6 +3548,15 @@ export function placeLabel(n: GNode, ui: string): string {
   }
   return (n.kind === 'passage') && n.sheet.ref ? refLabelOf(ui, n.sheet.ref) : n.label
 }
+/** A place answer's point in the graph: the place's name, "A – B" for a distance, the person's name for a birth or death, "Génesis 12 · Mapa" for a passage. */
+async function placePointLabel(s: NodeSheet, ui: string): Promise<string> {
+  const kind = s.what[0] ?? 'where'
+  if (kind === 'view') return `${refLabelOf(ui, s.ref ?? '')} · ${PLT(ui).mapWord}`
+  if (kind === 'born' || kind === 'died') return askedName(s.term, (s.concept ? (await personOf(s.lang, s.concept).catch(() => null))?.name : null) ?? s.term ?? '…')
+  const ids = [s.concept ?? '', ...(kind === 'distance' || kind === 'days' ? [s.what[1] ?? ''] : [])].filter((x) => x.startsWith('lug:'))
+  const names = (await placeRefs(s.lang, ids).catch(() => [])).map((x) => x.name)
+  return names.length ? names.join(' – ') : s.term ?? '…'
+}
 /** A point's name in 2–5 words: the passage and what was shown ("Ruth 2:3 · Notes"), the article's title, else the question. */
 async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | undefined): Promise<string> {
   // a 5M session's step: "OBS 1 · M1 · f5"
@@ -3117,6 +3565,8 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
     const st = fx ? sessionOfSheet({ ...s, id: '', version: null, phrase: null, candidates: null }, fx, null) : null
     if (fx && st) return stepShort(fx, st, ui)
   }
+  // a place answer: the place's name, "Belén – Jerusalén", a person's name, "Génesis 12 · Mapa"
+  if (s.intent === 'place') return placePointLabel(s, ui)
   // a family answer: "Hijos de Isaac", a person's name, "Personas aquí"
   if (s.intent === 'kin') {
     const kind = s.what[0] ?? 'who'
@@ -3124,7 +3574,8 @@ async function pointLabel(kind: string, s: NodeSheet, ui: string, q: string | un
     const p = s.concept ? await personOf(s.lang, s.concept).catch(() => null) : null
     const name = askedName(s.term, p?.name ?? s.term ?? '…')
     if (kind === 'family') return withName(ui, KT(ui).family, name)
-    const h = KT(ui).head[kind as Exclude<KinKind, 'who' | 'family'>]
+    if (kind === 'tree' || kind === 'up' || kind === 'down') return withName(ui, KT(ui)[kind], name)
+    const h = KT(ui).head[kind as RelKind]
     return kind === 'who' || !h ? name : withName(ui, h, name)
   }
   const im = /^([0-9a-z]{3}) (front|\d+):intro$/.exec(s.ref ?? '')
@@ -3713,7 +4164,7 @@ export async function answer(c: ConvState, made: Made, t0: number): Promise<Answ
     const reply = done.reply
     // ("Dímelo en francés" with no French helps here: said first)
     if (made.langNote) reply.intro = [made.langNote, reply.intro].filter(Boolean).join(' ')
-    reply.follow = await tidy(reply.follow ?? [], x.sheet.lang).catch(() => reply.follow ?? [])
+    reply.follow = await tidy(reply.follow ?? [], x.sheet.lang, x.sheet.intent === 'kin' ? MAX_FOLLOW + 1 : MAX_FOLLOW).catch(() => reply.follow ?? [])
     // (a language that is not on the phone: "Add languages" first, then these)
     if (!reply.follow.length) {
       const named = /^([0-9a-z]{3})/.exec(x.sheet.ref ?? '')?.[1] ?? null

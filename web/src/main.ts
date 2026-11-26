@@ -9,12 +9,17 @@ import { aboutLabel, whatYouCanAsk, modelLine, modelNotice, modelNewer, modelSec
 import { anyOf, backOf, MNT, menuGroups, resourcesSub, settingsRows, type MenuState, type PanelView } from './menu'
 import { disposeHost, onDownloads, renderResources, renderServer, RT, type ResCtx } from './resources'
 import { resetMacula } from './macula'
-import { addUnits, installedLangs, onPacksChanged, openLang, setPacksServers, updateLangs } from './packs'
+import { addUnits, aquiferOn, installedLangs, onPacksChanged, openLang, patchedKinds, setAquifer, setPacksServers, setYaapi, updateLangs, yaapiOn, type PatchKind } from './packs'
+import { aquiferMenu, yaapiMenu } from './aquifer'
 import { PREVIEW_SERVER } from './shared'
-import { isCreditLine, warmKin } from './kin'
+import { isCreditLine, onKinReady, warmKin } from './kin'
 import { buildContext, packReader, plainContext } from './context'
 import { type Again, againStep, bookLabel, browseStep, type Followup, splitFollow } from './converse'
+import { followIcon, followTitle, followType, layoutFollow } from './followtype'
 import { renderMacula } from './syntaxview'
+import { buildTree, saveReplacer, type TreeView } from './tree'
+import { renderTree } from './treeview'
+import { placeBlock } from './placeview'
 import { has } from './commands'
 import { resetSearch } from './search'
 import { md, mdDir } from './md'
@@ -26,12 +31,13 @@ import { hint as pwaHint } from './pwa'
 import { askReport, closeReport, feedbackBar, FT, type ReportMsg, sendFeedback, submitReport } from './feedback'
 import { applyBrand, discreetOn, keepHistory, lock, locked, protectSummary, protectView, PT, setDiscreet, watchAway } from './protect'
 import { count, lastSent, pendingReport, sendUsage, setSnapshot, setUsageOn, todayCounts, usageOn, USAGE_T } from './usage'
-import { answer, backNow, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
+import { answer, backNow, treeBar, treeBase, treeStep, treeWords, codeReads, loadFixture5, contextSheet, type ConvState, env, guessLang, type Made, MAX_CONVS, moveOut, NP, pathLabel, pathSheet, placeLabel, questionOf, readQuestion, type Reply, resetBooks, returnTo, roomForNew, stateLine } from './pipeline'
 import { backLine, GD, GT, mapRows, newGraph, nodeOf, sessionNode } from './graph'
+import { lanesList } from './lanesview'
 import { isOnline, modelLabel, onlineAnswer, onlineAvailable, onlineOn, onlineProblem, onlineSession, onlineSlots, type OnlineAnswer, setOnline, signIn, signInAvailable, signOut } from './online'
 import { shareButton, shareSession, shareTextButton } from './share'
 import { FU, languagePicker, packFor, emptyLine, quickSpec, quickTap } from './firstuse'
-import { backExplore, closeExplore, modesOn, openExplore, openExploreAt, redrawExplore, resetExplore, setExploreHooks, XT } from './explore'
+import { backExplore, closeExplore, exploreStale, kinReadyExplore, modesOn, openExplore, openExploreAt, redrawExplore, resetExplore, setExploreHooks, XT } from './explore'
 import { composerSwitch, mountComposer } from './composer'
 import { forgetFreeHint, foundNothing, type Shape, shapeRow, understoodFor, understoodLine } from './teach'
 import { closeHowto, forgetHowto, howtoLabel, howtoStep, openHowTo, setHowtoHooks } from './howto'
@@ -184,7 +190,7 @@ function save() {
   // (an OBS story's helps too: a whole story's are a few KB, a Bible chapter's study tens of KB)
   for (const c of convs) c.msgs.slice(0, -8).forEach((m) => { delete m.study; delete m.obs })
   try {
-    if (keepHistory()) localStorage.setItem(KEY, JSON.stringify({ convs, current }))
+    if (keepHistory()) localStorage.setItem(KEY, JSON.stringify({ convs, current }, saveReplacer))
     else localStorage.removeItem(KEY)
   } catch {}
 }
@@ -350,6 +356,8 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
   }
   // who is who, the sentence's structure (macula.ts): drawn, its text kept for sharing and reports
   else if (m.macula) host.appendChild(renderMacula(m.macula))
+  // a family tree (tree.ts): drawn in place of its text; a saved one is drawn from its text first and replaced when it is built again
+  else if (m.tree) host.appendChild(treeBlock(m, m.tree))
   else if (m.info) {
     const box = el('div', m.intro ? 'info' : 'plain md')
     box.innerHTML = md(m.info, m.ctx ?? '') // md() escapes everything first
@@ -363,15 +371,33 @@ function renderMsg(m: Msg, pending = false): HTMLElement {
     }
     // a family answer's sources ("Datos de familia: TIPNR (STEPBible), ACAI (BiblioNexus)", kin.ts): in sight, small and grey like an
     // article's source label (Abel, Nov 18: not big, not hidden in «detalles»)
-    else if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isCreditLine(last.textContent ?? '')) last.className = 'credit'
+    else if (last?.tagName === 'P' && last.children.length === 1 && last.firstElementChild?.tagName === 'EM' && isCreditLine(last.textContent ?? '')) {
+      last.className = 'credit'
+      // its words are mostly Latin names (OpenBible.info, TIPNR): md.ts gives the paragraph "ltr", and in an Arabic answer it sat on the left
+      if (m.ui && rtlLang(m.ui)) last.setAttribute('dir', 'rtl')
+    }
     // an Open Bible Stories answer: each frame's picture above its text (obsimg.ts: the phone's, Door43's, or a placeholder)
     addObsPictures(box, m.meta, m.ui ?? nav)
     // an OBS story or frame: the words its notes and key terms quote, tappable as a passage's (obswords.ts)
     if (m.obs) linkObsWords(box, m.obs)
     // its helps in three levels: all the notes, a frame's, each note (view.ts)
     if (m.obs) groupObsHelps(box)
+    // a place answer: the map with its list next to it (the list alone when no place has a point), before the source line
+    if (m.map || m.list) {
+      const blk = placeBlock(m, m.ui ?? nav)
+      if (last?.className === 'credit') box.insertBefore(blk, last)
+      else box.appendChild(blk)
+    }
     host.appendChild(box)
     pageAnswer(box, m.ui ?? nav)
+    if (m.treeOf) {
+      const of = m.treeOf
+      void buildTree(of.pack, of.id, of.mode, m.ui ?? nav, of.open, of.down).then((v) => {
+        if (!v.focus.name || v.focus.name === v.focus.id) return
+        m.tree = v
+        if (box.isConnected) box.replaceWith(treeBlock(m, v))
+      }).catch((e) => { console.warn('tree: kept as text', e) })
+    }
   }
   if (m.helps?.length) host.appendChild(renderHelps(m.helps))
   if (showsCards(m, pending)) {
@@ -499,23 +525,55 @@ function followRow(m: Msg, follow: Followup[], cls = 'follow', backs = -1): HTML
   // in the app's direction (not the answer's: an Arabic answer in an English app keeps English buttons left to right)
   const ui = m.ui ?? nav
   f.dir = rtlLang(ui) ? 'rtl' : 'ltr'
-  const { shown, more } = backs < 0 ? { shown: follow, more: [] as Followup[] } : splitFollow(follow, backs)
-  for (const x of shown) f.appendChild(followButton(m, x))
-  if (more.length) {
+  // the main row is grouped by type (followtype.ts): the buttons in the order of their types, each with the icon of its type; the
+  // ways back and the retry row (backs < 0) stay as they are. What is in sight is still chosen by splitFollow (a path's or a
+  // session's next step first), and the types are named only over the buttons behind "More"
+  const typed = backs >= 0
+  const lay = typed ? layoutFollow(follow, backs) : { shown: follow, groups: [] as ReturnType<typeof layoutFollow>['groups'] }
+  for (const x of lay.shown) f.appendChild(followButton(m, x, typed))
+  if (lay.groups.length) {
     // (the app's words, not the answer's: an English question in a Spanish app does not turn "Más" into "More")
     const b = el('button', 'more', bidiLabel(`${MORE[nav.split('-')[0]!] ?? MORE.en} ${rtlLang(nav) ? '◂' : '▸'}`, nav)) as HTMLButtonElement
     b.type = 'button'
     b.onclick = () => {
-      const bs = more.map((x) => followButton(m, x))
-      b.replaceWith(...bs)
-      bs[0]?.focus()
+      const nodes: HTMLElement[] = []
+      for (const g of lay.groups) {
+        if (g.title) {
+          const h = el('p', 'follow-title', bidiLabel(followTitle(nav, g.type), nav))
+          h.dir = rtlLang(nav) ? 'rtl' : 'ltr'
+          nodes.push(h)
+        }
+        nodes.push(...g.items.map((x) => followButton(m, x, true)))
+      }
+      b.replaceWith(...nodes)
+      ;(nodes.find((n) => n.tagName === 'BUTTON') as HTMLButtonElement | undefined)?.focus()
     }
     f.appendChild(b)
   }
   return f
 }
+/** A family tree as the bubble shows it (treeview.ts), with the credit line of its text under it. */
+function treeBlock(m: Msg, v: TreeView): HTMLElement {
+  const ui = m.ui ?? nav
+  const base = treeBase(v.pack)
+  const wrap = el('div', 'tree-block')
+  wrap.appendChild(renderTree(v, {
+    bar: (id, from) => treeBar(base, v.ui, id, from, v.mode, v.focus.id),
+    button: (f) => followButton(m, f),
+    words: treeWords(v.ui, v),
+    ancestors: v.mode === 'tree' ? treeStep(base, v.ui, 'up', v.focus.id, v.focus.name) : undefined,
+    treeOf: (id) => treeStep(base, v.ui, 'tree', id, v.nodes.find((n) => n.id === id)?.name ?? ''),
+  }))
+  const last = (m.info ?? '').split('\n\n').pop() ?? ''
+  if (isCreditLine(last.replace(/^\*|\*$/g, ''))) {
+    const c = el('p', 'credit', last.replace(/^\*|\*$/g, ''))
+    c.dir = rtlLang(ui) ? 'rtl' : 'ltr'
+    wrap.appendChild(c)
+  }
+  return wrap
+}
 /** One next step's button. */
-function followButton(m: Msg, x: Followup): HTMLButtonElement {
+function followButton(m: Msg, x: Followup, icon = false): HTMLButtonElement {
   const ui = m.ui ?? nav
   // a way back reads as it is now, in the app's language (a message kept from before has the words and the place it was drawn with)
   const now = backNow(conv().graph, x, nav)
@@ -523,6 +581,12 @@ function followButton(m: Msg, x: Followup): HTMLButtonElement {
   b.type = 'button'
   if (x.back || x.toPath || x.toSession) b.className = 'back'
   else if (x.pathNext) b.className = 'path-next'
+  // the icon of its type (the main row only; the label stays the button's name)
+  if (icon && !(x.back || x.toPath || x.toSession)) {
+    const t = followType(x)
+    b.insertAdjacentHTML('afterbegin', followIcon(t))
+    b.classList.add('has-ic', `ty-${t}`)
+  }
   b.onclick = () => {
     if (x.back) goTo(x.back, 'back')
     else if (x.browse) {
@@ -981,14 +1045,54 @@ function renderSubPanel(v: Exclude<PanelView, 'main'>) {
   }
 }
 
+/** "Use Aquifer complementary helps": on, Aquifer fills the notes, questions and introductions Door43 lacks (never replaces Door43's). */
+function aquiferSwitch(): HTMLButtonElement {
+  const q = aquiferMenu(nav)
+  const b = el('button', 'mrow') as HTMLButtonElement
+  b.type = 'button'
+  b.setAttribute('role', 'switch')
+  const sub = el('span', 'mrow-s')
+  const paint = () => {
+    b.setAttribute('aria-checked', String(aquiferOn()))
+    sub.textContent = `${aquiferOn() ? q.on : q.off} · ${q.hint}`
+  }
+  b.append(el('span', 'mrow-t', q.title), sub)
+  b.onclick = () => {
+    setAquifer(!aquiferOn())
+    paint()
+  }
+  paint()
+  return b
+}
+/** "Use yaapi Bible texts": on, a published version's text fills the books Door43 has no Bible text for (unaligned, marked). */
+function yaapiSwitch(): HTMLButtonElement {
+  const q = yaapiMenu(nav)
+  const b = el('button', 'mrow') as HTMLButtonElement
+  b.type = 'button'
+  b.setAttribute('role', 'switch')
+  const sub = el('span', 'mrow-s')
+  const paint = () => {
+    b.setAttribute('aria-checked', String(yaapiOn()))
+    sub.textContent = `${yaapiOn() ? q.on : q.off} · ${q.hint}`
+  }
+  b.append(el('span', 'mrow-t', q.title), sub)
+  b.onclick = () => {
+    setYaapi(!yaapiOn())
+    paint()
+  }
+  paint()
+  return b
+}
 /** Settings: the rows of the old menu that are about how the app works, each opening its own screen. */
 function renderSettingsView() {
   const list = el('div', 'mrows')
   const onOff = (b: boolean) => (b ? MT().on : MT().off)
-  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported() })) {
+  for (const id of settingsRows({ online: onlineAvailable(), update: updateSupported(), aquifer: PATCHED.includes('aquifer'), yaapi: PATCHED.includes('yaapi') })) {
     if (id === 'online') mrow(list, OT().label, onOff(onlineOn() && (!signInAvailable() || !!onlineSession())), go('online'))
     else if (id === 'model') mrow(list, modelTitle(nav), modelOff() ? MT().none : `FunctionGemma 270M · ${modelLine(nav)}`, go('model'))
     else if (id === 'suggest') list.appendChild(composerSwitch(nav, MT().on, MT().off))
+    else if (id === 'aquifer') list.appendChild(aquiferSwitch())
+    else if (id === 'yaapi') list.appendChild(yaapiSwitch())
     else if (id === 'safety') mrow(list, PT(nav).title, protectSummary(nav, MT().off), go('safety'))
     else if (id === 'usage') mrow(list, UT().title, onOff(usageOn()), go('usage'))
     else if (id === 'update') {
@@ -1242,8 +1346,8 @@ status.onclick = () => showAbout(nav, () => setReady())
   brand.onclick = () => showAbout(nav, () => setReady())
   brand.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); brand.click() } }
 }
-// the notice opens the menu, where the model can be downloaded or loaded
-notice.onclick = () => { if (!panel.classList.contains('show')) menu.click() }
+// the notice opens the menu straight on the model view, where the model can be downloaded or loaded
+notice.onclick = () => { if (!panel.classList.contains('show')) { menu.click(); go('model')() } }
 
 function setReady() {
   const ok = modelReady() && !modelOff()
@@ -1468,6 +1572,11 @@ setExploreHooks({
   ask: (label, q) => {
     if (busy || locked()) return false
     runSheet(label, { ...bare(q.lang), intent: q.intent, ref: q.ref ?? null, what: q.what ?? [], concept: q.concept ?? null }, nav)
+    return true
+  },
+  run: (label, sheet) => {
+    if (busy || locked()) return false
+    runSheet(label, sheet, nav)
     return true
   },
   addLang: () => {
@@ -1804,14 +1913,11 @@ function closeOutline() {
 }
 
 // ------------------------------------------------------------------------------------------------------------ the map
-// The conversation's graph as a list, full screen like Browse (and under the PIN lock like it): each point its name and a small
-// mark for how it joined the one above (same passage, from it, new topic), indented when it went deeper or branched; the
-// current point marked. A tap goes back there. From the menu and from the bar (next to Browse), once there are 3 points.
+// The conversation's graph in lanes (graph.ts mapRows, lanesview.ts), full screen like Browse (and under the PIN lock like it): each
+// point its name and what kind of step it is, the main line and each fork in a lane of its own, the way to the current point in
+// colour; the current point marked. A tap goes back there. From the menu and from the bar (next to Browse), once there are 3 points.
 const MAP_MIN = 3
 const ICONS: Record<string, string> = {
-  start: '<circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>',
-  line: '<path d="M12 3v18"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
-  deeper: '<path d="M6 4v8a4 4 0 0 0 4 4h9"/><path d="M15 12l4 4-4 4"/>',
   branch: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10"/><path d="M18 9c0 5-12 3-12 8"/>',
 }
 const svg = (inner: string, size = 18) =>
@@ -1885,7 +1991,7 @@ function closeMap(refocus = true) {
   mapOpener = null
   if (refocus && to?.isConnected) to.focus({ preventScroll: true })
 }
-function drawMap() {
+function drawMap(keep?: { top: number; open: string }) {
   const b = ensureMap()
   const t = GT(nav)
   const g = conv().graph
@@ -1935,52 +2041,29 @@ function drawMap() {
     }
     b.body.appendChild(row)
   }
-  const list = el('div', 'ex-rows gm-rows')
-  let here: HTMLElement | null = null
-  for (const r of g ? mapRows(g, mapOpened) : []) {
-    const row = el('button', r.k === 'node' && r.cur ? 'ex-row gm-row on' : 'ex-row gm-row') as HTMLButtonElement
-    row.type = 'button'
-    // indented by depth (at most 6 steps: a small phone keeps room for the name)
-    row.style.paddingInlineStart = `${6 + Math.min(r.depth, 6) * 18}px`
-    if (r.k === 'more') {
-      row.classList.add('gm-more')
-      row.appendChild(el('span', 'ex-row-t', t.more.replace('{n}', String(r.n))))
-      row.onclick = () => {
-        mapOpened.add(r.key)
-        drawMap()
-      }
-    } else if (r.k === 'group') {
-      // a 5M session (5M in the pack): its name over its steps; the steps themselves are the points to go back to
-      row.classList.add('gm-group')
-      row.disabled = true
-      const name = el('span', 'ex-row-t', r.label)
-      name.dir = 'ltr'
-      row.appendChild(name)
-    } else {
-      const ic = el('span', `gm-ic gm-${r.node.edge}`)
-      ic.innerHTML = svg(ICONS[r.node.edge] ?? ICONS.start!)
-      const txt = el('span', 'gm-txt')
-      const name = el('span', 'ex-row-t', r.node.label)
-      name.dir = dirOf(r.node.label) // what the person asked, or a button's label: its own direction
-      txt.appendChild(name)
-      txt.appendChild(el('span', 'ex-row-s', r.cur ? `${t.here} · ${t.edge[r.node.edge]}` : t.edge[r.node.edge]))
-      row.append(ic, txt)
-      if (r.cur) {
-        row.setAttribute('aria-current', 'true')
-        here = row
-      }
-      const id = r.node.id
-      row.onclick = () => {
-        if (busy) return
-        closeMap(false)
-        goTo(id, 'map')
-      }
-    }
-    list.appendChild(row)
-  }
+  const { list, here } = lanesList(g ? mapRows(g, mapOpened) : [], {
+    t,
+    rtl: rtlLang(nav),
+    onGo: (id) => {
+      if (busy) return
+      closeMap(false)
+      goTo(id, 'map')
+    },
+    onOpen: (key) => {
+      // the scroll stays where it was, and the focus goes to the first row that was revealed
+      mapOpened.add(key)
+      drawMap({ top: gmap?.body.scrollTop ?? 0, open: key })
+    },
+  })
   b.body.appendChild(list)
-  b.body.scrollTop = 0
-  if (here) (here as HTMLElement).scrollIntoView({ block: 'center' })
+  if (keep) {
+    b.body.scrollTop = keep.top
+    const first = list.querySelector<HTMLElement>(`[data-id="${keep.open}"]`)?.nextElementSibling
+    first?.querySelector<HTMLElement>('.gm-go')?.focus({ preventScroll: true })
+  } else {
+    b.body.scrollTop = 0
+    here?.scrollIntoView({ block: 'center' })
+  }
 }
 
 form.addEventListener('submit', (e) => {
@@ -2032,10 +2115,15 @@ lock(nav)
 watchAway(() => nav)
 load()
 renderConv()
+let PATCHED: PatchKind[] = []
 function refreshInstalled() {
+  void patchedKinds().then((p) => { PATCHED = p })
   return installedLangs().then((ls) => {
     const had = packsKnown ? INSTALLED.length > 0 : null
+    const same = ls.join() === INSTALLED.join()
     INSTALLED = ls
+    // Browse follows a new list; the same list draws nothing (the scroll stays), unless a change of packs emptied its stack (resetExplore): then its home
+    if (!same || exploreStale()) redrawExplore()
     packsKnown = true
     $('#packs').textContent = ls.map((l) => PACK_NAMES[l] ?? l).join(' · ')
     // from no language to one (a download here or in the menu, a .tcpack file): the light build without a model offers it once
@@ -2060,6 +2148,8 @@ onPacksChanged(() => {
   resetMacula()
   refreshInstalled().then(() => cmp.reset())
 })
+// Browse's people tab: drawn again when the packs with people change (kin.ts tells when an index is built). The packs changing is drawn again from refreshInstalled, once INSTALLED is the new list (resetExplore above emptied the stack)
+onKinReady(kinReadyExplore)
 setReady()
 // usage counts (only if turned on): this opening, and the days that ended go out when there is internet
 setSnapshot(() => ({

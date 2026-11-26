@@ -480,6 +480,7 @@ FINDALL = [
     ('ar-goliath', 'ar', 'أين قتل داود جليات؟', None, {'route': 'search', 'ref': G17}),
     ('ar-snow', 'ar', 'أين يذكر الثلج؟', None, {'route': 'search', 'has': ['ثلج|الثلج|ٱلثَّلْجِ|الثَّلْجِ|ثَلْج']}),
     # review of Nov 15: one verse is THE answer only when it is clearly ahead ("Jesus" and "born" are in many verses alike)
+    # route 'search' since 3cd3d06: no born-in relation for Jesus in the data, so a born/died question falls back to the verse search
     ('not-en-born', 'en', 'Where was Jesus born?', None, {'route': 'search', 'not': [NOT_WHERE]}),
     ('not-es-born', 'es', 'dónde nació Jesús', None, {'route': 'search', 'not': [NOT_WHERE]}),
     ('not-ar-born', 'ar', 'أين ولد يسوع', None, {'route': 'search', 'not': [NOT_WHERE]}),

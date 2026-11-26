@@ -14,8 +14,8 @@
 export const LRI = '\u2066', RLI = '\u2067', FSI = '\u2068', PDI = '\u2069'
 const ISOLATES = /[\u2066-\u2069]/
 // what strip() removes: the isolates, and the marks and embeddings that come in text pasted from WhatsApp and other apps
-// (LRM, RLM, ALM, LRE…RLO)
-const MARKS = /[\u2066-\u2069\u200E\u200F\u061C\u202A-\u202E]/g
+// (LRM, RLM, ALM, LRE…RLO), and the word joiner isolateRef puts after the hyphen of a range
+const MARKS = /[\u2066-\u2069\u200E\u200F\u061C\u202A-\u202E\u2060]/g
 
 // strong right-to-left: Hebrew, Arabic (with its punctuation ، ؛ ؟), Syriac, Thaana, NKo, Samaritan, Mandaic, and the Hebrew
 // and Arabic presentation forms
@@ -108,4 +108,29 @@ export function bidiLabel(s: string, ui: string): string {
     i = end
   }
   return out
+}
+
+// A reference after an Arabic book name ("التكوين 12:1-13:3"): the digits that follow an Arabic letter are Arabic numbers for the algorithm
+// (W2), and W4 joins them over a ":" but NOT over a "-", so the range splits and reads "13:3-12:1". Isolating the whole label (`isolate`)
+// does not help: its direction is the Arabic one. The number part must be a left-to-right run of its own.
+const WJ = '\u2060' // word joiner: the range does not break after its hyphen (strip removes it)
+const NUMBER = /[0-9٠-٩۰-۹]+(?:[:.,\-–][0-9٠-٩۰-۹]+)*/g
+
+/** `s` cut into its words and its numbers ("12:1-13:3" is one number: digits joined by : . , - –). */
+export function splitNumbers(s: string): { text: string; num: boolean }[] {
+  const out: { text: string; num: boolean }[] = []
+  let at = 0
+  for (const m of s.matchAll(NUMBER)) {
+    if (m.index! > at) out.push({ text: s.slice(at, m.index), num: false })
+    out.push({ text: m[0], num: true })
+    at = m.index! + m[0].length
+  }
+  if (at < s.length) out.push({ text: s.slice(at), num: false })
+  return out
+}
+
+/** A reference label for a sentence or a summary in a right-to-left language: the whole label isolated, each number an LRI … PDI run inside it. */
+export function isolateRef(s: string): string {
+  if (!s || ISOLATES.test(s)) return s
+  return isolate(splitNumbers(s).map((p) => (p.num ? LRI + p.text.replace(/[-–]/g, '$&' + WJ) + PDI : p.text)).join(''))
 }

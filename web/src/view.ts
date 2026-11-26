@@ -234,7 +234,7 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
   const many = s.texts[0]!.verses.length > 1
   const drawText = (t: Study['texts'][number], host: HTMLElement) => {
     const wrap = el('div', 'tx')
-    wrap.appendChild(el('div', 'tx-label', t.label))
+    wrap.appendChild(el('div', 'tx-label', t.tag ? `${t.label} · ${t.tag}` : t.label))
     const p = el('p', 'vv')
     p.dir = dirOf(t.verses.map((v) => v.p.map((x) => x[0]).join('')).join(' ')) // the version's own direction
     for (const v of t.verses) {
@@ -303,7 +303,9 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
       openPanel({ kind: 'note', study: s, i, root: box })
     }
     // (a chapter's note asked about a word, above the passage: its verse first, "3:5 «…»")
-    const head = noteHead(n.said, first(n.note))
+    const head0 = noteHead(n.said, first(n.note))
+    // a note from an Aquifer patch says so in its button, where it shows before it is opened
+    const head: Node = n.patch ? (() => { const f = document.createDocumentFragment(); f.append(head0, ' ', el('span', 'aqtag', `(${n.patch})`)); return f })() : head0
     const h: Node = withRef ? (() => { const f = document.createDocumentFragment(); const r = el('span', 'nref', n.ref); r.dir = 'auto'; f.append(r, ' ', head); return f })() : head
     return itemFold(h, body, dirOf(n.note || n.said || ''))
   }
@@ -363,9 +365,16 @@ export function renderStudy(s: Study, question?: string): HTMLElement {
     d.appendChild(el('summary', '', lbl(fill(heads.questionsN, { n: s.questions.length }))))
     if (s.first === 'questions') d.setAttribute('open', '') // asked for alone: it is the answer (each question still folded)
     // each question folded, its answer inside (an English question in an Arabic app: its "?" at its end)
-    for (const q of s.questions) d.appendChild(itemFold(el('strong', '', q.q), document.createTextNode(q.a), dirOf(`${q.q} ${q.a}`)))
+    for (const q of s.questions) {
+      const qf = document.createDocumentFragment()
+      qf.append(el('strong', '', q.q))
+      if (q.patch) qf.append(' ', el('span', 'aqtag', `(${q.patch})`))
+      d.appendChild(itemFold(qf, document.createTextNode(q.a), dirOf(`${q.q} ${q.a}`)))
+    }
     box.appendChild(d)
   }
+  // items from an Aquifer patch: the notice, with the attribution the license asks for
+  if (s.aquifer) box.appendChild(el('p', 'aqnotice', s.aquifer)).dir = dirOf(s.aquifer)
   return box
 }
 
@@ -511,6 +520,7 @@ function noteBlock(s: Helps, i: number): HTMLElement {
   const head = [n.said ? `«${n.said}»` : '', n.orig && n.orig !== n.said ? `(${n.orig})` : ''].filter(Boolean).join(' ')
   if (head) d.appendChild(el('div', 'pnote-head', head)).dir = dirOf(head)
   d.appendChild(richText(n.note, s.lang))
+  if (n.patch) d.appendChild(el('div', 'aqtag', `(${n.patch})`))
   if (n.concept && !n.note.includes(n.concept)) {
     const a = el('a', 'lk chip-link', n.concept.split('/').pop()!.replace(/-/g, ' '))
     a.dataset.href = n.concept

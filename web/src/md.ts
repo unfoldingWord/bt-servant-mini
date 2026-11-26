@@ -57,9 +57,9 @@ export function md(src: string, ctx = ''): string {
       close()
       continue
     }
-    const h = /^(#{1,3})\s+(.*)$/.exec(lines[0]!)
+    const h = /^(#{1,6})\s+(.*)$/.exec(lines[0]!)
     if (h) {
-      const level = h[1]!.length + 2 // # -> h3, ## -> h4, ### -> h5
+      const level = Math.min(h[1]!.length + 2, 5) // # -> h3, ## -> h4, ### and deeper -> h5
       out.push(`<h${level}${D(h[2]!)}>${inline(h[2]!)}</h${level}>`)
       lines.shift()
       if (!lines.length) continue

@@ -16,7 +16,7 @@ const MODULE = /^(\.\/packs|@bt-synergy\/language-pack-[\w-]+)$/
 
 /** Technical strings no screen shows (file → exact literal). */
 const ALLOWED: Record<string, string[]> = {
-  'packs.ts': ['@bt-synergy/language-pack-client', './packs', 'no packs server', 'read-only pack store', 'btsm-packs', 'btsm.packs.checked', 'no pack for ${} on the server'],
+  'packs.ts': ['@bt-synergy/language-pack-client', './packs', 'no packs server', 'read-only pack store', 'btsm-packs', 'btsm.packs.checked', 'no pack for ${} on the server', '${}/v3/packs/complement/${}'],
   'obsimg.ts': ['./packs'],
   'resources.ts': ['./packs'],
   'webmodel.ts': ['no packs server'],

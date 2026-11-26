@@ -46,6 +46,8 @@ const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''
 const mb = (n) => (n / 1048576).toFixed(1)
 const segKey = (id) => `v3/seg/${id}.seg`
 const catKey = (name) => `v3/catalog/${name}.seg`
+const compKey = (id) => `v3/complement/${id}`
+const STAGING_BUCKET = opt('staging-bucket', 'language-packs-staging')
 
 // ------------------------------------------------------------------------------------------------------------ source
 
@@ -142,6 +144,39 @@ async function fetchSegmentToFile(id, size, sha) {
   return done
 }
 
+/**
+ * A complement (the map background `basemap`): from the source's /v3/packs/complement/<id> route, and, while the source does not serve
+ * it yet (the staging worker answers 400), from the object `v3/complement/<id>` of the staging bucket through wrangler (the account
+ * wrangler is logged in to). Checked as a catalog entry says: its length, then the SHA-256 of the file, which is its id.
+ */
+async function fetchComplement(id, size) {
+  let b = null
+  const res = await fromSource(`/v3/packs/complement/${id}`)
+  if (res.ok) b = new Uint8Array(await res.arrayBuffer())
+  else if (res.status !== 400 && res.status !== 404) throw new Error(`complement ${id}: HTTP ${res.status} from the source`)
+  else {
+    await res.body?.cancel()
+    mkdirSync(CACHE, { recursive: true })
+    const file = join(CACHE, `complement-${id}`)
+    const local = join(HERE, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.exe' : 'wrangler')
+    const bin = existsSync(local) ? local : 'wrangler'
+    const { code, out } = await new Promise((done, fail) => {
+      const p = spawn(bin, ['r2', 'object', 'get', `${STAGING_BUCKET}/${compKey(id)}`, '--file', file, '--remote'], { cwd: HERE, shell: process.platform === 'win32' })
+      let out = ''
+      p.stdout.on('data', (d) => (out += d))
+      p.stderr.on('data', (d) => (out += d))
+      p.on('error', fail)
+      p.on('close', (code) => done({ code, out }))
+    })
+    if (code !== 0 || !existsSync(file)) throw new Error(`complement ${id}: not served by the source (HTTP ${res.status}) and not in ${STAGING_BUCKET}: ${out.trim().slice(-300)}`)
+    b = new Uint8Array(readFileSync(file))
+    rmSync(file, { force: true })
+  }
+  if (b.length !== size) throw new Error(`complement ${id}: got ${b.length} bytes, the catalog says ${size}`)
+  if (createHash('sha256').update(b).digest('hex') !== id) throw new Error(`complement ${id}: SHA-256 differs`)
+  return b
+}
+
 // ------------------------------------------------------------------------------------------------------------ targets
 
 /** Where the copy goes: has(key, size) → present; get(key) → bytes or null (catalogs); put(key, bytes | {file}). */
@@ -149,7 +184,7 @@ async function openTarget() {
   if (flag('remote')) {
     if (flag('local') || opt('dir')) throw new Error('one target: --local, --dir or --remote')
     const base = opt('target-url', MINI_SERVER).replace(/\/+$/, '')
-    const path = (key) => key.replace(/^v3\/catalog\/(.+)\.seg$/, '/v3/packs/$1/catalog').replace(/^v3\/seg\/(.+)\.seg$/, '/v3/packs/seg/$1')
+    const path = (key) => key.replace(/^v3\/catalog\/(.+)\.seg$/, '/v3/packs/$1/catalog').replace(/^v3\/seg\/(.+)\.seg$/, '/v3/packs/seg/$1').replace(/^v3\/complement\/(.+)$/, '/v3/packs/complement/$1')
     const wrangler = join(HERE, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.exe' : 'wrangler')
     return {
       name: `R2 bucket ${BUCKET} (remote; read through ${base})`,
@@ -310,6 +345,9 @@ async function main() {
       segs.get(id).of.add(name)
     }
   }
+  // the complements they list (the map background): small files the catalogs point to, put before the catalogs like the segments
+  const comps = new Map() // id → { size, kind }
+  for (const [, { verified }] of catalogs) for (const c of verified.catalog.complements ?? []) comps.set(hex(c.id), { size: c.size, kind: c.kind })
   if (!flag('no-model')) {
     for (const m of models.models) {
       const id = m.path.split('/').pop()
@@ -324,6 +362,8 @@ async function main() {
     if (!(await target.has(segKey(id), segs.get(id).size))) lacking.push(id)
   })
   if (errors.length) throw new Error(`reading the target: ${errors[0]}`)
+  const lackingComps = []
+  for (const [id, c] of comps) if (!(await target.has(compKey(id), c.size))) lackingComps.push(id)
   const catChanges = []
   for (const [name, { bytes }] of catalogs) {
     const now = await target.get(catKey(name))
@@ -352,6 +392,7 @@ async function main() {
   const copyBytes = lacking.reduce((n, id) => n + segs.get(id).size, 0) + catChanges.reduce((n, c) => n + catalogs.get(c.name).bytes.length, 0)
   console.log(`not on the source (skipped): ${missingLangs.join(', ') || '-'}`)
   console.log(`objects: ${ids.length + catalogs.size} (${catalogs.size} catalogs, ${ids.length} segments), ${mb(allBytes)} MB`)
+  console.log(`complements: ${comps.size} listed (${[...comps.values()].map((c) => c.kind).join(', ') || '-'}), ${lackingComps.length} to copy`)
   console.log(`to copy: ${lacking.length + catChanges.length} objects (${catChanges.length} catalogs, ${lacking.length} segments), ${mb(copyBytes)} MB`)
   if (DRY) return target.dispose?.()
 
@@ -376,6 +417,14 @@ async function main() {
       failed.push(e instanceof Error ? e.message : String(e))
     }
   }
+  for (const id of lackingComps) {
+    try {
+      await target.put(compKey(id), await fetchComplement(id, comps.get(id).size))
+      copied++
+    } catch (e) {
+      failed.push(e instanceof Error ? e.message : String(e))
+    }
+  }
   // the catalogs: the ones others require first (common before the languages), and each only when every segment it names is
   // there and every catalog it requires is there at the id it names (else a phone would get a language whose common catalog
   // the bucket lacks, with no reason to ask the next server)
@@ -390,8 +439,9 @@ async function main() {
     }
     const still = []
     for (const s of verified.catalog.segments) if (!(await target.has(segKey(hex(s.id)), s.size))) still.push(s)
+    for (const c of verified.catalog.complements ?? []) if (!(await target.has(compKey(hex(c.id)), c.size))) still.push({ id: c.id })
     if (still.length) {
-      failed.push(`catalog ${name} not written: ${still.length} of its segments are missing`)
+      failed.push(`catalog ${name} not written: ${still.length} of its segments or complements are missing`)
       continue
     }
     await target.put(catKey(name), bytes)

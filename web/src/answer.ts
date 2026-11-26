@@ -7,8 +7,10 @@ import { type BookModel, type HelpRow, verseId } from '@bt-synergy/language-pack
 import { textOfRange } from '@lpc/query/passage'
 import { type AlignedText, alignIndex, quoteIn } from './align'
 import { openLang, hasLang, installedLangs } from './packs'
+import { type PatchMark, patchCite, patchForAI, patchNotice, patchTag, patchTextForAI, versionName } from './aquifer'
 import { FOLD, FOLD_END, focusOrder, focusWords, SHOWN, wordsOf } from './focus'
 import { isObsRef, obsAnswer, storyText } from './obs'
+import type { PlaceRef, Trip } from '@lpc/query/geo'
 import tEn from './data/tpl-en.json'
 import tEs from './data/tpl-es.json'
 import tFr from './data/tpl-fr.json'
@@ -133,6 +135,18 @@ const refLabel = (r: Ref): string =>
   r.kind === 'book' ? '' : r.kind === 'bookintro' ? '' : r.kind === 'chapter' || r.kind === 'chapintro' ? String(r.ch)
     : r.ch2 !== undefined && r.ch2 !== r.ch ? `${r.ch}:${r.v1}-${r.ch2}:${r.v2}` : `${r.ch}:${r.v1}${r.v2 !== r.v1 ? '-' + r.v2 : ''}`
 
+/** The Aquifer patch mark of a row that came from one (the client marks every such row; a base row has none). */
+const patchOfRow = (row: HelpRow | undefined): PatchMark | undefined => (row as { patch?: PatchMark } | undefined)?.patch
+/** The notice and the source-line entry when the book's notes (a table the reader keeps whole) came from an Aquifer patch. */
+function patchTail(lang: string, model: BookModel): { notice: string; cite: string } | null {
+  const m = patchOfRow(model.notes?.rows[0])
+  return m ? { notice: patchNotice(UI ?? lang, [m]), cite: patchCite(m) } : null
+}
+/** What a text is called: a patch text (yaapi) by its readable name, a pack's by its short code (GLT, GST). */
+const textName = (t: { res: string }): string => {
+  const m = patchOfRow(t as unknown as HelpRow)
+  return m ? versionName(m) : resShort(t.res).toUpperCase()
+}
 const isIntroRow = (row: HelpRow): boolean => row.cols.isIntro === true || row.cols.isIntro === 'true'
 const inRange = (row: HelpRow, [from, to]: [number, number]): boolean => row.from <= to && row.to >= from
 
@@ -171,7 +185,12 @@ async function alignedOf(l: Lang, code: string, model: BookModel): Promise<Align
   if (a === undefined) l.aligned.set(code, (a = alignIndex(model as any)))
   return a
 }
-const releaseOf = (model: BookModel, key: string): string => model.res.find((x) => x[0] === key)?.[1] ?? ''
+/** A patch's release is a git commit (`UWTranslationNotes@603546c…`), not a version: shown as "Aquifer", never as the hash. */
+const releaseOf = (model: BookModel, key: string): string => {
+  const r = model.res.find((x) => x[0] === key)?.[1] ?? ''
+  // (a yaapi text's release is `ABBR@sha256:…`: shown as its source too)
+  return /@(sha256:)?[0-9a-f]{7,}$/i.test(r) ? (key.startsWith('yaapi/') ? 'yaapi' : 'Aquifer') : r
+}
 const cite = (res: string, release: string, extra = ''): string => `${res} ${release}${extra ? ' (' + extra + ')' : ''}`.trim()
 const sourceLine = (lang: string, cites: string[]): string => {
   // one entry per resource and release
@@ -255,7 +274,9 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const textKeys: string[] = [...(l.maps.map?.core.coverage.keys() ?? [])].filter((k: string) => /\/(ult|ust|glt|gst|bsb|t4t)$/.test(k))
   if (wantText && s.version) {
     const key = textKeys.find((k) => k.endsWith('/' + verKey(s.version as 'ult' | 'ust')))
-    if (key && !cover(key)) {
+    // (not when the book's only texts are a patch's, unaligned Bible texts: they are shown, labelled, below)
+    const patchTextsOnly = !!model?.texts.length && model.texts.every((t) => !!patchOfRow(t as unknown as HelpRow))
+    if (key && !cover(key) && !patchTextsOnly) {
       const others = textKeys.filter((k) => cover(k)).map((k) => upper(k))
       const label = upper(key)
       const msg = others.length ? say(lang, 'not_covered', { label, book, others: others.join(', ') }) : say(lang, 'not_covered_none', { label, book })
@@ -273,6 +294,14 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
   const al = await alignedOf(l, ref.book, model)
   const range = rangeOf(ref)
   const out: string[] = []
+  /** The marks of the patches the items shown came from: the notice, and the source line (a report) say so. */
+  const patched: PatchMark[] = []
+  const tagOf = (row: HelpRow | undefined): string => {
+    const m = patchOfRow(row)
+    if (!m) return ''
+    patched.push(m)
+    return ` *(${patchTag(UI ?? lang, m)})*`
+  }
   const head = say(lang, 'passage_head', { book, ref: refLabel(ref), lang }).replace(/\s+\(/, ' (').replace(/\s{2,}/g, ' ')
   out.push('## ' + head)
   facts = { kind: 'passage', book, ref: refLabel(ref), texts: 0, notes: 0, questions: 0, terms: 0, code: ref.book, ch: ref.ch ?? null }
@@ -293,7 +322,7 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
       const note = clean(row.cols.note, true)
       // a note with its own title needs no second one; its headings go under the answer's
       if (!/^#/.test(note)) out.push('### ' + say(lang, 'intro_head', { what: what_ }))
-      out.push(note.replace(/^#{1,2}\s/gm, '### '))
+      out.push(note.replace(/^#{1,2}\s/gm, '### ') + tagOf(row))
       facts.intro = what_
       cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} intro, note ${row.id}`))
     } else out.push(say(lang, 'intro_none', { what: what_ }))
@@ -311,7 +340,8 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     for (const t of texts) {
       const text = plain(textOfRange(ref.book, t.pieces as any, t.events as any, from, to))
       if (!text || wrongScript(lang, text)) continue
-      lines.push(say(lang, 'text_line', { label: `**${resShort(t.res).toUpperCase()}**`, res: t.res, release: releaseOf(model, t.res), text }))
+      const tm = patchOfRow(t as unknown as HelpRow)
+      lines.push((tm ? `**${textName(t)}**: ${text}` : say(lang, 'text_line', { label: `**${textName(t)}**`, res: t.res, release: releaseOf(model, t.res), text })) + tagOf(t as unknown as HelpRow))
       if (!cited.has(t.res)) {
         cited.add(t.res)
         facts.texts++
@@ -368,13 +398,13 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     // "[Academy: title]" is a tap when the article can be opened: "[text](id)" is the link md() and linkTarget() know
     const academy = n.concept ? say(lang, 'note_academy', { title: await title(n.concept) }) + (!clean(n.cols.note).includes(n.concept) && (await hasArticle(l, n.concept)) ? `(${n.concept})` : '') : ''
     cites.push(cite(model.notes!.res, releaseOf(model, model.notes!.res), `${ref.book} ${n.ref}, note ${n.id}`))
-    return say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy })
+    return say(lang, 'note_line', { n: i + 1, head: headTxt ? `**${headTxt}**: ` : '', note: clean(n.cols.note).replace(/\n+/g, ' '), academy }) + tagOf(n)
   }
   const qs = wantQs ? rowsIn(model.questions) : []
   facts.questions = qs.length
   const qLines = qs.map((q) => {
     cites.push(cite(model.questions!.res, releaseOf(model, model.questions!.res), `${ref.book} ${q.ref}`))
-    return say(lang, 'question_line', { q: `**${String(q.cols.question ?? '')}**`, a: String(q.cols.response ?? '') })
+    return say(lang, 'question_line', { q: `**${String(q.cols.question ?? '')}**`, a: String(q.cols.response ?? '') }) + tagOf(q)
   })
   // one thing asked (only notes, only the text…): that thing, as it is
   const only = what.filter((w) => w !== 'intro').length === 1
@@ -433,6 +463,13 @@ async function passage(s: Sheet, l: Lang): Promise<Result> {
     else out.push(FOLD + say(lang, 'questions_fold', { n: qs.length }), ...qLines)
   }
   // where it comes from, at the top: resource, release and passage (the full source line still ends the answer)
+  // items from an Aquifer patch: one notice with the attribution, and the patch in the source line (a report carries it)
+  if (patched.length) {
+    // (outside the last fold, or the attribution would stay hidden behind its button)
+    if (out.some((b) => b.startsWith(FOLD))) out.push(FOLD_END)
+    out.push(patchNotice(UI ?? lang, patched))
+    for (const m of new Map(patched.map((x) => [x.patch + x.release + x.review, x])).values()) cites.push(patchCite(m))
+  }
   const top = topSource(cites)
   if (top) withTop(out, `${top} — ${book} ${lab}`.trim())
   return { answer: out.join('\n\n'), cites }
@@ -649,6 +686,8 @@ async function rank(s: Sheet, l0: Lang): Promise<Result> {
   const lines = ['**' + say(lang, 'rank_head', { book, ref: lab, n: rows.length }) + '**', '']
   for (const [i, [id, c]] of sorted.slice(0, 10).entries()) lines.push(say(lang, 'rank_line', { n: i + 1, title: await titleOf(l, id), count: c }))
   for (const [id] of sorted.slice(0, 10)) cites.push(`id:${id}`)
+  const pt = patchTail(lang, model)
+  if (pt) { lines.push('', pt.notice); cites.push(pt.cite) }
   return { answer: lines.join('\n'), cites }
 }
 
@@ -766,6 +805,8 @@ async function advice(s: Sheet, l: Lang): Promise<Result> {
       for (const c of ans.cites.slice(0, 1)) cites.push(cite(c.res, c.release, articleId))
     }
   } else if (!matched) out.push(say(lang, 'advice_none'))
+  const pt = (model ? patchTail(lang, model) : null)
+  if (pt) { out.push(pt.notice); cites.push(pt.cite) }
   const top = topSource(cites)
   if (top) withTop(out, top)
   return { answer: out.join('\n\n'), cites }
@@ -806,13 +847,18 @@ export async function answerSheet(s: Sheet): Promise<Result> {
 /** One piece of a verse: its text, and for a word the helps it is part of (`n3` the fourth note, `t0` the first term). */
 export type StudyPiece = [text: string, keys?: string]
 /** quotes: what the note quotes in every text; about: the titles of its key terms and article (what focus.ts matches) */
-export type StudyNote = { said: string; orig: string; note: string; concept?: string; ref: string; quotes?: string; about?: string }
+export type StudyNote = { said: string; orig: string; note: string; concept?: string; ref: string; quotes?: string; about?: string
+  /** it came from an Aquifer patch: the short tag that says so (aquifer.ts patchTag) */
+  patch?: string }
 export type StudyTerm = { id: string; title: string; said: string; orig: string }
 /** A passage as the bubble shows it: each text with its words tied to the notes and key terms that quote them. */
 export type Study = {
   lang: string; head: string; book: string; ch: number; v1: number; v2: number
-  texts: { label: string; verses: { v: string; p: StudyPiece[] }[] }[]
-  notes: StudyNote[]; terms: StudyTerm[]; questions: { q: string; a: string }[]
+  /** `tag`: an unaligned text of a patch (yaapi) says so, with its version (aquifer.ts patchTag) */
+  texts: { label: string; tag?: string; verses: { v: string; p: StudyPiece[] }[] }[]
+  notes: StudyNote[]; terms: StudyTerm[]; questions: { q: string; a: string; patch?: string }[]
+  /** items came from an Aquifer patch: the notice with its attribution (aquifer.ts patchNotice) */
+  aquifer?: string
   heads: { notes: string; terms: string; questions: string
     /** templates the view fills: {words} {n} {all}, {n}, {ref} {n} (older studies kept in a conversation have none) */
     focus?: string; more?: string; verse?: string; termsN?: string; questionsN?: string }
@@ -909,7 +955,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
     }))
     const sample = verses.map((x) => x.p.map((p) => p[0]).join('')).join(' ')
     if (!sample.trim() || wrongScript(lang, sample)) continue
-    texts.push({ label: resShort(t.res).toUpperCase(), verses })
+    texts.push({ label: textName(t), verses, ...(patchOfRow(t as unknown as HelpRow) ? { tag: patchTag(UI ?? lang, patchOfRow(t as unknown as HelpRow)!) } : {}) })
   }
   if (!texts.length) return null
   const titles = new Map<string, string>()
@@ -933,14 +979,21 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
       ref: n.ref,
       quotes: qs.map((q) => q.text).join(' / '),
       about: (await Promise.all(aboutOf(n, linkRows).map(title))).join(' / '),
+      ...(patchOfRow(n) ? { patch: patchTag(UI ?? lang, patchOfRow(n)!) } : {}),
     })
   }
-  const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? '') }))
+  const questions = rowsIn(model.questions).map((q) => ({ q: String(q.cols.question ?? ''), a: String(q.cols.response ?? ''), ...(patchOfRow(q) ? { patch: patchTag(UI ?? lang, patchOfRow(q)!) } : {}) }))
+  const marks = [...noteRows, ...rowsIn(model.questions), ...model.texts.filter((t) => texts.some((x) => x.label === textName(t))) as unknown as HelpRow[]].map(patchOfRow).filter((m): m is PatchMark => !!m)
   const book = bookName(lang, ref.book)
   const lab = refLabel(ref)
   const releases = [...(model.notes ? [model.notes.res] : []), ...model.texts.map((t) => t.res)]
-    .filter((res) => res === model.notes?.res ? noteRows.length : texts.some((t) => t.label === resShort(res).toUpperCase()))
-    .map((res) => `${HELPS[resShort(res)] ?? upper(res)} ${releaseOf(model, res)}`.trim())
+    .filter((res) => res === model.notes?.res ? noteRows.length : texts.some((t) => t.label === textName(model.texts.find((x) => x.res === res) ?? { res })))
+    // (notes from an Aquifer patch have a commit as their release, not a version: "Translation Notes (Aquifer)")
+    .map((res) => (res === model.notes?.res && patchOfRow(model.notes.rows[0])
+      ? `${HELPS[resShort(res)] ?? upper(res)} (Aquifer)`
+      : patchOfRow(model.texts.find((x) => x.res === res) as unknown as HelpRow)
+        ? textName(model.texts.find((x) => x.res === res)!)
+        : `${HELPS[resShort(res)] ?? upper(res)} ${releaseOf(model, res)}`.trim()))
   const long = ref.kind === 'chapter' || (ref.ch2 ?? ref.ch) !== ref.ch || (ref.v2 ?? 0) - (ref.v1 ?? 0) >= 3
   const nVerses = new Set(texts[0]!.verses.map((x) => x.v)).size
   const asked = s.what.filter((w) => w !== 'intro')
@@ -957,6 +1010,7 @@ export async function studyOf(s: Sheet): Promise<Study | null> {
       more: raw('more_notes', ['n']), verse: raw('verse_fold', ['ref', 'n']), termsN: raw('terms_fold', ['n']), questionsN: raw('questions_fold', ['n']),
     },
     source: `${[...new Set(releases)].join(' · ')} — ${book} ${lab}`.trim(),
+    ...(marks.length ? { aquifer: patchNotice(UI ?? lang, marks).split('**').join('') } : {}),
     long, summary: long ? say(lang, 'chapter_summary', { book, ref: lab, v: nVerses, n: notes.length }) : undefined,
     first: asked.length === 1 ? asked[0] : undefined,
     focus: wordsOf(focusWords(QUESTION, [s.term, s.phrase, ...NAMED]), s.term, s.phrase, ...NAMED, QUESTION),
@@ -997,9 +1051,16 @@ export async function helpView(lang: string, book: string, id: string, which: 'n
   const row = (which === 'note' ? model?.notes : model?.questions)?.rows.find((x) => x.id === id)
   if (!model || !row) return null
   const title = `${bookName(l.lang, book)} ${row.ref}`
+  // an item from an Aquifer patch says so, with the notice and the attribution
+  const pm = patchOfRow(row)
+  const aq = pm ? `
+
+*(${patchTag(UI ?? l.lang, pm)})*
+
+${patchNotice(UI ?? l.lang, [pm])}` : ''
   if (which === 'question') return { title, ref: row.ref, md: `**${String(row.cols.question ?? '')}**
 
-${String(row.cols.response ?? '')}` }
+${String(row.cols.response ?? '')}${aq}` }
   const al = await alignedOf(l, book, model)
   const qs = quoteIn(al, row.quote)
   const said = (qs.find((q) => /\/(ult|glt)$/.test(q.res)) ?? qs[0])?.text ?? ''
@@ -1011,7 +1072,7 @@ ${String(row.cols.response ?? '')}` }
 [[${row.concept}]]` : ''
   return { title, ref: row.ref, md: (head ? `**${head}**
 
-` : '') + note + academy }
+` : '') + note + academy + aq }
 }
 
 // ------------------------------------------------------------------------------------------------- context for online AI
@@ -1050,5 +1111,272 @@ export async function passageContext(s: Sheet): Promise<string> {
   const chapIntro = intros.find((x) => x !== bookIntro && x.from === verseId(ref.book, ref.ch!, 1))
   if (chapIntro) parts.push(`## Introduction to ${book} ${ref.ch} (translation notes)\n${clip(clean(chapIntro.cols.note), 1300)}`)
   if (bookIntro) parts.push(`## Introduction to ${book} (translation notes, beginning)\n${clip(clean(bookIntro.cols.note), 1600)}`)
+  // the surrounding verses are a patch's unaligned text: its source, license and that it is not Door43's go with it
+  const tm = patchOfRow(simple as unknown as HelpRow)
+  if (tm && parts.some((x) => x.startsWith('## Surrounding verses'))) parts.unshift(patchTextForAI(tm))
+  // the book's notes come from an Aquifer patch (the reader keeps a table whole): the model says so when it uses them
+  const pm = patchOfRow(model.notes?.rows[0])
+  if (pm) parts.push(patchForAI(pm))
   return parts.join('\n\n')
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// Place, distance and travel-time sentences (diseno-mapas.md 5.3 and 5.8). Pure functions: they take what language-pack-client gives (`PlaceRef`,
+// `Trip`) and the UI language, and return the text. Every sentence is whole per language (hi and ar agree in gender and number, so no sentence is
+// built word by word); only the eight directions are fragments, and each fragment is a whole phrase with its own preposition.
+// `trip` is always `trip(a, b)` of the client, with `a` the first place named in the call (direction from a to b): "a is north of b" reads the
+// opposite direction. So `trip(place, ref)` for `whereLine` and `refDaysLine`, and `trip(a, b)` for `distanceLine`; `daysLine` takes any trip.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+type GeoLang = 'en' | 'es' | 'fr' | 'id' | 'hi' | 'ar'
+type GeoText = {
+  /** the eight directions, clockwise from north: where something stands in relation to {ref} */
+  dir: string[]
+  /** "according to the proposed location" (certainty 2), with the separator that joins it to the sentence */
+  pre: string
+  where: string; near: string; onMap: string; uncertain: string; uncertainRef: string
+  region: string; water: string; waterRef: string; unknown: string
+  straight: string; nearDist: string; regionDist: string; waterDist: string; uncertainDist: string
+  /** "on foot, by donkey or by camel", "on horseback", and the ship with its season */
+  foot: string; horse: string; ship: string
+  less: string; over: string; lessAll: string
+  sep: string; end: string; approx: string; refDays: string
+  born: string; bornF: string; bornNone: string; bornNoneF?: string; died: string; diedF: string; diedNone: string; diedNoneF?: string
+}
+const geoText: Record<GeoLang, GeoText> = {
+  en: {
+    dir: ['north of {ref}', 'northeast of {ref}', 'east of {ref}', 'southeast of {ref}', 'south of {ref}', 'southwest of {ref}', 'west of {ref}', 'northwest of {ref}'],
+    pre: 'According to the proposed location, ',
+    where: '{pre}{name} was about {n} km {loc}.', near: '{pre}{name} was next to {ref}.', onMap: '{name} is shown on the map.',
+    uncertain: 'It is not known for certain where {name} was; several sites have been proposed.',
+    uncertainRef: 'It is not known for certain where {name} was; several sites near {ref} have been proposed.',
+    region: '{name} is a region; it has no exact point on the map.', water: '{name} is a body of water.', waterRef: '{name}, near {ref}.',
+    unknown: 'It is not known where {name} was.',
+    straight: '{pre}about {n} km in a straight line; {a} is {loc}.', nearDist: '{pre}{a} was next to {b} (less than 3 km).',
+    regionDist: '{name} is a region; it has no point to measure from.', waterDist: '{name} is a river or other water; it has no point to measure from.',
+    uncertainDist: 'It is not known for certain where {name} was, so no distance is given.',
+    foot: 'on foot, by donkey or by camel', horse: 'on horseback', ship: 'by ship, in the sailing season (spring to autumn)',
+    less: 'less than a day', over: 'more than two months', lessAll: 'less than a day {foot}',
+    sep: '; ', end: '.', approx: '(approx.)', refDays: '{pre}from {ref} to {name}, {foot}: {r} (approx.).',
+    born: 'According to Theographic, {name} was born in {place}.', bornF: 'According to Theographic, {name} was born in {place}.',
+    bornNone: 'The data I have do not say where {name} was born.',
+    died: 'According to Theographic, {name} died in {place}.', diedF: 'According to Theographic, {name} died in {place}.',
+    diedNone: 'The data I have do not say where {name} died.',
+  },
+  es: {
+    dir: ['al norte de {ref}', 'al noreste de {ref}', 'al este de {ref}', 'al sureste de {ref}', 'al sur de {ref}', 'al suroeste de {ref}', 'al oeste de {ref}', 'al noroeste de {ref}'],
+    pre: 'Según la ubicación propuesta, ',
+    where: '{pre}{name} estaba a unos {n} km {loc}.', near: '{pre}{name} estaba junto a {ref}.', onMap: '{name} aparece en el mapa.',
+    uncertain: 'No se sabe con certeza dónde estaba {name}; se han propuesto varios sitios.',
+    uncertainRef: 'No se sabe con certeza dónde estaba {name}; se han propuesto varios sitios cerca de {ref}.',
+    region: '{name} es una región; no tiene un punto exacto en el mapa.', water: '{name} es una masa de agua.', waterRef: '{name}, cerca de {ref}.',
+    unknown: 'No se sabe dónde estaba {name}.',
+    straight: '{pre}unos {n} km en línea recta; {a} está {loc}.', nearDist: '{pre}{a} estaba junto a {b} (a menos de 3 km).',
+    regionDist: '{name} es una región; no tiene un punto para medir.', waterDist: '{name} es un río u otra agua; no tiene un punto para medir.',
+    uncertainDist: 'No se sabe con certeza dónde estaba {name}, así que no se da una distancia.',
+    foot: 'a pie, en burro o en camello', horse: 'a caballo', ship: 'en barco, en la temporada de navegación (primavera a otoño)',
+    less: 'menos de un día', over: 'más de dos meses', lessAll: 'menos de un día {foot}',
+    sep: '; ', end: '.', approx: '(aprox.)', refDays: '{pre}de {ref} a {name}, {foot}: {r} (aprox.).',
+    born: 'Según Theographic, {name} nació en {place}.', bornF: 'Según Theographic, {name} nació en {place}.',
+    bornNone: 'Los datos que tengo no dicen dónde nació {name}.',
+    died: 'Según Theographic, {name} murió en {place}.', diedF: 'Según Theographic, {name} murió en {place}.',
+    diedNone: 'Los datos que tengo no dicen dónde murió {name}.',
+  },
+  fr: {
+    dir: ['au nord de {ref}', 'au nord-est de {ref}', "à l'est de {ref}", 'au sud-est de {ref}', 'au sud de {ref}', 'au sud-ouest de {ref}', "à l'ouest de {ref}", 'au nord-ouest de {ref}'],
+    pre: "Selon l'emplacement proposé, ",
+    where: '{pre}{name} se trouvait à environ {n} km {loc}.', near: '{pre}{name} se trouvait tout près de {ref}.', onMap: '{name} figure sur la carte.',
+    uncertain: "On ne sait pas avec certitude où se trouvait {name} ; plusieurs sites ont été proposés.",
+    uncertainRef: "On ne sait pas avec certitude où se trouvait {name} ; plusieurs sites près de {ref} ont été proposés.",
+    region: "{name} est une région ; elle n'a pas de point précis sur la carte.", water: '{name} est une étendue d’eau.', waterRef: '{name}, près de {ref}.',
+    unknown: 'On ne sait pas où se trouvait {name}.',
+    straight: '{pre}environ {n} km à vol d’oiseau ; {a} est {loc}.', nearDist: '{pre}{a} se trouvait tout près de {b} (à moins de 3 km).',
+    regionDist: "{name} est une région ; elle n'a pas de point à mesurer.", waterDist: "{name} est un fleuve ou une autre étendue d’eau ; il n'a pas de point à mesurer.",
+    uncertainDist: "On ne sait pas avec certitude où se trouvait {name} ; aucune distance n'est donnée.",
+    foot: "à pied, à dos d'âne ou de chameau", horse: 'à cheval', ship: 'en bateau, pendant la saison de navigation (du printemps à l’automne)',
+    less: "moins d'un jour", over: 'plus de deux mois', lessAll: "moins d'un jour {foot}",
+    sep: ' ; ', end: '.', approx: '(approx.)', refDays: '{pre}de {ref} à {name}, {foot} : {r} (approx.).',
+    born: 'Selon Theographic, {name} est né à {place}.', bornF: 'Selon Theographic, {name} est née à {place}.',
+    bornNone: 'Les données que j’ai ne disent pas où {name} est né.', bornNoneF: 'Les données que j’ai ne disent pas où {name} est née.',
+    died: 'Selon Theographic, {name} est mort à {place}.', diedF: 'Selon Theographic, {name} est morte à {place}.',
+    diedNone: 'Les données que j’ai ne disent pas où {name} est mort.', diedNoneF: 'Les données que j’ai ne disent pas où {name} est morte.',
+  },
+  id: {
+    dir: ['di sebelah utara {ref}', 'di sebelah timur laut {ref}', 'di sebelah timur {ref}', 'di sebelah tenggara {ref}', 'di sebelah selatan {ref}', 'di sebelah barat daya {ref}', 'di sebelah barat {ref}', 'di sebelah barat laut {ref}'],
+    pre: 'Menurut lokasi yang diusulkan, ',
+    where: '{pre}{name} berada sekitar {n} km {loc}.', near: '{pre}{name} berada tepat di dekat {ref}.', onMap: '{name} ditunjukkan di peta.',
+    uncertain: 'Tidak diketahui dengan pasti di mana {name} berada; beberapa tempat telah diusulkan.',
+    uncertainRef: 'Tidak diketahui dengan pasti di mana {name} berada; beberapa tempat dekat {ref} telah diusulkan.',
+    region: '{name} adalah sebuah wilayah; tidak ada titik pastinya di peta.', water: '{name} adalah badan air.', waterRef: '{name}, dekat {ref}.',
+    unknown: 'Tidak diketahui di mana {name} berada.',
+    straight: '{pre}sekitar {n} km dalam garis lurus; {a} berada {loc}.', nearDist: '{pre}{a} berada tepat di dekat {b} (kurang dari 3 km).',
+    regionDist: '{name} adalah sebuah wilayah; tidak ada titik untuk diukur.', waterDist: '{name} adalah sungai atau perairan lain; tidak ada titik untuk diukur.',
+    uncertainDist: 'Tidak diketahui dengan pasti di mana {name} berada, jadi jaraknya tidak diberikan.',
+    foot: 'berjalan kaki, dengan keledai atau unta', horse: 'berkuda', ship: 'dengan kapal, pada musim berlayar (musim semi sampai musim gugur)',
+    less: 'kurang dari sehari', over: 'lebih dari dua bulan', lessAll: 'kurang dari sehari {foot}',
+    sep: '; ', end: '.', approx: '(perkiraan)', refDays: '{pre}dari {ref} ke {name}, {foot}: {r} (perkiraan).',
+    born: 'Menurut Theographic, {name} lahir di {place}.', bornF: 'Menurut Theographic, {name} lahir di {place}.',
+    bornNone: 'Data yang saya miliki tidak menyebutkan di mana {name} lahir.',
+    died: 'Menurut Theographic, {name} meninggal di {place}.', diedF: 'Menurut Theographic, {name} meninggal di {place}.',
+    diedNone: 'Data yang saya miliki tidak menyebutkan di mana {name} meninggal.',
+  },
+  // hi, ar: pending native review
+  hi: {
+    dir: ['{ref} के उत्तर में', '{ref} के उत्तर-पूर्व में', '{ref} के पूर्व में', '{ref} के दक्षिण-पूर्व में', '{ref} के दक्षिण में', '{ref} के दक्षिण-पश्चिम में', '{ref} के पश्चिम में', '{ref} के उत्तर-पश्चिम में'],
+    pre: 'प्रस्तावित स्थान के अनुसार, ',
+    where: '{pre}{name} {loc} लगभग {n} किमी दूर है।', near: '{pre}{name} {ref} के बिलकुल पास है।', onMap: '{name} नक्शे पर दिखाया गया है।',
+    uncertain: 'निश्चित रूप से नहीं पता कि {name} कहाँ था; कई जगहें सुझाई गई हैं।',
+    uncertainRef: 'निश्चित रूप से नहीं पता कि {name} कहाँ था; {ref} के पास कई जगहें सुझाई गई हैं।',
+    region: '{name} एक क्षेत्र है; नक्शे पर इसका कोई ठीक बिंदु नहीं है।', water: '{name} एक जलराशि है।', waterRef: '{name}, {ref} के पास।',
+    unknown: 'यह नहीं पता कि {name} कहाँ था।',
+    straight: '{pre}सीधी रेखा में लगभग {n} किमी; {a} {loc} है।', nearDist: '{pre}{a} {b} के बिलकुल पास है (3 किमी से कम)।',
+    regionDist: '{name} एक क्षेत्र है; इसमें नापने के लिए कोई बिंदु नहीं है।', waterDist: '{name} एक नदी या जलराशि है; इसमें नापने के लिए कोई बिंदु नहीं है।',
+    uncertainDist: 'निश्चित रूप से नहीं पता कि {name} कहाँ था, इसलिए दूरी नहीं दी गई।',
+    foot: 'पैदल, गधे या ऊँट से', horse: 'घोड़े से', ship: 'जहाज़ से, नौकायन के मौसम में (वसंत से पतझड़ तक)',
+    less: 'एक दिन से कम', over: 'दो महीने से अधिक', lessAll: '{foot} एक दिन से कम',
+    sep: '; ', end: '।', approx: '(लगभग)', refDays: '{pre}{ref} से {name} तक, {foot}: {r} (लगभग)।',
+    born: 'Theographic के अनुसार, {name} का जन्म {place} में हुआ।', bornF: 'Theographic के अनुसार, {name} का जन्म {place} में हुआ।',
+    bornNone: 'मेरे पास मौजूद आँकड़े नहीं बताते कि {name} का जन्म कहाँ हुआ।',
+    died: 'Theographic के अनुसार, {name} की मृत्यु {place} में हुई।', diedF: 'Theographic के अनुसार, {name} की मृत्यु {place} में हुई।',
+    diedNone: 'मेरे पास मौजूद आँकड़े नहीं बताते कि {name} की मृत्यु कहाँ हुई।',
+  },
+  ar: {
+    dir: ['شمال {ref}', 'شمال شرق {ref}', 'شرق {ref}', 'جنوب شرق {ref}', 'جنوب {ref}', 'جنوب غرب {ref}', 'غرب {ref}', 'شمال غرب {ref}'],
+    pre: 'بحسب الموقع المقترح، ',
+    where: '{pre}موقع {name}: على بعد نحو {n} كم {loc}.', near: '{pre}{name} قريب جدًا من {ref}.', onMap: '{name} مبيّن على الخريطة.',
+    uncertain: 'لا يُعرف بيقين أين كان موقع {name}؛ اقتُرحت عدة مواقع.',
+    uncertainRef: 'لا يُعرف بيقين أين كان موقع {name}؛ اقتُرحت عدة مواقع قرب {ref}.',
+    region: '{name} منطقة؛ ليس لها نقطة محددة على الخريطة.', water: '{name} مسطح مائي.', waterRef: '{name}، قرب {ref}.',
+    unknown: 'لا يُعرف أين كان موقع {name}.',
+    straight: '{pre}نحو {n} كم في خط مستقيم؛ {a} {loc}.', nearDist: '{pre}{a} قريب جدًا من {b} (أقل من 3 كم).',
+    regionDist: '{name} منطقة؛ ليس لها نقطة للقياس.', waterDist: '{name} نهر أو مسطح مائي؛ ليس له نقطة للقياس.',
+    uncertainDist: 'لا يُعرف بيقين أين كان موقع {name}، فلا تُعطى مسافة.',
+    foot: 'سيرًا على الأقدام أو على حمار أو جمل', horse: 'على الحصان', ship: 'بالسفينة، في موسم الإبحار (من الربيع إلى الخريف)',
+    less: 'أقل من يوم', over: 'أكثر من شهرين', lessAll: 'أقل من يوم {foot}',
+    sep: '؛ ', end: '.', approx: '(تقريبًا)', refDays: '{pre}من {ref} إلى {name}، {foot}: {r} (تقريبًا).',
+    born: 'بحسب Theographic، وُلد {name} في {place}.', bornF: 'بحسب Theographic، وُلدت {name} في {place}.',
+    bornNone: 'البيانات التي لديّ لا تذكر أين وُلد {name}.', bornNoneF: 'البيانات التي لديّ لا تذكر أين وُلدت {name}.',
+    died: 'بحسب Theographic، مات {name} في {place}.', diedF: 'بحسب Theographic، ماتت {name} في {place}.',
+    diedNone: 'البيانات التي لديّ لا تذكر أين مات {name}.', diedNoneF: 'البيانات التي لديّ لا تذكر أين ماتت {name}.',
+  },
+}
+const geoLang = (ui: string): GeoLang => {
+  const l = (ui || '').slice(0, 2).toLowerCase()
+  return (l in geoText ? l : 'en') as GeoLang
+}
+const geoFill = (tpl: string, v: Record<string, string>): string => tpl.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k]! : m))
+const geoUp = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+/** "N km" rounded as shown: under 10 km to the km, up to 100 to 5 km, more to 10 km. */
+function geoKm(km: number): number {
+  if (km < 10) return Math.max(1, Math.round(km))
+  if (km <= 100) return Math.round(km / 5) * 5
+  return Math.round(km / 10) * 10
+}
+const GEO_DIR: Record<Trip['direction'], number> = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 }
+/** The phrase "north of Y" for where `a` stands in relation to `b`: the opposite of the bearing a to b. */
+const geoLoc = (t: GeoText, d: Trip['direction'], ref: string): string => geoFill(t.dir[(GEO_DIR[d] + 4) % 8]!, { ref })
+const geoPre = (t: GeoText, sure: number): string => (sure === 2 ? t.pre : '')
+
+/** "It is not known where X was": a place with no point (certainty 0). */
+export function unknownPlaceLine(ui: string, place: PlaceRef): string {
+  return geoFill(geoText[geoLang(ui)].unknown, { name: place.name })
+}
+
+/**
+ * Where `place` is, in relation to `ref` (the nearest reference place): "Bethel was about 15 km north of Jerusalem." `trip` is `trip(place, ref)` of the
+ * client (undefined when either has no point or has nothing to measure). Region, water and uncertain places get their own sentences, without km.
+ */
+export function whereLine(ui: string, place: PlaceRef, ref: PlaceRef | null, trip: Trip | undefined): string {
+  const t = geoText[geoLang(ui)]
+  const v = { name: place.name, ref: ref?.name ?? '' }
+  if (place.sure === 0) return unknownPlaceLine(ui, place)
+  if (place.form === 2) return geoFill(t.region, v)
+  if (place.form === 3) return geoFill(ref ? t.waterRef : t.water, v)
+  if (place.sure === 1) return geoFill(ref ? t.uncertainRef : t.uncertain, v)
+  if (!ref || !trip) return geoFill(t.onMap, v)
+  const pre = geoPre(t, trip.sure)
+  if (trip.near) return geoFill(t.near, { ...v, pre })
+  return geoFill(t.where, { ...v, pre, n: String(geoKm(trip.km)), loc: geoLoc(t, trip.direction, ref.name) })
+}
+
+/**
+ * The distance between two places in a straight line: "About 9 km in a straight line; Bethlehem is south of Jerusalem." `trip` is `trip(a, b)`. A region
+ * or a water has no point to measure; an uncertain or unlocated place gives no number.
+ */
+export function distanceLine(ui: string, a: PlaceRef, b: PlaceRef, trip: Trip | undefined): string {
+  const t = geoText[geoLang(ui)]
+  const nopoint = [a, b].find((p) => p.sure === 0)
+  if (nopoint) return unknownPlaceLine(ui, nopoint)
+  const shape = [a, b].find((p) => p.form === 2 || p.form === 3)
+  if (shape) return geoFill(shape.form === 2 ? t.regionDist : t.waterDist, { name: shape.name })
+  const doubt = [a, b].find((p) => p.sure === 1)
+  if (doubt) return geoFill(t.uncertainDist, { name: doubt.name })
+  if (!trip) return ''
+  const pre = geoPre(t, trip.sure)
+  if (trip.near) return geoFill(t.nearDist, { pre, a: a.name, b: b.name })
+  return geoUp(geoFill(t.straight, { pre, a: a.name, n: String(geoKm(trip.km)), loc: geoLoc(t, trip.direction, b.name) }))
+}
+
+/** Whole days as a range (approx.): "about 8 to 11 days", "about 3 days", "less than a day", "more than two months". */
+function geoRange(l: GeoLang, t: GeoText, d: { low: number; high: number }): string {
+  if (d.low >= 60) return t.over
+  if (d.low === 0 && d.high <= 1) return t.less
+  const same = d.low === d.high
+  const [a, b] = [String(d.low), String(d.high)]
+  switch (l) {
+    case 'en': return same ? `about ${a} ${d.low === 1 ? 'day' : 'days'}` : `about ${a} to ${b} days`
+    case 'es': return same ? (d.low === 1 ? 'un día' : `unos ${a} días`) : `unos ${a} a ${b} días`
+    case 'fr': return same ? `environ ${a} ${d.low === 1 ? 'jour' : 'jours'}` : `environ ${a} à ${b} jours`
+    case 'id': return same ? `sekitar ${a} hari` : `sekitar ${a} sampai ${b} hari`
+    case 'hi': return same ? `लगभग ${a} दिन` : `लगभग ${a} से ${b} दिन`
+    case 'ar': {
+      // number agreement: 1 and 2 are words, 3 to 10 take the plural, 11 or more the accusative singular
+      const unit = (n: number) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n <= 10 ? `${n} أيام` : `${n} يومًا`)
+      return same ? `نحو ${unit(d.low)}` : `نحو ${a} إلى ${unit(d.high)}`
+    }
+  }
+}
+
+/**
+ * How long the trip takes, from the client's `Trip` (the rules of 5.8 are there: no `days` with certainty below 2, nearer than 3 km, or without a
+ * point): "On foot, by donkey or by camel: about 8 to 11 days; on horseback: about 4 to 6 days (approx.)." Empty string without `trip.days`.
+ */
+export function daysLine(ui: string, trip: Trip | undefined): string {
+  if (!trip?.days) return ''
+  const l = geoLang(ui)
+  const t = geoText[l]
+  const { foot, horse, ship } = trip.days
+  const lessFoot = foot.low === 0 && foot.high <= 1
+  const lessHorse = horse.low === 0 && horse.high <= 1
+  const colon = l === 'fr' ? ' : ' : ': '
+  const parts: string[] = []
+  if (lessFoot && lessHorse) parts.push(geoFill(t.lessAll, { foot: t.foot }))
+  else {
+    parts.push(`${t.foot}${colon}${geoRange(l, t, foot)}`)
+    parts.push(`${t.horse}${colon}${geoRange(l, t, horse)}`)
+  }
+  if (ship) parts.push(`${t.ship}${colon}${geoRange(l, t, ship)}`)
+  const pre = geoPre(t, trip.sure)
+  const body = parts.join(t.sep)
+  return (pre ? pre + body : geoUp(body)) + ` ${t.approx}${t.end}`
+}
+
+/** For the place card: the days on foot from its reference place, as `refDaysLine(ui, place, ref, trip(place, ref))`. Empty string without days. */
+export function refDaysLine(ui: string, place: PlaceRef, ref: PlaceRef, trip: Trip | undefined): string {
+  if (!trip?.days) return ''
+  const l = geoLang(ui)
+  const t = geoText[l]
+  const pre = geoPre(t, trip.sure)
+  const s = geoFill(t.refDays, { pre, ref: ref.name, name: place.name, foot: t.foot, r: geoRange(l, t, trip.days.foot) })
+  return pre ? s : geoUp(s)
+}
+
+/** "According to Theographic, Paul was born in Tarsus." `place` null: "The data I have do not say where X was born." `female` picks fr and ar agreement. */
+export function bornLine(ui: string, person: string, place: PlaceRef | null, female = false): string {
+  const t = geoText[geoLang(ui)]
+  return place ? geoFill(female ? t.bornF : t.born, { name: person, place: place.name }) : geoFill((female && t.bornNoneF) || t.bornNone, { name: person })
+}
+
+export function diedLine(ui: string, person: string, place: PlaceRef | null, female = false): string {
+  const t = geoText[geoLang(ui)]
+  return place ? geoFill(female ? t.diedF : t.died, { name: person, place: place.name }) : geoFill((female && t.diedNoneF) || t.diedNone, { name: person })
 }

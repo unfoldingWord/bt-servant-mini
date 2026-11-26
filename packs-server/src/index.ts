@@ -7,6 +7,7 @@
  *   GET|HEAD /v3/packs/{lang}/catalog   → v3/catalog/{lang}.seg   (no-cache: revalidated with If-None-Match → 304)
  *   GET|HEAD /v3/packs/common/catalog   → v3/catalog/common.seg
  *   GET|HEAD /v3/packs/seg/{sha256}     → v3/seg/{sha256}.seg     (immutable; Range for the 291 MB model)
+ *   GET|HEAD /v3/packs/complement/{sha256} → v3/complement/{sha256} (a file a catalog lists, e.g. the map background; immutable)
  *   OPTIONS  (CORS preflight)
  *
  * A language code with a regional alias is looked up as itself first, then as its alias (es → es-419), as the old server
@@ -40,6 +41,7 @@ const PREFIX = '/v3/packs/'
 export type Target =
   | { route: 'catalog'; lang: string; key: string; alias?: string }
   | { route: 'seg'; id: string; key: string }
+  | { route: 'complement'; id: string; key: string }
 
 /** `path` is what follows `/v3/packs/`, still percent-encoded: a `%` never matches, so `..` and `%2F` never reach a key. */
 export function parsePath(path: string): Target | null {
@@ -50,6 +52,8 @@ export function parsePath(path: string): Target | null {
   if (first === 'seg' && second !== 'catalog') {
     return SEGMENT_ID_RE.test(second) ? { route: 'seg', id: second, key: `v3/seg/${second}.seg` } : null
   }
+  // `complement` is not a language tag (2 or 3 letters): a path under it that is not a complement is a bad path.
+  if (first === 'complement') return SEGMENT_ID_RE.test(second) ? { route: 'complement', id: second, key: `v3/complement/${second}` } : null
   if (second !== 'catalog') return null
   const lang = first.toLowerCase()
   if (lang === 'common') return { route: 'catalog', lang, key: 'v3/catalog/common.seg' }
@@ -103,6 +107,7 @@ function json(status: number, body: unknown, extra: Record<string, string> = {})
   })
 }
 const cacheControl = (t: Target) => (t.route === 'catalog' ? CATALOG_CACHE_CONTROL : SEGMENT_CACHE_CONTROL)
+const NOT_FOUND = { catalog: 'catalog not found', seg: 'segment not found', complement: 'complement not found' } as const
 const hasBody = (o: R2Object | R2ObjectBody): o is R2ObjectBody => 'body' in o && (o as R2ObjectBody).body !== undefined
 
 // ------------------------------------------------------------------------------------------------------------ serving
@@ -111,7 +116,7 @@ const hasBody = (o: R2Object | R2ObjectBody): o is R2ObjectBody => 'body' in o &
 async function serve(request: Request, bucket: R2Bucket, target: Target, key: string): Promise<Response | null> {
   const tags = parseIfNoneMatch(request.headers.get('If-None-Match'))
   const isHead = request.method === 'HEAD'
-  const segment = target.route === 'seg'
+  const segment = target.route !== 'catalog'
   // A catalog is whole or nothing: its Range is ignored. HEAD reads Range like the GET it stands for.
   const range = segment ? parseRange(request.headers.get('Range')) : null
   const notModified = (etag: string) =>
@@ -178,7 +183,7 @@ async function respond(request: Request, env: Env): Promise<Response> {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
   if (!url.pathname.startsWith(PREFIX)) {
     if (url.pathname === '/' && (request.method === 'GET' || request.method === 'HEAD')) {
-      return json(200, { service: 'bt-servant-mini-packs', routes: ['/v3/packs/{lang}/catalog', '/v3/packs/common/catalog', '/v3/packs/seg/{sha256}'] })
+      return json(200, { service: 'bt-servant-mini-packs', routes: ['/v3/packs/{lang}/catalog', '/v3/packs/common/catalog', '/v3/packs/seg/{sha256}', '/v3/packs/complement/{sha256}'] })
     }
     return json(404, { error: 'not found' })
   }
@@ -193,7 +198,7 @@ async function respond(request: Request, env: Env): Promise<Response> {
     (await serve(request, bucket, target, target.key)) ??
     (target.route === 'catalog' && target.alias ? await serve(request, bucket, target, target.alias) : null)
   if (served) return served
-  return json(404, { error: target.route === 'catalog' ? 'catalog not found' : 'segment not found' })
+  return json(404, { error: NOT_FOUND[target.route] })
 }
 
 export async function handle(request: Request, env: Env): Promise<Response> {
